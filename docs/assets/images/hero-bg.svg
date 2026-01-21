@@ -1,0 +1,42 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+      <!-- Horizontal lines -->
+      <line x1="0" y1="0" x2="60" y2="0" stroke="#3b82f6" stroke-width="0.5" opacity="0.15"/>
+      <!-- Vertical lines -->
+      <line x1="0" y1="0" x2="0" y2="60" stroke="#3b82f6" stroke-width="0.5" opacity="0.15"/>
+    </pattern>
+
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.03" />
+      <stop offset="50%" style="stop-color:#8b5cf6;stop-opacity:0.05" />
+      <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:0.03" />
+    </linearGradient>
+
+    <!-- Radial gradient overlay for depth -->
+    <radialGradient id="radialOverlay">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.05" />
+      <stop offset="100%" style="stop-color:#000000;stop-opacity:0.1" />
+    </radialGradient>
+  </defs>
+
+  <!-- Background gradient -->
+  <rect width="1200" height="800" fill="url(#bgGradient)"/>
+
+  <!-- Grid pattern -->
+  <rect width="1200" height="800" fill="url(#grid)"/>
+
+  <!-- Radial overlay for depth -->
+  <rect width="1200" height="800" fill="url(#radialOverlay)"/>
+
+  <!-- Decorative accent dots -->
+  <circle cx="200" cy="150" r="3" fill="#3b82f6" opacity="0.3"/>
+  <circle cx="800" cy="200" r="2" fill="#8b5cf6" opacity="0.3"/>
+  <circle cx="1000" cy="600" r="2.5" fill="#06b6d4" opacity="0.3"/>
+  <circle cx="300" cy="650" r="2" fill="#3b82f6" opacity="0.25"/>
+  <circle cx="600" cy="400" r="4" fill="#8b5cf6" opacity="0.2"/>
+
+  <!-- Subtle connection lines -->
+  <line x1="200" y1="150" x2="600" y2="400" stroke="#3b82f6" stroke-width="0.5" opacity="0.1"/>
+  <line x1="800" y1="200" x2="1000" y2="600" stroke="#8b5cf6" stroke-width="0.5" opacity="0.1"/>
+</svg>

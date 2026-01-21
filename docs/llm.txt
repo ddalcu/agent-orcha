@@ -1,0 +1,1058 @@
+# Agent Orcha - LLM Documentation
+
+## Project Overview
+
+Agent Orcha is a declarative TypeScript framework for building, managing, and scaling multi-agent AI systems. It combines the flexibility of TypeScript with the simplicity of YAML to orchestrate complex workflows, manage diverse tools via Model Context Protocol (MCP), and integrate semantic search seamlessly.
+
+**Repository:** https://github.com/ddalcu/agent-orcha
+**NPM Package:** https://www.npmjs.com/package/agent-orcha
+**Version:** 0.0.2
+**License:** MIT
+**Requirements:** Node.js >= 20.0.0
+
+## Key Features
+
+1. **Declarative AI**: Define agents, workflows, and infrastructure in version-controlled YAML files
+2. **Model Agnostic**: Swap between OpenAI, Gemini, Anthropic, or local LLMs (Ollama, LM Studio) without code changes
+3. **Universal Tooling**: Leverage Model Context Protocol (MCP) to connect agents to any external service, API, or database
+4. **RAG Native**: Built-in vector store integration (Chroma, Memory) for semantic search and knowledge retrieval
+5. **Robust Workflow Engine**: Orchestrate complex multi-agent sequences with parallel execution, conditional logic, and state management
+6. **Production Ready**: High-performance Fastify REST API, Server-Sent Events (SSE) for streaming, comprehensive logging
+7. **Developer Experience**: Full TypeScript support, intuitive CLI, modular architecture
+8. **Extensible Functions**: Custom JavaScript functions to extend agent capabilities with zero boilerplate
+
+## Quick Start
+
+### 1. Initialize Project
+
+```bash
+npx agent-orcha init my-project
+cd my-project
+```
+
+This creates a project with:
+- agents/ - Agent configuration files
+- workflows/ - Workflow definition files
+- functions/ - Custom JavaScript functions
+- vectors/ - Vector store configurations and data
+- llm.json - LLM and embedding provider settings
+- mcp.json - MCP server configuration
+
+### 2. Configure LLM (llm.json)
+
+```json
+{
+  "version": "1.0",
+  "models": {
+    "default": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:1234/v1",
+      "apiKey": "not-needed",
+      "model": "your-model-name",
+      "temperature": 0.7
+    },
+    "openai": {
+      "apiKey": "sk-your-openai-key",
+      "model": "gpt-4o",
+      "temperature": 0.7
+    }
+  },
+  "embeddings": {
+    "default": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:1234/v1",
+      "apiKey": "not-needed",
+      "model": "text-embedding-model"
+    }
+  }
+}
+```
+
+**LLM Providers:**
+- OpenAI: Omit baseUrl (uses default OpenAI endpoint)
+- LM Studio: baseUrl: "http://localhost:1234/v1"
+- Ollama: baseUrl: "http://localhost:11434/v1"
+- Anthropic: Supported via provider configuration
+- Gemini: Supported via provider configuration
+
+### 3. Create Agent (agents/myagent.agent.yaml)
+
+```yaml
+name: myagent
+description: My first AI agent
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0.7
+
+prompt:
+  system: |
+    You are a helpful assistant.
+    Answer questions clearly and concisely.
+  inputVariables:
+    - query
+
+output:
+  format: text
+```
+
+### 4. Start Server
+
+```bash
+npx agent-orcha start
+# Server runs on http://localhost:3000
+# Web UI available at http://localhost:3000
+```
+
+### 5. Invoke Agent
+
+```bash
+curl -X POST http://localhost:3000/api/agents/myagent/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"query": "Hello, how are you?"}}'
+```
+
+Response:
+```json
+{
+  "output": "Hello! I'm doing well, thank you...",
+  "metadata": {
+    "tokensUsed": 42,
+    "toolCalls": [],
+    "duration": 823
+  }
+}
+```
+
+## Core Concepts
+
+### Agents
+
+Agents are AI-powered units that use LLMs to process input and optionally call tools. Each agent is defined in a YAML file.
+
+**Agent Schema:**
+```yaml
+name: string                    # Unique identifier (required)
+description: string             # Human-readable description (required)
+version: string                 # Semantic version (default: "1.0.0")
+
+llm: string | object            # LLM configuration reference
+  # Simple: llm: default
+  # With override: llm: { name: default, temperature: 0.3 }
+
+prompt:                         # Prompt configuration (required)
+  system: string                # System message/instructions
+  inputVariables: [string]      # Variables to interpolate in prompt
+
+tools:                          # Available tools (optional)
+  - mcp:<server-name>           # MCP server tools
+  - vector:<store-name>         # Vector store search
+  - function:<function-name>    # Custom functions
+  - builtin:<tool-name>         # Built-in tools
+
+output:                         # Output formatting (optional)
+  format: text | json | structured
+
+metadata:                       # Custom metadata (optional)
+  category: string
+  tags: [string]
+```
+
+**Example Agent with Tools:**
+```yaml
+name: researcher
+description: Researches topics using web fetch and vector search
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0.5
+
+prompt:
+  system: |
+    You are a thorough researcher.
+    Use available tools to gather information before responding.
+  inputVariables:
+    - topic
+    - context
+
+tools:
+  - mcp:fetch              # Web fetch MCP server
+  - vector:knowledge       # Vector store search
+  - function:custom-tool   # Custom function
+
+output:
+  format: text
+```
+
+### Workflows
+
+Workflows orchestrate multiple agents in defined sequences with support for parallel execution, conditional logic, and state management.
+
+**Workflow Schema:**
+```yaml
+name: string                    # Unique identifier (required)
+description: string             # Human-readable description (required)
+version: string                 # Semantic version (default: "1.0.0")
+
+input:                          # Input schema (required)
+  schema:
+    <field_name>:
+      type: string | number | boolean | array | object
+      required: boolean
+      default: any
+      description: string
+
+steps:                          # Workflow steps (required)
+  - id: string                  # Unique step identifier
+    agent: string               # Agent name to execute
+    input:                      # Input mapping using templates
+      <key>: "{{input.field}}"           # From workflow input
+      <key>: "{{steps.stepId.output}}"   # From previous step
+    condition: string           # Optional conditional execution
+    retry:                      # Optional retry configuration
+      maxAttempts: number
+      delay: number
+    output:
+      key: string
+
+  # Parallel execution
+  - parallel:
+      - id: step1
+        agent: agent1
+        input: {...}
+      - id: step2
+        agent: agent2
+        input: {...}
+
+config:                         # Workflow configuration (optional)
+  timeout: number               # Total timeout ms (default: 300000)
+  onError: stop | continue | retry
+
+output:                         # Output mapping (required)
+  <key>: "{{steps.stepId.output}}"
+
+metadata:                       # Custom metadata (optional)
+  category: string
+  tags: [string]
+```
+
+**Template Syntax:**
+- `{{input.fieldName}}` - Access workflow input field
+- `{{steps.stepId.output}}` - Access step output
+- `{{steps.stepId.output.nested.path}}` - Access nested output
+- `{{steps.stepId.metadata.duration}}` - Access step metadata
+
+**Example Workflow:**
+```yaml
+name: research-paper
+description: Research a topic and write a comprehensive paper
+version: "1.0.0"
+
+input:
+  schema:
+    topic:
+      type: string
+      required: true
+      description: The topic to research
+    style:
+      type: string
+      default: "professional"
+
+steps:
+  - id: research
+    agent: researcher
+    input:
+      topic: "{{input.topic}}"
+      context: "Gather comprehensive information"
+    output:
+      key: researchFindings
+
+  - id: summarize
+    agent: summarizer
+    input:
+      content: "{{steps.research.output}}"
+      maxPoints: "10"
+    condition: "{{steps.research.metadata.success}}"
+    output:
+      key: summary
+
+  - id: write
+    agent: writer
+    input:
+      research: "{{steps.research.output}}"
+      outline: "{{steps.summarize.output}}"
+      style: "{{input.style}}"
+    output:
+      key: paper
+
+config:
+  timeout: 600000
+  onError: stop
+
+output:
+  paper: "{{steps.write.output}}"
+  summary: "{{steps.summarize.output}}"
+  researchFindings: "{{steps.research.output}}"
+```
+
+### Vector Stores
+
+Vector stores enable semantic search and RAG capabilities. They load documents, create embeddings, and provide similarity search.
+
+**Vector Store Schema:**
+```yaml
+name: string                    # Unique identifier (required)
+description: string             # Human-readable description (required)
+
+source:                         # Data source (required)
+  type: directory | file | url
+  path: string                  # Path relative to project root
+  pattern: string               # Glob pattern for directories
+  recursive: boolean            # Recursive search (default: true)
+
+loader:                         # Document loader (required)
+  type: text | pdf | csv | json | markdown
+
+splitter:                       # Text chunking (required)
+  type: character | recursive | token | markdown
+  chunkSize: number             # Characters per chunk (default: 1000)
+  chunkOverlap: number          # Overlap between chunks (default: 200)
+
+embedding: string               # Reference to embedding config (default: "default")
+
+store:                          # Vector store backend (required)
+  type: memory | chroma
+  options:
+    path: string                # Storage path (for chroma)
+    collectionName: string      # Collection name
+    url: string                 # Server URL (for chroma)
+
+search:                         # Search configuration (optional)
+  defaultK: number              # Results per search (default: 4)
+  scoreThreshold: number        # Minimum similarity (0-1)
+```
+
+**Vector Store Types:**
+1. **Memory** - In-memory storage, fast but not persistent, recreates embeddings on startup
+2. **Chroma** - Persistent local storage, embeddings cached and reused across restarts
+
+**Example Vector Store:**
+```yaml
+name: knowledge
+description: Knowledge base for semantic search
+
+source:
+  type: directory
+  path: vectors/sample-data
+  pattern: "*.txt"
+
+loader:
+  type: text
+
+splitter:
+  type: character
+  chunkSize: 1000
+  chunkOverlap: 200
+
+embedding: default
+
+store:
+  type: memory
+
+search:
+  defaultK: 4
+  scoreThreshold: 0.2
+```
+
+### Functions
+
+Functions are custom JavaScript tools that extend agent capabilities. They require no dependencies and are simple to create.
+
+**Function Schema:**
+```javascript
+export default {
+  name: 'function-name',           // Unique identifier (required)
+  description: 'What it does',     // Clear description (required)
+
+  parameters: {                    // Input parameters (required)
+    param1: {
+      type: 'number',              // string | number | boolean | array | object | enum
+      description: 'Parameter description',
+      required: true,              // Optional, defaults to true
+      default: 0,                  // Optional default value
+    },
+  },
+
+  execute: async ({ param1 }) => { // Execution function (required)
+    // Your logic here
+    return `Result: ${param1}`;
+  },
+};
+
+// Optional metadata
+export const metadata = {
+  name: 'function-name',
+  version: '1.0.0',
+  author: 'Your Name',
+  tags: ['category'],
+};
+```
+
+**Example Function (Fibonacci Calculator):**
+```javascript
+export default {
+  name: 'fibonacci',
+  description: 'Returns the nth Fibonacci number (0-based indexing)',
+
+  parameters: {
+    n: {
+      type: 'number',
+      description: 'The index (0-based, max 100)',
+    },
+  },
+
+  execute: async ({ n }) => {
+    if (n < 0 || !Number.isInteger(n)) {
+      throw new Error('Index must be a non-negative integer');
+    }
+    if (n > 100) {
+      throw new Error('Index too large (max 100)');
+    }
+
+    if (n === 0) return 'Fibonacci(0) = 0';
+    if (n === 1) return 'Fibonacci(1) = 1';
+
+    let prev = 0, curr = 1;
+    for (let i = 2; i <= n; i++) {
+      [prev, curr] = [curr, prev + curr];
+    }
+
+    return `Fibonacci(${n}) = ${curr}`;
+  },
+};
+```
+
+**Using Functions in Agents:**
+```yaml
+name: math-assistant
+description: Assistant that can calculate Fibonacci numbers
+
+llm:
+  name: default
+  temperature: 0.3
+
+prompt:
+  system: |
+    You are a math assistant.
+    Use the fibonacci tool to calculate Fibonacci numbers.
+  inputVariables:
+    - query
+
+tools:
+  - function:fibonacci    # References fibonacci.function.js
+
+output:
+  format: text
+```
+
+### MCP Servers
+
+Model Context Protocol (MCP) servers provide external tools to agents. Configure them in mcp.json.
+
+**MCP Configuration:**
+```json
+{
+  "version": "1.0.0",
+  "servers": {
+    "<server-name>": {
+      "transport": "streamable-http | stdio | sse",
+      "url": "https://server-url/mcp",
+      "command": "node",
+      "args": ["./mcp-server.js"],
+      "timeout": 30000,
+      "enabled": true,
+      "description": "Server description"
+    }
+  },
+  "globalOptions": {
+    "throwOnLoadError": false,
+    "prefixToolNameWithServerName": true,
+    "defaultToolTimeout": 30000
+  }
+}
+```
+
+**Example MCP Configuration:**
+```json
+{
+  "version": "1.0.0",
+  "servers": {
+    "fetch": {
+      "transport": "streamable-http",
+      "url": "https://remote.mcpservers.org/fetch/mcp",
+      "description": "Web fetch capabilities",
+      "timeout": 30000,
+      "enabled": true
+    }
+  }
+}
+```
+
+**Using MCP Tools in Agents:**
+```yaml
+tools:
+  - mcp:fetch    # All tools from "fetch" server
+```
+
+## REST API Reference
+
+### Health Check
+
+```
+GET /health
+
+Response:
+{
+  "status": "ok",
+  "timestamp": "2026-01-21T12:00:00.000Z"
+}
+```
+
+### Agents Endpoints
+
+**List All Agents**
+```
+GET /api/agents
+
+Response:
+[
+  {
+    "name": "agent1",
+    "description": "Agent description",
+    "version": "1.0.0",
+    "tools": ["mcp:fetch", "vector:knowledge"]
+  }
+]
+```
+
+**Get Agent Details**
+```
+GET /api/agents/:name
+
+Response:
+{
+  "name": "agent1",
+  "description": "Agent description",
+  "version": "1.0.0",
+  "llm": { "name": "default", "temperature": 0.7 },
+  "prompt": { "system": "...", "inputVariables": ["query"] },
+  "tools": ["mcp:fetch"],
+  "output": { "format": "text" }
+}
+```
+
+**Invoke Agent**
+```
+POST /api/agents/:name/invoke
+Content-Type: application/json
+
+Request:
+{
+  "input": {
+    "topic": "your topic",
+    "context": "additional context"
+  }
+}
+
+Response:
+{
+  "output": "Agent response text",
+  "metadata": {
+    "tokensUsed": 150,
+    "toolCalls": ["fetch", "vector_search"],
+    "duration": 1234
+  }
+}
+```
+
+**Stream Agent Response (SSE)**
+```
+POST /api/agents/:name/stream
+Content-Type: application/json
+
+Request:
+{
+  "input": {
+    "query": "your query"
+  }
+}
+
+Response: Server-Sent Events stream with incremental output
+```
+
+### Workflows Endpoints
+
+**List All Workflows**
+```
+GET /api/workflows
+
+Response:
+[
+  {
+    "name": "workflow1",
+    "description": "Workflow description",
+    "version": "1.0.0",
+    "steps": [...]
+  }
+]
+```
+
+**Get Workflow Details**
+```
+GET /api/workflows/:name
+
+Response:
+{
+  "name": "workflow1",
+  "description": "Workflow description",
+  "version": "1.0.0",
+  "input": { "schema": {...} },
+  "steps": [...],
+  "config": { "timeout": 300000 },
+  "output": {...}
+}
+```
+
+**Run Workflow**
+```
+POST /api/workflows/:name/run
+Content-Type: application/json
+
+Request:
+{
+  "input": {
+    "topic": "research topic",
+    "style": "professional"
+  }
+}
+
+Response:
+{
+  "output": {
+    "paper": "Final content",
+    "summary": "Key points"
+  },
+  "metadata": {
+    "duration": 5000,
+    "stepsExecuted": 3,
+    "success": true
+  },
+  "stepResults": {
+    "research": { "output": "...", "metadata": {...} },
+    "summarize": { "output": "...", "metadata": {...} }
+  }
+}
+```
+
+### Vector Stores Endpoints
+
+**List All Vector Stores**
+```
+GET /api/vectors
+
+Response:
+[
+  {
+    "name": "knowledge",
+    "description": "Knowledge base",
+    "documentCount": 42,
+    "storeType": "memory"
+  }
+]
+```
+
+**Get Vector Store Config**
+```
+GET /api/vectors/:name
+
+Response:
+{
+  "name": "knowledge",
+  "description": "Knowledge base",
+  "source": {...},
+  "loader": {...},
+  "splitter": {...},
+  "store": {...},
+  "search": {...}
+}
+```
+
+**Search Vector Store**
+```
+POST /api/vectors/:name/search
+Content-Type: application/json
+
+Request:
+{
+  "query": "search term",
+  "k": 4
+}
+
+Response:
+{
+  "results": [
+    {
+      "content": "Document text...",
+      "metadata": {...},
+      "score": 0.92
+    }
+  ]
+}
+```
+
+**Refresh Vector Store (Reload Documents)**
+```
+POST /api/vectors/:name/refresh
+
+Response:
+{
+  "success": true,
+  "documentsLoaded": 42,
+  "duration": 1234
+}
+```
+
+**Add Documents to Vector Store**
+```
+POST /api/vectors/:name/add
+Content-Type: application/json
+
+Request:
+{
+  "documents": [
+    {
+      "content": "Document text",
+      "metadata": { "source": "custom" }
+    }
+  ]
+}
+
+Response:
+{
+  "success": true,
+  "documentsAdded": 1
+}
+```
+
+## CLI Reference
+
+### Commands
+
+**Initialize Project**
+```bash
+npx agent-orcha init [directory]
+
+# Creates project structure with examples
+# directory - Target directory (default: current)
+```
+
+**Start Server**
+```bash
+npx agent-orcha start
+
+# Starts Fastify server on port 3000 (configurable via PORT env var)
+# Environment variables:
+#   PORT - Server port (default: 3000)
+#   HOST - Server host (default: 0.0.0.0)
+```
+
+**Help**
+```bash
+npx agent-orcha help
+
+# Shows CLI usage information
+```
+
+## Library Usage
+
+Agent Orcha can be used as a TypeScript/JavaScript library in your projects.
+
+```typescript
+import { Orchestrator } from 'agent-orcha';
+
+const orchestrator = new Orchestrator({
+  projectRoot: './my-agents-project'
+});
+
+await orchestrator.initialize();
+
+// Invoke an agent
+const result = await orchestrator.agents.invoke('researcher', {
+  topic: 'machine learning',
+  context: 'brief overview'
+});
+
+console.log(result.output);
+
+// Run a workflow
+const workflowResult = await orchestrator.workflows.run('research-paper', {
+  topic: 'artificial intelligence'
+});
+
+console.log(workflowResult.output);
+
+// Search vector store
+const searchResults = await orchestrator.vectors.search('knowledge', {
+  query: 'semantic search',
+  k: 4
+});
+
+console.log(searchResults);
+
+// Clean up
+await orchestrator.close();
+```
+
+## Project Structure
+
+```
+my-project/
+├── agents/                     # Agent YAML configurations
+│   ├── researcher.agent.yaml
+│   └── writer.agent.yaml
+├── workflows/                  # Workflow YAML definitions
+│   └── research-paper.workflow.yaml
+├── functions/                  # Custom JavaScript functions
+│   └── fibonacci.function.js
+├── vectors/                    # Vector store configs and data
+│   ├── knowledge.vector.yaml
+│   └── sample-data/
+│       └── documents.txt
+├── llm.json                    # LLM and embedding configurations
+├── mcp.json                    # MCP server configuration
+├── .env                        # Environment variables (optional)
+└── package.json                # Project metadata (if using as library)
+```
+
+## Environment Variables
+
+```bash
+# Server Configuration
+PORT=3000                       # Server port (default: 3000)
+HOST=0.0.0.0                   # Server host (default: 0.0.0.0)
+
+# LLM API Keys (can be set here or in llm.json)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=...
+```
+
+## Tool Types Reference
+
+1. **Function Tools** - Custom JavaScript/TypeScript functions in functions/
+   ```yaml
+   tools:
+     - function:fibonacci
+     - function:custom-tool
+   ```
+
+2. **MCP Tools** - External tools from MCP servers
+   ```yaml
+   tools:
+     - mcp:fetch              # All tools from "fetch" server
+   ```
+
+3. **Vector Tools** - Semantic search on vector stores
+   ```yaml
+   tools:
+     - vector:knowledge       # Search "knowledge" store
+   ```
+
+4. **Built-in Tools** - Framework-provided tools
+   ```yaml
+   tools:
+     - builtin:tool_name
+   ```
+
+## Production Deployment
+
+### Docker Deployment
+
+```dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+EXPOSE 3000
+CMD ["npx", "agent-orcha", "start"]
+```
+
+### Chroma Vector Store Setup
+
+```bash
+# Option 1: Run Chroma with Docker
+docker run -p 8000:8000 chromadb/chroma
+
+# Option 2: Install and run locally
+pip install chromadb
+chroma run --path .chroma --port 8000
+```
+
+### Configuration Best Practices
+
+1. **LLM Configuration**: Store API keys in environment variables, not in llm.json
+2. **Vector Stores**: Use Chroma for production (persistent), Memory for development
+3. **Timeouts**: Configure appropriate timeouts for workflows based on expected duration
+4. **Error Handling**: Set onError strategy in workflows (stop, continue, retry)
+5. **Logging**: Use environment variables to control log levels
+
+## Examples
+
+### Example 1: Simple Q&A Agent
+
+```yaml
+# agents/qa.agent.yaml
+name: qa
+description: Question answering agent
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0.3
+
+prompt:
+  system: |
+    You are a helpful Q&A assistant.
+    Provide concise, accurate answers to questions.
+  inputVariables:
+    - question
+
+output:
+  format: text
+```
+
+### Example 2: Research Agent with Tools
+
+```yaml
+# agents/researcher.agent.yaml
+name: researcher
+description: Research agent with web fetch and vector search
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0.5
+
+prompt:
+  system: |
+    You are a thorough researcher.
+    1. Search the knowledge base first
+    2. Fetch additional information from the web if needed
+    3. Synthesize findings into a comprehensive report
+  inputVariables:
+    - topic
+    - context
+
+tools:
+  - mcp:fetch
+  - vector:knowledge
+
+output:
+  format: text
+```
+
+### Example 3: Multi-Step Workflow
+
+```yaml
+# workflows/analysis.workflow.yaml
+name: analysis
+description: Multi-step data analysis workflow
+version: "1.0.0"
+
+input:
+  schema:
+    data:
+      type: string
+      required: true
+
+steps:
+  - id: extract
+    agent: extractor
+    input:
+      data: "{{input.data}}"
+    output:
+      key: extracted
+
+  - id: analyze
+    agent: analyzer
+    input:
+      data: "{{steps.extract.output}}"
+    output:
+      key: analysis
+
+  - id: summarize
+    agent: summarizer
+    input:
+      analysis: "{{steps.analyze.output}}"
+    output:
+      key: summary
+
+config:
+  timeout: 300000
+  onError: stop
+
+output:
+  summary: "{{steps.summarize.output}}"
+  fullAnalysis: "{{steps.analyze.output}}"
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **LLM Connection Errors**
+   - Verify API keys in llm.json or environment variables
+   - Check baseUrl for local models (LM Studio, Ollama)
+   - Ensure model name matches provider configuration
+
+2. **Vector Store Errors**
+   - For Chroma: Verify Chroma server is running on specified URL
+   - Check embedding model configuration in llm.json
+   - Ensure source documents exist at specified paths
+
+3. **MCP Server Errors**
+   - Verify MCP server is accessible at specified URL
+   - Check timeout configuration
+   - Review MCP server logs for errors
+
+4. **Workflow Execution Errors**
+   - Check step dependencies and template syntax
+   - Verify agent names referenced in steps exist
+   - Review timeout configuration for long-running workflows
+
+## Additional Resources
+
+- **Documentation:** https://ddalcu.github.io/agent-orcha/documentation.html
+- **GitHub Repository:** https://github.com/ddalcu/agent-orcha
+- **NPM Package:** https://www.npmjs.com/package/agent-orcha
+- **Issue Tracker:** https://github.com/ddalcu/agent-orcha/issues
+- **Discussions:** https://github.com/ddalcu/agent-orcha/discussions
+
+## Version History
+
+- **0.0.1** (Initial Release)
+  - Declarative YAML-based agent configuration
+  - Multi-agent workflow orchestration
+  - Vector store integration (Memory, Chroma)
+  - MCP server support
+  - Custom function tools
+  - REST API with SSE streaming
+  - CLI for project initialization and server management
+  - Web UI for agent and workflow execution
+
+---
+
+Last Updated: 2026-01-21

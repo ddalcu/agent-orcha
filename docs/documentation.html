@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO Meta Tags -->
+  <title>Documentation - Agent Orcha | Multi-Agent AI Framework</title>
+  <meta name="description" content="Complete documentation for Agent Orcha. Learn agents, workflows, vector stores, MCP integration, and custom functions with YAML configuration.">
+  <meta name="keywords" content="agent orcha documentation, multi-agent AI, YAML configuration, MCP tools, RAG, vector stores">
+  <meta name="author" content="Agent Orcha">
+
+  <!-- Open Graph Tags -->
+  <meta property="og:title" content="Documentation - Agent Orcha">
+  <meta property="og:description" content="Complete documentation for building multi-agent AI systems with Agent Orcha.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ddalcu.github.io/agent-orcha/documentation.html">
+
+  <!-- Twitter Card Tags -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Documentation - Agent Orcha">
+  <meta name="twitter:description" content="Complete documentation for building multi-agent AI systems.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-container">
+      <a href="index.html" class="nav-logo">
+        <img src="assets/images/logo-only.png" alt="Agent Orcha Logo">
+        <span>Agent Orcha</span>
+      </a>
+      <button class="nav-toggle" aria-label="Toggle navigation">☰</button>
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="https://github.com/ddalcu/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-npm"></i> NPM</a></li>
+      </ul>
+    </div>
+  </nav>
+
+
+  <!-- Documentation Content -->
+  <section class="section">
+    <div class="docs-layout">
+      <!-- Left Sidebar Navigation -->
+      <aside class="docs-sidebar">
+        <nav class="docs-nav">
+          <h4>Getting Started</h4>
+          <ul>
+            <li><a href="#quick-start">Quick Start Guide</a></li>
+          </ul>
+
+          <h4>Core Concepts</h4>
+          <ul>
+            <li><a href="#core-concepts">Overview</a></li>
+            <li><a href="#agents">Agents</a></li>
+            <li><a href="#workflows">Workflows</a></li>
+            <li><a href="#vector-stores">Vector Stores</a></li>
+            <li><a href="#functions">Functions</a></li>
+            <li><a href="#mcp-servers">MCP Servers</a></li>
+          </ul>
+
+          <h4>API Reference</h4>
+          <ul>
+            <li><a href="#api-reference">Overview</a></li>
+            <li>
+              <ul>
+                <li><a href="#agents-api">Agents API</a></li>
+                <li><a href="#workflows-api">Workflows API</a></li>
+                <li><a href="#vectors-api">Vector Stores API</a></li>
+              </ul>
+            </li>
+          </ul>
+
+          <h4>CLI Reference</h4>
+          <ul>
+            <li><a href="#cli-reference">CLI Commands</a></li>
+          </ul>
+
+          <h4>Examples</h4>
+          <ul>
+            <li><a href="#examples">Code Examples</a></li>
+          </ul>
+        </nav>
+      </aside>
+
+      <!-- Main Content -->
+      <div class="docs-content">
+
+        <!-- Quick Start Guide -->
+        <h2 id="quick-start">Quick Start Guide</h2>
+        <p>Get started with Agent Orcha in minutes. Follow these steps to set up your first multi-agent system.</p>
+
+        <div class="expandable active">
+          <div class="expandable-header">
+            <h3>Step 1: Initialize Your Project</h3>
+            <span class="expandable-icon">▼</span>
+          </div>
+          <div class="expandable-content">
+            <div class="expandable-body">
+              <p>Create a new Agent Orcha project with example configurations:</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-language">Bash</span>
+                  <button class="code-copy-btn" data-copy-target="init-cmd">Copy</button>
+                </div>
+                <div class="code-content">
+                  <pre id="init-cmd"><code>npx agent-orcha init my-project
+cd my-project</code></pre>
+                </div>
+              </div>
+              <p>This creates a project directory with:</p>
+              <ul>
+                <li><code>agents/</code> - Example agent configurations</li>
+                <li><code>workflows/</code> - Example workflow definitions</li>
+                <li><code>functions/</code> - Custom JavaScript functions</li>
+                <li><code>vectors/</code> - Vector store configurations</li>
+                <li><code>llm.json</code> - LLM provider settings</li>
+                <li><code>mcp.json</code> - MCP server configuration</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="expandable">
+          <div class="expandable-header">
+            <h3>Step 2: Configure Your LLM</h3>
+            <span class="expandable-icon">▼</span>
+          </div>
+          <div class="expandable-content">
+            <div class="expandable-body">
+              <p>Edit <code>llm.json</code> to configure your LLM providers. Agent Orcha supports OpenAI, Anthropic, Gemini, and local models.</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-language">JSON</span>
+                  <button class="code-copy-btn" data-copy-target="llm-config">Copy</button>
+                </div>
+                <div class="code-content">
+                  <pre id="llm-config"><code>{
+  "version": "1.0",
+  "models": {
+    "default": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:1234/v1",
+      "apiKey": "not-needed",
+      "model": "your-model-name",
+      "temperature": 0.7
+    },
+    "openai": {
+      "apiKey": "sk-your-openai-key",
+      "model": "gpt-4o",
+      "temperature": 0.7
+    }
+  },
+  "embeddings": {
+    "default": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:1234/v1",
+      "apiKey": "not-needed",
+      "model": "text-embedding-model"
+    }
+  }
+}</code></pre>
+                </div>
+              </div>
+              <p><strong>For local models:</strong></p>
+              <ul>
+                <li><strong>LM Studio:</strong> Use <code>baseUrl: "http://localhost:1234/v1"</code></li>
+                <li><strong>Ollama:</strong> Use <code>baseUrl: "http://localhost:11434/v1"</code></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="expandable">
+          <div class="expandable-header">
+            <h3>Step 3: Create Your First Agent</h3>
+            <span class="expandable-icon">▼</span>
+          </div>
+          <div class="expandable-content">
+            <div class="expandable-body">
+              <p>Create a new file <code>agents/myagent.agent.yaml</code>:</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-language">YAML</span>
+                  <button class="code-copy-btn" data-copy-target="first-agent">Copy</button>
+                </div>
+                <div class="code-content">
+                  <pre id="first-agent"><code>name: myagent
+description: My first AI agent
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0.7
+
+prompt:
+  system: |
+    You are a helpful assistant.
+    Answer questions clearly and concisely.
+  inputVariables:
+    - query
+
+output:
+  format: text</code></pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="expandable">
+          <div class="expandable-header">
+            <h3>Step 4: Start the Server</h3>
+            <span class="expandable-icon">▼</span>
+          </div>
+          <div class="expandable-content">
+            <div class="expandable-body">
+              <p>Launch the Agent Orcha server:</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-language">Bash</span>
+                  <button class="code-copy-btn" data-copy-target="start-cmd">Copy</button>
+                </div>
+                <div class="code-content">
+                  <pre id="start-cmd"><code>npx agent-orcha start</code></pre>
+                </div>
+              </div>
+              <p>You should see:</p>
+              <div class="code-block">
+                <div class="code-content">
+                  <pre><code>🚀 Agent Orchestrator running on http://localhost:3000
+📊 Web UI available at http://localhost:3000</code></pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="expandable">
+          <div class="expandable-header">
+            <h3>Step 5: Test Your Agent</h3>
+            <span class="expandable-icon">▼</span>
+          </div>
+          <div class="expandable-content">
+            <div class="expandable-body">
+              <p>Invoke your agent via the REST API:</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-language">Bash</span>
+                  <button class="code-copy-btn" data-copy-target="test-agent">Copy</button>
+                </div>
+                <div class="code-content">
+                  <pre id="test-agent"><code>curl -X POST http://localhost:3000/api/agents/myagent/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"query": "Hello, how are you?"}}'</code></pre>
+                </div>
+              </div>
+              <p>Expected response:</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-language">JSON</span>
+                </div>
+                <div class="code-content">
+                  <pre><code>{
+  "output": "Hello! I'm doing well, thank you...",
+  "metadata": {
+    "tokensUsed": 42,
+    "toolCalls": [],
+    "duration": 823
+  }
+}</code></pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Core Concepts -->
+        <h2 id="core-concepts" class="mt-2xl">Core Concepts</h2>
+
+        <h3 id="agents">Agents</h3>
+        <p>Agents are AI-powered units that can use tools and respond to queries. Each agent is defined in a YAML file with its configuration.</p>
+
+        <h4>Agent Schema</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="agent-schema">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="agent-schema"><code>name: string                    # Unique identifier (required)
+description: string             # Human-readable description (required)
+version: string                 # Semantic version (default: "1.0.0")
+
+llm: string | object            # Reference to LLM config in llm.json
+  # Simple: llm: default
+  # With override: llm: { name: default, temperature: 0.3 }
+
+prompt:                         # Prompt configuration (required)
+  system: string                # System message/instructions
+  inputVariables: [string]      # Variables to interpolate
+
+tools:                          # Tools available to agent (optional)
+  - mcp:<server-name>           # MCP server tools
+  - vector:<store-name>         # Vector store search
+  - function:<function-name>    # Custom functions
+  - builtin:<tool-name>         # Built-in tools
+
+output:                         # Output formatting (optional)
+  format: text | json | structured
+
+metadata:                       # Custom metadata (optional)
+  category: string
+  tags: [string]</code></pre>
+          </div>
+        </div>
+
+        <h4>Example Agent with Tools</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="agent-example">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="agent-example"><code>name: math
+description: An agent that can calculate Fibonacci numbers
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0.3
+
+prompt:
+  system: |
+    You are a mathematical assistant specialized in Fibonacci numbers.
+
+    When users ask about Fibonacci numbers:
+    1. Parse the index from their query (0-based indexing)
+    2. Use the fibonacci function to calculate the result
+    3. Return the result in a clear, formatted way
+  inputVariables:
+    - query
+
+tools:
+  - function:fibonacci  # References fibonacci.function.js
+
+output:
+  format: text
+
+metadata:
+  category: mathematics
+  tags:
+    - math
+    - fibonacci</code></pre>
+          </div>
+        </div>
+
+        <h3 id="workflows" class="mt-xl">Workflows</h3>
+        <p>Workflows orchestrate multiple agents in a defined sequence with parallel execution, conditional logic, and state management.</p>
+
+        <h4>Workflow Schema</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="workflow-schema">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="workflow-schema"><code>name: string                    # Unique identifier (required)
+description: string             # Human-readable description (required)
+version: string                 # Semantic version (default: "1.0.0")
+
+input:                          # Input schema (required)
+  schema:
+    <field_name>:
+      type: string | number | boolean | array | object
+      required: boolean
+      default: any
+      description: string
+
+steps:                          # Workflow steps (required)
+  - id: string                  # Unique step identifier
+    agent: string               # Agent name to execute
+    input:                      # Input mapping using templates
+      <key>: "{{input.field}}"
+      <key>: "{{steps.stepId.output}}"
+    condition: string           # Optional conditional execution
+    retry:                      # Optional retry configuration
+      maxAttempts: number
+      delay: number
+    output:
+      key: string
+
+config:                         # Workflow configuration (optional)
+  timeout: number               # Total timeout ms (default: 300000)
+  onError: stop | continue | retry
+
+output:                         # Output mapping (required)
+  <key>: "{{steps.stepId.output}}"
+
+metadata:                       # Custom metadata (optional)
+  category: string
+  tags: [string]</code></pre>
+          </div>
+        </div>
+
+        <h4>Template Syntax</h4>
+        <p>Access data within workflows using double curly braces:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Template</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>{{input.fieldName}}</code></td>
+              <td>Access workflow input field</td>
+            </tr>
+            <tr>
+              <td><code>{{steps.stepId.output}}</code></td>
+              <td>Access step output</td>
+            </tr>
+            <tr>
+              <td><code>{{steps.stepId.output.nested.path}}</code></td>
+              <td>Access nested output</td>
+            </tr>
+            <tr>
+              <td><code>{{steps.stepId.metadata.duration}}</code></td>
+              <td>Access step metadata</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="vector-stores" class="mt-xl">Vector Stores</h3>
+        <p>Vector stores enable semantic search and RAG (Retrieval Augmented Generation) capabilities for your agents.</p>
+
+        <h4>Vector Store Schema</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="vector-schema">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="vector-schema"><code>name: string                    # Unique identifier (required)
+description: string             # Human-readable description (required)
+
+source:                         # Data source (required)
+  type: directory | file | url
+  path: string                  # Path relative to project root
+  pattern: string               # Glob pattern for directories
+  recursive: boolean            # Recursive search (default: true)
+
+loader:                         # Document loader (required)
+  type: text | pdf | csv | json | markdown
+
+splitter:                       # Text chunking (required)
+  type: character | recursive | token | markdown
+  chunkSize: number             # Characters per chunk (default: 1000)
+  chunkOverlap: number          # Overlap between chunks (default: 200)
+
+embedding: string               # Reference to embedding config (default: "default")
+
+store:                          # Vector store backend (required)
+  type: memory | chroma
+  options:
+    path: string                # Storage path (for chroma)
+    collectionName: string      # Collection name
+    url: string                 # Server URL (for chroma)
+
+search:                         # Search configuration (optional)
+  defaultK: number              # Results per search (default: 4)
+  scoreThreshold: number        # Minimum similarity (0-1)</code></pre>
+          </div>
+        </div>
+
+        <h3 id="functions" class="mt-xl">Functions</h3>
+        <p>Functions are custom JavaScript tools that extend agent capabilities. They're simple to create and require no dependencies.</p>
+
+        <h4>Function Schema</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">JavaScript</span>
+            <button class="code-copy-btn" data-copy-target="function-schema">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="function-schema"><code>export default {
+  name: 'function-name',
+  description: 'What it does',
+
+  parameters: {
+    param1: {
+      type: 'number',  // string | number | boolean | array | object | enum
+      description: 'Parameter description',
+      required: true,
+      default: 0,
+    },
+  },
+
+  execute: async ({ param1 }) => {
+    // Your logic here
+    return `Result: ${param1}`;
+  },
+};
+
+export const metadata = {
+  name: 'function-name',
+  version: '1.0.0',
+  author: 'Your Name',
+  tags: ['category'],
+};</code></pre>
+          </div>
+        </div>
+
+        <h4>Example Function</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">JavaScript</span>
+            <button class="code-copy-btn" data-copy-target="fibonacci-func">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="fibonacci-func"><code>export default {
+  name: 'fibonacci',
+  description: 'Returns the nth Fibonacci number (0-based indexing)',
+
+  parameters: {
+    n: {
+      type: 'number',
+      description: 'The index (0-based, max 100)',
+    },
+  },
+
+  execute: async ({ n }) => {
+    if (n < 0 || !Number.isInteger(n)) {
+      throw new Error('Index must be a non-negative integer');
+    }
+    if (n > 100) {
+      throw new Error('Index too large (max 100)');
+    }
+
+    if (n === 0) return 'Fibonacci(0) = 0';
+    if (n === 1) return 'Fibonacci(1) = 1';
+
+    let prev = 0, curr = 1;
+    for (let i = 2; i <= n; i++) {
+      [prev, curr] = [curr, prev + curr];
+    }
+
+    return `Fibonacci(${n}) = ${curr}`;
+  },
+};</code></pre>
+          </div>
+        </div>
+
+        <h3 id="mcp-servers" class="mt-xl">MCP Servers</h3>
+        <p>Model Context Protocol (MCP) servers provide external tools to agents. Configure them in <code>mcp.json</code>.</p>
+
+        <h4>MCP Configuration</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">JSON</span>
+            <button class="code-copy-btn" data-copy-target="mcp-config">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="mcp-config"><code>{
+  "version": "1.0.0",
+  "servers": {
+    "fetch": {
+      "transport": "streamable-http",
+      "url": "https://remote.mcpservers.org/fetch/mcp",
+      "description": "Web fetch capabilities",
+      "timeout": 30000,
+      "enabled": true
+    }
+  },
+  "globalOptions": {
+    "throwOnLoadError": false,
+    "prefixToolNameWithServerName": true,
+    "defaultToolTimeout": 30000
+  }
+}</code></pre>
+          </div>
+        </div>
+
+        <!-- API Reference -->
+        <h2 id="api-reference" class="mt-2xl">API Reference</h2>
+        <p>Complete REST API documentation for interacting with agents, workflows, and vector stores.</p>
+
+        <h3>Health Check</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">HTTP</span>
+          </div>
+          <div class="code-content">
+            <pre><code>GET /health
+
+Response:
+{
+  "status": "ok",
+  "timestamp": "2026-01-21T12:00:00.000Z"
+}</code></pre>
+          </div>
+        </div>
+
+        <h3 id="agents-api">Agents API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/agents</code></td>
+              <td>List all agents</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/agents/:name</code></td>
+              <td>Get agent details</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/agents/:name/invoke</code></td>
+              <td>Run agent</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/agents/:name/stream</code></td>
+              <td>Stream agent response (SSE)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Invoke Agent</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+            <button class="code-copy-btn" data-copy-target="agent-invoke">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="agent-invoke"><code>curl -X POST http://localhost:3000/api/agents/researcher/invoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "topic": "your topic",
+      "context": "additional context"
+    }
+  }'</code></pre>
+          </div>
+        </div>
+
+        <h4>Response</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">JSON</span>
+          </div>
+          <div class="code-content">
+            <pre><code>{
+  "output": "Agent response text",
+  "metadata": {
+    "tokensUsed": 150,
+    "toolCalls": ["fetch", "vector_search"],
+    "duration": 1234
+  }
+}</code></pre>
+          </div>
+        </div>
+
+        <h3 id="workflows-api" class="mt-xl">Workflows API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/workflows</code></td>
+              <td>List all workflows</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/workflows/:name</code></td>
+              <td>Get workflow details</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/workflows/:name/run</code></td>
+              <td>Execute workflow</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Run Workflow</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+            <button class="code-copy-btn" data-copy-target="workflow-run">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="workflow-run"><code>curl -X POST http://localhost:3000/api/workflows/research-paper/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "topic": "research topic",
+      "style": "professional"
+    }
+  }'</code></pre>
+          </div>
+        </div>
+
+        <h3 id="vectors-api" class="mt-xl">Vector Stores API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/vectors</code></td>
+              <td>List all vector stores</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/vectors/:name</code></td>
+              <td>Get vector store config</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/vectors/:name/search</code></td>
+              <td>Search vector store</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/vectors/:name/refresh</code></td>
+              <td>Reload documents</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/vectors/:name/add</code></td>
+              <td>Add documents</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Search Vector Store</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+            <button class="code-copy-btn" data-copy-target="vector-search">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="vector-search"><code>curl -X POST http://localhost:3000/api/vectors/knowledge/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "search term",
+    "k": 4
+  }'</code></pre>
+          </div>
+        </div>
+
+        <!-- CLI Reference -->
+        <h2 id="cli-reference" class="mt-2xl">CLI Reference</h2>
+        <p>Command-line interface for Agent Orcha operations.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Command</th>
+              <th>Description</th>
+              <th>Options</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>npx agent-orcha init [dir]</code></td>
+              <td>Initialize a new project with example configs</td>
+              <td><code>dir</code> - Target directory (default: current)</td>
+            </tr>
+            <tr>
+              <td><code>npx agent-orcha start</code></td>
+              <td>Start the agent orchestrator server</td>
+              <td>Environment variables: <code>PORT</code>, <code>HOST</code></td>
+            </tr>
+            <tr>
+              <td><code>npx agent-orcha help</code></td>
+              <td>Show help information</td>
+              <td>-</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Examples -->
+        <h2 id="examples" class="mt-2xl">Examples</h2>
+        <p>Real-world examples to help you get started with common use cases.</p>
+
+        <h3>Example 1: Math Agent with Custom Function</h3>
+        <p>This example shows an agent using a custom Fibonacci calculator function.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML - agents/math.agent.yaml</span>
+            <button class="code-copy-btn" data-copy-target="math-agent">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="math-agent"><code>name: math
+description: An agent that can calculate Fibonacci numbers
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0.3
+
+prompt:
+  system: |
+    You are a mathematical assistant.
+    Use the fibonacci function to calculate results.
+  inputVariables:
+    - query
+
+tools:
+  - function:fibonacci
+
+output:
+  format: text</code></pre>
+          </div>
+        </div>
+
+        <h3 class="mt-xl">Example 2: Multi-Step Workflow</h3>
+        <p>Orchestrating multiple agents to complete a complex task.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML - workflows/example.workflow.yaml</span>
+            <button class="code-copy-btn" data-copy-target="example-workflow">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="example-workflow"><code>name: example-workflow
+description: A workflow demonstrating multi-agent orchestration
+version: "1.0.0"
+
+input:
+  schema:
+    topic:
+      type: string
+      required: true
+      description: The topic to process
+
+steps:
+  - id: get-time
+    agent: time
+    input:
+      timezone: "America/New_York"
+    output:
+      key: current_time
+
+  - id: search-knowledge
+    agent: knowledge
+    input:
+      query: "{{input.topic}}"
+    output:
+      key: knowledge_result
+
+  - id: perform-calculation
+    agent: math
+    input:
+      query: "Calculate the 10th Fibonacci number"
+    output:
+      key: calculation_result
+
+  - id: summarize
+    agent: example
+    input:
+      query: |
+        Summarize: {{steps.get-time.output}}
+        Topic: {{input.topic}}
+        Knowledge: {{steps.search-knowledge.output}}
+        Math: {{steps.perform-calculation.output}}
+    output:
+      key: final_summary
+
+config:
+  timeout: 300000
+  onError: stop
+
+output:
+  timestamp: "{{steps.get-time.output}}"
+  knowledge: "{{steps.search-knowledge.output}}"
+  calculation: "{{steps.perform-calculation.output}}"
+  summary: "{{steps.summarize.output}}"</code></pre>
+          </div>
+        </div>
+
+        <h3 class="mt-xl">Example 3: Vector Store for RAG</h3>
+        <p>Setting up semantic search with a vector store.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML - vectors/knowledge.vector.yaml</span>
+            <button class="code-copy-btn" data-copy-target="vector-example">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="vector-example"><code>name: knowledge
+description: Knowledge base for semantic search
+
+source:
+  type: directory
+  path: vectors/sample-data
+  pattern: "*.txt"
+
+loader:
+  type: text
+
+splitter:
+  type: character
+  chunkSize: 1000
+  chunkOverlap: 200
+
+embedding: default
+
+store:
+  type: memory
+
+search:
+  defaultK: 4
+  scoreThreshold: 0.2</code></pre>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h4>Product</h4>
+          <ul class="footer-links">
+            <li><a href="documentation.html">Documentation</a></li>
+            <li><a href="documentation.html#quick-start">Quick Start</a></li>
+            <li><a href="documentation.html#examples">Examples</a></li>
+            <li><a href="documentation.html#api-reference">API Reference</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>Community</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/ddalcu/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/issues" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Issues</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/discussions" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Discussions</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>Resources</h4>
+          <ul class="footer-links">
+            <li><a href="https://www.npmjs.com/package/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-npm"></i> NPM Package</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/blob/main/README.md" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> README</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/blob/main/LICENSE" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> License</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>About</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
+            <li>Version 0.0.1</li>
+            <li>MIT License</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Agent Orcha. Released under the MIT License. 100% open source and forever free.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="assets/js/main.js"></script>
+  <script src="assets/js/code-copy.js"></script>
+</body>
+</html>

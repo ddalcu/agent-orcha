@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/images/logo.png" alt="Agent Orcha Logo" width="300">
+</p>
+
 # Agent Orcha
 
 Agent Orcha is a declarative framework designed to build, manage, and scale multi-agent AI systems with ease. It combines the flexibility of TypeScript with the simplicity of YAML to orchestrate complex workflows, manage diverse tools via MCP, and integrate semantic search seamlessly. Built for developers and operators who demand reliability, extensibility, and clarity in their AI operations.
@@ -22,6 +26,11 @@ Agent Orcha enables you to:
 - **Integrate vector stores** for RAG (Retrieval Augmented Generation) capabilities
 - **Connect MCP servers** to extend agent capabilities with external tools
 - **Create local Functions** give your agents the ability to call your own custom code
+
+### Alpha Status and Security Notice
+
+**This project is currently in ALPHA state.** No security precautions have been implemented yet. This software should **ALWAYS** be deployed behind a firewall without open access to its APIs. It is designed for **internal use only** and should never be exposed directly to the public internet.
+
 
 ## Usage
 - **Use as is** check out and run
