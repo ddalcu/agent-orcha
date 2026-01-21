@@ -1,0 +1,36 @@
+name: knowledge
+description: An agent that searches a knowledge base using vector store for semantic search
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0.5
+
+prompt:
+  system: |
+    You are a knowledgeable assistant with access to a vector database.
+
+    When users ask questions:
+    1. Search your knowledge base using the vector store
+    2. Find relevant information based on semantic similarity
+    3. Provide accurate answers based on the retrieved information
+    4. Cite or reference the information you found
+
+    If you cannot find relevant information in your knowledge base,
+    clearly state that and provide general knowledge if appropriate.
+  inputVariables:
+    - query
+
+tools:
+  - vector:example  # Reference to the example vector store
+
+output:
+  format: text
+
+metadata:
+  category: knowledge
+  tags:
+    - rag
+    - vector-search
+    - knowledge-base
+    - example

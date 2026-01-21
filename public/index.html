@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Orcha</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            dark: {
+              bg: '#0f172a',
+              surface: '#1e293b',
+              border: '#334155',
+              hover: '#475569',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-dark-bg text-gray-100 min-h-screen">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-8">
+      <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+        Agent Orcha
+      </h1>
+      <p class="text-gray-400 mt-2">Orchestrating AI Agents with Power</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-dark-border mb-6">
+      <nav class="flex space-x-8">
+        <button class="tab-btn border-b-2 border-blue-500 text-blue-400 pb-3 px-1 font-medium" data-tab="agents">
+          Agents
+        </button>
+        <button class="tab-btn border-b-2 border-transparent text-gray-400 hover:text-gray-300 pb-3 px-1 font-medium" data-tab="workflows">
+          Workflows
+        </button>
+        <button class="tab-btn border-b-2 border-transparent text-gray-400 hover:text-gray-300 pb-3 px-1 font-medium" data-tab="llm">
+          LLMs
+        </button>
+      </nav>
+    </div>
+
+    <!-- Agents Tab -->
+    <div id="agentsTab" class="tab-content">
+      <div class="space-y-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Select Agent</label>
+          <select id="agentSelect" class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-2.5 text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <option value="">-- Select Agent --</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Input</label>
+          <textarea id="agentInput" rows="6" class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none" placeholder="Enter your message or input here..."></textarea>
+        </div>
+
+        <button id="runAgent" disabled class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
+          Run Agent
+        </button>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Output</label>
+          <div id="agentOutput" class="bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto">
+            Select an agent to get started.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Workflows Tab -->
+    <div id="workflowsTab" class="tab-content hidden">
+      <div class="space-y-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Select Workflow</label>
+          <select id="workflowSelect" class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-2.5 text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+            <option value="">-- Select Workflow --</option>
+          </select>
+        </div>
+
+        <!-- Flow Diagram -->
+        <div id="flowDiagram" class="bg-dark-surface border border-dark-border rounded-lg p-6 overflow-x-auto">
+          <div class="text-gray-500 italic text-center py-8">Select a workflow to see its flow</div>
+        </div>
+
+        <!-- Workflow Inputs -->
+        <div id="workflowInputs" class="space-y-3"></div>
+
+        <!-- Workflow Status -->
+        <div id="workflowStatus" class="bg-dark-surface border border-dark-border rounded-lg p-5 hidden">
+          <div class="flex justify-between items-center mb-3">
+            <div id="statusMessage" class="font-medium text-gray-200">Starting workflow...</div>
+            <div id="statusTime" class="text-sm text-gray-400">0s</div>
+          </div>
+          <div class="w-full bg-dark-bg rounded-full h-2 mb-4">
+            <div id="progressFill" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <div id="statusLog" class="bg-dark-bg rounded-lg p-3 max-h-48 overflow-y-auto text-xs font-mono space-y-1"></div>
+        </div>
+
+        <button id="runWorkflow" disabled class="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
+          Run Workflow
+        </button>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Output</label>
+          <div id="workflowOutput" class="bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto">
+            Select a workflow to get started.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LLM Tab -->
+    <div id="llmTab" class="tab-content hidden">
+      <div class="space-y-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Select LLM</label>
+          <select id="llmSelect" class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-2.5 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent">
+            <option value="">-- Select LLM --</option>
+          </select>
+        </div>
+
+        <!-- LLM Info -->
+        <div id="llmInfo" class="bg-dark-surface/50 border border-dark-border rounded-lg p-4 hidden">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span class="text-gray-400">Model:</span>
+              <span id="llmModel" class="ml-2 text-gray-200 font-medium"></span>
+            </div>
+            <div>
+              <span class="text-gray-400">Base URL:</span>
+              <span id="llmBaseUrl" class="ml-2 text-gray-200 font-medium"></span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Message</label>
+          <textarea id="llmInput" rows="6" class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none" placeholder="Enter your message to the LLM..."></textarea>
+        </div>
+
+        <div class="flex space-x-3">
+          <button id="runLlm" disabled class="bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
+            Send Message
+          </button>
+          <button id="streamLlm" disabled class="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
+            Stream Response
+          </button>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Output</label>
+          <div id="llmOutput" class="bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const agentSelect = document.getElementById('agentSelect');
+    const workflowSelect = document.getElementById('workflowSelect');
+    const llmSelect = document.getElementById('llmSelect');
+    const agentInputEl = document.getElementById('agentInput');
+    const agentOutputEl = document.getElementById('agentOutput');
+    const workflowOutputEl = document.getElementById('workflowOutput');
+    const llmInputEl = document.getElementById('llmInput');
+    const llmOutputEl = document.getElementById('llmOutput');
+    const llmInfoEl = document.getElementById('llmInfo');
+    const llmModelEl = document.getElementById('llmModel');
+    const llmBaseUrlEl = document.getElementById('llmBaseUrl');
+    const runAgentBtn = document.getElementById('runAgent');
+    const runWorkflowBtn = document.getElementById('runWorkflow');
+    const runLlmBtn = document.getElementById('runLlm');
+    const streamLlmBtn = document.getElementById('streamLlm');
+    const workflowInputsEl = document.getElementById('workflowInputs');
+    const flowDiagramEl = document.getElementById('flowDiagram');
+    const workflowStatusEl = document.getElementById('workflowStatus');
+    const statusMessageEl = document.getElementById('statusMessage');
+    const statusTimeEl = document.getElementById('statusTime');
+    const progressFillEl = document.getElementById('progressFill');
+    const statusLogEl = document.getElementById('statusLog');
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    let agents = [];
+    let workflows = [];
+    let llmConfigs = [];
+    let currentWorkflowSchema = null;
+    let currentWorkflowSteps = [];
+    let stepElements = new Map();
+    let statusStartTime = null;
+    let statusInterval = null;
+
+    // Tab switching
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabName = btn.dataset.tab;
+        tabBtns.forEach(b => {
+          b.classList.remove('border-blue-500', 'border-purple-500', 'border-green-500', 'text-blue-400', 'text-purple-400', 'text-green-400');
+          b.classList.add('border-transparent', 'text-gray-400');
+        });
+        tabContents.forEach(tc => tc.classList.add('hidden'));
+
+        const colors = { agents: 'blue', workflows: 'purple', llm: 'green' };
+        const color = colors[tabName] || 'blue';
+        btn.classList.remove('border-transparent', 'text-gray-400');
+        btn.classList.add(`border-${color}-500`, `text-${color}-400`);
+
+        document.getElementById(`${tabName}Tab`).classList.remove('hidden');
+      });
+    });
+
+    async function loadAgents() {
+      try {
+        const res = await fetch('/api/agents');
+        agents = await res.json();
+        agents.forEach(agent => {
+          const opt = document.createElement('option');
+          opt.value = agent.name;
+          opt.textContent = `${agent.name} - ${agent.description}`;
+          agentSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load agents:', e);
+      }
+    }
+
+    async function loadWorkflows() {
+      try {
+        const res = await fetch('/api/workflows');
+        workflows = await res.json();
+        workflows.forEach(wf => {
+          const opt = document.createElement('option');
+          opt.value = wf.name;
+          opt.textContent = `${wf.name} - ${wf.description}`;
+          workflowSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load workflows:', e);
+      }
+    }
+
+    async function loadLLMs() {
+      try {
+        const res = await fetch('/api/llm');
+        llmConfigs = await res.json();
+        llmConfigs.forEach(llm => {
+          const opt = document.createElement('option');
+          opt.value = llm.name;
+          opt.textContent = `${llm.name} (${llm.model})`;
+          llmSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load LLMs:', e);
+      }
+    }
+
+    agentSelect.addEventListener('change', () => {
+      runAgentBtn.disabled = !agentSelect.value;
+    });
+
+    workflowSelect.addEventListener('change', async () => {
+      runWorkflowBtn.disabled = !workflowSelect.value;
+      resetWorkflowStatus();
+      if (workflowSelect.value) {
+        await loadWorkflowDetails(workflowSelect.value);
+      } else {
+        workflowInputsEl.innerHTML = '';
+        currentWorkflowSchema = null;
+        currentWorkflowSteps = [];
+        flowDiagramEl.innerHTML = '<div class="text-gray-500 italic text-center py-8">Select a workflow to see its flow</div>';
+      }
+    });
+
+    llmSelect.addEventListener('change', () => {
+      const hasValue = !!llmSelect.value;
+      runLlmBtn.disabled = !hasValue;
+      streamLlmBtn.disabled = !hasValue;
+
+      if (hasValue) {
+        const llm = llmConfigs.find(l => l.name === llmSelect.value);
+        if (llm) {
+          llmInfoEl.classList.remove('hidden');
+          llmModelEl.textContent = llm.model;
+          llmBaseUrlEl.textContent = llm.baseUrl || '(OpenAI default)';
+        }
+      } else {
+        llmInfoEl.classList.add('hidden');
+      }
+    });
+
+    async function loadWorkflowDetails(name) {
+      try {
+        const res = await fetch(`/api/workflows/${name}`);
+        const workflow = await res.json();
+        currentWorkflowSchema = workflow.input?.schema || {};
+        currentWorkflowSteps = workflow.steps || [];
+        renderWorkflowInputs(currentWorkflowSchema);
+        renderFlowDiagram(currentWorkflowSteps);
+      } catch (e) {
+        console.error('Failed to load workflow details:', e);
+      }
+    }
+
+    function parseToolRef(toolRef) {
+      if (typeof toolRef === 'string') {
+        const [source, name] = toolRef.split(':');
+        return { source, name };
+      }
+      return { source: toolRef.source, name: toolRef.name };
+    }
+
+    function getAgentTools(agentName) {
+      const agent = agents.find(a => a.name === agentName);
+      if (!agent || !agent.tools) return { mcp: [], vector: [] };
+
+      const mcp = [];
+      const vector = [];
+
+      agent.tools.forEach(tool => {
+        const { source, name } = parseToolRef(tool);
+        if (source === 'mcp') mcp.push(name);
+        else if (source === 'vector') vector.push(name);
+      });
+
+      return { mcp, vector };
+    }
+
+    function renderFlowDiagram(steps) {
+      flowDiagramEl.innerHTML = '';
+      stepElements.clear();
+
+      if (!steps || steps.length === 0) {
+        flowDiagramEl.innerHTML = '<div class="text-gray-500 italic text-center py-8">No steps defined</div>';
+        return;
+      }
+
+      const container = document.createElement('div');
+      container.className = 'flex items-center gap-3 flex-nowrap';
+
+      // Input node
+      const inputNode = document.createElement('div');
+      inputNode.className = 'flex flex-col items-center px-5 py-3 bg-green-500/10 border border-green-500/30 rounded-lg min-w-[100px] text-center';
+      inputNode.innerHTML = '<span class="font-semibold text-green-400 text-sm">Input</span>';
+      container.appendChild(inputNode);
+
+      steps.forEach((step) => {
+        const arrow = document.createElement('span');
+        arrow.className = 'text-gray-600 text-xl flex-shrink-0';
+        arrow.textContent = '→';
+        container.appendChild(arrow);
+
+        if (step.parallel && step.parallel.length > 0) {
+          const parallelContainer = document.createElement('div');
+          parallelContainer.className = 'flex flex-col gap-2 p-3 bg-dark-bg/50 border border-dashed border-dark-border rounded-lg';
+          step.parallel.forEach(pStep => {
+            const stepEl = createStepElement(pStep);
+            stepElements.set(pStep.id, stepEl);
+            parallelContainer.appendChild(stepEl);
+          });
+          container.appendChild(parallelContainer);
+        } else {
+          const stepEl = createStepElement(step);
+          stepElements.set(step.id, stepEl);
+          container.appendChild(stepEl);
+        }
+      });
+
+      const finalArrow = document.createElement('span');
+      finalArrow.className = 'text-gray-600 text-xl flex-shrink-0';
+      finalArrow.textContent = '→';
+      container.appendChild(finalArrow);
+
+      // Output node
+      const outputNode = document.createElement('div');
+      outputNode.className = 'flex flex-col items-center px-5 py-3 bg-green-500/10 border border-green-500/30 rounded-lg min-w-[100px] text-center';
+      outputNode.innerHTML = '<span class="font-semibold text-green-400 text-sm">Output</span>';
+      container.appendChild(outputNode);
+
+      flowDiagramEl.appendChild(container);
+    }
+
+    function createStepElement(step) {
+      const stepEl = document.createElement('div');
+      stepEl.className = 'flex flex-col items-center px-4 py-3 bg-blue-500/10 border border-blue-500/30 rounded-lg min-w-[120px] text-center transition-all';
+
+      const tools = getAgentTools(step.agent);
+      let toolBadges = '';
+
+      if (tools.mcp.length > 0) {
+        tools.mcp.forEach(name => {
+          toolBadges += `<span class="px-2 py-0.5 text-[10px] font-semibold uppercase bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">MCP:${name}</span>`;
+        });
+      }
+      if (tools.vector.length > 0) {
+        tools.vector.forEach(name => {
+          toolBadges += `<span class="px-2 py-0.5 text-[10px] font-semibold uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded">Vec:${name}</span>`;
+        });
+      }
+
+      stepEl.innerHTML = `
+        <span class="font-semibold text-blue-300 text-sm">${step.id || 'step'}</span>
+        <span class="text-xs text-gray-400 mt-0.5">${step.agent || ''}</span>
+        ${toolBadges ? `<div class="flex flex-wrap gap-1 mt-2 justify-center">${toolBadges}</div>` : ''}
+      `;
+      return stepEl;
+    }
+
+    function renderWorkflowInputs(schema) {
+      workflowInputsEl.innerHTML = '';
+      const entries = Object.entries(schema);
+      if (entries.length === 0) return;
+
+      const label = document.createElement('label');
+      label.className = 'block text-sm font-medium text-gray-300 mb-2';
+      label.textContent = 'Workflow Inputs';
+      workflowInputsEl.appendChild(label);
+
+      const inputsContainer = document.createElement('div');
+      inputsContainer.className = 'space-y-2';
+
+      for (const [key, field] of entries) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = `wf-${key}`;
+        input.placeholder = `${key}${field.required ? ' *' : ''}${field.default ? ` (default: ${field.default})` : ''}`;
+        input.className = 'w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-2.5 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent';
+        if (field.default) input.value = field.default;
+        inputsContainer.appendChild(input);
+      }
+
+      workflowInputsEl.appendChild(inputsContainer);
+    }
+
+    runAgentBtn.addEventListener('click', async () => {
+      const agentName = agentSelect.value;
+      const message = agentInputEl.value.trim();
+      if (!agentName) return;
+
+      const agent = agents.find(a => a.name === agentName);
+      const inputVars = agent?.inputVariables || ['content'];
+      const inputObj = {};
+
+      if (inputVars.length === 1) {
+        inputObj[inputVars[0]] = message;
+      } else {
+        inputObj[inputVars[0] || 'content'] = message;
+        inputVars.slice(1).forEach(v => inputObj[v] = '');
+      }
+
+      agentOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-400 whitespace-pre-wrap overflow-x-auto';
+      agentOutputEl.textContent = 'Running agent...';
+      runAgentBtn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/agents/${agentName}/invoke`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: inputObj })
+        });
+        const result = await res.json();
+        agentOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto';
+        agentOutputEl.textContent = typeof result.output === 'string'
+          ? result.output
+          : JSON.stringify(result, null, 2);
+      } catch (e) {
+        agentOutputEl.className = 'bg-dark-surface border border-red-900/30 rounded-lg p-4 min-h-[200px] font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto';
+        agentOutputEl.textContent = 'Error: ' + e.message;
+      } finally {
+        runAgentBtn.disabled = false;
+      }
+    });
+
+    function updateStepStatus(stepId, status) {
+      const stepEl = stepElements.get(stepId);
+      if (stepEl) {
+        stepEl.className = 'flex flex-col items-center px-4 py-3 rounded-lg min-w-[120px] text-center transition-all';
+        if (status === 'running') {
+          stepEl.className += ' bg-yellow-500/20 border border-yellow-500/40 animate-pulse';
+        } else if (status === 'complete') {
+          stepEl.className += ' bg-green-500/20 border border-green-500/40';
+        } else if (status === 'error') {
+          stepEl.className += ' bg-red-500/20 border border-red-500/40';
+        } else {
+          stepEl.className += ' bg-blue-500/10 border border-blue-500/30';
+        }
+      }
+    }
+
+    function addStatusLog(message, type = '') {
+      const entry = document.createElement('div');
+      entry.className = 'text-gray-400';
+      if (type === 'step-start') entry.className = 'text-blue-400';
+      if (type === 'step-complete') entry.className = 'text-green-400';
+      if (type === 'step-error') entry.className = 'text-red-400';
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      statusLogEl.appendChild(entry);
+      statusLogEl.scrollTop = statusLogEl.scrollHeight;
+    }
+
+    function updateProgress(current, total, elapsed) {
+      const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+      progressFillEl.style.width = `${percentage}%`;
+
+      const seconds = Math.floor(elapsed / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const displayTime = minutes > 0
+        ? `${minutes}m ${seconds % 60}s`
+        : `${seconds}s`;
+      statusTimeEl.textContent = displayTime;
+    }
+
+    function resetWorkflowStatus() {
+      workflowStatusEl.classList.add('hidden');
+      statusLogEl.innerHTML = '';
+      progressFillEl.style.width = '0%';
+      statusTimeEl.textContent = '0s';
+      stepElements.forEach((el) => {
+        el.className = 'flex flex-col items-center px-4 py-3 bg-blue-500/10 border border-blue-500/30 rounded-lg min-w-[120px] text-center transition-all';
+      });
+      if (statusInterval) {
+        clearInterval(statusInterval);
+        statusInterval = null;
+      }
+    }
+
+    runWorkflowBtn.addEventListener('click', async () => {
+      const workflowName = workflowSelect.value;
+      if (!workflowName) return;
+
+      const inputObj = {};
+      if (currentWorkflowSchema) {
+        for (const key of Object.keys(currentWorkflowSchema)) {
+          const el = document.getElementById(`wf-${key}`);
+          if (el && el.value) inputObj[key] = el.value;
+        }
+      }
+
+      resetWorkflowStatus();
+      workflowStatusEl.classList.remove('hidden');
+      workflowOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-400 whitespace-pre-wrap overflow-x-auto';
+      workflowOutputEl.textContent = 'Starting workflow...';
+      runWorkflowBtn.disabled = true;
+      statusStartTime = Date.now();
+
+      statusInterval = setInterval(() => {
+        if (statusStartTime) {
+          const elapsed = Date.now() - statusStartTime;
+          const seconds = Math.floor(elapsed / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const displayTime = minutes > 0
+            ? `${minutes}m ${seconds % 60}s`
+            : `${seconds}s`;
+          statusTimeEl.textContent = displayTime;
+        }
+      }, 1000);
+
+      try {
+        const response = await fetch(`/api/workflows/${workflowName}/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: inputObj })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const update = JSON.parse(data);
+
+                if (update.type === 'status') {
+                  const status = update.data;
+
+                  statusMessageEl.textContent = status.message;
+
+                  if (status.progress) {
+                    updateProgress(status.progress.current, status.progress.total, status.elapsed || 0);
+                  }
+
+                  if (status.type === 'step_start' && status.stepId) {
+                    updateStepStatus(status.stepId, 'running');
+                    addStatusLog(status.message, 'step-start');
+                  } else if (status.type === 'step_complete' && status.stepId) {
+                    updateStepStatus(status.stepId, 'complete');
+                    addStatusLog(status.message, 'step-complete');
+                  } else if (status.type === 'step_error' && status.stepId) {
+                    updateStepStatus(status.stepId, 'error');
+                    addStatusLog(status.message, 'step-error');
+                  } else if (status.type === 'workflow_start') {
+                    addStatusLog(status.message);
+                  } else if (status.type === 'workflow_complete' || status.type === 'workflow_error') {
+                    addStatusLog(status.message);
+                    if (statusInterval) {
+                      clearInterval(statusInterval);
+                      statusInterval = null;
+                    }
+                  }
+                } else if (update.type === 'result') {
+                  const result = update.data;
+                  workflowOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto';
+
+                  let output = '';
+                  if (result.output) {
+                    for (const [key, value] of Object.entries(result.output)) {
+                      output += `=== ${key} ===\n${value}\n\n`;
+                    }
+                  }
+                  output += `Duration: ${result.metadata?.duration}ms`;
+                  workflowOutputEl.textContent = output || JSON.stringify(result, null, 2);
+
+                  if (statusInterval) {
+                    clearInterval(statusInterval);
+                    statusInterval = null;
+                  }
+                }
+              } catch (e) {
+                console.error('Error parsing SSE data:', e, data);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        workflowOutputEl.className = 'bg-dark-surface border border-red-900/30 rounded-lg p-4 min-h-[200px] font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto';
+        workflowOutputEl.textContent = 'Error: ' + e.message;
+        addStatusLog(`Error: ${e.message}`, 'step-error');
+        if (statusInterval) {
+          clearInterval(statusInterval);
+          statusInterval = null;
+        }
+      } finally {
+        runWorkflowBtn.disabled = false;
+      }
+    });
+
+    runLlmBtn.addEventListener('click', async () => {
+      const llmName = llmSelect.value;
+      const message = llmInputEl.value.trim();
+      if (!llmName || !message) return;
+
+      llmOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-400 whitespace-pre-wrap overflow-x-auto';
+      llmOutputEl.textContent = 'Sending message...';
+      runLlmBtn.disabled = true;
+      streamLlmBtn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/llm/${llmName}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+        const result = await res.json();
+
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        llmOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto';
+        llmOutputEl.textContent = result.output;
+      } catch (e) {
+        llmOutputEl.className = 'bg-dark-surface border border-red-900/30 rounded-lg p-4 min-h-[200px] font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto';
+        llmOutputEl.textContent = 'Error: ' + e.message;
+      } finally {
+        runLlmBtn.disabled = false;
+        streamLlmBtn.disabled = false;
+      }
+    });
+
+    streamLlmBtn.addEventListener('click', async () => {
+      const llmName = llmSelect.value;
+      const message = llmInputEl.value.trim();
+      if (!llmName || !message) return;
+
+      llmOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto';
+      llmOutputEl.textContent = '';
+      runLlmBtn.disabled = true;
+      streamLlmBtn.disabled = true;
+
+      try {
+        const response = await fetch(`/api/llm/${llmName}/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const update = JSON.parse(data);
+                if (update.content) {
+                  llmOutputEl.textContent += update.content;
+                } else if (update.error) {
+                  throw new Error(update.error);
+                }
+              } catch (e) {
+                if (e.message !== 'Unexpected end of JSON input') {
+                  console.error('Error parsing SSE data:', e, data);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        llmOutputEl.className = 'bg-dark-surface border border-red-900/30 rounded-lg p-4 min-h-[200px] font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto';
+        llmOutputEl.textContent = 'Error: ' + e.message;
+      } finally {
+        runLlmBtn.disabled = false;
+        streamLlmBtn.disabled = false;
+      }
+    });
+
+    loadAgents();
+    loadWorkflows();
+    loadLLMs();
+  </script>
+</body>
+</html>

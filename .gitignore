@@ -1,0 +1,12 @@
+.claude
+node_modules
+.env
+dist
+tmp
+.chroma
+/agents
+/workflows
+/vectors
+/functions
+/llm.json
+/mcp.json

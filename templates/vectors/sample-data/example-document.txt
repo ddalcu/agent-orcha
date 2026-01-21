@@ -1,0 +1,15 @@
+Welcome to Agent Orchestrator
+
+This is an example document for the vector store.
+
+Agent Orchestrator is a TypeScript framework for building and orchestrating multi-agent AI systems with LangChain, Model Context Protocol (MCP), and vector store integration.
+
+Key Features:
+- Define agents using YAML configuration files
+- Create workflows that coordinate multiple agents
+- Integrate vector stores for RAG capabilities
+- Connect MCP servers for extended functionality
+- REST API for programmatic access
+
+You can add more documents to this directory to build your knowledge base.
+Each document will be chunked and embedded for semantic search.

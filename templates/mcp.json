@@ -1,0 +1,18 @@
+{
+  "version": "1.0.0",
+  "servers": {
+    "fetch": {
+      "transport": "streamable-http",
+      "url": "https://remote.mcpservers.org/fetch/mcp",
+      "description": "Web fetch capabilities for retrieving URLs and returning markdown",
+      "timeout": 30000,
+      "enabled": true
+    }
+  },
+  "globalOptions": {
+    "throwOnLoadError": false,
+    "prefixToolNameWithServerName": true,
+    "additionalToolNamePrefix": "",
+    "defaultToolTimeout": 30000
+  }
+}
