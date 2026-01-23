@@ -1,10 +1,10 @@
-<p align="center">
-  <img src="docs/assets/images/logo.png" alt="Agent Orcha Logo" width="300">
-</p>
+![alt text](https://github.com/ddalcu/agent-orcha/raw/main/docs/assets/images/logo.png "Agent Orcha Logo")
 
 # Agent Orcha
 
 Agent Orcha is a declarative framework designed to build, manage, and scale multi-agent AI systems with ease. It combines the flexibility of TypeScript with the simplicity of YAML to orchestrate complex workflows, manage diverse tools via MCP, and integrate semantic search seamlessly. Built for developers and operators who demand reliability, extensibility, and clarity in their AI operations.
+
+[Agent Orcha Website and Documentation](https://ddalcu.github.io/agent-orcha)
 
 ## Why Agent Orcha?
 
@@ -13,6 +13,8 @@ Agent Orcha is a declarative framework designed to build, manage, and scale mult
 - **Universal Tooling**: Leverage the **Model Context Protocol (MCP)** to connect agents to any external service, API, or database instantly.
 - **RAG Native**: Built-in vector store integration (Chroma, Memory) makes semantic search and knowledge retrieval a first-class citizen.
 - **Robust Workflow Engine**: Orchestrate complex multi-agent sequences with parallel execution, conditional logic, dynamic input interpolation, and state management.
+- **Conversation Memory**: Built-in session-based memory for multi-turn dialogues with automatic message management and TTL cleanup.
+- **Structured Output**: Enforce JSON schemas on agent responses with automatic validation and type safety.
 - **Production Ready**: Includes a high-performance Fastify REST API, Server-Sent Events (SSE) for real-time streaming, and comprehensive logging.
 - **Developer Experience**: Fully typed interfaces, intuitive CLI tooling, and a modular architecture designed for rapid iteration from prototype to production.
 - **Extensible Functions**: Drop in simple JavaScript functions to extend agent capabilities with zero boilerplate.
@@ -303,6 +305,174 @@ metadata:
   tags: [research, web, vectors]
 ```
 
+### Conversation Memory
+
+Agent Orcha supports session-based conversation memory, allowing agents to maintain context across multiple interactions. This is useful for building chatbots, multi-turn dialogues, and stateful applications.
+
+**Features:**
+- In-memory session storage using LangChain messages
+- Automatic FIFO message limit (default: 50 messages per session)
+- Optional TTL-based session cleanup (default: 1 hour)
+- Backward compatible (sessionId is optional)
+
+**API Usage:**
+
+```bash
+# First message
+curl -X POST http://localhost:3000/api/agents/chatbot-memory/invoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {"message": "My name is Alice"},
+    "sessionId": "user-123"
+  }'
+
+# Second message (agent remembers the name)
+curl -X POST http://localhost:3000/api/agents/chatbot-memory/invoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {"message": "What is my name?"},
+    "sessionId": "user-123"
+  }'
+```
+
+**Library Usage:**
+
+```typescript
+// Run agent with conversation memory
+const result1 = await orchestrator.runAgent(
+  'chatbot-memory',
+  { message: 'My name is Alice' },
+  'user-123'  // sessionId
+);
+
+const result2 = await orchestrator.runAgent(
+  'chatbot-memory',
+  { message: 'What is my name?' },
+  'user-123'  // Same sessionId maintains context
+);
+```
+
+**Session Management API:**
+
+```bash
+# Get session stats
+curl http://localhost:3000/api/agents/sessions/stats
+
+# Get session info
+curl http://localhost:3000/api/agents/sessions/user-123
+
+# Clear session
+curl -X DELETE http://localhost:3000/api/agents/sessions/user-123
+```
+
+**Memory Management (Programmatic):**
+
+```typescript
+// Access memory store
+const memory = orchestrator.memory;
+
+// Check if session exists
+const hasSession = memory.hasSession('user-123');
+
+// Get message count
+const count = memory.getMessageCount('user-123');
+
+// Clear a session
+memory.clearSession('user-123');
+
+// Get total sessions
+const totalSessions = memory.getSessionCount();
+```
+
+### Structured Output
+
+Agents can return validated, structured JSON output by specifying an `output.schema` configuration. This leverages LangChain's `withStructuredOutput()` to ensure responses match your desired format.
+
+**Features:**
+- JSON Schema-based output validation
+- Type-safe structured responses
+- Automatic schema enforcement via LLM
+- Validation metadata in response
+
+**Example Agent Configuration:**
+
+```yaml
+# agents/sentiment-structured.agent.yaml
+
+name: sentiment-structured
+description: Sentiment analysis with structured output
+llm:
+  name: default
+  temperature: 0
+prompt:
+  system: |
+    Analyze the sentiment of the provided text and return a structured response.
+    Provide both the sentiment category and a confidence score.
+  inputVariables:
+    - text
+output:
+  format: structured
+  schema:
+    type: object
+    properties:
+      sentiment:
+        type: string
+        enum: [positive, negative, neutral]
+        description: The overall sentiment
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Confidence score
+      keywords:
+        type: array
+        items:
+          type: string
+        description: Key sentiment-driving words
+    required:
+      - sentiment
+      - confidence
+```
+
+**API Usage:**
+
+```bash
+curl -X POST http://localhost:3000/api/agents/sentiment-structured/invoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {"text": "I love this product! It works great!"}
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "output": {
+    "sentiment": "positive",
+    "confidence": 0.95,
+    "keywords": ["love", "great"]
+  },
+  "metadata": {
+    "duration": 1234,
+    "structuredOutputValid": true
+  }
+}
+```
+
+**Library Usage:**
+
+```typescript
+const result = await orchestrator.runAgent('sentiment-structured', {
+  text: 'This is amazing!'
+});
+
+// result.output is a typed object
+console.log(result.output.sentiment); // "positive"
+console.log(result.output.confidence); // 0.95
+console.log(result.metadata.structuredOutputValid); // true
+```
+
 ## Workflows
 
 Workflows orchestrate multiple agents in a defined sequence. Define workflows in YAML files within the `workflows/` directory.
@@ -438,10 +608,29 @@ name: string                    # Unique identifier (required)
 description: string             # Human-readable description (required)
 
 source:                         # Data source (required)
-  type: directory | file | url
+  type: directory | file | database | web | s3
+  # For directory/file sources:
   path: string                  # Path relative to project root
   pattern: string               # Glob pattern for directories
   recursive: boolean            # Recursive search (default: true)
+  # For database sources:
+  connectionString: string      # Database connection string (postgresql:// or mysql://)
+  query: string                 # SQL query to fetch documents
+  contentColumn: string         # Column containing document content (default: content)
+  metadataColumns: string[]     # Columns to include as metadata (optional)
+  batchSize: number             # Rows per batch (default: 100)
+  # For web sources:
+  url: string                   # URL to scrape
+  selector: string              # CSS selector for content extraction (optional)
+  headers: object               # Custom headers (optional)
+  # For S3 sources:
+  bucket: string                # S3 bucket name
+  prefix: string                # Folder/prefix filter (optional)
+  endpoint: string              # Custom S3 endpoint for MinIO, Wasabi, etc. (optional)
+  region: string                # AWS region (default: us-east-1)
+  accessKeyId: string           # AWS access key (optional, uses env vars)
+  secretAccessKey: string       # AWS secret key (optional, uses env vars)
+  forcePathStyle: boolean       # Use path-style URLs for S3-compatible services (default: false)
 
 loader:                         # Document loader (required)
   type: text | pdf | csv | json | markdown
@@ -497,6 +686,63 @@ search:
 ```
 
 **Note:** Vector stores are initialized on startup, loading documents and creating embeddings immediately.
+
+### Data Source Types
+
+Agent Orcha supports multiple data source types for vector stores:
+
+#### Directory/File Sources
+Load documents from local files or directories:
+```yaml
+source:
+  type: directory
+  path: vectors/sample-data
+  pattern: "*.txt"
+  recursive: true
+```
+
+#### Database Sources
+Load documents from PostgreSQL or MySQL databases:
+```yaml
+source:
+  type: database
+  connectionString: postgresql://user:password@localhost:5432/docs_db
+  query: SELECT content, title, category FROM documents WHERE published = true
+  contentColumn: content
+  metadataColumns:
+    - title
+    - category
+  batchSize: 100
+```
+
+See `templates/vectors/postgres-docs.vector.yaml` and `templates/vectors/mysql-docs.vector.yaml` for complete examples.
+
+#### Web Scraping Sources
+Load documents from websites using CSS selectors:
+```yaml
+source:
+  type: web
+  url: https://docs.example.com/guide/
+  selector: article.documentation  # CSS selector for targeted extraction
+```
+
+See `templates/vectors/web-docs.vector.yaml` for a complete example.
+
+#### S3 Sources
+Load documents from AWS S3 or S3-compatible services (MinIO, Wasabi, etc.):
+```yaml
+source:
+  type: s3
+  bucket: my-knowledge-base
+  prefix: documentation/
+  region: us-east-1
+  pattern: "*.{pdf,txt,md}"
+  # Optional for S3-compatible services:
+  endpoint: http://localhost:9000  # For MinIO, Wasabi, etc.
+  forcePathStyle: true             # Required for MinIO and some S3-compatible services
+```
+
+See `templates/vectors/s3-pdfs.vector.yaml` and `templates/vectors/s3-minio.vector.yaml` for complete examples.
 
 ### Vector Store Types
 

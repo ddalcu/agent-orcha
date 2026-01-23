@@ -49,7 +49,17 @@ export class VectorStoreManager {
     }
 
     logger.info(`Initializing "${name}"...`);
-    logger.info(`Source: ${config.source.path}, Pattern: ${config.source.pattern || '*'}`);
+
+    // Log source-specific info
+    if (config.source.type === 'directory' || config.source.type === 'file') {
+      logger.info(`Source: ${config.source.path}, Pattern: ${'pattern' in config.source ? config.source.pattern || '*' : 'N/A'}`);
+    } else if (config.source.type === 'database') {
+      logger.info(`Source: database (${config.source.connectionString.split('@')[1] || 'unknown'})`);
+    } else if (config.source.type === 'web') {
+      logger.info(`Source: web (${config.source.url})`);
+    } else if (config.source.type === 's3') {
+      logger.info(`Source: s3 (bucket: ${config.source.bucket})`);
+    }
 
     try {
       const store = await VectorStoreFactory.create(config, this.projectRoot);

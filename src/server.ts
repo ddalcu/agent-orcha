@@ -8,6 +8,8 @@ import { agentsRoutes } from './routes/agents.route.js';
 import { workflowsRoutes } from './routes/workflows.route.js';
 import { vectorsRoutes } from './routes/vectors.route.js';
 import { llmRoutes } from './routes/llm.route.js';
+import { mcpRoutes } from './routes/mcp.route.js';
+import { functionsRoutes } from './routes/functions.route.js';
 import { getPinoConfig } from '../lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +45,8 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   await fastify.register(workflowsRoutes, { prefix: '/api/workflows' });
   await fastify.register(vectorsRoutes, { prefix: '/api/vectors' });
   await fastify.register(llmRoutes, { prefix: '/api/llm' });
+  await fastify.register(mcpRoutes, { prefix: '/api/mcp' });
+  await fastify.register(functionsRoutes, { prefix: '/api/functions' });
 
   return fastify;
 }

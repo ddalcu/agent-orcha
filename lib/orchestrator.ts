@@ -6,13 +6,15 @@ import { WorkflowLoader } from './workflows/workflow-loader.js';
 import { WorkflowExecutor } from './workflows/workflow-executor.js';
 import { VectorStoreManager } from './vectors/vector-store-manager.js';
 import { MCPClientManager } from './mcp/mcp-client.js';
-import { FunctionLoader } from './functions/function-loader.js';
+import { FunctionLoader, type LoadedFunction } from './functions/function-loader.js';
 import { ToolRegistry } from './tools/tool-registry.js';
 import { MCPConfigSchema } from './mcp/types.js';
 import { loadLLMConfig } from './llm/llm-config.js';
+import { ConversationStore } from './memory/conversation-store.js';
 import type { AgentDefinition, AgentResult } from './agents/types.js';
 import type { WorkflowDefinition, WorkflowResult } from './workflows/types.js';
 import type { VectorStoreInstance, VectorConfig } from './vectors/types.js';
+import type { StructuredTool } from '@langchain/core/tools';
 import { logger } from './logger.js';
 
 export interface OrchestratorConfig {
@@ -36,6 +38,7 @@ export class Orchestrator {
   private functionLoader: FunctionLoader;
   private mcpClient!: MCPClientManager;
   private toolRegistry!: ToolRegistry;
+  private conversationStore: ConversationStore;
 
   private initialized = false;
 
@@ -57,6 +60,10 @@ export class Orchestrator {
       this.config.projectRoot
     );
     this.functionLoader = new FunctionLoader(this.config.functionsDir);
+    this.conversationStore = new ConversationStore({
+      maxMessagesPerSession: 50,
+      sessionTTL: 3600000, // 1 hour
+    });
   }
 
   async initialize(): Promise<void> {
@@ -73,7 +80,7 @@ export class Orchestrator {
     await this.functionLoader.loadAll();
 
     this.toolRegistry = new ToolRegistry(this.mcpClient, this.vectorStoreManager, this.functionLoader);
-    this.agentExecutor = new AgentExecutor(this.toolRegistry);
+    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
 
     await this.agentLoader.loadAll();
@@ -130,7 +137,36 @@ export class Orchestrator {
     };
   }
 
-  async runAgent(name: string, input: Record<string, unknown>): Promise<AgentResult> {
+  get mcp(): MCPAccessor {
+    return {
+      getManager: () => this.mcpClient,
+    };
+  }
+
+  get functions(): FunctionAccessor {
+    return {
+      list: () => this.functionLoader.list(),
+      get: (name: string) => this.functionLoader.get(name),
+      getTool: (name: string) => this.functionLoader.getTool(name),
+      names: () => this.functionLoader.names(),
+    };
+  }
+
+  get memory(): MemoryAccessor {
+    return {
+      getStore: () => this.conversationStore,
+      clearSession: (sessionId: string) => this.conversationStore.clearSession(sessionId),
+      getSessionCount: () => this.conversationStore.getSessionCount(),
+      getMessageCount: (sessionId: string) => this.conversationStore.getMessageCount(sessionId),
+      hasSession: (sessionId: string) => this.conversationStore.hasSession(sessionId),
+    };
+  }
+
+  async runAgent(
+    name: string,
+    input: Record<string, unknown>,
+    sessionId?: string
+  ): Promise<AgentResult> {
     this.ensureInitialized();
 
     const definition = this.agentLoader.get(name);
@@ -139,12 +175,13 @@ export class Orchestrator {
     }
 
     const instance = await this.agentExecutor.createInstance(definition);
-    return instance.invoke(input);
+    return instance.invoke({ input, sessionId });
   }
 
   async *streamAgent(
     name: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    sessionId?: string
   ): AsyncGenerator<string, void, unknown> {
     this.ensureInitialized();
 
@@ -154,7 +191,7 @@ export class Orchestrator {
     }
 
     const instance = await this.agentExecutor.createInstance(definition);
-    yield* instance.stream(input);
+    yield* instance.stream({ input, sessionId });
   }
 
   async runWorkflow(name: string, input: Record<string, unknown>): Promise<WorkflowResult> {
@@ -251,6 +288,9 @@ export class Orchestrator {
     if (this.mcpClient) {
       await this.mcpClient.close();
     }
+    if (this.conversationStore) {
+      this.conversationStore.destroy();
+    }
   }
 
   private ensureInitialized(): void {
@@ -279,4 +319,23 @@ interface VectorAccessor {
   getConfig: (name: string) => VectorConfig | undefined;
   initialize: (name: string) => Promise<VectorStoreInstance>;
   refresh: (name: string) => Promise<void>;
+}
+
+interface MCPAccessor {
+  getManager: () => MCPClientManager;
+}
+
+interface FunctionAccessor {
+  list: () => LoadedFunction[];
+  get: (name: string) => LoadedFunction | undefined;
+  getTool: (name: string) => StructuredTool | undefined;
+  names: () => string[];
+}
+
+interface MemoryAccessor {
+  getStore: () => ConversationStore;
+  clearSession: (sessionId: string) => void;
+  getSessionCount: () => number;
+  getMessageCount: (sessionId: string) => number;
+  hasSession: (sessionId: string) => boolean;
 }

@@ -7,6 +7,37 @@
       "description": "Web fetch capabilities for retrieving URLs and returning markdown",
       "timeout": 30000,
       "enabled": true
+    },
+    "postgres": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://woofstagram:password@localhost:5432/woofstagram"],
+      "description": "PostgreSQL database access for schema inspection and queries",
+      "enabled": false
+    },
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "description": "Local filesystem operations for reading and writing files",
+      "enabled": true
+    },
+    "brave-search": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "your-api-key-here"
+      },
+      "description": "Web search powered by Brave Search API",
+      "enabled": true
+    },
+    "memory": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "description": "Persistent memory storage for conversation context",
+      "enabled": true
     }
   },
   "globalOptions": {

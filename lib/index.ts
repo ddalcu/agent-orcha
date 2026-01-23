@@ -3,11 +3,12 @@ export { Orchestrator } from './orchestrator.js';
 export type { OrchestratorConfig } from './orchestrator.js';
 
 // Agents
-export { AgentLoader, AgentExecutor } from './agents/index.js';
+export { AgentLoader, AgentExecutor, StructuredOutputWrapper } from './agents/index.js';
 export type {
   AgentDefinition,
   AgentInstance,
   AgentResult,
+  AgentInvokeOptions,
   ToolReference,
   OutputConfig,
   ToolCallRecord,
@@ -48,3 +49,7 @@ export { ToolRegistry, createVectorSearchTool } from './tools/index.js';
 // Functions
 export { FunctionLoader } from './functions/index.js';
 export type { FunctionMetadata, LoadedFunction } from './functions/index.js';
+
+// Memory
+export { ConversationStore } from './memory/index.js';
+export type { ConversationStoreConfig, ConversationSession } from './memory/index.js';

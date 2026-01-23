@@ -6,6 +6,7 @@ interface AgentParams {
 
 interface InvokeBody {
   input: Record<string, unknown>;
+  sessionId?: string;
 }
 
 export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -37,10 +38,10 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
     '/:name/invoke',
     async (request, reply) => {
       const { name } = request.params;
-      const { input } = request.body;
+      const { input, sessionId } = request.body;
 
       try {
-        const result = await fastify.orchestrator.runAgent(name, input);
+        const result = await fastify.orchestrator.runAgent(name, input, sessionId);
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -58,14 +59,14 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
     '/:name/stream',
     async (request, reply) => {
       const { name } = request.params;
-      const { input } = request.body;
+      const { input, sessionId } = request.body;
 
       reply.raw.setHeader('Content-Type', 'text/event-stream');
       reply.raw.setHeader('Cache-Control', 'no-cache');
       reply.raw.setHeader('Connection', 'keep-alive');
 
       try {
-        const stream = fastify.orchestrator.streamAgent(name, input);
+        const stream = fastify.orchestrator.streamAgent(name, input, sessionId);
 
         for await (const chunk of stream) {
           reply.raw.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
@@ -78,6 +79,46 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
         reply.raw.write(`data: ${JSON.stringify({ error: message })}\n\n`);
         reply.raw.end();
       }
+    }
+  );
+
+  // Session management endpoints
+  fastify.get('/sessions/stats', async () => {
+    return {
+      totalSessions: fastify.orchestrator.memory.getSessionCount(),
+    };
+  });
+
+  fastify.get<{ Params: { sessionId: string } }>(
+    '/sessions/:sessionId',
+    async (request, reply) => {
+      const { sessionId } = request.params;
+
+      if (!fastify.orchestrator.memory.hasSession(sessionId)) {
+        return reply.status(404).send({
+          error: 'Session not found',
+          sessionId,
+        });
+      }
+
+      return {
+        sessionId,
+        messageCount: fastify.orchestrator.memory.getMessageCount(sessionId),
+      };
+    }
+  );
+
+  fastify.delete<{ Params: { sessionId: string } }>(
+    '/sessions/:sessionId',
+    async (request) => {
+      const { sessionId } = request.params;
+
+      fastify.orchestrator.memory.clearSession(sessionId);
+
+      return {
+        message: 'Session cleared',
+        sessionId,
+      };
     }
   );
 };

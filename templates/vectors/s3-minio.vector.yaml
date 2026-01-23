@@ -1,0 +1,36 @@
+name: s3-minio
+description: Documents from MinIO S3-compatible storage
+
+source:
+  type: s3
+  endpoint: http://localhost:9000  # MinIO endpoint
+  bucket: knowledge-base
+  prefix: documentation/
+  region: us-east-1
+  # MinIO default credentials (change for production!)
+  accessKeyId: minioadmin
+  secretAccessKey: minioadmin
+  # Or use environment variables: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+  pattern: "*.{pdf,txt,md}"
+  forcePathStyle: true  # Required for MinIO and many S3-compatible services
+
+loader:
+  type: text  # Will be auto-detected based on file extension
+
+splitter:
+  type: recursive
+  chunkSize: 1000
+  chunkOverlap: 200
+
+embedding: default
+
+store:
+  type: memory
+
+search:
+  defaultK: 4
+  scoreThreshold: 0.3
+
+metadata:
+  category: s3
+  storage_type: minio

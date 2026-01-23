@@ -108,6 +108,47 @@ export class MCPClientManager {
     return tools;
   }
 
+  getServerNames(): string[] {
+    return Array.from(this.connections.keys());
+  }
+
+  getServerConfig(serverName: string): MCPServerConfig | undefined {
+    const connection = this.connections.get(serverName);
+    return connection?.config;
+  }
+
+  async getServerToolSchemas(serverName: string): Promise<Array<{ name: string; description?: string; inputSchema: unknown }>> {
+    const connection = this.connections.get(serverName);
+    if (!connection) {
+      return [];
+    }
+
+    const { tools: mcpTools } = await connection.client.listTools();
+    return mcpTools.map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }));
+  }
+
+  async callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<string> {
+    const connection = this.connections.get(serverName);
+    if (!connection) {
+      throw new Error(`MCP server "${serverName}" not found`);
+    }
+
+    const result = await connection.client.callTool({
+      name: toolName,
+      arguments: args,
+    });
+
+    if (result.isError) {
+      throw new Error(String(result.content));
+    }
+
+    return this.extractContent(result.content);
+  }
+
   private async getToolsForServer(serverName: string, connection: MCPConnection): Promise<StructuredTool[]> {
     const { tools: mcpTools } = await connection.client.listTools();
     const prefix = this.config.globalOptions?.prefixToolNameWithServerName ? `${serverName}_` : '';

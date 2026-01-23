@@ -1,0 +1,31 @@
+name: web-docs
+description: Documentation scraped from website
+
+source:
+  type: web
+  url: https://docs.example.com/guide/
+  selector: article.documentation  # CSS selector for targeted extraction
+  # Optional custom headers (uncomment if needed for authentication)
+  # headers:
+  #   Authorization: Bearer YOUR_TOKEN
+
+loader:
+  type: text
+
+splitter:
+  type: markdown
+  chunkSize: 1500
+  chunkOverlap: 100
+
+embedding: default
+
+store:
+  type: memory
+
+search:
+  defaultK: 5
+  scoreThreshold: 0.3
+
+metadata:
+  category: web
+  scraping: true

@@ -1,0 +1,20 @@
+name: chatbot-memory
+description: Conversational assistant with memory support
+version: 1.0.0
+llm:
+  name: default
+  temperature: 0.7
+prompt:
+  system: |
+    You are a helpful and friendly assistant.
+    Use conversation history to provide contextual responses.
+    Remember user preferences and information they share with you.
+  inputVariables:
+    - message
+output:
+  format: text
+metadata:
+  category: example
+  features:
+    - conversation-memory
+    - multi-turn-dialogue

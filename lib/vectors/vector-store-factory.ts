@@ -16,6 +16,7 @@ import type { VectorConfig, VectorStoreInstance, SearchResult, DocumentInput } f
 import { getEmbeddingConfig } from '../llm/llm-config.js';
 import { detectProvider } from '../llm/provider-detector.js';
 import { createLogger } from '../logger.js';
+import { DatabaseLoader, WebLoader, S3Loader } from './loaders/index.js';
 
 const logger = createLogger('VectorFactory');
 const searchLogger = createLogger('VectorSearch');
@@ -178,6 +179,28 @@ export class VectorStoreFactory {
   }
 
   private static async loadDocuments(config: VectorConfig, projectRoot: string): Promise<Document[]> {
+    // Handle database sources
+    if (config.source.type === 'database') {
+      logger.info(`Loading from database source`);
+      const dbLoader = new DatabaseLoader(config.source);
+      return dbLoader.load();
+    }
+
+    // Handle web sources
+    if (config.source.type === 'web') {
+      logger.info(`Loading from web source`);
+      const webLoader = new WebLoader(config.source);
+      return webLoader.load();
+    }
+
+    // Handle S3 sources
+    if (config.source.type === 's3') {
+      logger.info(`Loading from S3 source`);
+      const s3Loader = new S3Loader(config.source);
+      return s3Loader.load();
+    }
+
+    // Handle file-based sources (directory and file)
     const sourcePath = path.join(projectRoot, config.source.path);
 
     if (config.source.type === 'directory') {
@@ -197,8 +220,15 @@ export class VectorStoreFactory {
       return allDocs;
     }
 
-    const loader = this.createLoader(config.loader.type, sourcePath);
-    return loader.load();
+    // Handle single file source
+    if (config.source.type === 'file') {
+      const loader = this.createLoader(config.loader.type, sourcePath);
+      return loader.load();
+    }
+
+    // This should never be reached due to discriminated union exhaustiveness
+    const _exhaustiveCheck: never = config.source;
+    throw new Error(`Unknown source type: ${(_exhaustiveCheck as any).type}`);
   }
 
   private static createLoader(type: string, filePath: string) {
