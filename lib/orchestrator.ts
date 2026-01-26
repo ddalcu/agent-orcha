@@ -182,7 +182,7 @@ export class Orchestrator {
     name: string,
     input: Record<string, unknown>,
     sessionId?: string
-  ): AsyncGenerator<string, void, unknown> {
+  ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
     this.ensureInitialized();
 
     const definition = this.agentLoader.get(name);

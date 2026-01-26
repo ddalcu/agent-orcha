@@ -69,7 +69,12 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
         const stream = fastify.orchestrator.streamAgent(name, input, sessionId);
 
         for await (const chunk of stream) {
-          reply.raw.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+          if (typeof chunk === 'string') {
+            reply.raw.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+          } else {
+            // Already an event object
+            reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
+          }
         }
 
         reply.raw.write('data: [DONE]\n\n');

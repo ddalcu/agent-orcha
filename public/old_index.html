@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Orcha</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            dark: {
+              bg: '#0f172a',
+              surface: '#1e293b',
+              border: '#334155',
+              hover: '#475569',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom scrollbar for chat */
+    #chatMessages::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    #chatMessages::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    #chatMessages::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+
+    #chatMessages::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+
+    /* Loading dots animation */
+    @keyframes bounce {
+
+      0%,
+      80%,
+      100% {
+        transform: translateY(0) scale(1);
+        opacity: 0.5;
+      }
+
+      40% {
+        transform: translateY(-8px) scale(1.1);
+        opacity: 1;
+      }
+    }
+
+    .loading-dot {
+      animation: bounce 1.4s infinite ease-in-out;
+    }
+
+    /* Smooth scroll behavior */
+    #chatMessages {
+      scroll-behavior: smooth;
+    }
+  </style>
+</head>
+
+<body class="bg-dark-bg text-gray-100 min-h-screen">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-8">
+      <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+        Agent Orcha
+      </h1>
+      <p class="text-gray-400 mt-2">Orchestrating AI Agents with Power</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-dark-border mb-6">
+      <nav class="flex space-x-8">
+        <button class="tab-btn border-b-2 border-blue-500 text-blue-400 pb-3 px-1 font-medium" data-tab="agents">
+          Agents
+        </button>
+        <button class="tab-btn border-b-2 border-transparent text-gray-400 hover:text-gray-300 pb-3 px-1 font-medium"
+          data-tab="workflows">
+          Workflows
+        </button>
+        <button class="tab-btn border-b-2 border-transparent text-gray-400 hover:text-gray-300 pb-3 px-1 font-medium"
+          data-tab="knowledge">
+          Knowledge
+        </button>
+        <button class="tab-btn border-b-2 border-transparent text-gray-400 hover:text-gray-300 pb-3 px-1 font-medium"
+          data-tab="llm">
+          LLMs
+        </button>
+        <button class="tab-btn border-b-2 border-transparent text-gray-400 hover:text-gray-300 pb-3 px-1 font-medium"
+          data-tab="mcp">
+          MCP
+        </button>
+      </nav>
+    </div>
+
+    <!-- Agents Tab -->
+    <div id="agentsTab" class="tab-content flex flex-col h-[calc(100vh-220px)]">
+      <!-- Chat Messages Container -->
+      <div id="chatMessages" class="flex-1 overflow-y-auto mb-6 space-y-4 pr-2">
+        <!-- Welcome message -->
+        <div class="flex justify-start">
+          <div class="max-w-2xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-3 text-gray-100"
+            style="font-size: 15px; line-height: 1.5;">
+            Welcome to Agent Orcha. Start chatting with your AI agents.
+          </div>
+        </div>
+      </div>
+
+      <!-- Input Container (Fixed at bottom) -->
+      <div class="border-t border-dark-border pt-4">
+        <div class="relative">
+          <!-- Chat Input -->
+          <div
+            class="relative bg-dark-surface border border-dark-border rounded-2xl focus-within:border-gray-500 transition-colors">
+            <textarea id="chatInput" rows="1"
+              class="w-full bg-transparent px-4 py-3 pr-32 text-gray-100 placeholder-gray-500 resize-none focus:outline-none"
+              placeholder="Reply..." style="max-height: 200px; min-height: 48px;"></textarea>
+
+            <!-- Bottom Controls -->
+            <div class="absolute bottom-2 right-2 flex items-center gap-2">
+              <!-- Agent Selector Dropdown -->
+              <div class="relative">
+                <button id="agentSelectorBtn"
+                  class="flex items-center gap-2 px-3 py-1.5 bg-dark-bg hover:bg-dark-hover rounded-lg text-sm font-medium text-gray-300 transition-colors">
+                  <span id="selectedAgentName">Select Agent</span>
+                  <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </button>
+
+                <!-- Dropdown Menu -->
+                <div id="agentDropdown"
+                  class="hidden absolute bottom-full mb-2 right-0 w-80 bg-dark-surface border border-dark-border rounded-xl shadow-2xl overflow-hidden z-10">
+                  <div class="max-h-96 overflow-y-auto" id="agentDropdownList">
+                    <div class="text-gray-500 text-sm text-center py-4">Loading agents...</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Send Button -->
+              <button id="sendMessageBtn" disabled
+                class="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18">
+                  </path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Workflows Tab -->
+    <div id="workflowsTab" class="tab-content hidden">
+      <div class="space-y-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Select Workflow</label>
+          <select id="workflowSelect"
+            class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-2.5 text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+            <option value="">-- Select Workflow --</option>
+          </select>
+        </div>
+
+        <!-- Flow Diagram -->
+        <div id="flowDiagram" class="bg-dark-surface border border-dark-border rounded-lg p-6 overflow-x-auto">
+          <div class="text-gray-500 italic text-center py-8">Select a workflow to see its flow</div>
+        </div>
+
+        <!-- Workflow Inputs -->
+        <div id="workflowInputs" class="space-y-3"></div>
+
+        <!-- Workflow Status -->
+        <div id="workflowStatus" class="bg-dark-surface border border-dark-border rounded-lg p-5 hidden">
+          <div class="flex justify-between items-center mb-3">
+            <div id="statusMessage" class="font-medium text-gray-200">Starting workflow...</div>
+            <div id="statusTime" class="text-sm text-gray-400">0s</div>
+          </div>
+          <div class="w-full bg-dark-bg rounded-full h-2 mb-4">
+            <div id="progressFill" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%">
+            </div>
+          </div>
+          <div id="statusLog" class="bg-dark-bg rounded-lg p-3 max-h-48 overflow-y-auto text-xs font-mono space-y-1">
+          </div>
+        </div>
+
+        <button id="runWorkflow" disabled
+          class="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
+          Run Workflow
+        </button>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Output</label>
+          <div id="workflowOutput"
+            class="bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto">
+            Select a workflow to get started.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Knowledge Tab -->
+    <div id="knowledgeTab" class="tab-content hidden">
+      <div class="space-y-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Select Vector Store</label>
+          <select id="vectorSelect"
+            class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-2.5 text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+            <option value="">-- Select Vector Store --</option>
+          </select>
+        </div>
+
+        <!-- Vector Store Info -->
+        <div id="vectorInfo" class="bg-dark-surface/50 border border-dark-border rounded-lg p-4 hidden">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span class="text-gray-400">Description:</span>
+              <span id="vectorDescription" class="ml-2 text-gray-200"></span>
+            </div>
+            <div>
+              <span class="text-gray-400">Source Type:</span>
+              <span id="vectorSourceType" class="ml-2 text-gray-200 font-medium"></span>
+            </div>
+            <div>
+              <span class="text-gray-400">Store Type:</span>
+              <span id="vectorStoreType" class="ml-2 text-gray-200 font-medium"></span>
+            </div>
+            <div>
+              <span class="text-gray-400">Default Results:</span>
+              <span id="vectorDefaultK" class="ml-2 text-gray-200 font-medium"></span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Search Query</label>
+          <textarea id="vectorQuery" rows="4"
+            class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
+            placeholder="Enter your search query..."></textarea>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="searchVector" disabled
+            class="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
+            Search
+          </button>
+          <div class="flex items-center gap-2">
+            <label for="vectorK" class="text-sm text-gray-400">Results:</label>
+            <input type="number" id="vectorK" min="1" max="20" value="4"
+              class="w-20 bg-dark-surface border border-dark-border rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Search Results</label>
+          <div id="vectorResults" class="bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[300px]">
+            <div class="text-gray-500 italic text-center py-8">Select a vector store and enter a query to search.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LLM Tab -->
+    <div id="llmTab" class="tab-content hidden">
+      <div class="space-y-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Select LLM</label>
+          <select id="llmSelect"
+            class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-2.5 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent">
+            <option value="">-- Select LLM --</option>
+          </select>
+        </div>
+
+        <!-- LLM Info -->
+        <div id="llmInfo" class="bg-dark-surface/50 border border-dark-border rounded-lg p-4 hidden">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span class="text-gray-400">Model:</span>
+              <span id="llmModel" class="ml-2 text-gray-200 font-medium"></span>
+            </div>
+            <div>
+              <span class="text-gray-400">Base URL:</span>
+              <span id="llmBaseUrl" class="ml-2 text-gray-200 font-medium"></span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Message</label>
+          <textarea id="llmInput" rows="6"
+            class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+            placeholder="Enter your message to the LLM..."></textarea>
+        </div>
+
+        <div class="flex space-x-3">
+          <button id="runLlm" disabled
+            class="bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
+            Send Message
+          </button>
+          <button id="streamLlm" disabled
+            class="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
+            Stream Response
+          </button>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Output</label>
+          <div id="llmOutput"
+            class="bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MCP Tab -->
+    <div id="mcpTab" class="tab-content hidden">
+      <div class="space-y-6">
+        <!-- Source Type Selector -->
+        <div class="flex gap-2 border-b border-dark-border pb-4">
+          <button id="mcpSourceBtn"
+            class="px-4 py-2 rounded-lg font-medium bg-cyan-600 text-white transition-colors">MCP Servers</button>
+          <button id="functionsSourceBtn"
+            class="px-4 py-2 rounded-lg font-medium bg-dark-surface text-gray-400 hover:bg-dark-hover transition-colors">Internal
+            Functions</button>
+        </div>
+
+        <!-- MCP Server Section -->
+        <div id="mcpServerSection">
+          <div id="mcpServersContainer" class="space-y-4">
+            <div class="text-gray-500 text-sm text-center py-8">Loading servers...</div>
+          </div>
+        </div>
+
+        <!-- Functions Section -->
+        <div id="functionsSection" class="hidden">
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-300 mb-3">Internal Functions</label>
+            <div id="functionCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div class="text-gray-500 text-sm text-center py-8 col-span-full">Loading functions...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Execution Section -->
+        <div id="executionSection" class="hidden">
+          <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-4 mb-4">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="font-medium text-cyan-400" id="selectedItemName"></div>
+                <div class="text-xs text-gray-500 mt-1" id="selectedItemDescription"></div>
+              </div>
+              <button id="clearSelection" class="text-xs text-gray-400 hover:text-gray-300">Clear</button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Arguments (JSON)</label>
+            <textarea id="mcpToolArgs" rows="8"
+              class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none font-mono text-sm">{}</textarea>
+          </div>
+
+          <button id="callMcpTool"
+            class="bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
+            Execute
+          </button>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Output</label>
+            <div id="mcpOutput"
+              class="bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const chatMessagesEl = document.getElementById('chatMessages');
+    const chatInputEl = document.getElementById('chatInput');
+    const sendMessageBtn = document.getElementById('sendMessageBtn');
+    const agentSelectorBtn = document.getElementById('agentSelectorBtn');
+    const agentDropdown = document.getElementById('agentDropdown');
+    const agentDropdownList = document.getElementById('agentDropdownList');
+    const selectedAgentNameEl = document.getElementById('selectedAgentName');
+    const workflowSelect = document.getElementById('workflowSelect');
+    const vectorSelect = document.getElementById('vectorSelect');
+    const llmSelect = document.getElementById('llmSelect');
+    const workflowOutputEl = document.getElementById('workflowOutput');
+    const vectorQueryEl = document.getElementById('vectorQuery');
+    const vectorResultsEl = document.getElementById('vectorResults');
+    const vectorInfoEl = document.getElementById('vectorInfo');
+    const vectorDescriptionEl = document.getElementById('vectorDescription');
+    const vectorSourceTypeEl = document.getElementById('vectorSourceType');
+    const vectorStoreTypeEl = document.getElementById('vectorStoreType');
+    const vectorDefaultKEl = document.getElementById('vectorDefaultK');
+    const vectorKEl = document.getElementById('vectorK');
+    const llmInputEl = document.getElementById('llmInput');
+    const llmOutputEl = document.getElementById('llmOutput');
+    const llmInfoEl = document.getElementById('llmInfo');
+    const llmModelEl = document.getElementById('llmModel');
+    const llmBaseUrlEl = document.getElementById('llmBaseUrl');
+    const mcpToolArgsEl = document.getElementById('mcpToolArgs');
+    const mcpOutputEl = document.getElementById('mcpOutput');
+    const mcpSourceBtn = document.getElementById('mcpSourceBtn');
+    const functionsSourceBtn = document.getElementById('functionsSourceBtn');
+    const mcpServerSection = document.getElementById('mcpServerSection');
+    const functionsSection = document.getElementById('functionsSection');
+    const mcpServersContainerEl = document.getElementById('mcpServersContainer');
+    const functionCardsEl = document.getElementById('functionCards');
+    const executionSection = document.getElementById('executionSection');
+    const selectedItemNameEl = document.getElementById('selectedItemName');
+    const selectedItemDescriptionEl = document.getElementById('selectedItemDescription');
+    const clearSelectionBtn = document.getElementById('clearSelection');
+    const runAgentBtn = document.getElementById('runAgent');
+    const runWorkflowBtn = document.getElementById('runWorkflow');
+    const searchVectorBtn = document.getElementById('searchVector');
+    const runLlmBtn = document.getElementById('runLlm');
+    const streamLlmBtn = document.getElementById('streamLlm');
+    const callMcpToolBtn = document.getElementById('callMcpTool');
+    const workflowInputsEl = document.getElementById('workflowInputs');
+    const flowDiagramEl = document.getElementById('flowDiagram');
+    const workflowStatusEl = document.getElementById('workflowStatus');
+    const statusMessageEl = document.getElementById('statusMessage');
+    const statusTimeEl = document.getElementById('statusTime');
+    const progressFillEl = document.getElementById('progressFill');
+    const statusLogEl = document.getElementById('statusLog');
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    let agents = [];
+    let workflows = [];
+    let vectorStores = [];
+    let llmConfigs = [];
+    let mcpServers = [];
+    let currentMcpTools = [];
+    let functions = [];
+    let currentSource = 'mcp'; // 'mcp' or 'functions'
+    let selectedServer = null;
+    let selectedTool = null;
+    let selectedFunction = null;
+    let currentWorkflowSchema = null;
+    let currentWorkflowSteps = [];
+    let stepElements = new Map();
+    let statusStartTime = null;
+    let statusInterval = null;
+    let selectedAgent = null;
+    let chatHistory = [];
+    let sessionId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+    let isAgentRunning = false;
+
+    // Tab switching
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabName = btn.dataset.tab;
+        tabBtns.forEach(b => {
+          b.classList.remove('border-blue-500', 'border-purple-500', 'border-green-500', 'border-cyan-500', 'border-orange-500', 'text-blue-400', 'text-purple-400', 'text-green-400', 'text-cyan-400', 'text-orange-400');
+          b.classList.add('border-transparent', 'text-gray-400');
+        });
+        tabContents.forEach(tc => tc.classList.add('hidden'));
+
+        const colors = { agents: 'blue', workflows: 'purple', knowledge: 'orange', llm: 'green', mcp: 'cyan' };
+        const color = colors[tabName] || 'blue';
+        btn.classList.remove('border-transparent', 'text-gray-400');
+        btn.classList.add(`border-${color}-500`, `text-${color}-400`);
+
+        document.getElementById(`${tabName}Tab`).classList.remove('hidden');
+      });
+    });
+
+    async function loadAgents() {
+      try {
+        const res = await fetch('/api/agents');
+        agents = await res.json();
+
+        // Select last agent by default
+        if (agents.length > 0) {
+          selectedAgent = agents[agents.length - 1];
+          selectedAgentNameEl.textContent = selectedAgent.name;
+          sendMessageBtn.disabled = false;
+        }
+
+        renderAgentDropdown();
+
+        // Focus on text input
+        setTimeout(() => chatInputEl.focus(), 100);
+      } catch (e) {
+        console.error('Failed to load agents:', e);
+        agentDropdownList.innerHTML = '<div class="text-red-400 text-sm text-center py-4">Failed to load agents</div>';
+      }
+    }
+
+    function renderAgentDropdown() {
+      agentDropdownList.innerHTML = '';
+
+      if (agents.length === 0) {
+        agentDropdownList.innerHTML = '<div class="text-gray-500 text-sm text-center py-4">No agents available</div>';
+        return;
+      }
+
+      agents.forEach(agent => {
+        const agentItem = document.createElement('div');
+        agentItem.className = 'px-4 py-3 hover:bg-dark-hover cursor-pointer transition-colors border-b border-dark-border last:border-b-0';
+
+        const isSelected = selectedAgent && selectedAgent.name === agent.name;
+        if (isSelected) {
+          agentItem.classList.add('bg-dark-hover');
+        }
+
+        agentItem.innerHTML = `
+          <div class="flex items-start justify-between">
+            <div class="flex-1">
+              <div class="font-medium text-gray-200 mb-0.5">${agent.name}</div>
+              <div class="text-xs text-gray-500">${agent.description}</div>
+            </div>
+            ${isSelected ? '<svg class="w-5 h-5 text-blue-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>' : ''}
+          </div>
+        `;
+
+        agentItem.addEventListener('click', () => {
+          selectedAgent = agent;
+          selectedAgentNameEl.textContent = agent.name;
+          sendMessageBtn.disabled = false;
+          agentDropdown.classList.add('hidden');
+          renderAgentDropdown();
+        });
+
+        agentDropdownList.appendChild(agentItem);
+      });
+    }
+
+    // Toggle agent dropdown
+    agentSelectorBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      agentDropdown.classList.toggle('hidden');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!agentSelectorBtn.contains(e.target) && !agentDropdown.contains(e.target)) {
+        agentDropdown.classList.add('hidden');
+      }
+    });
+
+    // Auto-resize textarea
+    chatInputEl.addEventListener('input', function () {
+      this.style.height = '48px';
+      this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+    });
+
+    // Send message on Enter (Shift+Enter for new line)
+    chatInputEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    sendMessageBtn.addEventListener('click', sendMessage);
+
+    async function sendMessage() {
+      if (!selectedAgent || isAgentRunning) return;
+
+      const message = chatInputEl.value.trim();
+      if (!message) return;
+
+      // Add user message to chat
+      addChatMessage('user', message);
+
+      // Clear input
+      chatInputEl.value = '';
+      chatInputEl.style.height = '48px';
+
+      // Disable input while processing
+      isAgentRunning = true;
+      sendMessageBtn.disabled = true;
+      chatInputEl.disabled = true;
+
+      // Add loading message
+      const loadingId = addLoadingMessage();
+
+      try {
+        // Prepare input based on agent's input variables
+        const inputVars = selectedAgent.inputVariables || ['message'];
+        const inputObj = {};
+
+        if (inputVars.length === 1) {
+          inputObj[inputVars[0]] = message;
+        } else {
+          inputObj[inputVars[0] || 'message'] = message;
+        }
+
+        // Call agent API
+        const res = await fetch(`/api/agents/${selectedAgent.name}/invoke`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: inputObj, sessionId })
+        });
+
+        const result = await res.json();
+
+        // Remove loading message
+        removeLoadingMessage(loadingId);
+
+        // Add agent response
+        const output = typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2);
+        addChatMessage('assistant', output, result.metadata);
+
+      } catch (error) {
+        removeLoadingMessage(loadingId);
+        addChatMessage('assistant', `Error: ${error.message}`, { error: true });
+      } finally {
+        isAgentRunning = false;
+        sendMessageBtn.disabled = false;
+        chatInputEl.disabled = false;
+        chatInputEl.focus();
+      }
+    }
+
+    function addChatMessage(role, content, metadata = {}) {
+      const messageEl = document.createElement('div');
+      messageEl.className = role === 'user' ? 'flex justify-end' : 'flex justify-start';
+
+      const hasError = metadata.error;
+      const bgColor = role === 'user' ? 'bg-dark-surface' : (hasError ? 'bg-red-900/20 border-red-900/30' : 'bg-dark-surface');
+      const textColor = hasError ? 'text-red-300' : 'text-gray-100';
+
+      messageEl.innerHTML = `
+        <div class="max-w-2xl ${bgColor} border ${role === 'user' ? 'border-transparent' : 'border-dark-border'} rounded-3xl px-5 py-3 ${textColor}" style="font-size: 15px; line-height: 1.5;">
+          ${formatAssistantMessage(content)}
+        </div>
+      `;
+
+      // Add action buttons for assistant messages (below the bubble)
+      if (role === 'assistant' && !hasError) {
+        const actionsWrapper = document.createElement('div');
+        actionsWrapper.className = 'flex justify-start';
+        actionsWrapper.innerHTML = `
+          <div class="flex items-center gap-2 mt-2 ml-2">
+            <button class="copy-btn text-gray-500 hover:text-gray-300 transition-colors p-1.5" title="Copy">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+              </svg>
+            </button>
+          </div>
+        `;
+
+        chatMessagesEl.appendChild(messageEl);
+        chatMessagesEl.appendChild(actionsWrapper);
+
+        // Add copy functionality
+        const copyBtn = actionsWrapper.querySelector('.copy-btn');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(content);
+            copyBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+            setTimeout(() => {
+              copyBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>`;
+            }, 2000);
+          });
+        }
+      } else {
+        chatMessagesEl.appendChild(messageEl);
+      }
+
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+
+      chatHistory.push({ role, content, metadata });
+    }
+
+    function addLoadingMessage() {
+      const loadingId = 'loading-' + Date.now();
+      const messageEl = document.createElement('div');
+      messageEl.id = loadingId;
+      messageEl.className = 'flex justify-start';
+      messageEl.innerHTML = `
+        <div class="max-w-2xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-4">
+          <div class="flex items-center gap-3">
+            <div class="loading-dots flex gap-1">
+              <div class="loading-dot w-2 h-2 bg-orange-500 rounded-full"></div>
+              <div class="loading-dot w-2 h-2 bg-orange-500 rounded-full" style="animation-delay: 0.2s"></div>
+              <div class="loading-dot w-2 h-2 bg-orange-500 rounded-full" style="animation-delay: 0.4s"></div>
+            </div>
+          </div>
+        </div>
+      `;
+      chatMessagesEl.appendChild(messageEl);
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+      return loadingId;
+    }
+
+    function removeLoadingMessage(loadingId) {
+      const el = document.getElementById(loadingId);
+      if (el) el.remove();
+    }
+
+    function formatAssistantMessage(content) {
+      // Convert newlines to <br>, preserve formatting
+      return escapeHtml(content).replace(/\n/g, '<br>');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+
+    async function loadWorkflows() {
+      try {
+        const res = await fetch('/api/workflows');
+        workflows = await res.json();
+        workflows.forEach(wf => {
+          const opt = document.createElement('option');
+          opt.value = wf.name;
+          opt.textContent = `${wf.name} - ${wf.description}`;
+          workflowSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load workflows:', e);
+      }
+    }
+
+    async function loadVectorStores() {
+      try {
+        const res = await fetch('/api/vectors');
+        vectorStores = await res.json();
+        vectorStores.forEach(vs => {
+          const opt = document.createElement('option');
+          opt.value = vs.name;
+          opt.textContent = `${vs.name} - ${vs.description}`;
+          vectorSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load vector stores:', e);
+      }
+    }
+
+    async function loadLLMs() {
+      try {
+        const res = await fetch('/api/llm');
+        llmConfigs = await res.json();
+        llmConfigs.forEach(llm => {
+          const opt = document.createElement('option');
+          opt.value = llm.name;
+          opt.textContent = `${llm.name} (${llm.model})`;
+          llmSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load LLMs:', e);
+      }
+    }
+
+    function generateJsonFromSchema(schema) {
+      if (!schema || !schema.shape) return {};
+
+      const result = {};
+      for (const [key, value] of Object.entries(schema.shape)) {
+        // Check if it's optional
+        const isOptional = value._def?.typeName === 'ZodOptional';
+        const innerType = isOptional ? value._def.innerType : value;
+
+        // Get the actual type name
+        const typeName = innerType._def?.typeName || '';
+
+        // Generate placeholder based on type
+        if (typeName.includes('String')) {
+          result[key] = '';
+        } else if (typeName.includes('Number')) {
+          result[key] = 0;
+        } else if (typeName.includes('Boolean')) {
+          result[key] = false;
+        } else if (typeName.includes('Array')) {
+          result[key] = [];
+        } else if (typeName.includes('Object') || typeName.includes('Record')) {
+          result[key] = {};
+        } else {
+          result[key] = null;
+        }
+      }
+      return result;
+    }
+
+    function generateJsonFromJsonSchema(jsonSchema) {
+      if (!jsonSchema || !jsonSchema.properties) return {};
+
+      const result = {};
+      for (const [key, prop] of Object.entries(jsonSchema.properties)) {
+        const type = prop.type || 'string';
+
+        switch (type) {
+          case 'string':
+            result[key] = prop.default || '';
+            break;
+          case 'number':
+          case 'integer':
+            result[key] = prop.default || 0;
+            break;
+          case 'boolean':
+            result[key] = prop.default !== undefined ? prop.default : false;
+            break;
+          case 'array':
+            result[key] = prop.default || [];
+            break;
+          case 'object':
+            result[key] = prop.default || {};
+            break;
+          default:
+            result[key] = null;
+        }
+      }
+      return result;
+    }
+
+    async function loadMCPServers() {
+      try {
+        const res = await fetch('/api/mcp');
+        mcpServers = await res.json();
+        await renderServersWithTools();
+      } catch (e) {
+        console.error('Failed to load MCP servers:', e);
+        mcpServersContainerEl.innerHTML = '<div class="text-red-400 text-sm text-center py-8">Failed to load MCP servers</div>';
+      }
+    }
+
+    async function renderServersWithTools() {
+      mcpServersContainerEl.innerHTML = '';
+
+      if (mcpServers.length === 0) {
+        mcpServersContainerEl.innerHTML = '<div class="text-gray-500 text-sm text-center py-8">No MCP servers configured</div>';
+        return;
+      }
+
+      for (const server of mcpServers) {
+        try {
+          const res = await fetch(`/api/mcp/${server.name}/tools`);
+          const tools = await res.json();
+
+          const serverSection = document.createElement('div');
+          serverSection.className = 'bg-dark-surface/30 border border-dark-border rounded-lg overflow-hidden';
+
+          const header = document.createElement('div');
+          header.className = 'p-4 cursor-pointer hover:bg-dark-surface/50 transition-colors flex items-center justify-between';
+          header.dataset.serverName = server.name;
+          header.innerHTML = `
+            <div class="flex-1">
+              <div class="font-medium text-gray-200">${server.name}</div>
+              <div class="text-xs text-gray-500 mt-0.5">${server.transport}${server.command ? ` • ${server.command.split(' ')[0]}` : ''} • ${tools.length} tool${tools.length !== 1 ? 's' : ''}</div>
+            </div>
+            <svg class="w-5 h-5 text-gray-400 transform transition-transform server-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          `;
+
+          const toolsContainer = document.createElement('div');
+          toolsContainer.className = 'hidden p-4 pt-0 server-tools';
+          toolsContainer.dataset.serverName = server.name;
+
+          if (tools.length === 0) {
+            const emptyMsg = document.createElement('div');
+            emptyMsg.className = 'text-gray-500 text-sm text-center py-4';
+            emptyMsg.textContent = 'No tools available';
+            toolsContainer.appendChild(emptyMsg);
+          } else {
+            const toolsGrid = document.createElement('div');
+            toolsGrid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2';
+
+            tools.forEach(tool => {
+              const toolCard = document.createElement('div');
+              toolCard.className = 'mcp-tool-card bg-dark-surface border border-dark-border hover:border-cyan-500 rounded-lg p-3 cursor-pointer transition-all';
+              toolCard.dataset.serverName = server.name;
+              toolCard.dataset.toolName = tool.name;
+              toolCard.innerHTML = `
+                <div class="font-medium text-cyan-400 text-sm mb-1">${tool.name}</div>
+                <div class="text-xs text-gray-500 line-clamp-2">${tool.description || 'No description'}</div>
+              `;
+              toolCard.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectTool(server.name, tool);
+              });
+              toolsGrid.appendChild(toolCard);
+            });
+
+            toolsContainer.appendChild(toolsGrid);
+          }
+
+          header.addEventListener('click', () => toggleServer(server.name));
+
+          serverSection.appendChild(header);
+          serverSection.appendChild(toolsContainer);
+          mcpServersContainerEl.appendChild(serverSection);
+        } catch (e) {
+          console.error(`Failed to load tools for ${server.name}:`, e);
+        }
+      }
+    }
+
+    function toggleServer(serverName) {
+      const toolsContainer = document.querySelector(`.server-tools[data-server-name="${serverName}"]`);
+      const chevron = document.querySelector(`[data-server-name="${serverName}"] .server-chevron`);
+
+      if (toolsContainer && chevron) {
+        const isHidden = toolsContainer.classList.contains('hidden');
+
+        if (isHidden) {
+          toolsContainer.classList.remove('hidden');
+          chevron.classList.add('rotate-180');
+        } else {
+          toolsContainer.classList.add('hidden');
+          chevron.classList.remove('rotate-180');
+        }
+      }
+    }
+
+    function selectTool(serverName, tool) {
+      selectedServer = serverName;
+      selectedTool = tool;
+      selectedItemNameEl.textContent = tool.name;
+      selectedItemDescriptionEl.textContent = tool.description || 'No description';
+
+      // Remove highlight from all tool cards
+      document.querySelectorAll('.mcp-tool-card').forEach(card => {
+        card.classList.remove('border-cyan-500', 'bg-cyan-500/10');
+        card.classList.add('border-dark-border');
+      });
+
+      // Highlight selected tool card
+      const selectedCard = document.querySelector(`.mcp-tool-card[data-server-name="${serverName}"][data-tool-name="${tool.name}"]`);
+      if (selectedCard) {
+        selectedCard.classList.remove('border-dark-border');
+        selectedCard.classList.add('border-cyan-500', 'bg-cyan-500/10');
+      }
+
+      // Generate JSON template from schema
+      const jsonTemplate = generateJsonFromJsonSchema(tool.inputSchema);
+      mcpToolArgsEl.value = JSON.stringify(jsonTemplate, null, 2);
+
+      executionSection.classList.remove('hidden');
+    }
+
+    async function loadFunctions() {
+      try {
+        const res = await fetch('/api/functions');
+        functions = await res.json();
+        renderFunctionCards();
+      } catch (e) {
+        console.error('Failed to load functions:', e);
+        functionCardsEl.innerHTML = '<div class="text-red-400 text-sm text-center py-8 col-span-full">Failed to load functions</div>';
+      }
+    }
+
+    function renderFunctionCards() {
+      functionCardsEl.innerHTML = '';
+
+      if (functions.length === 0) {
+        functionCardsEl.innerHTML = '<div class="text-gray-500 text-sm text-center py-8 col-span-full">No internal functions configured</div>';
+        return;
+      }
+
+      functions.forEach(func => {
+        const card = document.createElement('div');
+        card.className = 'function-card bg-dark-surface border border-dark-border hover:border-cyan-500 rounded-lg p-4 cursor-pointer transition-all';
+        card.dataset.functionName = func.name;
+
+        const tags = func.tags && func.tags.length > 0
+          ? `<div class="flex flex-wrap gap-1 mt-2">${func.tags.map(tag =>
+            `<span class="px-2 py-0.5 text-xs bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded">${tag}</span>`
+          ).join('')}</div>`
+          : '';
+
+        card.innerHTML = `
+          <div class="font-medium text-cyan-400 mb-1">${func.name}</div>
+          <div class="text-xs text-gray-500 line-clamp-2">${func.description}</div>
+          ${tags}
+        `;
+        card.addEventListener('click', () => selectFunction(func));
+        functionCardsEl.appendChild(card);
+      });
+    }
+
+    async function selectFunction(func) {
+      // Load full details to get schema
+      try {
+        const res = await fetch(`/api/functions/${func.name}`);
+        const fullFunc = await res.json();
+
+        selectedFunction = fullFunc;
+        selectedItemNameEl.textContent = fullFunc.name;
+        selectedItemDescriptionEl.textContent = fullFunc.description || 'No description';
+
+        // Remove highlight from all function cards
+        document.querySelectorAll('.function-card').forEach(card => {
+          card.classList.remove('border-cyan-500', 'bg-cyan-500/10');
+          card.classList.add('border-dark-border');
+        });
+
+        // Highlight selected function card
+        const selectedCard = document.querySelector(`.function-card[data-function-name="${fullFunc.name}"]`);
+        if (selectedCard) {
+          selectedCard.classList.remove('border-dark-border');
+          selectedCard.classList.add('border-cyan-500', 'bg-cyan-500/10');
+        }
+
+        // Generate JSON template from schema
+        const jsonTemplate = generateJsonFromSchema(fullFunc.schema);
+        mcpToolArgsEl.value = JSON.stringify(jsonTemplate, null, 2);
+
+        executionSection.classList.remove('hidden');
+      } catch (e) {
+        console.error('Failed to load function details:', e);
+      }
+    }
+
+    // Source switcher
+    mcpSourceBtn.addEventListener('click', () => {
+      currentSource = 'mcp';
+      mcpSourceBtn.className = 'px-4 py-2 rounded-lg font-medium bg-cyan-600 text-white transition-colors';
+      functionsSourceBtn.className = 'px-4 py-2 rounded-lg font-medium bg-dark-surface text-gray-400 hover:bg-dark-hover transition-colors';
+      mcpServerSection.classList.remove('hidden');
+      functionsSection.classList.add('hidden');
+      executionSection.classList.add('hidden');
+      clearSelection();
+    });
+
+    functionsSourceBtn.addEventListener('click', () => {
+      currentSource = 'functions';
+      functionsSourceBtn.className = 'px-4 py-2 rounded-lg font-medium bg-cyan-600 text-white transition-colors';
+      mcpSourceBtn.className = 'px-4 py-2 rounded-lg font-medium bg-dark-surface text-gray-400 hover:bg-dark-hover transition-colors';
+      functionsSection.classList.remove('hidden');
+      mcpServerSection.classList.add('hidden');
+      executionSection.classList.add('hidden');
+      clearSelection();
+    });
+
+    clearSelectionBtn.addEventListener('click', () => {
+      clearSelection();
+    });
+
+    function clearSelection() {
+      selectedServer = null;
+      selectedTool = null;
+      selectedFunction = null;
+      executionSection.classList.add('hidden');
+      mcpToolArgsEl.value = '{}';
+      mcpOutputEl.textContent = '';
+
+      // Remove all highlights
+      document.querySelectorAll('.mcp-tool-card').forEach(card => {
+        card.classList.remove('border-cyan-500', 'bg-cyan-500/10');
+        card.classList.add('border-dark-border');
+      });
+      document.querySelectorAll('.function-card').forEach(card => {
+        card.classList.remove('border-cyan-500', 'bg-cyan-500/10');
+        card.classList.add('border-dark-border');
+      });
+    }
+
+
+    workflowSelect.addEventListener('change', async () => {
+      runWorkflowBtn.disabled = !workflowSelect.value;
+      resetWorkflowStatus();
+      if (workflowSelect.value) {
+        await loadWorkflowDetails(workflowSelect.value);
+      } else {
+        workflowInputsEl.innerHTML = '';
+        currentWorkflowSchema = null;
+        currentWorkflowSteps = [];
+        flowDiagramEl.innerHTML = '<div class="text-gray-500 italic text-center py-8">Select a workflow to see its flow</div>';
+      }
+    });
+
+    vectorSelect.addEventListener('change', async () => {
+      const hasValue = !!vectorSelect.value;
+      searchVectorBtn.disabled = !hasValue;
+
+      if (hasValue) {
+        try {
+          const res = await fetch(`/api/vectors/${vectorSelect.value}`);
+          const vectorStore = await res.json();
+
+          vectorInfoEl.classList.remove('hidden');
+          vectorDescriptionEl.textContent = vectorStore.description || 'N/A';
+          vectorSourceTypeEl.textContent = vectorStore.source?.type || 'N/A';
+          vectorStoreTypeEl.textContent = vectorStore.store?.type || 'memory';
+          vectorDefaultKEl.textContent = vectorStore.search?.defaultK || '4';
+
+          // Set the K input to the default value
+          vectorKEl.value = vectorStore.search?.defaultK || 4;
+        } catch (e) {
+          console.error('Failed to load vector store details:', e);
+        }
+      } else {
+        vectorInfoEl.classList.add('hidden');
+      }
+    });
+
+    llmSelect.addEventListener('change', () => {
+      const hasValue = !!llmSelect.value;
+      runLlmBtn.disabled = !hasValue;
+      streamLlmBtn.disabled = !hasValue;
+
+      if (hasValue) {
+        const llm = llmConfigs.find(l => l.name === llmSelect.value);
+        if (llm) {
+          llmInfoEl.classList.remove('hidden');
+          llmModelEl.textContent = llm.model;
+          llmBaseUrlEl.textContent = llm.baseUrl || '(OpenAI default)';
+        }
+      } else {
+        llmInfoEl.classList.add('hidden');
+      }
+    });
+
+
+    async function loadWorkflowDetails(name) {
+      try {
+        const res = await fetch(`/api/workflows/${name}`);
+        const workflow = await res.json();
+        currentWorkflowSchema = workflow.input?.schema || {};
+        currentWorkflowSteps = workflow.steps || [];
+        renderWorkflowInputs(currentWorkflowSchema);
+        renderFlowDiagram(currentWorkflowSteps);
+      } catch (e) {
+        console.error('Failed to load workflow details:', e);
+      }
+    }
+
+    function parseToolRef(toolRef) {
+      if (typeof toolRef === 'string') {
+        const [source, name] = toolRef.split(':');
+        return { source, name };
+      }
+      return { source: toolRef.source, name: toolRef.name };
+    }
+
+    function getAgentTools(agentName) {
+      const agent = agents.find(a => a.name === agentName);
+      if (!agent || !agent.tools) return { mcp: [], vector: [] };
+
+      const mcp = [];
+      const vector = [];
+
+      agent.tools.forEach(tool => {
+        const { source, name } = parseToolRef(tool);
+        if (source === 'mcp') mcp.push(name);
+        else if (source === 'vector') vector.push(name);
+      });
+
+      return { mcp, vector };
+    }
+
+    function renderFlowDiagram(steps) {
+      flowDiagramEl.innerHTML = '';
+      stepElements.clear();
+
+      if (!steps || steps.length === 0) {
+        flowDiagramEl.innerHTML = '<div class="text-gray-500 italic text-center py-8">No steps defined</div>';
+        return;
+      }
+
+      const container = document.createElement('div');
+      container.className = 'flex items-center gap-3 flex-nowrap';
+
+      // Input node
+      const inputNode = document.createElement('div');
+      inputNode.className = 'flex flex-col items-center px-5 py-3 bg-green-500/10 border border-green-500/30 rounded-lg min-w-[100px] text-center';
+      inputNode.innerHTML = '<span class="font-semibold text-green-400 text-sm">Input</span>';
+      container.appendChild(inputNode);
+
+      steps.forEach((step) => {
+        const arrow = document.createElement('span');
+        arrow.className = 'text-gray-600 text-xl flex-shrink-0';
+        arrow.textContent = '→';
+        container.appendChild(arrow);
+
+        if (step.parallel && step.parallel.length > 0) {
+          const parallelContainer = document.createElement('div');
+          parallelContainer.className = 'flex flex-col gap-2 p-3 bg-dark-bg/50 border border-dashed border-dark-border rounded-lg';
+          step.parallel.forEach(pStep => {
+            const stepEl = createStepElement(pStep);
+            stepElements.set(pStep.id, stepEl);
+            parallelContainer.appendChild(stepEl);
+          });
+          container.appendChild(parallelContainer);
+        } else {
+          const stepEl = createStepElement(step);
+          stepElements.set(step.id, stepEl);
+          container.appendChild(stepEl);
+        }
+      });
+
+      const finalArrow = document.createElement('span');
+      finalArrow.className = 'text-gray-600 text-xl flex-shrink-0';
+      finalArrow.textContent = '→';
+      container.appendChild(finalArrow);
+
+      // Output node
+      const outputNode = document.createElement('div');
+      outputNode.className = 'flex flex-col items-center px-5 py-3 bg-green-500/10 border border-green-500/30 rounded-lg min-w-[100px] text-center';
+      outputNode.innerHTML = '<span class="font-semibold text-green-400 text-sm">Output</span>';
+      container.appendChild(outputNode);
+
+      flowDiagramEl.appendChild(container);
+    }
+
+    function createStepElement(step) {
+      const stepEl = document.createElement('div');
+      stepEl.className = 'flex flex-col items-center px-4 py-3 bg-blue-500/10 border border-blue-500/30 rounded-lg min-w-[120px] text-center transition-all';
+
+      const tools = getAgentTools(step.agent);
+      let toolBadges = '';
+
+      if (tools.mcp.length > 0) {
+        tools.mcp.forEach(name => {
+          toolBadges += `<span class="px-2 py-0.5 text-[10px] font-semibold uppercase bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">MCP:${name}</span>`;
+        });
+      }
+      if (tools.vector.length > 0) {
+        tools.vector.forEach(name => {
+          toolBadges += `<span class="px-2 py-0.5 text-[10px] font-semibold uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded">Vec:${name}</span>`;
+        });
+      }
+
+      stepEl.innerHTML = `
+        <span class="font-semibold text-blue-300 text-sm">${step.id || 'step'}</span>
+        <span class="text-xs text-gray-400 mt-0.5">${step.agent || ''}</span>
+        ${toolBadges ? `<div class="flex flex-wrap gap-1 mt-2 justify-center">${toolBadges}</div>` : ''}
+      `;
+      return stepEl;
+    }
+
+    function renderWorkflowInputs(schema) {
+      workflowInputsEl.innerHTML = '';
+      const entries = Object.entries(schema);
+      if (entries.length === 0) return;
+
+      const label = document.createElement('label');
+      label.className = 'block text-sm font-medium text-gray-300 mb-2';
+      label.textContent = 'Workflow Inputs';
+      workflowInputsEl.appendChild(label);
+
+      const inputsContainer = document.createElement('div');
+      inputsContainer.className = 'space-y-2';
+
+      for (const [key, field] of entries) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = `wf-${key}`;
+        input.placeholder = `${key}${field.required ? ' *' : ''}${field.default ? ` (default: ${field.default})` : ''}`;
+        input.className = 'w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-2.5 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent';
+        if (field.default) input.value = field.default;
+        inputsContainer.appendChild(input);
+      }
+
+      workflowInputsEl.appendChild(inputsContainer);
+    }
+
+
+    function updateStepStatus(stepId, status) {
+      const stepEl = stepElements.get(stepId);
+      if (stepEl) {
+        stepEl.className = 'flex flex-col items-center px-4 py-3 rounded-lg min-w-[120px] text-center transition-all';
+        if (status === 'running') {
+          stepEl.className += ' bg-yellow-500/20 border border-yellow-500/40 animate-pulse';
+        } else if (status === 'complete') {
+          stepEl.className += ' bg-green-500/20 border border-green-500/40';
+        } else if (status === 'error') {
+          stepEl.className += ' bg-red-500/20 border border-red-500/40';
+        } else {
+          stepEl.className += ' bg-blue-500/10 border border-blue-500/30';
+        }
+      }
+    }
+
+    function addStatusLog(message, type = '') {
+      const entry = document.createElement('div');
+      entry.className = 'text-gray-400';
+      if (type === 'step-start') entry.className = 'text-blue-400';
+      if (type === 'step-complete') entry.className = 'text-green-400';
+      if (type === 'step-error') entry.className = 'text-red-400';
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      statusLogEl.appendChild(entry);
+      statusLogEl.scrollTop = statusLogEl.scrollHeight;
+    }
+
+    function updateProgress(current, total, elapsed) {
+      const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+      progressFillEl.style.width = `${percentage}%`;
+
+      const seconds = Math.floor(elapsed / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const displayTime = minutes > 0
+        ? `${minutes}m ${seconds % 60}s`
+        : `${seconds}s`;
+      statusTimeEl.textContent = displayTime;
+    }
+
+    function resetWorkflowStatus() {
+      workflowStatusEl.classList.add('hidden');
+      statusLogEl.innerHTML = '';
+      progressFillEl.style.width = '0%';
+      statusTimeEl.textContent = '0s';
+      stepElements.forEach((el) => {
+        el.className = 'flex flex-col items-center px-4 py-3 bg-blue-500/10 border border-blue-500/30 rounded-lg min-w-[120px] text-center transition-all';
+      });
+      if (statusInterval) {
+        clearInterval(statusInterval);
+        statusInterval = null;
+      }
+    }
+
+    runWorkflowBtn.addEventListener('click', async () => {
+      const workflowName = workflowSelect.value;
+      if (!workflowName) return;
+
+      const inputObj = {};
+      if (currentWorkflowSchema) {
+        for (const key of Object.keys(currentWorkflowSchema)) {
+          const el = document.getElementById(`wf-${key}`);
+          if (el && el.value) inputObj[key] = el.value;
+        }
+      }
+
+      resetWorkflowStatus();
+      workflowStatusEl.classList.remove('hidden');
+      workflowOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-400 whitespace-pre-wrap overflow-x-auto';
+      workflowOutputEl.textContent = 'Starting workflow...';
+      runWorkflowBtn.disabled = true;
+      statusStartTime = Date.now();
+
+      statusInterval = setInterval(() => {
+        if (statusStartTime) {
+          const elapsed = Date.now() - statusStartTime;
+          const seconds = Math.floor(elapsed / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const displayTime = minutes > 0
+            ? `${minutes}m ${seconds % 60}s`
+            : `${seconds}s`;
+          statusTimeEl.textContent = displayTime;
+        }
+      }, 1000);
+
+      try {
+        const response = await fetch(`/api/workflows/${workflowName}/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: inputObj })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const update = JSON.parse(data);
+
+                if (update.type === 'status') {
+                  const status = update.data;
+
+                  statusMessageEl.textContent = status.message;
+
+                  if (status.progress) {
+                    updateProgress(status.progress.current, status.progress.total, status.elapsed || 0);
+                  }
+
+                  if (status.type === 'step_start' && status.stepId) {
+                    updateStepStatus(status.stepId, 'running');
+                    addStatusLog(status.message, 'step-start');
+                  } else if (status.type === 'step_complete' && status.stepId) {
+                    updateStepStatus(status.stepId, 'complete');
+                    addStatusLog(status.message, 'step-complete');
+                  } else if (status.type === 'step_error' && status.stepId) {
+                    updateStepStatus(status.stepId, 'error');
+                    addStatusLog(status.message, 'step-error');
+                  } else if (status.type === 'workflow_start') {
+                    addStatusLog(status.message);
+                  } else if (status.type === 'workflow_complete' || status.type === 'workflow_error') {
+                    addStatusLog(status.message);
+                    if (statusInterval) {
+                      clearInterval(statusInterval);
+                      statusInterval = null;
+                    }
+                  }
+                } else if (update.type === 'result') {
+                  const result = update.data;
+                  workflowOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto';
+
+                  let output = '';
+                  if (result.output) {
+                    for (const [key, value] of Object.entries(result.output)) {
+                      output += `=== ${key} ===\n${value}\n\n`;
+                    }
+                  }
+                  output += `Duration: ${result.metadata?.duration}ms`;
+                  workflowOutputEl.textContent = output || JSON.stringify(result, null, 2);
+
+                  if (statusInterval) {
+                    clearInterval(statusInterval);
+                    statusInterval = null;
+                  }
+                }
+              } catch (e) {
+                console.error('Error parsing SSE data:', e, data);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        workflowOutputEl.className = 'bg-dark-surface border border-red-900/30 rounded-lg p-4 min-h-[200px] font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto';
+        workflowOutputEl.textContent = 'Error: ' + e.message;
+        addStatusLog(`Error: ${e.message}`, 'step-error');
+        if (statusInterval) {
+          clearInterval(statusInterval);
+          statusInterval = null;
+        }
+      } finally {
+        runWorkflowBtn.disabled = false;
+      }
+    });
+
+    runLlmBtn.addEventListener('click', async () => {
+      const llmName = llmSelect.value;
+      const message = llmInputEl.value.trim();
+      if (!llmName || !message) return;
+
+      llmOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-400 whitespace-pre-wrap overflow-x-auto';
+      llmOutputEl.textContent = 'Sending message...';
+      runLlmBtn.disabled = true;
+      streamLlmBtn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/llm/${llmName}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+        const result = await res.json();
+
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        llmOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto';
+        llmOutputEl.textContent = result.output;
+      } catch (e) {
+        llmOutputEl.className = 'bg-dark-surface border border-red-900/30 rounded-lg p-4 min-h-[200px] font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto';
+        llmOutputEl.textContent = 'Error: ' + e.message;
+      } finally {
+        runLlmBtn.disabled = false;
+        streamLlmBtn.disabled = false;
+      }
+    });
+
+    searchVectorBtn.addEventListener('click', async () => {
+      const vectorName = vectorSelect.value;
+      const query = vectorQueryEl.value.trim();
+      if (!vectorName || !query) return;
+
+      const k = parseInt(vectorKEl.value) || 4;
+
+      vectorResultsEl.innerHTML = '<div class="text-gray-400 italic text-center py-8">Searching...</div>';
+      searchVectorBtn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/vectors/${vectorName}/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, k })
+        });
+        const data = await res.json();
+
+        // Handle different response formats
+        const results = Array.isArray(data) ? data : (data.results || []);
+
+        if (!results || results.length === 0) {
+          vectorResultsEl.innerHTML = '<div class="text-gray-500 italic text-center py-8">No results found.</div>';
+          return;
+        }
+
+        // Render results
+        vectorResultsEl.innerHTML = '';
+        results.forEach((result, index) => {
+          const resultCard = document.createElement('div');
+          resultCard.className = 'mb-4 last:mb-0 bg-dark-bg border border-dark-border rounded-lg p-4';
+
+          const header = document.createElement('div');
+          header.className = 'flex items-center justify-between mb-2 pb-2 border-b border-dark-border';
+
+          const title = document.createElement('div');
+          title.className = 'font-semibold text-gray-200';
+          title.textContent = `Result ${index + 1}`;
+
+          const score = document.createElement('div');
+          score.className = 'text-sm';
+          const scoreValue = result.score || 0;
+          score.innerHTML = `<span class="text-gray-400">Score:</span> <span class="font-mono ${scoreValue > 0.7 ? 'text-green-400' : scoreValue > 0.4 ? 'text-yellow-400' : 'text-gray-400'}">${scoreValue.toFixed(3)}</span>`;
+
+          header.appendChild(title);
+          header.appendChild(score);
+
+          const content = document.createElement('div');
+          content.className = 'text-sm text-gray-300 mb-3 whitespace-pre-wrap';
+          content.textContent = result.content || '';
+
+          const metadata = document.createElement('div');
+          metadata.className = 'text-xs text-gray-500';
+
+          if (result.metadata && Object.keys(result.metadata).length > 0) {
+            const metadataEntries = Object.entries(result.metadata)
+              .filter(([key]) => key !== 'loc' && key !== 'source' && key !== 's3_bucket' && key !== 's3_key')
+              .map(([key, value]) => `<span class="inline-block mr-3"><span class="text-gray-600">${key}:</span> <span class="text-gray-400">${value}</span></span>`)
+              .join('');
+
+            if (metadataEntries) {
+              metadata.innerHTML = metadataEntries;
+            } else {
+              metadata.textContent = 'No metadata';
+            }
+
+            // Show source separately if available
+            const source = result.metadata.source || result.metadata.s3_key;
+            if (source) {
+              const sourceEl = document.createElement('div');
+              sourceEl.className = 'mt-2 text-xs text-gray-600';
+              sourceEl.innerHTML = `<span class="text-gray-600">Source:</span> <span class="text-gray-500 font-mono">${source}</span>`;
+              metadata.appendChild(sourceEl);
+            }
+          } else {
+            metadata.textContent = 'No metadata';
+          }
+
+          resultCard.appendChild(header);
+          resultCard.appendChild(content);
+          resultCard.appendChild(metadata);
+
+          vectorResultsEl.appendChild(resultCard);
+        });
+
+      } catch (e) {
+        vectorResultsEl.innerHTML = `<div class="text-red-400 text-center py-8">Error: ${e.message}</div>`;
+      } finally {
+        searchVectorBtn.disabled = false;
+      }
+    });
+
+    streamLlmBtn.addEventListener('click', async () => {
+      const llmName = llmSelect.value;
+      const message = llmInputEl.value.trim();
+      if (!llmName || !message) return;
+
+      llmOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto';
+      llmOutputEl.textContent = '';
+      runLlmBtn.disabled = true;
+      streamLlmBtn.disabled = true;
+
+      try {
+        const response = await fetch(`/api/llm/${llmName}/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const update = JSON.parse(data);
+                if (update.content) {
+                  llmOutputEl.textContent += update.content;
+                } else if (update.error) {
+                  throw new Error(update.error);
+                }
+              } catch (e) {
+                if (e.message !== 'Unexpected end of JSON input') {
+                  console.error('Error parsing SSE data:', e, data);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        llmOutputEl.className = 'bg-dark-surface border border-red-900/30 rounded-lg p-4 min-h-[200px] font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto';
+        llmOutputEl.textContent = 'Error: ' + e.message;
+      } finally {
+        runLlmBtn.disabled = false;
+        streamLlmBtn.disabled = false;
+      }
+    });
+
+    callMcpToolBtn.addEventListener('click', async () => {
+      let args = {};
+      try {
+        args = JSON.parse(mcpToolArgsEl.value || '{}');
+      } catch (e) {
+        mcpOutputEl.className = 'bg-dark-surface border border-red-900/30 rounded-lg p-4 min-h-[200px] font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto';
+        mcpOutputEl.textContent = 'Error: Invalid JSON in arguments\n' + e.message;
+        return;
+      }
+
+      mcpOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-400 whitespace-pre-wrap overflow-x-auto';
+      mcpOutputEl.textContent = 'Executing...';
+      callMcpToolBtn.disabled = true;
+
+      try {
+        let result;
+
+        if (currentSource === 'mcp') {
+          if (!selectedServer || !selectedTool) {
+            mcpOutputEl.textContent = 'Error: No tool selected';
+            return;
+          }
+
+          const res = await fetch(`/api/mcp/${selectedServer}/call`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: selectedTool.name, arguments: args })
+          });
+          result = await res.json();
+        } else {
+          if (!selectedFunction) {
+            mcpOutputEl.textContent = 'Error: No function selected';
+            return;
+          }
+
+          const res = await fetch(`/api/functions/${selectedFunction.name}/call`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ arguments: args })
+          });
+          result = await res.json();
+        }
+
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        mcpOutputEl.className = 'bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto';
+        mcpOutputEl.textContent = typeof result.content === 'string'
+          ? result.content
+          : JSON.stringify(result, null, 2);
+      } catch (e) {
+        mcpOutputEl.className = 'bg-dark-surface border border-red-900/30 rounded-lg p-4 min-h-[200px] font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto';
+        mcpOutputEl.textContent = 'Error: ' + e.message;
+      } finally {
+        callMcpToolBtn.disabled = false;
+      }
+    });
+
+    loadAgents();
+    loadWorkflows();
+    loadVectorStores();
+    loadLLMs();
+    loadMCPServers();
+    loadFunctions();
+  </script>
+</body>
+
+</html>

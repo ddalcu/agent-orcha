@@ -260,7 +260,7 @@ export class AgentExecutor {
     llm: BaseChatModel,
     tools: StructuredTool[],
     input: Record<string, unknown> | AgentInvokeOptions
-  ): AsyncGenerator<string, void, unknown> {
+  ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
     const { input: actualInput, sessionId } = this.parseInvokeOptions(input);
 
     if (tools.length > 0) {
@@ -273,22 +273,36 @@ export class AgentExecutor {
       const userMessage = this.formatUserMessage(definition, actualInput);
       const messages = this.buildMessagesWithHistory(userMessage, sessionId);
 
-      // Note: stream may not support recursionLimit config directly
-      // If recursion limit is needed for streaming, consider using withConfig
-      const stream = await agent.stream({
-        messages,
-      });
+      const eventStream = await agent.streamEvents(
+        { messages },
+        {
+          version: 'v2',
+        }
+      );
 
       let accumulatedOutput = '';
 
-      for await (const chunk of stream) {
-        if (chunk.agent?.messages && Array.isArray(chunk.agent.messages)) {
-          for (const msg of chunk.agent.messages) {
-            if (typeof msg === 'object' && 'content' in msg && typeof msg.content === 'string') {
-              accumulatedOutput += msg.content;
-              yield msg.content;
-            }
+      for await (const event of eventStream) {
+        if (event.event === 'on_chat_model_stream') {
+          const chunk = event.data.chunk;
+          if (chunk.content) {
+            accumulatedOutput += chunk.content;
+            yield { type: 'content', content: chunk.content };
           }
+        } else if (event.event === 'on_tool_start') {
+          yield {
+            type: 'tool_start',
+            tool: event.name,
+            input: event.data.input,
+            runId: event.run_id,
+          };
+        } else if (event.event === 'on_tool_end') {
+          yield {
+            type: 'tool_end',
+            tool: event.name,
+            output: event.data.output,
+            runId: event.run_id,
+          };
         }
       }
 
@@ -319,7 +333,7 @@ export class AgentExecutor {
       for await (const chunk of stream) {
         if (typeof chunk.content === 'string') {
           accumulatedOutput += chunk.content;
-          yield chunk.content;
+          yield { type: 'content', content: chunk.content };
         }
       }
 

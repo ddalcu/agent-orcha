@@ -60,5 +60,5 @@ export interface AgentInvokeOptions {
 export interface AgentInstance {
   definition: AgentDefinition;
   invoke: (input: Record<string, unknown> | AgentInvokeOptions) => Promise<AgentResult>;
-  stream: (input: Record<string, unknown> | AgentInvokeOptions) => AsyncGenerator<string, void, unknown>;
+  stream: (input: Record<string, unknown> | AgentInvokeOptions) => AsyncGenerator<string | Record<string, unknown>, void, unknown>;
 }
