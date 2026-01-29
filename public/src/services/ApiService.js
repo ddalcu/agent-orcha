@@ -41,18 +41,18 @@ export class ApiService {
         });
     }
 
-    async getVectorStores() {
-        const res = await fetch('/api/vectors');
+    async getKnowledgeStores() {
+        const res = await fetch('/api/knowledge');
         return res.json();
     }
 
-    async getVectorStore(name) {
-        const res = await fetch(`/api/vectors/${name}`);
+    async getKnowledgeStore(name) {
+        const res = await fetch(`/api/knowledge/${name}`);
         return res.json();
     }
 
-    async searchVectorStore(name, query, k) {
-        const res = await fetch(`/api/vectors/${name}/search`, {
+    async searchKnowledgeStore(name, query, k) {
+        const res = await fetch(`/api/knowledge/${name}/search`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query, k })
@@ -116,6 +116,24 @@ export class ApiService {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ arguments: args })
+        });
+        return res.json();
+    }
+    async getFileTree() {
+        const res = await fetch('/api/files/tree');
+        return res.json();
+    }
+
+    async readFile(filePath) {
+        const res = await fetch(`/api/files/read?path=${encodeURIComponent(filePath)}`);
+        return res.json();
+    }
+
+    async writeFile(filePath, content) {
+        const res = await fetch('/api/files/write', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath, content })
         });
         return res.json();
     }

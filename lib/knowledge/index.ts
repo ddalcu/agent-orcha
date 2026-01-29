@@ -1,7 +1,9 @@
-export { VectorStoreFactory } from './vector-store-factory.js';
-export { VectorStoreManager } from './vector-store-manager.js';
+export { KnowledgeStoreFactory } from './knowledge-store-factory.js';
+export { KnowledgeStoreManager } from './knowledge-store-manager.js';
 export {
-  VectorConfigSchema,
+  KnowledgeConfigSchema,
+  VectorKnowledgeConfigSchema,
+  GraphRagKnowledgeConfigSchema,
   SourceConfigSchema,
   DirectorySourceConfigSchema,
   FileSourceConfigSchema,
@@ -15,7 +17,9 @@ export {
   SearchConfigSchema,
 } from './types.js';
 export type {
-  VectorConfig,
+  KnowledgeConfig,
+  VectorKnowledgeConfig,
+  GraphRagKnowledgeConfig,
   SourceConfig,
   DirectorySourceConfig,
   FileSourceConfig,
@@ -28,7 +32,18 @@ export type {
   SearchConfig,
   SearchResult,
   DocumentInput,
-  VectorStoreInstance,
+  KnowledgeStoreInstance,
 } from './types.js';
 export { DatabaseLoader, WebLoader, S3Loader } from './loaders/index.js';
 export { getPool, closeAllPools, getDatabaseType, detectFileType, isSupportedFileType } from './utils/index.js';
+
+// Graph RAG exports
+export { GraphRagFactory } from './graph-rag/index.js';
+export type {
+  GraphNode,
+  GraphEdge,
+  Community,
+  GraphStore,
+  GraphConfig,
+  GraphSearchConfig,
+} from './graph-rag/index.js';

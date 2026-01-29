@@ -5,7 +5,7 @@ export const ToolReferenceSchema = z.union([
   z.string(),
   z.object({
     name: z.string(),
-    source: z.enum(['mcp', 'vector', 'builtin', 'custom']),
+    source: z.enum(['mcp', 'knowledge', 'builtin', 'custom']),
     config: z.record(z.unknown()).optional(),
   }),
 ]);

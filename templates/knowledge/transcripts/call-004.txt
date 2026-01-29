@@ -1,0 +1,42 @@
+Call ID: CC-004
+Date: 2024-11-16
+Agent: James Park
+Duration: 5 minutes 30 seconds
+
+[00:00] Agent James Park: Thanks for calling Greenfield Auto Group, this is James.
+
+[00:04] Customer Priya Sharma: Hi James. My name is Priya Sharma and I'm looking for a reliable commuter car. I drive about 60 miles round trip to work every day so fuel efficiency is my top priority.
+
+[00:16] Agent James Park: 60 miles a day — fuel economy is definitely going to matter. Are you open to hybrids or strictly looking at gas vehicles?
+
+[00:23] Customer Priya Sharma: I'd consider a hybrid. I'm not ready for full electric though — my apartment complex doesn't have chargers.
+
+[00:30] Agent James Park: Makes total sense. For your situation, I'd recommend looking at three options: the Toyota Camry Hybrid, the Honda Accord Hybrid, or the Hyundai Sonata Hybrid. All three are in the 45-52 mpg range and they're very comfortable for highway commuting.
+
+[00:48] Customer Priya Sharma: I actually rented a Camry Hybrid on vacation last month and I loved it. Very smooth and quiet.
+
+[00:55] Agent James Park: The Camry Hybrid is phenomenal. We just got a batch of 2024 models in — the SE and XLE trims. The SE starts at $28,855 and gets 51 mpg combined. At your 60 miles per day, you'd spend roughly $35 a week on gas at current prices.
+
+[01:12] Customer Priya Sharma: Wow, that's about half what I'm spending now in my old Nissan. What colors do you have?
+
+[01:18] Agent James Park: In the SE we have Ice Cap White, Midnight Black, and Underground Blue. The XLE is in Celestial Silver. The XLE has the leather interior and the larger touchscreen if that matters to you.
+
+[01:32] Customer Priya Sharma: I like the sound of the XLE. What's the price difference?
+
+[01:36] Agent James Park: The XLE is $33,120. So about a $4,200 step up, but you get leather seats, JBL premium audio, panoramic roof, and wireless phone charging. A lot of people feel it's worth it for a car you'll be spending two hours a day in.
+
+[01:52] Customer Priya Sharma: Good point. Can I come by after work tomorrow? I get off at 5:30 and could be there by 6.
+
+[01:58] Agent James Park: Absolutely. I'll block off 6pm for you tomorrow. We'll have the Camry Hybrid XLE ready for a test drive. Should I also have the Accord Hybrid available for comparison?
+
+[02:08] Customer Priya Sharma: Sure, why not. Good to compare.
+
+[02:11] Agent James Park: Smart move. I'll have both ready. Can I get a contact number?
+
+[02:16] Customer Priya Sharma: 555-0283.
+
+[02:19] Agent James Park: Perfect, Priya. See you tomorrow at 6pm. Bring your current car too — we can give you a trade-in estimate on the Nissan while you're here.
+
+[02:27] Customer Priya Sharma: Oh great idea. I'll do that. Thanks James!
+
+Outcome: Test drive appointment scheduled for tomorrow 6pm. Customer interested in 2024 Toyota Camry Hybrid XLE and Honda Accord Hybrid. Trade-in evaluation offered for current Nissan. High purchase intent.

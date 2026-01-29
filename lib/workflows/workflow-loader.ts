@@ -27,7 +27,9 @@ export class WorkflowLoader {
   async loadOne(filePath: string): Promise<WorkflowDefinition> {
     const content = await fs.readFile(filePath, 'utf-8');
     const parsed = parseYaml(content);
-    return WorkflowDefinitionSchema.parse(parsed);
+    const workflow = WorkflowDefinitionSchema.parse(parsed);
+    this.workflows.set(workflow.name, workflow);
+    return workflow;
   }
 
   get(name: string): WorkflowDefinition | undefined {

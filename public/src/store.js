@@ -2,14 +2,18 @@
 class Store extends EventTarget {
     constructor() {
         super();
+        const validTabs = ['agents', 'workflows', 'knowledge', 'mcp', 'ide'];
+        const hashTab = window.location.hash.replace('#', '');
+        const initialTab = validTabs.includes(hashTab) ? hashTab : 'agents';
+
         this.data = {
-            activeTab: 'agents',
+            activeTab: initialTab,
             agents: [],
             selectedAgent: null,
             chatHistory: [],
             sessionId: 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
             workflows: [],
-            vectorStores: [],
+            knowledgeStores: [],
             llms: [],
             mcpServers: [],
             functions: []

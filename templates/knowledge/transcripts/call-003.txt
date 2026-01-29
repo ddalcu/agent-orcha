@@ -1,0 +1,42 @@
+Call ID: CC-003
+Date: 2024-11-16
+Agent: Sarah Mitchell
+Duration: 11 minutes 45 seconds
+
+[00:00] Agent Sarah Mitchell: Greenfield Auto Group, this is Sarah Mitchell. How can I help you?
+
+[00:05] Customer David Nguyen: Hey Sarah, this is David Nguyen. I was in last week looking at trucks and I've been thinking about that Ford F-150 Lightning you showed me.
+
+[00:14] Agent Sarah Mitchell: David! Great to hear from you. Yes, the Lightning — the Lariat trim in Antimatter Blue. Have you had a chance to think about what we discussed?
+
+[00:24] Customer David Nguyen: I have. The price point was a little high at $62,000. I was talking to my buddy and he said Ford is offering some incentives right now. Is that true?
+
+[00:35] Agent Sarah Mitchell: Your buddy is right. Ford currently has a $3,500 manufacturer rebate on all 2024 Lightning models. On top of that, you'd qualify for the federal EV tax credit of up to $7,500. So you're looking at potentially $11,000 in savings.
+
+[00:52] Customer David Nguyen: Wait, so the effective price could be around $51,000?
+
+[00:57] Agent Sarah Mitchell: Exactly. And the Lightning qualifies because it's assembled in the US and meets the battery sourcing requirements. I should mention though — the tax credit situation can change. The current incentives are good through the end of December.
+
+[01:12] Customer David Nguyen: Hmm, that does create some urgency. What about financing? I'd want to put about $10,000 down.
+
+[01:20] Agent Sarah Mitchell: With $10,000 down on a $62,000 MSRP, after the rebate you'd be financing around $48,500. We're currently offering 2.9% APR for 60 months through Ford Motor Credit. That puts your monthly payment around $870.
+
+[01:40] Customer David Nguyen: That's manageable. I also wanted to ask — my wife Rachel is nervous about the range. She thinks we'd be stranded somewhere.
+
+[01:50] Agent Sarah Mitchell: Totally understandable concern. The Lightning Lariat has a standard range of 240 miles, and the extended range battery gets you up to 320 miles. For context, the average American drives about 37 miles per day. You could go almost a full week without charging.
+
+[02:08] Customer David Nguyen: And there's a charging station at my office, so that helps.
+
+[02:12] Agent Sarah Mitchell: That's perfect. And Ford includes a complimentary home charger with every Lightning purchase. The Level 2 charger can fully charge the truck overnight — about 8 hours from empty.
+
+[02:25] Customer David Nguyen: Okay, I think I'm ready to move forward. Can we come in Wednesday evening? Rachel wants to drive it herself before we commit.
+
+[02:34] Agent Sarah Mitchell: Wednesday evening works great. How about 6pm? I'll have the Lightning charged and ready for both of you to test drive. We can also go through the financing details in person.
+
+[02:45] Customer David Nguyen: Perfect. 6pm Wednesday. We'll be there.
+
+[02:48] Agent Sarah Mitchell: Wonderful. I'll send you a confirmation text. And David — I'll also pull together a comparison sheet showing the total cost of ownership versus a gas truck. The fuel savings on the Lightning are significant.
+
+[03:00] Customer David Nguyen: That would be really helpful. Thanks Sarah, see you Wednesday.
+
+Outcome: Test drive and financing appointment scheduled for Wednesday 6pm. Customer highly interested in 2024 Ford F-150 Lightning Lariat. $3,500 rebate + $7,500 EV tax credit discussed. Very high purchase intent.

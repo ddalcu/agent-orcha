@@ -15,7 +15,12 @@ export type {
 } from './agents/index.js';
 
 // Workflows
-export { WorkflowLoader, WorkflowExecutor } from './workflows/index.js';
+export {
+  WorkflowLoader,
+  WorkflowExecutor,
+  LangGraphExecutor,
+  InterruptManager,
+} from './workflows/index.js';
 export type {
   WorkflowDefinition,
   WorkflowStep,
@@ -24,16 +29,31 @@ export type {
   StepResult,
   InputMapping,
   ParallelSteps,
+  LangGraphWorkflowDefinition,
+  StepBasedWorkflowDefinition,
+  GraphToolConfig,
+  GraphAgentConfig,
+  GraphConfig,
+  WorkflowInterrupt,
+  InterruptState,
 } from './workflows/index.js';
 
-// Vectors
-export { VectorStoreFactory, VectorStoreManager } from './vectors/index.js';
+// Knowledge
+export { KnowledgeStoreFactory, KnowledgeStoreManager, GraphRagFactory } from './knowledge/index.js';
 export type {
-  VectorConfig,
-  VectorStoreInstance,
+  KnowledgeConfig,
+  VectorKnowledgeConfig,
+  GraphRagKnowledgeConfig,
+  KnowledgeStoreInstance,
   SearchResult,
   DocumentInput,
-} from './vectors/index.js';
+  GraphNode,
+  GraphEdge,
+  Community,
+  GraphStore,
+  GraphConfig as GraphRagGraphConfig,
+  GraphSearchConfig,
+} from './knowledge/index.js';
 
 // LLM
 export { LLMFactory } from './llm/index.js';
@@ -44,7 +64,13 @@ export { MCPClientManager } from './mcp/index.js';
 export type { MCPConfig, MCPServerConfig } from './mcp/index.js';
 
 // Tools
-export { ToolRegistry, createVectorSearchTool } from './tools/index.js';
+export {
+  ToolRegistry,
+  ToolDiscovery,
+  AgentToolWrapper,
+  createKnowledgeSearchTool,
+  createAskUserTool,
+} from './tools/index.js';
 
 // Functions
 export { FunctionLoader } from './functions/index.js';

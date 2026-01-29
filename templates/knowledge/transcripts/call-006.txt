@@ -1,0 +1,44 @@
+Call ID: CC-006
+Date: 2024-11-17
+Agent: James Park
+Duration: 7 minutes 52 seconds
+
+[00:00] Agent James Park: Greenfield Auto Group, James Park here.
+
+[00:04] Customer Tom Bradley Jr: Hey James, it's Tom Bradley Jr. My dad Tom is your service manager there.
+
+[00:10] Agent James Park: Hey Tom! How's it going? What can I help you with?
+
+[00:13] Customer Tom Bradley Jr: Pretty good. I'm actually looking to lease a vehicle for the first time. I just finished my residency and I'm starting as an attending physician next month, so I want something nice but I don't want to commit to buying until I've been in the job for a year.
+
+[00:28] Agent James Park: Congratulations on finishing residency, Tom! Leasing is a smart move in your situation. What kind of vehicle are you thinking?
+
+[00:35] Customer Tom Bradley Jr: Something professional looking for the hospital but fun enough for weekends. I was thinking maybe a BMW 3 Series or a Genesis G70?
+
+[00:45] Agent James Park: We don't carry BMW, but we do have the Genesis G70 and I'd also suggest looking at the Lexus IS 350. Both are luxury sport sedans that fit your description perfectly.
+
+[00:58] Customer Tom Bradley Jr: I didn't know you carried Genesis. Tell me more about the G70.
+
+[01:03] Agent James Park: The 2024 Genesis G70 is a hidden gem. It comes standard with a 2.0T engine making 252 horsepower, or you can step up to the 3.3T with 365 horsepower. The interior is gorgeous — quilted leather seats, 10.25-inch display, premium Lexicon sound system. And here's the kicker: the lease deals on Genesis are incredibly competitive.
+
+[01:25] Customer Tom Bradley Jr: What kind of lease numbers are we talking about?
+
+[01:28] Agent James Park: On the G70 2.0T Prestige, with $3,000 down you're looking at about $425 a month for 36 months, 12,000 miles per year. That includes all the luxury features, not a stripped-down model. The Lexus IS 350 would be about $480 a month comparably equipped.
+
+[01:48] Customer Tom Bradley Jr: $425 is really reasonable. What about the 3.3T?
+
+[01:52] Agent James Park: The 3.3T bumps it to about $510 a month. The extra power is fun but honestly the 2.0T is plenty of car for most people. It still does 0-60 in about 5.5 seconds.
+
+[02:05] Customer Tom Bradley Jr: I think I'd start with the 2.0T. Does your dad get me any kind of employee family discount?
+
+[02:12] Agent James Park: Ha! I can't make promises, but we do have a friends and family program. Let me talk to the sales manager about what we can do. Either way, Genesis incentives are already strong.
+
+[02:24] Customer Tom Bradley Jr: Fair enough. Can I swing by this weekend? Maybe Saturday afternoon?
+
+[02:28] Agent James Park: Saturday afternoon is wide open. How about 2pm? I'll have the G70 and the Lexus IS 350 both pulled up for you.
+
+[02:35] Customer Tom Bradley Jr: Saturday at 2pm. Let's do it. Thanks James.
+
+[02:38] Agent James Park: Looking forward to it, Tom. Tell your dad I said hi!
+
+Outcome: Test drive appointment scheduled for Saturday 2pm. Customer interested in leasing 2024 Genesis G70 2.0T and Lexus IS 350. Son of service manager Tom Bradley. Possible friends and family pricing. High lease intent.

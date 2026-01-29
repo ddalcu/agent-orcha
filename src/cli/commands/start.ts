@@ -15,7 +15,7 @@ async function directoryExists(dirPath: string): Promise<boolean> {
 }
 
 async function validateProjectStructure(projectRoot: string): Promise<void> {
-  const requiredDirs = ['agents', 'functions', 'vectors', 'workflows'];
+  const requiredDirs = ['agents', 'functions', 'knowledge', 'workflows'];
   const missingDirs = [];
 
   for (const dir of requiredDirs) {
@@ -80,6 +80,7 @@ export async function startCommand(_args: string[]): Promise<void> {
   ╔═══════════════════════════════════════════════════════════╗
   ║                      AGENT ORCHA                          ║
   ║       Declare the system. Orcha handles the REST.         ║
+  ║               Knowledge, Agent, Action                    ║
   ╚═══════════════════════════════════════════════════════════╝
 `);
   console.log(`Project root: ${projectRoot}\n`);
@@ -104,7 +105,7 @@ export async function startCommand(_args: string[]): Promise<void> {
 
   logger.info(`Loaded ${orchestrator.agents.names().length} agents`);
   logger.info(`Loaded ${orchestrator.workflows.names().length} workflows`);
-  logger.info(`Loaded ${orchestrator.vectors.listConfigs().length} vector configs`);
+  logger.info(`Loaded ${orchestrator.knowledge.listConfigs().length} knowledge configs`);
 
   const server = await createServer(orchestrator);
 

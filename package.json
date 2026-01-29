@@ -21,6 +21,7 @@
     "type": "git",
     "url": "https://github.com/ddalcu/agent-orcha.git"
   },
+  "homepage": "https://agentorcha.com",
   "type": "module",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
@@ -59,6 +60,8 @@
     "dotenv": "^16.4.7",
     "fastify": "^5.2.0",
     "glob": "^11.0.0",
+    "graphology": "^0.26.0",
+    "graphology-communities-louvain": "^2.0.2",
     "langchain": "^1.2.12",
     "minimatch": "^10.0.1",
     "mysql2": "^3.12.0",

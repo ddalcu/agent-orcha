@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const InputMappingSchema = z.union([
   z.string(),
   z.object({
-    from: z.enum(['context', 'step', 'vector', 'mcp']),
+    from: z.enum(['context', 'step', 'knowledge', 'mcp']),
     path: z.string(),
     transform: z.string().optional(),
   }),
@@ -44,10 +44,60 @@ export const WorkflowConfigSchema = z.object({
   onError: z.enum(['stop', 'continue', 'retry']).default('stop'),
 });
 
-export const WorkflowDefinitionSchema = z.object({
+// LangGraph-specific schemas
+export const GraphToolConfigSchema = z.object({
+  mode: z.enum(['all', 'include', 'exclude', 'none']).default('all'),
+  sources: z
+    .array(z.enum(['mcp', 'knowledge', 'function', 'builtin']))
+    .default(['mcp', 'knowledge', 'function', 'builtin']),
+  include: z.array(z.string()).optional(),
+  exclude: z.array(z.string()).optional(),
+});
+
+export const GraphAgentConfigSchema = z.object({
+  mode: z.enum(['all', 'include', 'exclude', 'none']).default('all'),
+  include: z.array(z.string()).optional(),
+  exclude: z.array(z.string()).optional(),
+});
+
+export const GraphConfigSchema = z.object({
+  model: z.string().default('default'),
+  tools: GraphToolConfigSchema.default({ mode: 'all' }),
+  agents: GraphAgentConfigSchema.default({ mode: 'all' }),
+  executionMode: z
+    .enum(['react', 'single-turn'])
+    .default('react')
+    .describe(
+      'Execution mode: "react" allows multiple tool call iterations (ReAct loop), "single-turn" calls tools once and returns'
+    ),
+  maxIterations: z.number().default(10),
+  timeout: z.number().default(300000),
+});
+
+export const LangGraphWorkflowSchema = z.object({
   name: z.string().describe('Unique workflow identifier'),
   description: z.string().describe('Human-readable description'),
   version: z.string().default('1.0.0'),
+  type: z.literal('langgraph'),
+  input: z.object({
+    schema: z.record(InputFieldSchema),
+  }),
+  prompt: z.object({
+    system: z.string(),
+    goal: z.string(),
+  }),
+  graph: GraphConfigSchema,
+  output: z.record(z.string()),
+  config: WorkflowConfigSchema.optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+// Step-based workflow (existing)
+const StepBasedWorkflowSchema = z.object({
+  name: z.string().describe('Unique workflow identifier'),
+  description: z.string().describe('Human-readable description'),
+  version: z.string().default('1.0.0'),
+  type: z.literal('steps').default('steps'),
   input: z.object({
     schema: z.record(InputFieldSchema),
   }),
@@ -57,6 +107,12 @@ export const WorkflowDefinitionSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
 });
 
+// Discriminated union of workflow types
+export const WorkflowDefinitionSchema = z.discriminatedUnion('type', [
+  StepBasedWorkflowSchema,
+  LangGraphWorkflowSchema,
+]);
+
 export type InputMapping = z.infer<typeof InputMappingSchema>;
 export type RetryConfig = z.infer<typeof RetryConfigSchema>;
 export type StepOutput = z.infer<typeof StepOutputSchema>;
@@ -64,6 +120,11 @@ export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
 export type ParallelSteps = z.infer<typeof ParallelStepsSchema>;
 export type InputField = z.infer<typeof InputFieldSchema>;
 export type WorkflowConfig = z.infer<typeof WorkflowConfigSchema>;
+export type GraphToolConfig = z.infer<typeof GraphToolConfigSchema>;
+export type GraphAgentConfig = z.infer<typeof GraphAgentConfigSchema>;
+export type GraphConfig = z.infer<typeof GraphConfigSchema>;
+export type LangGraphWorkflowDefinition = z.infer<typeof LangGraphWorkflowSchema>;
+export type StepBasedWorkflowDefinition = z.infer<typeof StepBasedWorkflowSchema>;
 export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 
 export interface StepResult {
@@ -93,7 +154,14 @@ export interface WorkflowResult {
 }
 
 export interface WorkflowStatus {
-  type: 'step_start' | 'step_complete' | 'step_error' | 'workflow_start' | 'workflow_complete' | 'workflow_error';
+  type:
+    | 'step_start'
+    | 'step_complete'
+    | 'step_error'
+    | 'workflow_start'
+    | 'workflow_complete'
+    | 'workflow_error'
+    | 'workflow_interrupt';
   stepId?: string;
   agent?: string;
   message: string;
@@ -103,4 +171,21 @@ export interface WorkflowStatus {
   };
   elapsed?: number;
   error?: string;
+  interrupt?: WorkflowInterrupt;
+}
+
+// Interrupt types for human-in-the-loop
+export interface WorkflowInterrupt {
+  threadId: string;
+  question: string;
+  timestamp: number;
+}
+
+export interface InterruptState {
+  threadId: string;
+  workflowName: string;
+  question: string;
+  timestamp: number;
+  resolved: boolean;
+  answer?: string;
 }

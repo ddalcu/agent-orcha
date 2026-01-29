@@ -1,0 +1,84 @@
+name: langgraph-research
+description: Autonomous research workflow using LangGraph with automatic tool discovery
+version: "1.0.0"
+type: langgraph
+
+input:
+  schema:
+    topic:
+      type: string
+      required: true
+      description: The research topic
+    budget:
+      type: string
+      required: false
+      description: Optional budget constraint
+
+# No explicit steps - prompt-driven execution
+prompt:
+  system: |
+    You are a research assistant with access to tools and agents.
+    Your task is to thoroughly research the given topic and provide a comprehensive analysis.
+
+    You have access to:
+    - Knowledge base search tools (vector stores)
+    - Function tools for calculations and data processing
+    - MCP tools for external APIs
+    - Other specialized agents that you can call as needed
+
+    IMPORTANT: You can call multiple tools at once in parallel. Think carefully about what tools
+    you need, then call them all together. After receiving the tool results, synthesize them
+    into your final answer.
+
+    If the user hasn't provided a budget but it's relevant to the research, use the ask_user tool
+    to request this information before proceeding with budget-related analysis.
+
+    Research process:
+    1. Identify all tools/agents you need to call
+    2. Call them in parallel (all at once)
+    3. Synthesize the results into a comprehensive report
+
+  goal: "Research and analyze: {{input.topic}}"
+
+# LangGraph-specific configuration
+graph:
+  model: default  # LLM config reference (from llm.json)
+
+  # Execution mode:
+  # - "react": Full ReAct loop, allows multiple rounds of tool calls (default)
+  # - "single-turn": Calls tools once and returns, prevents looping
+  executionMode: single-turn
+
+  # Tool discovery - discover all available tools
+  tools:
+    mode: all  # Options: all, include, exclude, none
+    sources: [mcp, vector, function, builtin]
+    # Optionally filter specific tools:
+    # include: ["mcp:fetch"]
+    # exclude: ["function:dangerous"]
+
+  # Agent discovery - discover all available agents
+  agents:
+    mode: all  # Options: all, include, exclude, none
+    # Optionally filter specific agents:
+    # include: [math, time]
+    # exclude: [admin]
+
+  # Execution limits
+  maxIterations: 10  # Max tool-calling iterations (reduced from 50)
+  timeout: 300000
+
+output:
+  analysis: "{{state.messages[-1].content}}"
+
+config:
+  onError: stop
+
+metadata:
+  category: research
+  tags:
+    - langgraph
+    - autonomous
+    - research
+    - tool-discovery
+    - human-in-the-loop

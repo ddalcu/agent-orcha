@@ -2,41 +2,42 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
-import { VectorConfigSchema, type VectorConfig, type VectorStoreInstance } from './types.js';
-import { VectorStoreFactory } from './vector-store-factory.js';
+import { KnowledgeConfigSchema, type KnowledgeConfig, type VectorKnowledgeConfig, type GraphRagKnowledgeConfig, type KnowledgeStoreInstance } from './types.js';
+import { KnowledgeStoreFactory } from './knowledge-store-factory.js';
+import { GraphRagFactory } from './graph-rag/graph-rag-factory.js';
 import { createLogger } from '../logger.js';
 
-const logger = createLogger('VectorStore');
+const logger = createLogger('KnowledgeStore');
 
-export class VectorStoreManager {
-  private vectorsDir: string;
+export class KnowledgeStoreManager {
+  private knowledgeDir: string;
   private projectRoot: string;
-  private stores: Map<string, VectorStoreInstance> = new Map();
-  private configs: Map<string, VectorConfig> = new Map();
+  private stores: Map<string, KnowledgeStoreInstance> = new Map();
+  private configs: Map<string, KnowledgeConfig> = new Map();
 
-  constructor(vectorsDir: string, projectRoot: string) {
-    this.vectorsDir = vectorsDir;
+  constructor(knowledgeDir: string, projectRoot: string) {
+    this.knowledgeDir = knowledgeDir;
     this.projectRoot = projectRoot;
   }
 
   async loadAll(): Promise<void> {
-    const files = await glob('**/*.vector.yaml', { cwd: this.vectorsDir });
+    const files = await glob('**/*.knowledge.yaml', { cwd: this.knowledgeDir });
 
     for (const file of files) {
-      const filePath = path.join(this.vectorsDir, file);
+      const filePath = path.join(this.knowledgeDir, file);
       await this.loadOne(filePath);
     }
   }
 
-  async loadOne(filePath: string): Promise<VectorConfig> {
+  async loadOne(filePath: string): Promise<KnowledgeConfig> {
     const content = await fs.readFile(filePath, 'utf-8');
     const parsed = parseYaml(content);
-    const config = VectorConfigSchema.parse(parsed);
+    const config = KnowledgeConfigSchema.parse(parsed);
     this.configs.set(config.name, config);
     return config;
   }
 
-  async initialize(name: string): Promise<VectorStoreInstance> {
+  async initialize(name: string): Promise<KnowledgeStoreInstance> {
     const existing = this.stores.get(name);
     if (existing) {
       logger.info(`"${name}" already initialized`);
@@ -45,10 +46,10 @@ export class VectorStoreManager {
 
     const config = this.configs.get(name);
     if (!config) {
-      throw new Error(`Vector config not found: ${name}`);
+      throw new Error(`Knowledge config not found: ${name}`);
     }
 
-    logger.info(`Initializing "${name}"...`);
+    logger.info(`Initializing "${name}" (kind: ${config.kind})...`);
 
     // Log source-specific info
     if (config.source.type === 'directory' || config.source.type === 'file') {
@@ -62,7 +63,14 @@ export class VectorStoreManager {
     }
 
     try {
-      const store = await VectorStoreFactory.create(config, this.projectRoot);
+      let store: KnowledgeStoreInstance;
+
+      if (config.kind === 'graph-rag') {
+        store = await GraphRagFactory.create(config as GraphRagKnowledgeConfig, this.projectRoot);
+      } else {
+        store = await KnowledgeStoreFactory.create(config as VectorKnowledgeConfig, this.projectRoot);
+      }
+
       this.stores.set(name, store);
       logger.info(`"${name}" initialized successfully`);
       return store;
@@ -78,19 +86,19 @@ export class VectorStoreManager {
     }
   }
 
-  get(name: string): VectorStoreInstance | undefined {
+  get(name: string): KnowledgeStoreInstance | undefined {
     return this.stores.get(name);
   }
 
-  getConfig(name: string): VectorConfig | undefined {
+  getConfig(name: string): KnowledgeConfig | undefined {
     return this.configs.get(name);
   }
 
-  list(): VectorStoreInstance[] {
+  list(): KnowledgeStoreInstance[] {
     return Array.from(this.stores.values());
   }
 
-  listConfigs(): VectorConfig[] {
+  listConfigs(): KnowledgeConfig[] {
     return Array.from(this.configs.values());
   }
 

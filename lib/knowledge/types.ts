@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GraphConfigSchema, GraphSearchConfigSchema } from './graph-rag/types.js';
 
 // Directory source configuration
 export const DirectorySourceConfigSchema = z.object({
@@ -79,8 +80,11 @@ export const SearchConfigSchema = z.object({
   scoreThreshold: z.number().optional(),
 });
 
-export const VectorConfigSchema = z.object({
-  name: z.string().describe('Unique vector store identifier'),
+// --- Vector Knowledge Config (existing, now with explicit kind) ---
+
+export const VectorKnowledgeConfigSchema = z.object({
+  kind: z.literal('vector').default('vector'),
+  name: z.string().describe('Unique knowledge store identifier'),
   description: z.string().describe('Human-readable description'),
   source: SourceConfigSchema,
   loader: LoaderConfigSchema,
@@ -90,6 +94,40 @@ export const VectorConfigSchema = z.object({
   search: SearchConfigSchema.optional(),
   metadata: z.record(z.unknown()).optional(),
 });
+
+// --- GraphRAG Knowledge Config ---
+
+export const GraphRagKnowledgeConfigSchema = z.object({
+  kind: z.literal('graph-rag'),
+  name: z.string().describe('Unique knowledge store identifier'),
+  description: z.string().describe('Human-readable description'),
+  source: SourceConfigSchema,
+  loader: LoaderConfigSchema,
+  splitter: SplitterConfigSchema,
+  embedding: EmbeddingRefSchema,
+  graph: GraphConfigSchema,
+  search: GraphSearchConfigSchema.optional().default({}),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+// --- Unified Knowledge Config (discriminated by kind) ---
+
+/**
+ * Unified schema that handles both vector and graph-rag configs.
+ * Existing configs without a `kind` field default to 'vector'.
+ */
+export const KnowledgeConfigSchema = z.preprocess(
+  (data: unknown) => {
+    if (typeof data === 'object' && data !== null && !('kind' in data)) {
+      return { ...data, kind: 'vector' };
+    }
+    return data;
+  },
+  z.discriminatedUnion('kind', [
+    VectorKnowledgeConfigSchema,
+    GraphRagKnowledgeConfigSchema,
+  ])
+);
 
 export type DirectorySourceConfig = z.infer<typeof DirectorySourceConfigSchema>;
 export type FileSourceConfig = z.infer<typeof FileSourceConfigSchema>;
@@ -101,7 +139,9 @@ export type LoaderConfig = z.infer<typeof LoaderConfigSchema>;
 export type SplitterConfig = z.infer<typeof SplitterConfigSchema>;
 export type StoreConfig = z.infer<typeof StoreConfigSchema>;
 export type SearchConfig = z.infer<typeof SearchConfigSchema>;
-export type VectorConfig = z.infer<typeof VectorConfigSchema>;
+export type VectorKnowledgeConfig = z.infer<typeof VectorKnowledgeConfigSchema>;
+export type GraphRagKnowledgeConfig = z.infer<typeof GraphRagKnowledgeConfigSchema>;
+export type KnowledgeConfig = z.infer<typeof KnowledgeConfigSchema>;
 
 export interface SearchResult {
   content: string;
@@ -114,8 +154,8 @@ export interface DocumentInput {
   metadata?: Record<string, unknown>;
 }
 
-export interface VectorStoreInstance {
-  config: VectorConfig;
+export interface KnowledgeStoreInstance {
+  config: KnowledgeConfig;
   search: (query: string, k?: number) => Promise<SearchResult[]>;
   addDocuments: (documents: DocumentInput[]) => Promise<void>;
   refresh: () => Promise<void>;

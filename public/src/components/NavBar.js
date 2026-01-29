@@ -9,8 +9,8 @@ export class NavBar extends Component {
             { id: 'agents', label: 'Agents', icon: 'fa-robot', color: 'blue' },
             { id: 'workflows', label: 'Workflows', icon: 'fa-project-diagram', color: 'purple' },
             { id: 'knowledge', label: 'Knowledge', icon: 'fa-brain', color: 'orange' },
-            { id: 'llm', label: 'LLMs', icon: 'fa-circle-nodes', color: 'green' },
-            { id: 'mcp', label: 'MCP', icon: 'fa-server', color: 'cyan' }
+            { id: 'mcp', label: 'MCP', icon: 'fa-server', color: 'cyan' },
+            { id: 'ide', label: 'IDE', icon: 'fa-code', color: 'green' }
         ];
     }
 
@@ -18,9 +18,17 @@ export class NavBar extends Component {
         this.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const tabId = e.currentTarget.dataset.tab;
+                window.location.hash = tabId;
                 store.set('activeTab', tabId);
                 this.updateActiveState(tabId);
             });
+        });
+
+        // Sync visual state when tab changes externally (browser back/forward)
+        store.addEventListener('state-change', (e) => {
+            if (e.detail.key === 'activeTab') {
+                this.updateActiveState(e.detail.value);
+            }
         });
 
         // Initialize state

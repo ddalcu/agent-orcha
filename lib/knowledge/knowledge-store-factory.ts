@@ -12,17 +12,17 @@ import * as path from 'path';
 import type { Document } from '@langchain/core/documents';
 import type { Embeddings } from '@langchain/core/embeddings';
 import type { VectorStore } from '@langchain/core/vectorstores';
-import type { VectorConfig, VectorStoreInstance, SearchResult, DocumentInput } from './types.js';
+import type { KnowledgeConfig, VectorKnowledgeConfig, KnowledgeStoreInstance, SearchResult, DocumentInput } from './types.js';
 import { getEmbeddingConfig } from '../llm/llm-config.js';
 import { detectProvider } from '../llm/provider-detector.js';
 import { createLogger } from '../logger.js';
 import { DatabaseLoader, WebLoader, S3Loader } from './loaders/index.js';
 
-const logger = createLogger('VectorFactory');
-const searchLogger = createLogger('VectorSearch');
+const logger = createLogger('KnowledgeFactory');
+const searchLogger = createLogger('KnowledgeSearch');
 
-export class VectorStoreFactory {
-  static async create(config: VectorConfig, projectRoot: string): Promise<VectorStoreInstance> {
+export class KnowledgeStoreFactory {
+  static async create(config: VectorKnowledgeConfig, projectRoot: string): Promise<KnowledgeStoreInstance> {
     logger.info(`Loading documents for "${config.name}"...`);
     const documents = await this.loadDocuments(config, projectRoot);
     logger.info(`Loaded ${documents.length} document(s)`);
@@ -50,13 +50,13 @@ export class VectorStoreFactory {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Embedding test failed: ${errorMessage}`);
-        throw new Error(`Failed to create embeddings for vector store "${config.name}": ${errorMessage}`);
+        throw new Error(`Failed to create embeddings for knowledge store "${config.name}": ${errorMessage}`);
       }
     }
 
-    logger.info(`Building vector store...`);
+    logger.info(`Building knowledge store...`);
     const store = await this.createStore(config, splitDocs, embeddings, projectRoot);
-    logger.info(`Vector store "${config.name}" ready`);
+    logger.info(`Knowledge store "${config.name}" ready`);
 
     return {
       config,
@@ -71,7 +71,7 @@ export class VectorStoreFactory {
           const wordCount = searchQuery.split(/\s+/).filter(w => w.length > 0).length;
           if (searchQuery.length < 30 || wordCount < 4) {
             searchLogger.warn(`Query is short (${searchQuery.length} chars, ${wordCount} words), expanding with context`);
-            // Add context based on the vector store description to make query more descriptive
+            // Add context based on the knowledge store description to make query more descriptive
             const storeContext = config.description 
               ? `${config.description.toLowerCase()} information about`
               : 'information about';
@@ -178,7 +178,7 @@ export class VectorStoreFactory {
     };
   }
 
-  private static async loadDocuments(config: VectorConfig, projectRoot: string): Promise<Document[]> {
+  static async loadDocuments(config: KnowledgeConfig, projectRoot: string): Promise<Document[]> {
     // Handle database sources
     if (config.source.type === 'database') {
       logger.info(`Loading from database source`);
@@ -246,7 +246,7 @@ export class VectorStoreFactory {
     }
   }
 
-  private static async splitDocuments(config: VectorConfig, documents: Document[]): Promise<Document[]> {
+  static async splitDocuments(config: KnowledgeConfig, documents: Document[]): Promise<Document[]> {
     const splitterConfig = {
       chunkSize: config.splitter.chunkSize,
       chunkOverlap: config.splitter.chunkOverlap,
@@ -260,7 +260,7 @@ export class VectorStoreFactory {
     return splitter.splitDocuments(documents);
   }
 
-  private static createEmbeddings(configName: string): Embeddings {
+  static createEmbeddings(configName: string): Embeddings {
     const embeddingConfig = getEmbeddingConfig(configName);
     const provider = detectProvider(embeddingConfig);
 
@@ -383,7 +383,7 @@ export class VectorStoreFactory {
 
 
   private static async createStore(
-    config: VectorConfig,
+    config: VectorKnowledgeConfig,
     docs: Document[],
     embeddings: Embeddings,
     projectRoot: string

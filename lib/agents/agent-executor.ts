@@ -1,4 +1,4 @@
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent } from "langchain";
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { StructuredTool } from '@langchain/core/tools';
@@ -74,10 +74,10 @@ export class AgentExecutor {
     sessionId?: string
   ): Promise<AgentResult> {
     try {
-      const agent = createReactAgent({
-        llm,
+      const agent = createAgent({
+        model: llm,
         tools,
-        stateModifier: definition.prompt.system,
+        systemPrompt: definition.prompt.system,
       });
 
       const userMessage = this.formatUserMessage(definition, input);
@@ -264,10 +264,10 @@ export class AgentExecutor {
     const { input: actualInput, sessionId } = this.parseInvokeOptions(input);
 
     if (tools.length > 0) {
-      const agent = createReactAgent({
-        llm,
+      const agent = createAgent({
+        model: llm,
         tools,
-        stateModifier: definition.prompt.system,
+        systemPrompt: definition.prompt.system,
       });
 
       const userMessage = this.formatUserMessage(definition, actualInput);

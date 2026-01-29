@@ -5,8 +5,8 @@ import './NavBar.js';
 import './AgentsView.js';
 import './WorkflowsView.js';
 import './KnowledgeView.js';
-import './LlmView.js';
 import './McpView.js';
+import './IdeView.js';
 
 export class AppRoot extends Component {
     postRender() {
@@ -16,8 +16,20 @@ export class AppRoot extends Component {
             }
         });
 
-        // Initial tab
-        this.switchTab(store.get('activeTab'));
+        // Handle browser back/forward
+        window.addEventListener('hashchange', () => {
+            const hash = window.location.hash.replace('#', '');
+            if (hash && hash !== store.get('activeTab')) {
+                store.set('activeTab', hash);
+            }
+        });
+
+        // Initial tab from hash or default
+        const initialTab = store.get('activeTab');
+        if (!window.location.hash) {
+            window.location.hash = initialTab;
+        }
+        this.switchTab(initialTab);
     }
 
     switchTab(tabId) {
@@ -30,12 +42,12 @@ export class AppRoot extends Component {
             case 'agents': el = document.createElement('agents-view'); break;
             case 'workflows': el = document.createElement('workflows-view'); break;
             case 'knowledge': el = document.createElement('knowledge-view'); break;
-            case 'llm': el = document.createElement('llm-view'); break;
             case 'mcp': el = document.createElement('mcp-view'); break;
+            case 'ide': el = document.createElement('ide-view'); break;
             default: el = document.createElement('agents-view'); break;
         }
 
-        // Preserve state or re-render? Web Components are cheap to re-create usually, 
+        // Preserve state or re-render? Web Components are cheap to re-create usually,
         // but for chat history we might want to keep it in store (which we do).
         // If we wanted to keep DOM alive we'd hide/show, but replacing is cleaner for now.
         container.appendChild(el);
