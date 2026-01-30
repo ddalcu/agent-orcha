@@ -1,1 +1,2 @@
-export { createVectorSearchTool } from './vector-search.tool.js';
+export { createKnowledgeSearchTool } from './knowledge-search.tool.js';
+export { createAskUserTool } from './ask-user.tool.js';

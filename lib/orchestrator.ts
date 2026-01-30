@@ -4,22 +4,32 @@ import { AgentLoader } from './agents/agent-loader.js';
 import { AgentExecutor } from './agents/agent-executor.js';
 import { WorkflowLoader } from './workflows/workflow-loader.js';
 import { WorkflowExecutor } from './workflows/workflow-executor.js';
-import { VectorStoreManager } from './vectors/vector-store-manager.js';
+import { LangGraphExecutor } from './workflows/langgraph-executor.js';
+import { InterruptManager } from './workflows/interrupt-manager.js';
+import { KnowledgeStoreManager } from './knowledge/knowledge-store-manager.js';
 import { MCPClientManager } from './mcp/mcp-client.js';
-import { FunctionLoader } from './functions/function-loader.js';
+import { FunctionLoader, type LoadedFunction } from './functions/function-loader.js';
 import { ToolRegistry } from './tools/tool-registry.js';
+import { ToolDiscovery } from './tools/tool-discovery.js';
 import { MCPConfigSchema } from './mcp/types.js';
 import { loadLLMConfig } from './llm/llm-config.js';
+import { ConversationStore } from './memory/conversation-store.js';
 import type { AgentDefinition, AgentResult } from './agents/types.js';
-import type { WorkflowDefinition, WorkflowResult } from './workflows/types.js';
-import type { VectorStoreInstance, VectorConfig } from './vectors/types.js';
+import type {
+  WorkflowDefinition,
+  WorkflowResult,
+  LangGraphWorkflowDefinition,
+  InterruptState,
+} from './workflows/types.js';
+import type { KnowledgeStoreInstance, KnowledgeConfig } from './knowledge/types.js';
+import type { StructuredTool } from '@langchain/core/tools';
 import { logger } from './logger.js';
 
 export interface OrchestratorConfig {
   projectRoot: string;
   agentsDir?: string;
   workflowsDir?: string;
-  vectorsDir?: string;
+  knowledgeDir?: string;
   functionsDir?: string;
   mcpConfigPath?: string;
   llmConfigPath?: string;
@@ -32,10 +42,14 @@ export class Orchestrator {
   private agentExecutor!: AgentExecutor;
   private workflowLoader: WorkflowLoader;
   private workflowExecutor!: WorkflowExecutor;
-  private vectorStoreManager: VectorStoreManager;
+  private langGraphExecutor!: LangGraphExecutor;
+  private knowledgeStoreManager: KnowledgeStoreManager;
   private functionLoader: FunctionLoader;
   private mcpClient!: MCPClientManager;
   private toolRegistry!: ToolRegistry;
+  private toolDiscovery!: ToolDiscovery;
+  private interruptManager!: InterruptManager;
+  private conversationStore: ConversationStore;
 
   private initialized = false;
 
@@ -44,7 +58,7 @@ export class Orchestrator {
       projectRoot: config.projectRoot,
       agentsDir: config.agentsDir ?? path.join(config.projectRoot, 'agents'),
       workflowsDir: config.workflowsDir ?? path.join(config.projectRoot, 'workflows'),
-      vectorsDir: config.vectorsDir ?? path.join(config.projectRoot, 'vectors'),
+      knowledgeDir: config.knowledgeDir ?? path.join(config.projectRoot, 'knowledge'),
       functionsDir: config.functionsDir ?? path.join(config.projectRoot, 'functions'),
       mcpConfigPath: config.mcpConfigPath ?? path.join(config.projectRoot, 'mcp.json'),
       llmConfigPath: config.llmConfigPath ?? path.join(config.projectRoot, 'llm.json'),
@@ -52,11 +66,15 @@ export class Orchestrator {
 
     this.agentLoader = new AgentLoader(this.config.agentsDir);
     this.workflowLoader = new WorkflowLoader(this.config.workflowsDir);
-    this.vectorStoreManager = new VectorStoreManager(
-      this.config.vectorsDir,
+    this.knowledgeStoreManager = new KnowledgeStoreManager(
+      this.config.knowledgeDir,
       this.config.projectRoot
     );
     this.functionLoader = new FunctionLoader(this.config.functionsDir);
+    this.conversationStore = new ConversationStore({
+      maxMessagesPerSession: 50,
+      sessionTTL: 3600000, // 1 hour
+    });
   }
 
   async initialize(): Promise<void> {
@@ -72,18 +90,34 @@ export class Orchestrator {
     // Load function tools
     await this.functionLoader.loadAll();
 
-    this.toolRegistry = new ToolRegistry(this.mcpClient, this.vectorStoreManager, this.functionLoader);
-    this.agentExecutor = new AgentExecutor(this.toolRegistry);
+    this.toolRegistry = new ToolRegistry(
+      this.mcpClient,
+      this.knowledgeStoreManager,
+      this.functionLoader
+    );
+    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
+
+    // Initialize LangGraph components
+    this.interruptManager = new InterruptManager();
+    this.toolDiscovery = new ToolDiscovery(
+      this.toolRegistry,
+      this.mcpClient,
+      this.knowledgeStoreManager,
+      this.functionLoader,
+      this.agentLoader,
+      this.agentExecutor
+    );
+    this.langGraphExecutor = new LangGraphExecutor(this.toolDiscovery, this.interruptManager);
 
     await this.agentLoader.loadAll();
     await this.workflowLoader.loadAll();
-    await this.vectorStoreManager.loadAll();
+    await this.knowledgeStoreManager.loadAll();
 
-    // Initialize all vector stores on startup (load documents and create embeddings)
-    logger.info('[Orchestrator] Initializing vector stores...');
-    await this.vectorStoreManager.initializeAll();
-    logger.info('[Orchestrator] Vector stores ready');
+    // Initialize all knowledge stores on startup (load documents and create embeddings)
+    logger.info('[Orchestrator] Initializing knowledge stores...');
+    await this.knowledgeStoreManager.initializeAll();
+    logger.info('[Orchestrator] Knowledge stores ready');
 
     this.initialized = true;
   }
@@ -119,18 +153,84 @@ export class Orchestrator {
     };
   }
 
-  get vectors(): VectorAccessor {
+  get knowledge(): KnowledgeAccessor {
     return {
-      list: () => this.vectorStoreManager.list(),
-      listConfigs: () => this.vectorStoreManager.listConfigs(),
-      get: (name: string) => this.vectorStoreManager.get(name),
-      getConfig: (name: string) => this.vectorStoreManager.getConfig(name),
-      initialize: (name: string) => this.vectorStoreManager.initialize(name),
-      refresh: (name: string) => this.vectorStoreManager.refresh(name),
+      list: () => this.knowledgeStoreManager.list(),
+      listConfigs: () => this.knowledgeStoreManager.listConfigs(),
+      get: (name: string) => this.knowledgeStoreManager.get(name),
+      getConfig: (name: string) => this.knowledgeStoreManager.getConfig(name),
+      initialize: (name: string) => this.knowledgeStoreManager.initialize(name),
+      refresh: (name: string) => this.knowledgeStoreManager.refresh(name),
     };
   }
 
-  async runAgent(name: string, input: Record<string, unknown>): Promise<AgentResult> {
+  get mcp(): MCPAccessor {
+    return {
+      getManager: () => this.mcpClient,
+    };
+  }
+
+  get functions(): FunctionAccessor {
+    return {
+      list: () => this.functionLoader.list(),
+      get: (name: string) => this.functionLoader.get(name),
+      getTool: (name: string) => this.functionLoader.getTool(name),
+      names: () => this.functionLoader.names(),
+    };
+  }
+
+  get projectRoot(): string {
+    return this.config.projectRoot;
+  }
+
+  get memory(): MemoryAccessor {
+    return {
+      getStore: () => this.conversationStore,
+      clearSession: (sessionId: string) => this.conversationStore.clearSession(sessionId),
+      getSessionCount: () => this.conversationStore.getSessionCount(),
+      getMessageCount: (sessionId: string) => this.conversationStore.getMessageCount(sessionId),
+      hasSession: (sessionId: string) => this.conversationStore.hasSession(sessionId),
+    };
+  }
+
+  async reloadFile(relativePath: string): Promise<string> {
+    this.ensureInitialized();
+
+    const absolutePath = path.resolve(this.config.projectRoot, relativePath);
+
+    if (relativePath.endsWith('.agent.yaml')) {
+      await this.agentLoader.loadOne(absolutePath);
+      return 'agent';
+    }
+
+    if (relativePath.endsWith('.workflow.yaml')) {
+      await this.workflowLoader.loadOne(absolutePath);
+      return 'workflow';
+    }
+
+    if (relativePath.endsWith('.knowledge.yaml')) {
+      await this.knowledgeStoreManager.loadOne(absolutePath);
+      return 'knowledge';
+    }
+
+    if (relativePath.endsWith('.function.js')) {
+      await this.functionLoader.loadOne(absolutePath);
+      return 'function';
+    }
+
+    if (relativePath === 'llm.json') {
+      await loadLLMConfig(this.config.llmConfigPath);
+      return 'llm';
+    }
+
+    return 'none';
+  }
+
+  async runAgent(
+    name: string,
+    input: Record<string, unknown>,
+    sessionId?: string
+  ): Promise<AgentResult> {
     this.ensureInitialized();
 
     const definition = this.agentLoader.get(name);
@@ -139,13 +239,14 @@ export class Orchestrator {
     }
 
     const instance = await this.agentExecutor.createInstance(definition);
-    return instance.invoke(input);
+    return instance.invoke({ input, sessionId });
   }
 
   async *streamAgent(
     name: string,
-    input: Record<string, unknown>
-  ): AsyncGenerator<string, void, unknown> {
+    input: Record<string, unknown>,
+    sessionId?: string
+  ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
     this.ensureInitialized();
 
     const definition = this.agentLoader.get(name);
@@ -154,7 +255,7 @@ export class Orchestrator {
     }
 
     const instance = await this.agentExecutor.createInstance(definition);
-    yield* instance.stream(input);
+    yield* instance.stream({ input, sessionId });
   }
 
   async runWorkflow(name: string, input: Record<string, unknown>): Promise<WorkflowResult> {
@@ -165,6 +266,15 @@ export class Orchestrator {
       throw new Error(`Workflow not found: ${name}`);
     }
 
+    // Route based on workflow type
+    if (definition.type === 'langgraph') {
+      return this.langGraphExecutor.execute(
+        definition as LangGraphWorkflowDefinition,
+        input
+      );
+    }
+
+    // Default to step-based workflow
     return this.workflowExecutor.execute(definition, input);
   }
 
@@ -179,6 +289,16 @@ export class Orchestrator {
       throw new Error(`Workflow not found: ${name}`);
     }
 
+    // Route based on workflow type
+    if (definition.type === 'langgraph') {
+      yield* this.streamLangGraphWorkflow(
+        definition as LangGraphWorkflowDefinition,
+        input
+      );
+      return;
+    }
+
+    // Existing step-based streaming
     const statusQueue: Array<{ type: 'status' | 'result'; data: unknown }> = [];
     let resolveNext: ((value: void) => void) | null = null;
     let isComplete = false;
@@ -232,24 +352,126 @@ export class Orchestrator {
     await executionPromise;
   }
 
-  async searchVectors(
+  private async *streamLangGraphWorkflow(
+    definition: LangGraphWorkflowDefinition,
+    input: Record<string, unknown>
+  ): AsyncGenerator<{ type: 'status' | 'result'; data: unknown }, void, unknown> {
+    const statusQueue: Array<{ type: 'status' | 'result'; data: unknown }> = [];
+    let resolveNext: ((value: void) => void) | null = null;
+    let isComplete = false;
+
+    const onStatus = (status: import('./workflows/types.js').WorkflowStatus) => {
+      statusQueue.push({ type: 'status', data: status });
+      if (resolveNext) {
+        resolveNext();
+        resolveNext = null;
+      }
+    };
+
+    // Start execution in background
+    const executionPromise = this.langGraphExecutor
+      .execute(definition, input, undefined, onStatus)
+      .then((result) => {
+        isComplete = true;
+        statusQueue.push({ type: 'result', data: result });
+        if (resolveNext) {
+          resolveNext();
+          resolveNext = null;
+        }
+      })
+      .catch((error) => {
+        isComplete = true;
+        statusQueue.push({
+          type: 'result',
+          data: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        if (resolveNext) {
+          resolveNext();
+          resolveNext = null;
+        }
+      });
+
+    // Yield status updates
+    while (!isComplete || statusQueue.length > 0) {
+      if (statusQueue.length > 0) {
+        yield statusQueue.shift()!;
+      } else {
+        await new Promise<void>((resolve) => {
+          resolveNext = resolve;
+        });
+      }
+    }
+
+    await executionPromise;
+  }
+
+  async searchKnowledge(
     storeName: string,
     query: string,
     k?: number
   ): Promise<{ content: string; metadata: Record<string, unknown>; score: number }[]> {
     this.ensureInitialized();
 
-    let store = this.vectorStoreManager.get(storeName);
+    let store = this.knowledgeStoreManager.get(storeName);
     if (!store) {
-      store = await this.vectorStoreManager.initialize(storeName);
+      store = await this.knowledgeStoreManager.initialize(storeName);
     }
 
     return store.search(query, k);
   }
 
+  // LangGraph workflow interrupt methods
+
+  /**
+   * Resumes a LangGraph workflow with the user's answer to an interrupt.
+   */
+  async resumeLangGraphWorkflow(
+    name: string,
+    threadId: string,
+    answer: string
+  ): Promise<WorkflowResult> {
+    this.ensureInitialized();
+
+    const definition = this.workflowLoader.get(name);
+    if (!definition) {
+      throw new Error(`Workflow not found: ${name}`);
+    }
+
+    if (definition.type !== 'langgraph') {
+      throw new Error(`Workflow "${name}" is not a LangGraph workflow`);
+    }
+
+    return this.langGraphExecutor.resumeWithAnswer(
+      definition as LangGraphWorkflowDefinition,
+      threadId,
+      answer
+    );
+  }
+
+  /**
+   * Gets all active interrupts for a workflow.
+   */
+  getLangGraphInterrupts(name: string): InterruptState[] {
+    this.ensureInitialized();
+    return this.interruptManager.getInterruptsByWorkflow(name);
+  }
+
+  /**
+   * Gets a specific interrupt by thread ID.
+   */
+  getLangGraphInterrupt(threadId: string): InterruptState | undefined {
+    this.ensureInitialized();
+    return this.interruptManager.getInterrupt(threadId);
+  }
+
   async close(): Promise<void> {
     if (this.mcpClient) {
       await this.mcpClient.close();
+    }
+    if (this.conversationStore) {
+      this.conversationStore.destroy();
     }
   }
 
@@ -272,11 +494,30 @@ interface WorkflowAccessor {
   names: () => string[];
 }
 
-interface VectorAccessor {
-  list: () => VectorStoreInstance[];
-  listConfigs: () => VectorConfig[];
-  get: (name: string) => VectorStoreInstance | undefined;
-  getConfig: (name: string) => VectorConfig | undefined;
-  initialize: (name: string) => Promise<VectorStoreInstance>;
+interface KnowledgeAccessor {
+  list: () => KnowledgeStoreInstance[];
+  listConfigs: () => KnowledgeConfig[];
+  get: (name: string) => KnowledgeStoreInstance | undefined;
+  getConfig: (name: string) => KnowledgeConfig | undefined;
+  initialize: (name: string) => Promise<KnowledgeStoreInstance>;
   refresh: (name: string) => Promise<void>;
+}
+
+interface MCPAccessor {
+  getManager: () => MCPClientManager;
+}
+
+interface FunctionAccessor {
+  list: () => LoadedFunction[];
+  get: (name: string) => LoadedFunction | undefined;
+  getTool: (name: string) => StructuredTool | undefined;
+  names: () => string[];
+}
+
+interface MemoryAccessor {
+  getStore: () => ConversationStore;
+  clearSession: (sessionId: string) => void;
+  getSessionCount: () => number;
+  getMessageCount: (sessionId: string) => number;
+  hasSession: (sessionId: string) => boolean;
 }

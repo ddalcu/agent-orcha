@@ -1,0 +1,36 @@
+Call ID: CC-002
+Date: 2024-11-15
+Agent: James Park
+Duration: 6 minutes 10 seconds
+
+[00:00] Agent James Park: Greenfield Auto Group, James speaking. What can I do for you?
+
+[00:04] Customer Linda Chen: Hi James. I bought a 2023 Civic from you guys about eight months ago and I'm having an issue with the infotainment system. The screen keeps freezing and sometimes goes completely black.
+
+[00:16] Agent James Park: I'm sorry to hear that, Linda. That's definitely not normal. Let me pull up your account. Can you give me your last name again?
+
+[00:22] Customer Linda Chen: Chen. C-H-E-N. Linda Chen.
+
+[00:28] Agent James Park: Got it. I see your 2023 Honda Civic Sport — purchased in March. That should still be under the factory warranty. The infotainment issue you're describing sounds like it might need a software update, or in some cases a hardware replacement.
+
+[00:42] Customer Linda Chen: Is that something you can fix quickly or am I going to be without my car?
+
+[00:47] Agent James Park: The software update takes about 45 minutes. If it needs a hardware replacement, that's usually a half-day job but we'd give you a loaner. Either way it's fully covered under warranty.
+
+[00:58] Customer Linda Chen: Okay, that's a relief. When can I bring it in?
+
+[01:02] Agent James Park: I can get you in as early as Monday morning. We have a 7:30am drop-off slot open. You could drop the car off, we'd diagnose it, and if it's the software update you'd have it back by lunch.
+
+[01:14] Customer Linda Chen: Monday at 7:30 works. Will the loaner be ready if I need one?
+
+[01:18] Agent James Park: Absolutely. I'll reserve a loaner just in case. Also, I want to mention — while you're here, we can do a complimentary multi-point inspection since you're at the eight-month mark. Check tires, brakes, fluids, all that.
+
+[01:32] Customer Linda Chen: That would be great, thank you. I appreciate you being so thorough.
+
+[01:36] Agent James Park: Of course. Let me also flag this with our service manager, Tom Bradley. He's been tracking some infotainment issues across a few Civic models and may have a quick fix ready.
+
+[01:48] Customer Linda Chen: Sounds good. Thanks James.
+
+[01:50] Agent James Park: You're welcome, Linda. You're confirmed for Monday at 7:30am. We'll take good care of you and your Civic.
+
+Outcome: Service appointment scheduled for Monday 7:30am. Warranty repair for infotainment system. Loaner vehicle reserved. Customer satisfied with response.

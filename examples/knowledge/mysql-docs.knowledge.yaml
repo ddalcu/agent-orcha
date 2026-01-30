@@ -1,0 +1,34 @@
+name: mysql-docs
+description: Knowledge base stored in MySQL database
+
+source:
+  type: database
+  connectionString: mysql://user:password@localhost:3306/knowledge_base
+  query: SELECT text_content, article_title, tags, updated_at FROM articles WHERE status = 'published'
+  contentColumn: text_content
+  metadataColumns:
+    - article_title
+    - tags
+    - updated_at
+  batchSize: 100
+
+loader:
+  type: text  # Database already returns text
+
+splitter:
+  type: recursive
+  chunkSize: 1000
+  chunkOverlap: 200
+
+embedding: default
+
+store:
+  type: memory
+
+search:
+  defaultK: 4
+  scoreThreshold: 0.3
+
+metadata:
+  category: database
+  database_type: mysql

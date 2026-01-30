@@ -3,18 +3,24 @@ export { Orchestrator } from './orchestrator.js';
 export type { OrchestratorConfig } from './orchestrator.js';
 
 // Agents
-export { AgentLoader, AgentExecutor } from './agents/index.js';
+export { AgentLoader, AgentExecutor, StructuredOutputWrapper } from './agents/index.js';
 export type {
   AgentDefinition,
   AgentInstance,
   AgentResult,
+  AgentInvokeOptions,
   ToolReference,
   OutputConfig,
   ToolCallRecord,
 } from './agents/index.js';
 
 // Workflows
-export { WorkflowLoader, WorkflowExecutor } from './workflows/index.js';
+export {
+  WorkflowLoader,
+  WorkflowExecutor,
+  LangGraphExecutor,
+  InterruptManager,
+} from './workflows/index.js';
 export type {
   WorkflowDefinition,
   WorkflowStep,
@@ -23,16 +29,31 @@ export type {
   StepResult,
   InputMapping,
   ParallelSteps,
+  LangGraphWorkflowDefinition,
+  StepBasedWorkflowDefinition,
+  GraphToolConfig,
+  GraphAgentConfig,
+  GraphConfig,
+  WorkflowInterrupt,
+  InterruptState,
 } from './workflows/index.js';
 
-// Vectors
-export { VectorStoreFactory, VectorStoreManager } from './vectors/index.js';
+// Knowledge
+export { KnowledgeStoreFactory, KnowledgeStoreManager, GraphRagFactory } from './knowledge/index.js';
 export type {
-  VectorConfig,
-  VectorStoreInstance,
+  KnowledgeConfig,
+  VectorKnowledgeConfig,
+  GraphRagKnowledgeConfig,
+  KnowledgeStoreInstance,
   SearchResult,
   DocumentInput,
-} from './vectors/index.js';
+  GraphNode,
+  GraphEdge,
+  Community,
+  GraphStore,
+  GraphConfig as GraphRagGraphConfig,
+  GraphSearchConfig,
+} from './knowledge/index.js';
 
 // LLM
 export { LLMFactory } from './llm/index.js';
@@ -43,8 +64,18 @@ export { MCPClientManager } from './mcp/index.js';
 export type { MCPConfig, MCPServerConfig } from './mcp/index.js';
 
 // Tools
-export { ToolRegistry, createVectorSearchTool } from './tools/index.js';
+export {
+  ToolRegistry,
+  ToolDiscovery,
+  AgentToolWrapper,
+  createKnowledgeSearchTool,
+  createAskUserTool,
+} from './tools/index.js';
 
 // Functions
 export { FunctionLoader } from './functions/index.js';
 export type { FunctionMetadata, LoadedFunction } from './functions/index.js';
+
+// Memory
+export { ConversationStore } from './memory/index.js';
+export type { ConversationStoreConfig, ConversationSession } from './memory/index.js';

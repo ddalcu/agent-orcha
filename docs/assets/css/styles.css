@@ -468,6 +468,11 @@ pre {
   margin: 0;
 }
 
+.code-content pre code.hljs {
+  background: transparent;
+  padding: 0;
+}
+
 /* ========== Hero Section ========== */
 .hero {
   position: relative;
@@ -516,6 +521,75 @@ pre {
   justify-content: center;
   flex-wrap: wrap;
   margin-bottom: var(--space-2xl);
+}
+
+/* ========== Hero Split Layout ========== */
+.hero-split {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 560px;
+}
+
+.hero-image {
+  position: absolute;
+  left: -5%;
+  top: 5%;
+  width: 75%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.hero-image img {
+  width: 100%;
+  display: block;
+}
+
+.hero-split .hero-content {
+  position: relative;
+  z-index: 2;
+  text-align: left;
+  max-width: 520px;
+  margin: 0;
+}
+
+.hero-split .hero-cta {
+  justify-content: flex-start;
+}
+
+.hero-split .terminal {
+  margin: 0;
+  max-width: none;
+}
+
+@media (max-width: 1024px) {
+  .hero-split {
+    flex-direction: column;
+    min-height: auto;
+  }
+
+  .hero-image {
+    position: relative;
+    left: 0;
+    top: 0;
+    transform: none;
+    width: 100%;
+    margin-bottom: var(--space-lg);
+  }
+
+  .hero-split .hero-content {
+    text-align: center;
+    max-width: none;
+  }
+
+  .hero-split .hero-cta {
+    justify-content: center;
+  }
+
+  .hero-split .terminal {
+    margin: 0 auto;
+    max-width: 600px;
+  }
 }
 
 /* ========== Terminal Animation ========== */
@@ -940,4 +1014,118 @@ pre {
 
 .expandable-body {
   padding: 0 var(--space-lg) var(--space-lg);
+}
+
+/* ========== Steps Grid (5-card layout: 3 top, 2 centered) ========== */
+.steps-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-lg);
+}
+
+.steps-grid .card {
+  flex: 0 1 340px;
+  max-width: 400px;
+}
+
+@media (max-width: 768px) {
+  .steps-grid .card {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+}
+
+/* ========== Screenshot Grid ========== */
+.screenshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-lg);
+  margin-top: var(--space-2xl);
+}
+
+.screenshot-card {
+  text-align: center;
+}
+
+.screenshot-card img {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.screenshot-card img:hover {
+  transform: scale(1.03);
+  box-shadow: var(--shadow-lg);
+}
+
+.screenshot-caption {
+  margin-top: var(--space-sm);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 1024px) {
+  .screenshot-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .screenshot-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========== Screenshot Lightbox Modal ========== */
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.85);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--transition-normal), visibility var(--transition-normal);
+  cursor: pointer;
+}
+
+.lightbox-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.lightbox-overlay img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+  transform: scale(0.95);
+  transition: transform var(--transition-normal);
+}
+
+.lightbox-overlay.active img {
+  transform: scale(1);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 2rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: color var(--transition-fast);
+}
+
+.lightbox-close:hover {
+  color: var(--color-text-primary);
 }

@@ -4,9 +4,11 @@ node_modules
 dist
 tmp
 .chroma
+.graph-cache
 /agents
 /workflows
 /vectors
 /functions
 /llm.json
 /mcp.json
+.local

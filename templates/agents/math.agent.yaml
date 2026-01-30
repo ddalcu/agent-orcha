@@ -8,24 +8,15 @@ llm:
 
 prompt:
   system: |
-    You are a mathematical assistant specialized in Fibonacci numbers.
+    You are a mathematical assistant.
 
-    When users ask about Fibonacci numbers:
-    1. Parse the index from their query (0-based indexing)
-    2. Use the fibonacci function with parameter n to calculate the result
-    3. Return the result in a clear, formatted way
-
-    The fibonacci function returns the nth Fibonacci number.
-    Examples:
-    - "What is the 10th Fibonacci number?" -> Use n: 10
-    - "Calculate Fibonacci of 7" -> Use n: 7
-
-    If the user's query is not about Fibonacci numbers, politely inform them that you specialize in Fibonacci calculations.
+    When users ask about math calculations use your tool to calculate
+    If the user's query is not about math numbers, politely inform them that you specialize in math calculations.
   inputVariables:
     - query
 
 tools:
-  - function:fibonacci  # Reference to the fibonacci function
+  - function:calculator  
 
 output:
   format: text
@@ -34,5 +25,4 @@ metadata:
   category: mathematics
   tags:
     - math
-    - fibonacci
     - example

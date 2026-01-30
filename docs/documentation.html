@@ -6,8 +6,8 @@
 
   <!-- SEO Meta Tags -->
   <title>Documentation - Agent Orcha | Multi-Agent AI Framework</title>
-  <meta name="description" content="Complete documentation for Agent Orcha. Learn agents, workflows, vector stores, MCP integration, and custom functions with YAML configuration.">
-  <meta name="keywords" content="agent orcha documentation, multi-agent AI, YAML configuration, MCP tools, RAG, vector stores">
+  <meta name="description" content="Complete documentation for Agent Orcha. Learn agents, workflows, knowledge stores, GraphRAG, LangGraph, MCP integration, and custom functions with YAML configuration.">
+  <meta name="keywords" content="agent orcha documentation, multi-agent AI, YAML configuration, MCP tools, RAG, GraphRAG, knowledge stores, LangGraph">
   <meta name="author" content="Agent Orcha">
 
   <!-- Open Graph Tags -->
@@ -28,6 +28,9 @@
 
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+  <!-- Highlight.js -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
 
   <!-- Styles -->
   <link rel="stylesheet" href="assets/css/styles.css">
@@ -60,14 +63,21 @@
           <h4>Getting Started</h4>
           <ul>
             <li><a href="#quick-start">Quick Start Guide</a></li>
+            <li><a href="#studio">Agent Orcha Studio</a></li>
+            <li><a href="#cli-reference">CLI Commands</a></li>
+            <li><a href="#docker">Docker Deployment</a></li>
           </ul>
 
           <h4>Core Concepts</h4>
           <ul>
             <li><a href="#core-concepts">Overview</a></li>
             <li><a href="#agents">Agents</a></li>
+            <li><a href="#structured-output">Structured Output</a></li>
+            <li><a href="#conversation-memory">Conversation Memory</a></li>
             <li><a href="#workflows">Workflows</a></li>
-            <li><a href="#vector-stores">Vector Stores</a></li>
+            <li><a href="#langgraph-workflows">LangGraph Workflows</a></li>
+            <li><a href="#knowledge-stores">Knowledge Stores</a></li>
+            <li><a href="#graphrag">GraphRAG</a></li>
             <li><a href="#functions">Functions</a></li>
             <li><a href="#mcp-servers">MCP Servers</a></li>
           </ul>
@@ -79,14 +89,13 @@
               <ul>
                 <li><a href="#agents-api">Agents API</a></li>
                 <li><a href="#workflows-api">Workflows API</a></li>
-                <li><a href="#vectors-api">Vector Stores API</a></li>
+                <li><a href="#knowledge-api">Knowledge API</a></li>
+                <li><a href="#functions-api">Functions API</a></li>
+                <li><a href="#mcp-api">MCP API</a></li>
+                <li><a href="#files-api">Files API</a></li>
+                <li><a href="#llm-api">LLM API</a></li>
               </ul>
             </li>
-          </ul>
-
-          <h4>CLI Reference</h4>
-          <ul>
-            <li><a href="#cli-reference">CLI Commands</a></li>
           </ul>
 
           <h4>Examples</h4>
@@ -126,7 +135,7 @@ cd my-project</code></pre>
                 <li><code>agents/</code> - Example agent configurations</li>
                 <li><code>workflows/</code> - Example workflow definitions</li>
                 <li><code>functions/</code> - Custom JavaScript functions</li>
-                <li><code>vectors/</code> - Vector store configurations</li>
+                <li><code>knowledge/</code> - Knowledge store configurations and data</li>
                 <li><code>llm.json</code> - LLM provider settings</li>
                 <li><code>mcp.json</code> - MCP server configuration</li>
               </ul>
@@ -238,13 +247,7 @@ output:
                   <pre id="start-cmd"><code>npx agent-orcha start</code></pre>
                 </div>
               </div>
-              <p>You should see:</p>
-              <div class="code-block">
-                <div class="code-content">
-                  <pre><code>🚀 Agent Orchestrator running on http://localhost:3000
-📊 Web UI available at http://localhost:3000</code></pre>
-                </div>
-              </div>
+              <p>The server and Studio dashboard will be available at <code>http://localhost:3000</code>.</p>
             </div>
           </div>
         </div>
@@ -288,6 +291,144 @@ output:
           </div>
         </div>
 
+        <!-- Agent Orcha Studio -->
+        <h3 id="studio" class="mt-xl">Agent Orcha Studio</h3>
+        <p>Agent Orcha includes a built-in web dashboard accessible at <code>http://localhost:3000</code> when the server is running. The Studio provides a visual interface for managing and testing your entire instance.</p>
+
+        <h4>Studio Tabs</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Tab</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Agents</strong></td>
+              <td>Browse all agents, invoke with custom input, stream responses, manage conversation sessions</td>
+            </tr>
+            <tr>
+              <td><strong>Knowledge</strong></td>
+              <td>Browse and search knowledge stores (vector + GraphRAG), view entities and communities for GraphRAG stores</td>
+            </tr>
+            <tr>
+              <td><strong>MCP</strong></td>
+              <td>Browse MCP servers, view available tools per server, call tools directly</td>
+            </tr>
+            <tr>
+              <td><strong>Workflows</strong></td>
+              <td>Browse and execute workflows (step-based and LangGraph), stream execution progress</td>
+            </tr>
+            <tr>
+              <td><strong>IDE</strong></td>
+              <td>Full in-browser file editor with file tree, syntax highlighting (YAML, JSON, JS), hot-reload on save</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- CLI Commands -->
+        <h3 id="cli-reference" class="mt-xl">CLI Commands</h3>
+        <p>Command-line interface for Agent Orcha operations.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Command</th>
+              <th>Description</th>
+              <th>Options</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>npx agent-orcha init [dir]</code></td>
+              <td>Initialize a new project with example configs</td>
+              <td><code>dir</code> - Target directory (default: current)</td>
+            </tr>
+            <tr>
+              <td><code>npx agent-orcha start</code></td>
+              <td>Start the agent orchestrator server</td>
+              <td>Environment variables: <code>PORT</code>, <code>HOST</code>, <code>ORCHA_BASE_DIR</code></td>
+            </tr>
+            <tr>
+              <td><code>npx agent-orcha help</code></td>
+              <td>Show help information</td>
+              <td>-</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Docker Deployment -->
+        <h3 id="docker" class="mt-xl">Docker Deployment</h3>
+        <p>Agent Orcha provides a Docker image <code>ddalcu/agent-orcha</code> for containerized deployments. The image uses the Bun runtime and mounts your project directory to <code>/data</code>.</p>
+
+        <h4>Initialize a Project via Docker</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+            <button class="code-copy-btn" data-copy-target="docker-init">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="docker-init"><code>docker run -v ./my-agent-orcha-project:/data ddalcu/agent-orcha init</code></pre>
+          </div>
+        </div>
+
+        <h4>Start the Server via Docker</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+            <button class="code-copy-btn" data-copy-target="docker-start">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="docker-start"><code>docker run -p 3000:3000 -v ./my-agent-orcha-project:/data ddalcu/agent-orcha start</code></pre>
+          </div>
+        </div>
+
+        <h4>Docker Compose</h4>
+        <p>For a more manageable setup, use a <code>docker-compose.yaml</code> file:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="docker-compose">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="docker-compose"><code>version: '3.8'
+
+services:
+  agent-orcha:
+    image: ddalcu/agent-orcha
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./my-agent-orcha-project:/data
+    environment:
+      - ORCHA_BASE_DIR=/data</code></pre>
+          </div>
+        </div>
+
+        <h4>Environment Variables</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th>Description</th>
+              <th>Default</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>ORCHA_BASE_DIR</code></td>
+              <td>Base directory for the project inside the container</td>
+              <td><code>/data</code></td>
+            </tr>
+            <tr>
+              <td><code>PORT</code></td>
+              <td>Port for the server to listen on</td>
+              <td><code>3000</code></td>
+            </tr>
+          </tbody>
+        </table>
+
         <!-- Core Concepts -->
         <h2 id="core-concepts" class="mt-2xl">Core Concepts</h2>
 
@@ -314,13 +455,17 @@ prompt:                         # Prompt configuration (required)
   inputVariables: [string]      # Variables to interpolate
 
 tools:                          # Tools available to agent (optional)
-  - mcp:<server-name>           # MCP server tools
-  - vector:<store-name>         # Vector store search
-  - function:<function-name>    # Custom functions
-  - builtin:<tool-name>         # Built-in tools
+  - mcp:&lt;server-name&gt;           # MCP server tools
+  - knowledge:&lt;store-name&gt;      # Knowledge store search
+  - function:&lt;function-name&gt;    # Custom functions
+  - builtin:&lt;tool-name&gt;         # Built-in tools
 
 output:                         # Output formatting (optional)
   format: text | json | structured
+  schema:                       # Required when format is "structured"
+    type: object
+    properties: { ... }
+    required: [string]
 
 metadata:                       # Custom metadata (optional)
   category: string
@@ -335,43 +480,108 @@ metadata:                       # Custom metadata (optional)
             <button class="code-copy-btn" data-copy-target="agent-example">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="agent-example"><code>name: math
-description: An agent that can calculate Fibonacci numbers
+            <pre id="agent-example"><code>name: researcher
+description: Researches topics using knowledge search and web fetch
 version: "1.0.0"
 
 llm:
   name: default
-  temperature: 0.3
+  temperature: 0.5
 
 prompt:
   system: |
-    You are a mathematical assistant specialized in Fibonacci numbers.
-
-    When users ask about Fibonacci numbers:
-    1. Parse the index from their query (0-based indexing)
-    2. Use the fibonacci function to calculate the result
-    3. Return the result in a clear, formatted way
+    You are a thorough researcher. Use available tools
+    to gather information before responding.
   inputVariables:
-    - query
+    - topic
 
 tools:
-  - function:fibonacci  # References fibonacci.function.js
+  - mcp:fetch
+  - knowledge:docs
+  - function:fibonacci
 
 output:
   format: text
 
 metadata:
-  category: mathematics
-  tags:
-    - math
-    - fibonacci</code></pre>
+  category: research</code></pre>
+          </div>
+        </div>
+
+        <h3 id="structured-output" class="mt-xl">Structured Output</h3>
+        <p>Agents can return validated, structured JSON output by specifying an <code>output.schema</code>. This uses LangChain's <code>withStructuredOutput()</code> to ensure responses match your schema.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="structured-output">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="structured-output"><code>name: sentiment-structured
+description: Sentiment analysis with structured output
+
+llm:
+  name: default
+  temperature: 0
+
+prompt:
+  system: |
+    Analyze the sentiment of the provided text.
+  inputVariables:
+    - text
+
+output:
+  format: structured
+  schema:
+    type: object
+    properties:
+      sentiment:
+        type: string
+        enum: [positive, negative, neutral]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+      keywords:
+        type: array
+        items:
+          type: string
+    required:
+      - sentiment
+      - confidence</code></pre>
+          </div>
+        </div>
+
+        <h3 id="conversation-memory" class="mt-xl">Conversation Memory</h3>
+        <p>Agents support session-based conversation memory for multi-turn dialogues. Pass a <code>sessionId</code> in API calls to maintain context across interactions.</p>
+        <ul>
+          <li>In-memory session storage using LangChain messages</li>
+          <li>Automatic FIFO message limit (default: 50 messages per session)</li>
+          <li>Optional TTL-based session cleanup</li>
+          <li>Session management API endpoints for stats and cleanup</li>
+        </ul>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+            <button class="code-copy-btn" data-copy-target="memory-example">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="memory-example"><code># First message with sessionId
+curl -X POST http://localhost:3000/api/agents/chatbot/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"message": "My name is Alice"}, "sessionId": "user-123"}'
+
+# Second message - agent remembers context
+curl -X POST http://localhost:3000/api/agents/chatbot/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"message": "What is my name?"}, "sessionId": "user-123"}'</code></pre>
           </div>
         </div>
 
         <h3 id="workflows" class="mt-xl">Workflows</h3>
-        <p>Workflows orchestrate multiple agents in a defined sequence with parallel execution, conditional logic, and state management.</p>
+        <p>Workflows orchestrate multiple agents. Agent Orcha supports two workflow types: <strong>step-based</strong> (sequential/parallel with explicit steps) and <strong>LangGraph</strong> (autonomous, prompt-driven).</p>
 
-        <h4>Workflow Schema</h4>
+        <h4>Step-Based Workflow Schema</h4>
         <div class="code-block">
           <div class="code-header">
             <span class="code-language">YAML</span>
@@ -381,10 +591,11 @@ metadata:
             <pre id="workflow-schema"><code>name: string                    # Unique identifier (required)
 description: string             # Human-readable description (required)
 version: string                 # Semantic version (default: "1.0.0")
+type: steps                     # Optional (steps is default)
 
 input:                          # Input schema (required)
   schema:
-    <field_name>:
+    &lt;field_name&gt;:
       type: string | number | boolean | array | object
       required: boolean
       default: any
@@ -394,8 +605,8 @@ steps:                          # Workflow steps (required)
   - id: string                  # Unique step identifier
     agent: string               # Agent name to execute
     input:                      # Input mapping using templates
-      <key>: "{{input.field}}"
-      <key>: "{{steps.stepId.output}}"
+      &lt;key&gt;: "{{input.field}}"
+      &lt;key&gt;: "{{steps.stepId.output}}"
     condition: string           # Optional conditional execution
     retry:                      # Optional retry configuration
       maxAttempts: number
@@ -403,16 +614,18 @@ steps:                          # Workflow steps (required)
     output:
       key: string
 
+  # Parallel execution block
+  - parallel:
+      - id: step-a
+        agent: agent-a
+        input: { ... }
+
 config:                         # Workflow configuration (optional)
   timeout: number               # Total timeout ms (default: 300000)
   onError: stop | continue | retry
 
 output:                         # Output mapping (required)
-  <key>: "{{steps.stepId.output}}"
-
-metadata:                       # Custom metadata (optional)
-  category: string
-  tags: [string]</code></pre>
+  &lt;key&gt;: "{{steps.stepId.output}}"</code></pre>
           </div>
         </div>
 
@@ -445,24 +658,95 @@ metadata:                       # Custom metadata (optional)
           </tbody>
         </table>
 
-        <h3 id="vector-stores" class="mt-xl">Vector Stores</h3>
-        <p>Vector stores enable semantic search and RAG (Retrieval Augmented Generation) capabilities for your agents.</p>
+        <h3 id="langgraph-workflows" class="mt-xl">LangGraph Workflows</h3>
+        <p>LangGraph workflows use autonomous agents that discover and call tools/agents based on your prompt, without explicit step definitions.</p>
 
-        <h4>Vector Store Schema</h4>
+        <h4>LangGraph Schema</h4>
         <div class="code-block">
           <div class="code-header">
             <span class="code-language">YAML</span>
-            <button class="code-copy-btn" data-copy-target="vector-schema">Copy</button>
+            <button class="code-copy-btn" data-copy-target="langgraph-schema">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="vector-schema"><code>name: string                    # Unique identifier (required)
+            <pre id="langgraph-schema"><code>name: string
+type: langgraph                 # Required for LangGraph
+
+input:
+  schema:
+    &lt;field&gt;:
+      type: string
+      required: true
+
+prompt:
+  system: string                # System instructions
+  goal: string                  # Goal template (supports {{input.*}})
+
+graph:
+  model: string                 # LLM config name from llm.json
+  executionMode: react | single-turn  # Default: react
+  tools:
+    mode: all | include | exclude | none
+    sources: [mcp, knowledge, function, builtin]
+    include: [string]           # For mode: include
+    exclude: [string]           # For mode: exclude
+  agents:
+    mode: all | include | exclude | none
+  maxIterations: number         # Default: 10
+  timeout: number               # Default: 300000
+
+output:
+  &lt;key&gt;: "{{state.messages[-1].content}}"</code></pre>
+          </div>
+        </div>
+
+        <h4>Execution Modes</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Mode</th>
+              <th>Behavior</th>
+              <th>Best For</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>single-turn</code></td>
+              <td>Calls tools once, then returns</td>
+              <td>Research, data gathering, straightforward tasks</td>
+            </tr>
+            <tr>
+              <td><code>react</code></td>
+              <td>Multiple rounds of tool calls with analysis</td>
+              <td>Complex problems, iterative refinement</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Human-in-the-Loop</h4>
+        <p>LangGraph workflows support the <code>builtin:ask_user</code> tool. When called, the workflow pauses and waits for user input via <code>NodeInterrupt</code>.</p>
+
+        <h3 id="knowledge-stores" class="mt-xl">Knowledge Stores</h3>
+        <p>Knowledge stores enable semantic search and RAG capabilities. Define them in YAML files within the <code>knowledge/</code> directory. Two kinds: <strong>vector</strong> (default) and <strong>graph-rag</strong>.</p>
+
+        <h4>Vector Knowledge Schema</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="knowledge-schema">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="knowledge-schema"><code>name: string                    # Unique identifier (required)
 description: string             # Human-readable description (required)
+kind: vector                    # Optional (vector is default)
 
 source:                         # Data source (required)
-  type: directory | file | url
+  type: directory | file | database | web | s3
   path: string                  # Path relative to project root
   pattern: string               # Glob pattern for directories
   recursive: boolean            # Recursive search (default: true)
+  # Database: connectionString, query, contentColumn, metadataColumns, batchSize
+  # Web: url, selector, headers
+  # S3: bucket, prefix, endpoint, region, accessKeyId, secretAccessKey, pattern, forcePathStyle
 
 loader:                         # Document loader (required)
   type: text | pdf | csv | json | markdown
@@ -475,15 +759,75 @@ splitter:                       # Text chunking (required)
 embedding: string               # Reference to embedding config (default: "default")
 
 store:                          # Vector store backend (required)
-  type: memory | chroma
+  type: memory | chroma | pinecone | qdrant
   options:
     path: string                # Storage path (for chroma)
     collectionName: string      # Collection name
-    url: string                 # Server URL (for chroma)
+    url: string                 # Server URL (for chroma, qdrant)
 
 search:                         # Search configuration (optional)
   defaultK: number              # Results per search (default: 4)
   scoreThreshold: number        # Minimum similarity (0-1)</code></pre>
+          </div>
+        </div>
+
+        <h3 id="graphrag" class="mt-xl">GraphRAG</h3>
+        <p>GraphRAG knowledge stores extract entities and relationships from documents, build a knowledge graph, detect communities, and enable entity-level and thematic search.</p>
+
+        <h4>GraphRAG Schema</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="graphrag-schema">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="graphrag-schema"><code>name: string
+kind: graph-rag                 # Required for GraphRAG
+description: string
+
+source:                         # Same source types as vector
+  type: directory | file | database | web | s3
+
+loader:
+  type: text | pdf | csv | json | markdown
+
+splitter:
+  type: character | recursive | token | markdown
+  chunkSize: number
+  chunkOverlap: number
+
+embedding: string
+
+graph:
+  extraction:                   # Entity extraction
+    llm: string                 # LLM from llm.json (default: "default")
+    entityTypes:                # Optional (omit for auto-extraction)
+      - name: string
+        description: string
+    relationshipTypes:          # Optional
+      - name: string
+        description: string
+
+  communities:                  # Community detection
+    algorithm: louvain
+    resolution: number          # Default: 1.0
+    minSize: number             # Default: 2
+    summaryLlm: string          # Default: "default"
+
+  store:
+    type: memory | neo4j        # Default: memory
+
+  cache:
+    enabled: boolean            # Default: true
+    directory: string           # Default: ".graph-cache"
+
+search:
+  defaultK: number              # Default: 10
+  localSearch:
+    maxDepth: number            # Default: 2
+  globalSearch:
+    topCommunities: number      # Default: 5
+    llm: string                 # Default: "default"</code></pre>
           </div>
         </div>
 
@@ -544,7 +888,7 @@ export const metadata = {
   },
 
   execute: async ({ n }) => {
-    if (n < 0 || !Number.isInteger(n)) {
+    if (n &lt; 0 || !Number.isInteger(n)) {
       throw new Error('Index must be a non-negative integer');
     }
     if (n > 100) {
@@ -555,7 +899,7 @@ export const metadata = {
     if (n === 1) return 'Fibonacci(1) = 1';
 
     let prev = 0, curr = 1;
-    for (let i = 2; i <= n; i++) {
+    for (let i = 2; i &lt;= n; i++) {
       [prev, curr] = [curr, prev + curr];
     }
 
@@ -584,6 +928,11 @@ export const metadata = {
       "description": "Web fetch capabilities",
       "timeout": 30000,
       "enabled": true
+    },
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
     }
   },
   "globalOptions": {
@@ -597,7 +946,7 @@ export const metadata = {
 
         <!-- API Reference -->
         <h2 id="api-reference" class="mt-2xl">API Reference</h2>
-        <p>Complete REST API documentation for interacting with agents, workflows, and vector stores.</p>
+        <p>Complete REST API documentation for interacting with agents, workflows, knowledge stores, functions, MCP servers, files, and LLMs.</p>
 
         <h3>Health Check</h3>
         <div class="code-block">
@@ -645,6 +994,21 @@ Response:
               <td><code>/api/agents/:name/stream</code></td>
               <td>Stream agent response (SSE)</td>
             </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/agents/sessions/stats</code></td>
+              <td>Get session statistics</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/agents/sessions/:sessionId</code></td>
+              <td>Get session details</td>
+            </tr>
+            <tr>
+              <td>DELETE</td>
+              <td><code>/api/agents/sessions/:sessionId</code></td>
+              <td>Clear session messages</td>
+            </tr>
           </tbody>
         </table>
 
@@ -659,9 +1023,9 @@ Response:
   -H "Content-Type: application/json" \
   -d '{
     "input": {
-      "topic": "your topic",
-      "context": "additional context"
-    }
+      "topic": "your topic"
+    },
+    "sessionId": "optional-session-id"
   }'</code></pre>
           </div>
         </div>
@@ -676,8 +1040,11 @@ Response:
   "output": "Agent response text",
   "metadata": {
     "tokensUsed": 150,
-    "toolCalls": ["fetch", "vector_search"],
-    "duration": 1234
+    "toolCalls": [],
+    "duration": 1234,
+    "sessionId": "optional-session-id",
+    "messagesInSession": 4,
+    "structuredOutputValid": true
   }
 }</code></pre>
           </div>
@@ -708,6 +1075,11 @@ Response:
               <td><code>/api/workflows/:name/run</code></td>
               <td>Execute workflow</td>
             </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/workflows/:name/stream</code></td>
+              <td>Stream workflow execution (SSE)</td>
+            </tr>
           </tbody>
         </table>
 
@@ -729,7 +1101,7 @@ Response:
           </div>
         </div>
 
-        <h3 id="vectors-api" class="mt-xl">Vector Stores API</h3>
+        <h3 id="knowledge-api" class="mt-xl">Knowledge API</h3>
         <table>
           <thead>
             <tr>
@@ -741,40 +1113,55 @@ Response:
           <tbody>
             <tr>
               <td>GET</td>
-              <td><code>/api/vectors</code></td>
-              <td>List all vector stores</td>
+              <td><code>/api/knowledge</code></td>
+              <td>List all knowledge stores</td>
             </tr>
             <tr>
               <td>GET</td>
-              <td><code>/api/vectors/:name</code></td>
-              <td>Get vector store config</td>
+              <td><code>/api/knowledge/:name</code></td>
+              <td>Get knowledge store config</td>
             </tr>
             <tr>
               <td>POST</td>
-              <td><code>/api/vectors/:name/search</code></td>
-              <td>Search vector store</td>
+              <td><code>/api/knowledge/:name/search</code></td>
+              <td>Search knowledge store</td>
             </tr>
             <tr>
               <td>POST</td>
-              <td><code>/api/vectors/:name/refresh</code></td>
+              <td><code>/api/knowledge/:name/refresh</code></td>
               <td>Reload documents</td>
             </tr>
             <tr>
               <td>POST</td>
-              <td><code>/api/vectors/:name/add</code></td>
+              <td><code>/api/knowledge/:name/add</code></td>
               <td>Add documents</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/knowledge/:name/entities</code></td>
+              <td>Get GraphRAG entities</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/knowledge/:name/communities</code></td>
+              <td>Get GraphRAG communities</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/knowledge/:name/edges</code></td>
+              <td>Get GraphRAG edges</td>
             </tr>
           </tbody>
         </table>
 
-        <h4>Search Vector Store</h4>
+        <h4>Search Knowledge Store</h4>
         <div class="code-block">
           <div class="code-header">
             <span class="code-language">Bash</span>
-            <button class="code-copy-btn" data-copy-target="vector-search">Copy</button>
+            <button class="code-copy-btn" data-copy-target="knowledge-search">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="vector-search"><code>curl -X POST http://localhost:3000/api/vectors/knowledge/search \
+            <pre id="knowledge-search"><code>curl -X POST http://localhost:3000/api/knowledge/docs/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": "search term",
@@ -783,33 +1170,168 @@ Response:
           </div>
         </div>
 
-        <!-- CLI Reference -->
-        <h2 id="cli-reference" class="mt-2xl">CLI Reference</h2>
-        <p>Command-line interface for Agent Orcha operations.</p>
+        <h4>Add Documents to Knowledge Store</h4>
+        <p>Dynamically add documents to a knowledge store without restarting the server. If the store isn't initialized, it will be created automatically.</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+            <button class="code-copy-btn" data-copy-target="knowledge-add">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="knowledge-add"><code>curl -X POST http://localhost:3000/api/knowledge/docs/add \
+  -H "Content-Type: application/json" \
+  -d '{
+    "documents": [
+      {
+        "content": "Your document content here",
+        "metadata": {
+          "source": "api",
+          "category": "example",
+          "timestamp": "2026-01-29"
+        }
+      }
+    ]
+  }'</code></pre>
+          </div>
+        </div>
+        <p>Response:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">JSON</span>
+          </div>
+          <div class="code-content">
+            <pre><code>{
+  "success": true,
+  "added": 1
+}</code></pre>
+          </div>
+        </div>
+        <p><strong>Use cases:</strong></p>
+        <ul>
+          <li>Building knowledge stores incrementally from external sources</li>
+          <li>Real-time ingestion of generated content</li>
+          <li>Integrating with webhooks or external APIs</li>
+          <li>Dynamic document addition without server restarts</li>
+        </ul>
 
+        <h3 id="functions-api" class="mt-xl">Functions API</h3>
         <table>
           <thead>
             <tr>
-              <th>Command</th>
+              <th>Method</th>
+              <th>Endpoint</th>
               <th>Description</th>
-              <th>Options</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td><code>npx agent-orcha init [dir]</code></td>
-              <td>Initialize a new project with example configs</td>
-              <td><code>dir</code> - Target directory (default: current)</td>
+              <td>GET</td>
+              <td><code>/api/functions</code></td>
+              <td>List all functions</td>
             </tr>
             <tr>
-              <td><code>npx agent-orcha start</code></td>
-              <td>Start the agent orchestrator server</td>
-              <td>Environment variables: <code>PORT</code>, <code>HOST</code></td>
+              <td>GET</td>
+              <td><code>/api/functions/:name</code></td>
+              <td>Get function details and schema</td>
             </tr>
             <tr>
-              <td><code>npx agent-orcha help</code></td>
-              <td>Show help information</td>
-              <td>-</td>
+              <td>POST</td>
+              <td><code>/api/functions/:name/call</code></td>
+              <td>Call a function</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="mcp-api" class="mt-xl">MCP API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/mcp</code></td>
+              <td>List all MCP servers</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/mcp/:name</code></td>
+              <td>Get MCP server config</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/mcp/:name/tools</code></td>
+              <td>List tools from server</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/mcp/:name/call</code></td>
+              <td>Call a tool on server</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="files-api" class="mt-xl">Files API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/files/tree</code></td>
+              <td>Get project directory tree</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/files/read?path=...</code></td>
+              <td>Read file contents</td>
+            </tr>
+            <tr>
+              <td>PUT</td>
+              <td><code>/api/files/write</code></td>
+              <td>Write file contents (hot-reload)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="llm-api" class="mt-xl">LLM API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/llm</code></td>
+              <td>List all LLM configurations</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/llm/:name</code></td>
+              <td>Get LLM config details</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/llm/:name/chat</code></td>
+              <td>Chat with LLM</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/llm/:name/stream</code></td>
+              <td>Stream chat with LLM (SSE)</td>
             </tr>
           </tbody>
         </table>
@@ -885,13 +1407,6 @@ steps:
     output:
       key: knowledge_result
 
-  - id: perform-calculation
-    agent: math
-    input:
-      query: "Calculate the 10th Fibonacci number"
-    output:
-      key: calculation_result
-
   - id: summarize
     agent: example
     input:
@@ -899,7 +1414,6 @@ steps:
         Summarize: {{steps.get-time.output}}
         Topic: {{input.topic}}
         Knowledge: {{steps.search-knowledge.output}}
-        Math: {{steps.perform-calculation.output}}
     output:
       key: final_summary
 
@@ -910,26 +1424,25 @@ config:
 output:
   timestamp: "{{steps.get-time.output}}"
   knowledge: "{{steps.search-knowledge.output}}"
-  calculation: "{{steps.perform-calculation.output}}"
   summary: "{{steps.summarize.output}}"</code></pre>
           </div>
         </div>
 
-        <h3 class="mt-xl">Example 3: Vector Store for RAG</h3>
-        <p>Setting up semantic search with a vector store.</p>
+        <h3 class="mt-xl">Example 3: Knowledge Store for RAG</h3>
+        <p>Setting up semantic search with a knowledge store.</p>
 
         <div class="code-block">
           <div class="code-header">
-            <span class="code-language">YAML - vectors/knowledge.vector.yaml</span>
-            <button class="code-copy-btn" data-copy-target="vector-example">Copy</button>
+            <span class="code-language">YAML - knowledge/docs.knowledge.yaml</span>
+            <button class="code-copy-btn" data-copy-target="knowledge-example">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="vector-example"><code>name: knowledge
+            <pre id="knowledge-example"><code>name: docs
 description: Knowledge base for semantic search
 
 source:
   type: directory
-  path: vectors/sample-data
+  path: knowledge/sample-data
   pattern: "*.txt"
 
 loader:
@@ -948,6 +1461,161 @@ store:
 search:
   defaultK: 4
   scoreThreshold: 0.2</code></pre>
+          </div>
+        </div>
+
+        <h3 class="mt-xl">Example 4: LangGraph Workflow</h3>
+        <p>An autonomous workflow using LangGraph with automatic tool and agent discovery.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML - workflows/research.workflow.yaml</span>
+            <button class="code-copy-btn" data-copy-target="langgraph-example">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="langgraph-example"><code>name: langgraph-research
+description: Autonomous research using tool discovery
+version: "1.0.0"
+type: langgraph
+
+input:
+  schema:
+    topic:
+      type: string
+      required: true
+
+prompt:
+  system: |
+    You are a research assistant with access to tools and agents.
+    Identify all tools you need, call them in parallel,
+    then synthesize results into a comprehensive report.
+  goal: "Research and analyze: {{input.topic}}"
+
+graph:
+  model: default
+  executionMode: single-turn
+  tools:
+    mode: all
+    sources: [mcp, knowledge, function, builtin]
+  agents:
+    mode: all
+  maxIterations: 10
+  timeout: 300000
+
+output:
+  analysis: "{{state.messages[-1].content}}"</code></pre>
+          </div>
+        </div>
+
+        <h3 class="mt-xl">Example 5: GraphRAG Knowledge Store</h3>
+        <p>Building a knowledge graph from call center transcripts for entity-level and thematic analysis.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML - knowledge/call-center.knowledge.yaml</span>
+            <button class="code-copy-btn" data-copy-target="graphrag-example">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="graphrag-example"><code>name: call-center-analysis
+kind: graph-rag
+description: GraphRAG for call center transcripts
+
+source:
+  type: directory
+  path: knowledge/transcripts
+  pattern: "*.txt"
+
+loader:
+  type: text
+
+splitter:
+  type: recursive
+  chunkSize: 2000
+  chunkOverlap: 200
+
+embedding: default
+
+graph:
+  extraction:
+    llm: default
+    entityTypes:
+      - name: Agent
+        description: "Call center representative"
+      - name: Customer
+        description: "Person calling"
+      - name: Vehicle
+        description: "Car discussed"
+    relationshipTypes:
+      - name: HANDLED_BY
+        description: "Call handled by agent"
+      - name: INTERESTED_IN
+        description: "Customer interest"
+
+  communities:
+    algorithm: louvain
+    resolution: 1.0
+    minSize: 2
+    summaryLlm: default
+
+  store:
+    type: memory
+
+  cache:
+    enabled: true
+    directory: .graph-cache
+
+search:
+  defaultK: 10
+  localSearch:
+    maxDepth: 2
+  globalSearch:
+    topCommunities: 5
+    llm: default</code></pre>
+          </div>
+        </div>
+
+        <h3 class="mt-xl">Example 6: Agent with Structured Output</h3>
+        <p>An agent that returns validated JSON matching a schema.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML - agents/sentiment.agent.yaml</span>
+            <button class="code-copy-btn" data-copy-target="structured-example">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="structured-example"><code>name: sentiment-structured
+description: Sentiment analysis with structured output
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0
+
+prompt:
+  system: |
+    Analyze the sentiment of the provided text.
+  inputVariables:
+    - text
+
+output:
+  format: structured
+  schema:
+    type: object
+    properties:
+      sentiment:
+        type: string
+        enum: [positive, negative, neutral]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+      keywords:
+        type: array
+        items:
+          type: string
+    required:
+      - sentiment
+      - confidence</code></pre>
           </div>
         </div>
 
@@ -988,7 +1656,7 @@ search:
           <h4>About</h4>
           <ul class="footer-links">
             <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
-            <li>Version 0.0.1</li>
+            <li>Version 0.0.3</li>
             <li>MIT License</li>
           </ul>
         </div>
@@ -1002,5 +1670,23 @@ search:
   <!-- Scripts -->
   <script src="assets/js/main.js"></script>
   <script src="assets/js/code-copy.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>
+    document.querySelectorAll('.code-block').forEach(function(block) {
+      var langLabel = block.querySelector('.code-language');
+      var codeEl = block.querySelector('code');
+      if (langLabel && codeEl) {
+        var text = langLabel.textContent.trim().toLowerCase();
+        var lang;
+        if (text.includes('yaml')) lang = 'yaml';
+        else if (text.includes('json')) lang = 'json';
+        else if (text.includes('bash')) lang = 'bash';
+        else if (text.includes('javascript') || text.includes('js')) lang = 'javascript';
+        else if (text.includes('http')) lang = 'http';
+        if (lang) codeEl.classList.add('language-' + lang);
+      }
+    });
+    hljs.highlightAll();
+  </script>
 </body>
 </html>

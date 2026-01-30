@@ -7,20 +7,59 @@ import { createServer } from './server.js';
 import { logger } from '../lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, '..');
+
+// Add environment variable configuration
+const baseDir = process.env.ORCHA_BASE_DIR
+  ? path.resolve(process.env.ORCHA_BASE_DIR)
+  : path.resolve(__dirname, '..');
 
 function resolveResource(name: string): string {
-  const rootPath = path.join(projectRoot, name);
-  const templatePath = path.join(projectRoot, 'templates', name);
+  const resourcePath = path.join(baseDir, name);
+  return resourcePath;
+}
 
-  if (fs.existsSync(rootPath)) {
-    return rootPath;
+function validateConfiguration(): void {
+  const criticalFiles = [
+    { path: resolveResource('llm.json'), name: 'LLM configuration' },
+    { path: resolveResource('mcp.json'), name: 'MCP configuration' },
+  ];
+
+  const criticalDirs = [
+    { path: resolveResource('agents'), name: 'agents directory' },
+    { path: resolveResource('workflows'), name: 'workflows directory' },
+    { path: resolveResource('knowledge'), name: 'knowledge directory' },
+    { path: resolveResource('functions'), name: 'functions directory' },
+  ];
+
+  const missingFiles: string[] = [];
+
+  // Check critical files
+  for (const { path, name } of criticalFiles) {
+    if (!fs.existsSync(path)) {
+      missingFiles.push(`${name} (${path})`);
+      logger.error(`Missing required file: ${path}`);
+    }
   }
-  if (fs.existsSync(templatePath)) {
-    logger.info(`Using template resource for ${name}`);
-    return templatePath;
+
+  // Check critical directories
+  for (const { path, name } of criticalDirs) {
+    if (!fs.existsSync(path)) {
+      missingFiles.push(`${name} (${path})`);
+      logger.error(`Missing required directory: ${path}`);
+    }
   }
-  return rootPath;
+
+  if (missingFiles.length > 0) {
+    const errorMsg = `Configuration validation failed. Missing ${missingFiles.length} required resource(s):\n` +
+      missingFiles.map(f => `  - ${f}`).join('\n') +
+      `\n\nBase directory: ${baseDir}\n` +
+      `Set ORCHA_BASE_DIR environment variable to specify a different configuration directory.`;
+
+    logger.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+
+  logger.info('Configuration validation passed');
 }
 
 async function main(): Promise<void> {
@@ -28,12 +67,16 @@ async function main(): Promise<void> {
   const host = process.env['HOST'] ?? '0.0.0.0';
 
   logger.info('Initializing Agent Orchestrator...');
+  logger.info(`Base directory: ${baseDir}`);
+
+  // Validate configuration exists before proceeding
+  validateConfiguration();
 
   const orchestrator = new Orchestrator({
-    projectRoot,
+    projectRoot: baseDir,
     agentsDir: resolveResource('agents'),
     workflowsDir: resolveResource('workflows'),
-    vectorsDir: resolveResource('vectors'),
+    knowledgeDir: resolveResource('knowledge'),
     functionsDir: resolveResource('functions'),
     mcpConfigPath: resolveResource('mcp.json'),
     llmConfigPath: resolveResource('llm.json'),
@@ -43,7 +86,7 @@ async function main(): Promise<void> {
 
   logger.info(`Loaded ${orchestrator.agents.names().length} agents`);
   logger.info(`Loaded ${orchestrator.workflows.names().length} workflows`);
-  logger.info(`Loaded ${orchestrator.vectors.listConfigs().length} vector configs`);
+  logger.info(`Loaded ${orchestrator.knowledge.listConfigs().length} knowledge configs`);
 
   const server = await createServer(orchestrator);
 

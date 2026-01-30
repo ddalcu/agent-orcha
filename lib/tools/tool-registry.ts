@@ -1,20 +1,24 @@
 import type { StructuredTool } from '@langchain/core/tools';
 import type { MCPClientManager } from '../mcp/mcp-client.js';
-import type { VectorStoreManager } from '../vectors/vector-store-manager.js';
+import type { KnowledgeStoreManager } from '../knowledge/knowledge-store-manager.js';
 import type { FunctionLoader } from '../functions/function-loader.js';
 import type { ToolReference } from '../agents/types.js';
-import { createVectorSearchTool } from './built-in/vector-search.tool.js';
+import { createKnowledgeSearchTool } from './built-in/knowledge-search.tool.js';
 import { logger } from '../logger.js';
 
 export class ToolRegistry {
   private mcpClient: MCPClientManager;
-  private vectorStores: VectorStoreManager;
+  private knowledgeStores: KnowledgeStoreManager;
   private functionLoader: FunctionLoader;
   private builtInTools: Map<string, StructuredTool> = new Map();
 
-  constructor(mcpClient: MCPClientManager, vectorStores: VectorStoreManager, functionLoader: FunctionLoader) {
+  constructor(
+    mcpClient: MCPClientManager,
+    knowledgeStores: KnowledgeStoreManager,
+    functionLoader: FunctionLoader
+  ) {
     this.mcpClient = mcpClient;
-    this.vectorStores = vectorStores;
+    this.knowledgeStores = knowledgeStores;
     this.functionLoader = functionLoader;
   }
 
@@ -51,17 +55,17 @@ export class ToolRegistry {
       case 'mcp':
         return this.mcpClient.getToolsByServer(name);
 
-      case 'vector': {
-        const store = this.vectorStores.get(name);
+      case 'knowledge': {
+        const store = this.knowledgeStores.get(name);
         if (!store) {
-          await this.vectorStores.initialize(name);
-          const initializedStore = this.vectorStores.get(name);
+          await this.knowledgeStores.initialize(name);
+          const initializedStore = this.knowledgeStores.get(name);
           if (initializedStore) {
-            return [createVectorSearchTool(name, initializedStore)];
+            return [createKnowledgeSearchTool(name, initializedStore)];
           }
           return [];
         }
-        return [createVectorSearchTool(name, store)];
+        return [createKnowledgeSearchTool(name, store)];
       }
 
       case 'function': {
@@ -94,5 +98,66 @@ export class ToolRegistry {
 
   listBuiltIn(): string[] {
     return Array.from(this.builtInTools.keys());
+  }
+
+  // Methods for bulk tool discovery (used by LangGraph workflows)
+
+  /**
+   * Gets all MCP tools from all servers.
+   */
+  async getAllMCPTools(): Promise<StructuredTool[]> {
+    const serverNames = this.mcpClient.getServerNames();
+    const allTools: StructuredTool[] = [];
+
+    for (const serverName of serverNames) {
+      try {
+        const tools = await this.mcpClient.getToolsByServer(serverName);
+        allTools.push(...tools);
+      } catch (error) {
+        logger.warn(`Failed to get tools from MCP server "${serverName}":`, error);
+      }
+    }
+
+    return allTools;
+  }
+
+  /**
+   * Gets all knowledge search tools for all configured knowledge stores.
+   */
+  async getAllKnowledgeTools(): Promise<StructuredTool[]> {
+    const configs = this.knowledgeStores.listConfigs();
+    const tools: StructuredTool[] = [];
+
+    for (const config of configs) {
+      try {
+        // Initialize store if needed
+        let store = this.knowledgeStores.get(config.name);
+        if (!store) {
+          store = await this.knowledgeStores.initialize(config.name);
+        }
+
+        // Create knowledge search tool
+        const tool = createKnowledgeSearchTool(config.name, store);
+        tools.push(tool);
+      } catch (error) {
+        logger.warn(`Failed to create knowledge search tool for "${config.name}":`, error);
+      }
+    }
+
+    return tools;
+  }
+
+  /**
+   * Gets all custom function tools.
+   */
+  getAllFunctionTools(): StructuredTool[] {
+    return this.functionLoader.list().map((f) => f.tool);
+  }
+
+  /**
+   * Gets all built-in tools.
+   */
+  getAllBuiltInTools(): StructuredTool[] {
+    return Array.from(this.builtInTools.values());
   }
 }

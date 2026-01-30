@@ -25,6 +25,12 @@ export class WorkflowExecutor {
     onStatus?: (status: WorkflowStatus) => void
   ): Promise<WorkflowResult> {
     const startTime = Date.now();
+
+    // Only execute if this is a step-based workflow
+    if (definition.type === 'langgraph') {
+      throw new Error('LangGraph workflows should be executed using LangGraphExecutor');
+    }
+
     const context: WorkflowContext = {
       input: this.applyDefaults(definition, input),
       steps: {},

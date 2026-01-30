@@ -1,0 +1,68 @@
+name: langgraph-multi-turn
+description: Multi-turn LangGraph workflow that can iteratively refine results using ReAct pattern
+version: "1.0.0"
+type: langgraph
+
+input:
+  schema:
+    topic:
+      type: string
+      required: true
+      description: The research topic or complex problem to solve
+
+# Multi-turn execution with iterative refinement
+prompt:
+  system: |
+    You are an advanced research assistant that can iteratively refine your analysis.
+
+    Your capabilities:
+    - Search knowledge bases for information
+    - Call specialized agents for specific tasks
+    - Use calculation and data processing tools
+    - Iteratively refine your understanding by calling tools multiple times
+
+    REASONING PROCESS:
+    1. Start by calling tools to gather initial information
+    2. Analyze the results and identify gaps or areas needing deeper investigation
+    3. Call additional tools to fill those gaps
+    4. Continue refining until you have comprehensive understanding
+    5. Provide your final synthesized answer
+
+    You can call tools multiple times in different rounds to build up your knowledge.
+    Each round of tool calls should be purposeful and move you closer to a complete answer.
+
+  goal: "Provide a thorough analysis of: {{input.topic}}"
+
+# LangGraph configuration for multi-turn execution
+graph:
+  model: default
+
+  # ReAct mode allows multiple iterations
+  executionMode: react
+
+  # Tool discovery
+  tools:
+    mode: all
+    sources: [mcp, knowledge, function, builtin]
+
+  # Agent discovery
+  agents:
+    mode: all
+
+  # Allow up to 10 iterations for iterative refinement
+  maxIterations: 10
+  timeout: 300000
+
+output:
+  analysis: "{{state.messages[-1].content}}"
+
+config:
+  onError: stop
+
+metadata:
+  category: research
+  tags:
+    - langgraph
+    - react
+    - multi-turn
+    - iterative

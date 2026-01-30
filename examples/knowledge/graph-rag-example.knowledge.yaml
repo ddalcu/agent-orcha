@@ -1,0 +1,66 @@
+name: call-center-analysis
+kind: graph-rag
+description: GraphRAG knowledge base for analyzing call center transcripts
+
+source:
+  type: directory
+  path: knowledge/transcripts  # Update to your transcripts directory
+  pattern: "*.txt"
+  recursive: true
+
+loader:
+  type: text
+
+splitter:
+  type: recursive
+  chunkSize: 3400
+  chunkOverlap: 200
+
+embedding: default  # References embedding config in llm.json
+
+# Graph-specific configuration
+graph:
+  extraction:
+    llm: default  # LLM from llm.json for entity extraction
+    # Optional schema - omit for fully automatic extraction
+    entityTypes:
+      - name: Agent
+        description: "Call center representative"
+      - name: Customer
+        description: "Person calling the dealership"
+      - name: Vehicle
+        description: "Car make, model, or type discussed"
+      - name: Outcome
+        description: "Result of the call (appointment, sale, follow-up)"
+    relationshipTypes:
+      - name: HANDLED_BY
+        description: "Call was handled by an agent"
+      - name: INTERESTED_IN
+        description: "Customer expressed interest in a vehicle"
+      - name: RESULTED_IN
+        description: "Call resulted in an outcome"
+
+  communities:
+    algorithm: louvain
+    resolution: 1.0
+    minSize: 2
+    summaryLlm: default
+
+  store:
+    type: memory  # memory | neo4j
+    options: {}
+
+  cache:
+    enabled: true
+    directory: .graph-cache
+
+search:
+  defaultK: 10
+  localSearch:
+    maxDepth: 2
+  globalSearch:
+    topCommunities: 5
+    llm: default
+
+metadata:
+  category: graph-rag-example

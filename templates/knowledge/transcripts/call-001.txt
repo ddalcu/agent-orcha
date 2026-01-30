@@ -1,0 +1,40 @@
+Call ID: CC-001
+Date: 2024-11-15
+Agent: Sarah Mitchell
+Duration: 8 minutes 23 seconds
+
+[00:00] Agent Sarah Mitchell: Thank you for calling Greenfield Auto Group, this is Sarah. How can I help you today?
+
+[00:05] Customer Mike Torres: Hi Sarah, my name is Mike Torres. I'm looking into getting a new SUV for my family. We've got three kids now and our sedan just isn't cutting it anymore.
+
+[00:15] Agent Sarah Mitchell: Congratulations on the growing family, Mike! We've got some great options. Are you leaning toward anything in particular — midsize or full-size SUV?
+
+[00:22] Customer Mike Torres: Probably midsize. I've been looking at the Toyota Highlander and the Honda Pilot online. Do you have either of those in stock?
+
+[00:30] Agent Sarah Mitchell: We do! We have several 2024 Highlanders on the lot right now, including the XLE and Limited trims. For the Honda Pilot, we have the EX-L and the Touring. The Highlander XLE starts around $39,000 and the Pilot EX-L is right around $41,500.
+
+[00:50] Customer Mike Torres: That's in our budget range. My wife really likes the Highlander because of the hybrid option. Do you have any hybrid models?
+
+[01:02] Agent Sarah Mitchell: Yes! The 2024 Highlander Hybrid is one of our best sellers. We have two in stock — one in Celestial Silver and one in Blueprint. The hybrid gets about 36 miles per gallon combined, which is excellent for an SUV.
+
+[01:18] Customer Mike Torres: 36 mpg? That's really impressive. What's the price on the hybrid?
+
+[01:23] Agent Sarah Mitchell: The Highlander Hybrid XLE starts at $41,500. With the fuel savings over time, a lot of families find it's actually more economical than the standard model.
+
+[01:35] Customer Mike Torres: That makes sense. I'd love to come in and test drive one. When would be a good time?
+
+[01:42] Agent Sarah Mitchell: How about this Saturday morning? We could have both the Highlander Hybrid and the Pilot ready for you to compare side by side.
+
+[01:50] Customer Mike Torres: Saturday at 10am works perfectly. My wife Elena will be coming too.
+
+[01:55] Agent Sarah Mitchell: Great! I'll schedule you and Elena for 10am this Saturday. I'll have both vehicles pulled up front and ready. Can I get a phone number to confirm?
+
+[02:05] Customer Mike Torres: Sure, it's 555-0147.
+
+[02:08] Agent Sarah Mitchell: Perfect. You're all set for Saturday at 10am with Sarah Mitchell. Is there anything else I can help with?
+
+[02:15] Customer Mike Torres: No, that's everything. Thanks so much, Sarah!
+
+[02:18] Agent Sarah Mitchell: My pleasure, Mike. Looking forward to meeting you and Elena Saturday. Have a great day!
+
+Outcome: Test drive appointment scheduled for Saturday 10am. Customer interested in 2024 Toyota Highlander Hybrid and Honda Pilot. High purchase intent.

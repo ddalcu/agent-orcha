@@ -27,7 +27,9 @@ export class AgentLoader {
   async loadOne(filePath: string): Promise<AgentDefinition> {
     const content = await fs.readFile(filePath, 'utf-8');
     const parsed = parseYaml(content);
-    return AgentDefinitionSchema.parse(parsed);
+    const agent = AgentDefinitionSchema.parse(parsed);
+    this.agents.set(agent.name, agent);
+    return agent;
   }
 
   get(name: string): AgentDefinition | undefined {

@@ -5,7 +5,7 @@ export const ToolReferenceSchema = z.union([
   z.string(),
   z.object({
     name: z.string(),
-    source: z.enum(['mcp', 'vector', 'builtin', 'custom']),
+    source: z.enum(['mcp', 'knowledge', 'builtin', 'custom']),
     config: z.record(z.unknown()).optional(),
   }),
 ]);
@@ -46,11 +46,19 @@ export interface AgentResult {
     tokensUsed?: number;
     toolCalls?: ToolCallRecord[];
     duration: number;
+    sessionId?: string;
+    messagesInSession?: number;
+    structuredOutputValid?: boolean;
   };
+}
+
+export interface AgentInvokeOptions {
+  input: Record<string, unknown>;
+  sessionId?: string;
 }
 
 export interface AgentInstance {
   definition: AgentDefinition;
-  invoke: (input: Record<string, unknown>) => Promise<AgentResult>;
-  stream: (input: Record<string, unknown>) => AsyncGenerator<string, void, unknown>;
+  invoke: (input: Record<string, unknown> | AgentInvokeOptions) => Promise<AgentResult>;
+  stream: (input: Record<string, unknown> | AgentInvokeOptions) => AsyncGenerator<string | Record<string, unknown>, void, unknown>;
 }

@@ -1,5 +1,7 @@
 export { WorkflowLoader } from './workflow-loader.js';
 export { WorkflowExecutor } from './workflow-executor.js';
+export { LangGraphExecutor } from './langgraph-executor.js';
+export { InterruptManager } from './interrupt-manager.js';
 export {
   WorkflowDefinitionSchema,
   WorkflowStepSchema,
@@ -9,6 +11,10 @@ export {
   ParallelStepsSchema,
   InputFieldSchema,
   WorkflowConfigSchema,
+  LangGraphWorkflowSchema,
+  GraphToolConfigSchema,
+  GraphAgentConfigSchema,
+  GraphConfigSchema,
 } from './types.js';
 export type {
   WorkflowDefinition,
@@ -22,4 +28,12 @@ export type {
   WorkflowContext,
   WorkflowResult,
   StepResult,
+  LangGraphWorkflowDefinition,
+  StepBasedWorkflowDefinition,
+  GraphToolConfig,
+  GraphAgentConfig,
+  GraphConfig,
+  WorkflowInterrupt,
+  InterruptState,
+  WorkflowStatus,
 } from './types.js';

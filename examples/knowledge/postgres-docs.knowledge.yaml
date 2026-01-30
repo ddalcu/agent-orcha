@@ -1,0 +1,34 @@
+name: postgres-docs
+description: Documentation stored in PostgreSQL database
+
+source:
+  type: database
+  connectionString: postgresql://user:password@localhost:5432/docs_db
+  query: SELECT content, title, category, created_at FROM documents WHERE published = true
+  contentColumn: content
+  metadataColumns:
+    - title
+    - category
+    - created_at
+  batchSize: 100
+
+loader:
+  type: text  # Database already returns text
+
+splitter:
+  type: recursive
+  chunkSize: 1000
+  chunkOverlap: 200
+
+embedding: default
+
+store:
+  type: memory
+
+search:
+  defaultK: 4
+  scoreThreshold: 0.3
+
+metadata:
+  category: database
+  database_type: postgresql

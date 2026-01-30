@@ -6,8 +6,11 @@ import fastifyStatic from '@fastify/static';
 import type { Orchestrator } from '../lib/index.js';
 import { agentsRoutes } from './routes/agents.route.js';
 import { workflowsRoutes } from './routes/workflows.route.js';
-import { vectorsRoutes } from './routes/vectors.route.js';
+import { knowledgeRoutes } from './routes/knowledge.route.js';
 import { llmRoutes } from './routes/llm.route.js';
+import { mcpRoutes } from './routes/mcp.route.js';
+import { functionsRoutes } from './routes/functions.route.js';
+import { filesRoutes } from './routes/files.route.js';
 import { getPinoConfig } from '../lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -41,8 +44,11 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
 
   await fastify.register(agentsRoutes, { prefix: '/api/agents' });
   await fastify.register(workflowsRoutes, { prefix: '/api/workflows' });
-  await fastify.register(vectorsRoutes, { prefix: '/api/vectors' });
+  await fastify.register(knowledgeRoutes, { prefix: '/api/knowledge' });
   await fastify.register(llmRoutes, { prefix: '/api/llm' });
+  await fastify.register(mcpRoutes, { prefix: '/api/mcp' });
+  await fastify.register(functionsRoutes, { prefix: '/api/functions' });
+  await fastify.register(filesRoutes, { prefix: '/api/files' });
 
   return fastify;
 }

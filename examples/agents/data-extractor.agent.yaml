@@ -1,0 +1,48 @@
+name: data-extractor
+description: Extract structured data from unstructured text
+version: 1.0.0
+llm:
+  name: default
+  temperature: 0
+prompt:
+  system: |
+    Extract key information from the provided text and return it in a structured format.
+    Look for: names, dates, locations, organizations, and other relevant entities.
+  inputVariables:
+    - text
+output:
+  format: structured
+  schema:
+    type: object
+    properties:
+      names:
+        type: array
+        items:
+          type: string
+        description: Person names found in the text
+      dates:
+        type: array
+        items:
+          type: string
+        description: Dates mentioned in the text
+      locations:
+        type: array
+        items:
+          type: string
+        description: Locations mentioned in the text
+      organizations:
+        type: array
+        items:
+          type: string
+        description: Organizations mentioned in the text
+      summary:
+        type: string
+        description: Brief summary of the text
+    required:
+      - summary
+metadata:
+  category: example
+  features:
+    - structured-output
+    - data-extraction
+    - entity-recognition
