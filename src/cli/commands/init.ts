@@ -34,7 +34,7 @@ async function copyTemplates(targetDir: string): Promise<void> {
   }
 
   // Copy all template directories
-  const templateDirs = ['agents', 'functions', 'vectors', 'workflows'];
+  const templateDirs = ['agents', 'functions', 'knowledge', 'workflows'];
 
   for (const dir of templateDirs) {
     const sourcePath = path.join(templatesDir, dir);
@@ -47,7 +47,7 @@ async function copyTemplates(targetDir: string): Promise<void> {
   }
 
   // Copy config files
-  const configFiles = ['mcp.json', 'llm.json', '.env.example', 'README.md'];
+  const configFiles = ['mcp.json', 'llm.json', 'llm.md', '.env.example', 'README.md'];
 
   for (const file of configFiles) {
     const sourcePath = path.join(templatesDir, file);
@@ -89,7 +89,7 @@ export async function initCommand(args: string[]): Promise<void> {
   }
 
   // Check if directories already exist
-  const dirs = ['agents', 'functions', 'vectors', 'workflows'];
+  const dirs = ['agents', 'functions', 'knowledge', 'workflows'];
   const existingDirs = [];
 
   for (const dir of dirs) {
