@@ -35,18 +35,23 @@ export const functionsRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Get the tool's schema and convert Zod to JSON Schema
       const tool = func.tool;
-      const jsonSchema = zodToJsonSchema(tool.schema, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const jsonSchema = zodToJsonSchema(tool.schema as any, {
         name: func.name,
         $refStrategy: 'none',
       });
 
       // Extract the actual schema from $ref if present
       let finalSchema = jsonSchema;
-      if (jsonSchema.$ref && jsonSchema.definitions) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((jsonSchema as any).$ref && (jsonSchema as any).definitions) {
         // Extract the schema name from $ref (e.g., "#/definitions/calculator" -> "calculator")
-        const refName = jsonSchema.$ref.split('/').pop();
-        if (refName && jsonSchema.definitions[refName]) {
-          finalSchema = jsonSchema.definitions[refName];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const refName = (jsonSchema as any).$ref.split('/').pop();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (refName && (jsonSchema as any).definitions[refName]) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          finalSchema = (jsonSchema as any).definitions[refName];
         }
       }
 

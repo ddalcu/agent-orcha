@@ -460,7 +460,7 @@ pre {
 }
 
 .code-content {
-  padding: var(--space-md);
+  padding: var(--space-sm);
   overflow-x: auto;
 }
 
