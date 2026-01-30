@@ -3,7 +3,7 @@ description: Example vector store for semantic search
 
 source:
   type: directory
-  path: vectors/sample-data
+  path: knowledge/transcripts
   pattern: "*.txt"
   recursive: false
 

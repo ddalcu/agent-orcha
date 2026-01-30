@@ -3,8 +3,8 @@ description: Documentation scraped from website
 
 source:
   type: web
-  url: https://docs.example.com/guide/
-  selector: article.documentation  # CSS selector for targeted extraction
+  url: https://www.ietf.org/about/introduction/
+  selector: .block-markdown  # CSS selector for targeted extraction
   # Optional custom headers (uncomment if needed for authentication)
   # headers:
   #   Authorization: Bearer YOUR_TOKEN

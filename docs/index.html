@@ -6,20 +6,20 @@
 
   <!-- SEO Meta Tags -->
   <title>Agent Orcha - Declarative Multi-Agent AI Framework | TypeScript</title>
-  <meta name="description" content="Build production-ready multi-agent AI systems with declarative YAML. Model-agnostic, MCP tools, RAG support, REST API. TypeScript framework for Node.js 20+.">
-  <meta name="keywords" content="multi-agent AI, agent orchestration, declarative AI, TypeScript AI framework, MCP, RAG, vector stores, LangChain">
+  <meta name="description" content="Build multi-agent AI systems with declarative YAML. Model-agnostic, MCP tools, RAG &amp; GraphRAG, LangGraph workflows, built-in Studio IDE. TypeScript framework for Node.js 20+.">
+  <meta name="keywords" content="multi-agent AI, agent orchestration, declarative AI, TypeScript AI framework, MCP, RAG, GraphRAG, knowledge stores, LangGraph, LangChain">
   <meta name="author" content="Agent Orcha">
 
   <!-- Open Graph Tags -->
   <meta property="og:title" content="Agent Orcha - Declarative Multi-Agent AI Framework">
-  <meta property="og:description" content="Build production-ready multi-agent AI systems with declarative YAML. Model-agnostic, MCP tools, RAG support.">
+  <meta property="og:description" content="Build multi-agent AI systems with declarative YAML. Model-agnostic, MCP tools, RAG support.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ddalcu.github.io/agent-orcha/">
 
   <!-- Twitter Card Tags -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Agent Orcha - Declarative Multi-Agent AI Framework">
-  <meta name="twitter:description" content="Build production-ready multi-agent AI systems with declarative YAML.">
+  <meta name="twitter:description" content="Build multi-agent AI systems with declarative YAML.">
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,6 +28,9 @@
 
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+  <!-- Highlight.js -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
 
   <!-- Styles -->
   <link rel="stylesheet" href="assets/css/styles.css">
@@ -52,36 +55,42 @@
   <!-- Hero Section -->
   <section class="hero">
     <div class="container">
-      <div class="hero-content">
-        <h1 class="hero-title fade-in">Orchestrate AI Agents with Declarative YAML</h1>
-        <p class="hero-subtitle fade-in">Build production-ready multi-agent systems in minutes. Define everything in version-controlled YAML. No spaghetti code. Use AI to build your workflows.</p>
-        <div class="hero-cta fade-in">
-          <a href="https://github.com/ddalcu/agent-orcha" class="btn btn-secondary btn-large" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> View on GitHub</a>
+      <div class="hero-split">
+        <div class="hero-image fade-in">
+          <img src="assets/images/hero1.png" alt="Agent Orcha Studio Dashboard">
         </div>
-        <div class="terminal fade-in">
-          <div class="terminal-header">
-            <span class="terminal-dot"></span>
-            <span class="terminal-dot"></span>
-            <span class="terminal-dot"></span>
+        <div class="hero-content">
+          <h1 class="hero-title fade-in">Orchestrate AI Agents with Declarative YAML</h1>
+          <p class="hero-subtitle fade-in">Build multi-agent systems in minutes. Define everything in version-controlled YAML. No spaghetti code. Use AI to build your workflows.</p>
+          <div class="hero-cta fade-in">
+            <a href="https://github.com/ddalcu/agent-orcha" class="btn btn-secondary btn-large" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> View on GitHub</a>
+            <a href="https://www.npmjs.com/package/agent-orcha" class="btn btn-secondary btn-large" target="_blank" rel="noopener"><i class="fa-brands fa-npm"></i> View on NPM</a>
           </div>
-          <div class="terminal-content">
-            <div class="terminal-line">
-              <span class="terminal-prompt">$</span>
-              <span class="terminal-command">npx agent-orcha init my-project</span>
+          <div class="terminal fade-in">
+            <div class="terminal-header">
+              <span class="terminal-dot"></span>
+              <span class="terminal-dot"></span>
+              <span class="terminal-dot"></span>
             </div>
-            <div class="terminal-line">
-              <span class="terminal-output">✓ Project initialized with example agents and workflows</span>
-            </div>
-            <div class="terminal-line">
-              <span class="terminal-prompt">$</span>
-              <span class="terminal-command">cd my-project</span>
-            </div>
-            <div class="terminal-line">
-              <span class="terminal-prompt">$</span>
-              <span class="terminal-command">npx agent-orcha start</span>
-            </div>
-            <div class="terminal-line">
-              <span class="terminal-output"><i class="fa-solid fa-rocket"></i> Server running on http://localhost:3000</span>
+            <div class="terminal-content">
+              <div class="terminal-line">
+                <span class="terminal-prompt">$</span>
+                <span class="terminal-command">npx agent-orcha init my-project</span>
+              </div>
+              <div class="terminal-line">
+                <span class="terminal-output">✓ Project initialized with example agents and workflows</span>
+              </div>
+              <div class="terminal-line">
+                <span class="terminal-prompt">$</span>
+                <span class="terminal-command">cd my-project</span>
+              </div>
+              <div class="terminal-line">
+                <span class="terminal-prompt">$</span>
+                <span class="terminal-command">npx agent-orcha start</span>
+              </div>
+              <div class="terminal-line">
+                <span class="terminal-output"><i class="fa-solid fa-rocket"></i> Server running on http://localhost:3000</span>
+              </div>
             </div>
           </div>
         </div>
@@ -89,11 +98,11 @@
     </div>
   </section>
 
-  <!-- Three-Step Value Proposition -->
+  <!-- Get Started -->
   <section class="section" id="get-started">
     <div class="container">
-      <h2 class="text-center mb-2xl fade-in">Get Started in Three Simple Steps</h2>
-      <div class="grid grid-3">
+      <h2 class="text-center mb-2xl fade-in">Get Started</h2>
+      <div class="steps-grid">
         <div class="card fade-in">
           <div class="card-icon">1</div>
           <h3 class="card-title">Initialize</h3>
@@ -106,8 +115,8 @@
         </div>
         <div class="card fade-in">
           <div class="card-icon">2</div>
-          <h3 class="card-title">Configure</h3>
-          <p class="card-description">Edit YAML files to define agents, workflows, and vector stores. Version-controlled and human-readable. No code required.</p>
+          <h3 class="card-title">Configure with AI</h3>
+          <p class="card-description">Use your favorite AI coding client (Claude Code, Cursor, VSCode) to edit and generate YAML configs. Point your AI assistant to <a href="https://github.com/ddalcu/agent-orcha/blob/main/templates/llm.md" target="_blank" rel="noopener"><code>llm.md</code></a> as the reference.</p>
           <div class="code-block">
             <div class="code-content">
               <pre><code>agents/
@@ -120,11 +129,33 @@ workflows/
         <div class="card fade-in">
           <div class="card-icon">3</div>
           <h3 class="card-title">Start</h3>
-          <p class="card-description">Launch the production-ready API server with streaming support, logging, and CORS. Access via REST API or web UI.</p>
+          <p class="card-description">Launch the API server with streaming support, logging, and CORS. Access via REST API or web UI.</p>
           <div class="code-block">
             <div class="code-content">
               <pre><code>npx agent-orcha start
 # Server ready at :3000</code></pre>
+            </div>
+          </div>
+        </div>
+        <div class="card fade-in">
+          <div class="card-icon">4</div>
+          <h3 class="card-title">Test in Studio</h3>
+          <p class="card-description">Test agents, workflows, and knowledge stores via the built-in web dashboard. Chat with agents, run workflows, and browse knowledge stores.</p>
+          <div class="code-block">
+            <div class="code-content">
+              <pre><code>http://localhost:3000</code></pre>
+            </div>
+          </div>
+        </div>
+        <div class="card fade-in">
+          <div class="card-icon">5</div>
+          <h3 class="card-title">Deploy with Docker</h3>
+          <p class="card-description">Deploy to any host using the <code>ddalcu/agent-orcha</code> Docker image. Mount your project directory and expose port 3000.</p>
+          <div class="code-block">
+            <div class="code-content">
+              <pre><code>docker run -p 3000:3000 \
+  -v ./my-project:/data \
+  ddalcu/agent-orcha start</code></pre>
             </div>
           </div>
         </div>
@@ -154,8 +185,8 @@ workflows/
         </div>
         <div class="card fade-in">
           <div class="card-icon"><i class="fa-solid fa-brain"></i></div>
-          <h3 class="card-title">RAG Native</h3>
-          <p class="card-description">Built-in vector store integration (Chroma, Memory) makes semantic search and knowledge retrieval a first-class citizen.</p>
+          <h3 class="card-title">Knowledge Stores</h3>
+          <p class="card-description">Built-in vector stores (Chroma, Pinecone, Qdrant) and GraphRAG knowledge graphs make semantic search and entity analysis first-class citizens.</p>
         </div>
         <div class="card fade-in">
           <div class="card-icon"><i class="fa-solid fa-heart"></i></div>
@@ -166,6 +197,39 @@ workflows/
           <div class="card-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
           <h3 class="card-title">AI-First Design</h3>
           <p class="card-description">Built so AI can build AI agents. YAML is perfect for LLMs to read and write. Use Claude, ChatGPT, or any AI to generate, modify, and maintain your agent configurations effortlessly.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Agent Orcha Studio Screenshots -->
+  <section class="section">
+    <div class="container">
+      <h2 class="text-center mb-2xl fade-in">Agent Orcha Studio</h2>
+      <div class="screenshot-grid">
+        <div class="screenshot-card fade-in">
+          <img src="assets/images/screenshots/chat.png" alt="Agent Chat" loading="lazy">
+          <p class="screenshot-caption">Agent Chat</p>
+        </div>
+        <div class="screenshot-card fade-in">
+          <img src="assets/images/screenshots/ide.png" alt="Built-in IDE" loading="lazy">
+          <p class="screenshot-caption">Built-in IDE</p>
+        </div>
+        <div class="screenshot-card fade-in">
+          <img src="assets/images/screenshots/knowledge.png" alt="Knowledge Stores" loading="lazy">
+          <p class="screenshot-caption">Knowledge Stores</p>
+        </div>
+        <div class="screenshot-card fade-in">
+          <img src="assets/images/screenshots/mcp.png" alt="MCP Servers" loading="lazy">
+          <p class="screenshot-caption">MCP Servers</p>
+        </div>
+        <div class="screenshot-card fade-in">
+          <img src="assets/images/screenshots/shell.png" alt="Shell / Terminal" loading="lazy">
+          <p class="screenshot-caption">Shell / Terminal</p>
+        </div>
+        <div class="screenshot-card fade-in">
+          <img src="assets/images/screenshots/workflow.png" alt="Workflows" loading="lazy">
+          <p class="screenshot-caption">Workflows</p>
         </div>
       </div>
     </div>
@@ -204,7 +268,7 @@ prompt:
 
 tools:
   - mcp:fetch
-  - vector:knowledge
+  - knowledge:docs
   - function:custom-tool
 
 output:
@@ -259,11 +323,11 @@ output:
       <div class="grid grid-4 fade-in">
         <div class="card">
           <h4 class="card-title">YAML Configs</h4>
-          <p class="card-description">Agents<br>Workflows<br>Vector Stores<br>Functions</p>
+          <p class="card-description">Agents<br>Workflows<br>Knowledge Stores<br>Functions</p>
         </div>
         <div class="card">
           <h4 class="card-title">Orchestrator</h4>
-          <p class="card-description">Agent Executor<br>Workflow Engine<br>Tool Registry<br>LLM Factory</p>
+          <p class="card-description">Agent Executor<br>Workflow Engine<br>LangGraph Runtime<br>LLM Factory</p>
         </div>
         <div class="card">
           <h4 class="card-title">LLM Providers</h4>
@@ -271,8 +335,41 @@ output:
         </div>
         <div class="card">
           <h4 class="card-title">Integrations</h4>
-          <p class="card-description">MCP Servers<br>Vector Stores<br>Custom Functions<br>REST API</p>
+          <p class="card-description">MCP Servers<br>Knowledge Stores<br>Custom Functions<br>Studio IDE</p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- OpenAPI Specification -->
+  <section class="section">
+    <div class="container container-narrow">
+      <h2 class="text-center mb-2xl fade-in">Full OpenAPI Specification</h2>
+      <p class="text-center fade-in">Agent Orcha ships with a complete OpenAPI 3.0 specification. Import it into Swagger UI, Postman, or any API client for interactive exploration.</p>
+      <div class="code-block fade-in">
+        <div class="code-header">
+          <span class="code-language">JSON</span>
+          <button class="code-copy-btn" data-copy-target="openapi-info">Copy</button>
+        </div>
+        <div class="code-content">
+          <pre id="openapi-info"><code>{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Agent Orcha API",
+    "version": "0.0.3",
+    "description": "API for orchestrating agents, workflows, knowledge stores, functions, MCP servers, and LLMs."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
+    }
+  ]
+}</code></pre>
+        </div>
+      </div>
+      <div class="text-center mt-lg fade-in">
+        <a href="https://github.com/ddalcu/agent-orcha/blob/main/openapi.json" class="btn btn-secondary" target="_blank" rel="noopener"><i class="fa-solid fa-file-code"></i> View Full OpenAPI Spec on GitHub</a>
       </div>
     </div>
   </section>
@@ -298,6 +395,12 @@ output:
       </div>
     </div>
   </section>
+
+  <!-- Screenshot Lightbox Modal -->
+  <div class="lightbox-overlay" id="lightbox">
+    <button class="lightbox-close" aria-label="Close">&times;</button>
+    <img src="" alt="">
+  </div>
 
   <!-- Footer -->
   <footer class="footer">
@@ -332,7 +435,7 @@ output:
           <h4>About</h4>
           <ul class="footer-links">
             <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
-            <li>Version 0.0.1</li>
+            <li>Version 0.0.3</li>
             <li>MIT License</li>
           </ul>
         </div>
@@ -346,5 +449,49 @@ output:
   <!-- Scripts -->
   <script src="assets/js/main.js"></script>
   <script src="assets/js/code-copy.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>
+    document.querySelectorAll('.code-block').forEach(function(block) {
+      var langLabel = block.querySelector('.code-language');
+      var codeEl = block.querySelector('code');
+      if (langLabel && codeEl) {
+        var text = langLabel.textContent.trim().toLowerCase();
+        var lang;
+        if (text.includes('yaml')) lang = 'yaml';
+        else if (text.includes('json')) lang = 'json';
+        else if (text.includes('bash')) lang = 'bash';
+        else if (text.includes('javascript') || text.includes('js')) lang = 'javascript';
+        else if (text.includes('http')) lang = 'http';
+        if (lang) codeEl.classList.add('language-' + lang);
+      }
+    });
+    hljs.highlightAll();
+  </script>
+  <script>
+    (function() {
+      var overlay = document.getElementById('lightbox');
+      var overlayImg = overlay.querySelector('img');
+
+      document.querySelectorAll('.screenshot-card img').forEach(function(img) {
+        img.addEventListener('click', function() {
+          overlayImg.src = this.src;
+          overlayImg.alt = this.alt;
+          overlay.classList.add('active');
+        });
+      });
+
+      overlay.addEventListener('click', function(e) {
+        if (e.target !== overlayImg) {
+          overlay.classList.remove('active');
+        }
+      });
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          overlay.classList.remove('active');
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

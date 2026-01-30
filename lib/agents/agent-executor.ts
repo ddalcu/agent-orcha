@@ -281,6 +281,7 @@ export class AgentExecutor {
       );
 
       let accumulatedOutput = '';
+      let finalMessage: unknown = null;
 
       for await (const event of eventStream) {
         if (event.event === 'on_chat_model_stream') {
@@ -289,6 +290,9 @@ export class AgentExecutor {
             accumulatedOutput += chunk.content;
             yield { type: 'content', content: chunk.content };
           }
+        } else if (event.event === 'on_chat_model_end') {
+          // Capture the final message for structured output extraction
+          finalMessage = event.data.output;
         } else if (event.event === 'on_tool_start') {
           yield {
             type: 'tool_start',
@@ -306,8 +310,17 @@ export class AgentExecutor {
         }
       }
 
-      // Store AI response in session after streaming completes
-      if (sessionId && accumulatedOutput) {
+      // Handle structured output
+      if (definition.output?.format === 'structured' && finalMessage) {
+        const structuredOutput = this.extractStructuredOutput(finalMessage);
+        yield { type: 'result', output: structuredOutput };
+
+        // Store structured output as JSON string in session
+        if (sessionId) {
+          this.conversationStore.addMessage(sessionId, new AIMessage(JSON.stringify(structuredOutput)));
+        }
+      } else if (sessionId && accumulatedOutput) {
+        // Store AI response in session after streaming completes
         this.conversationStore.addMessage(sessionId, new AIMessage(accumulatedOutput));
       }
     } else {
@@ -329,16 +342,27 @@ export class AgentExecutor {
       const stream = await llm.stream(allMessages);
 
       let accumulatedOutput = '';
+      let finalChunk: unknown = null;
 
       for await (const chunk of stream) {
+        finalChunk = chunk;
         if (typeof chunk.content === 'string') {
           accumulatedOutput += chunk.content;
           yield { type: 'content', content: chunk.content };
         }
       }
 
-      // Store AI response in session after streaming completes
-      if (sessionId && accumulatedOutput) {
+      // Handle structured output
+      if (definition.output?.format === 'structured' && finalChunk) {
+        const structuredOutput = this.extractStructuredOutput(finalChunk);
+        yield { type: 'result', output: structuredOutput };
+
+        // Store structured output as JSON string in session
+        if (sessionId) {
+          this.conversationStore.addMessage(sessionId, new AIMessage(JSON.stringify(structuredOutput)));
+        }
+      } else if (sessionId && accumulatedOutput) {
+        // Store AI response in session after streaming completes
         this.conversationStore.addMessage(sessionId, new AIMessage(accumulatedOutput));
       }
     }

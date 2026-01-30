@@ -52,7 +52,7 @@ graph:
   # Tool discovery - discover all available tools
   tools:
     mode: all  # Options: all, include, exclude, none
-    sources: [mcp, vector, function, builtin]
+    sources: [mcp, knowledge, function, builtin]
     # Optionally filter specific tools:
     # include: ["mcp:fetch"]
     # exclude: ["function:dangerous"]
@@ -65,7 +65,7 @@ graph:
     # exclude: [admin]
 
   # Execution limits
-  maxIterations: 10  # Max tool-calling iterations (reduced from 50)
+  maxIterations: 10  # Max tool-calling iterations 
   timeout: 300000
 
 output:

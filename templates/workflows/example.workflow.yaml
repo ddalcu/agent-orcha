@@ -1,6 +1,7 @@
 name: example-workflow
 description: A workflow demonstrating multi-agent orchestration with MCP, function, and vector tools
 version: "1.0.0"
+type: steps
 
 input:
   schema:
@@ -10,49 +11,37 @@ input:
       description: The topic or question to process
 
 steps:
-  # Step 1: Get current East Coast time
-  - id: get-time
-    agent: time
-    input:
-      timezone: "America/New_York"
-    output:
-      key: current_time
 
-  # Step 2: Search the knowledge base for relevant information
+  # Step 1: Search the knowledge base for relevant information
   - id: search-knowledge
-    agent: knowledge
+    agent: call-center-analyst
     input:
       query: "{{input.topic}}"
     output:
       key: knowledge_result
 
-  # Step 3: Calculate the 10th Fibonacci number
+  # Step 2: Calculate the 10th Fibonacci number
   - id: perform-calculation
     agent: math
     input:
-      query: "Calculate the 10th Fibonacci number"
+      query: "Calculate 2*2"
     output:
       key: calculation_result
 
-  # Step 4: Summarize results with the example agent
+  # Step 3: Summarize results with the example agent
   - id: summarize
-    agent: example
+    agent: sentiment-structured
     input:
       query: |
         Summarize the following information:
-
-        Current East Coast USA Time:
-        {{steps.get-time.output}}
 
         Topic: {{input.topic}}
 
         Knowledge Base Results:
         {{steps.search-knowledge.output}}
 
-        Fibonacci Calculation Results:
+        Calculation Results:
         {{steps.perform-calculation.output}}
-
-        Provide a coherent summary combining these results, and make sure to include the current time.
     output:
       key: final_summary
 

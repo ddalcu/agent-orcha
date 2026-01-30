@@ -13,7 +13,7 @@ loader:
 
 splitter:
   type: recursive
-  chunkSize: 2000
+  chunkSize: 3400
   chunkOverlap: 200
 
 embedding: default  # References embedding config in llm.json

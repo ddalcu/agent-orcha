@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-Agent Orcha is a declarative TypeScript framework for building, managing, and scaling multi-agent AI systems. It combines the flexibility of TypeScript with the simplicity of YAML to orchestrate complex workflows, manage diverse tools via Model Context Protocol (MCP), and integrate semantic search seamlessly.
+Agent Orcha is a declarative TypeScript framework for building, managing, and scaling multi-agent AI systems. It combines the flexibility of TypeScript with the simplicity of YAML to orchestrate complex workflows, manage diverse tools via Model Context Protocol (MCP), and integrate semantic search and knowledge graphs seamlessly.
 
 **Repository:** https://github.com/ddalcu/agent-orcha
 **NPM Package:** https://www.npmjs.com/package/agent-orcha
-**Version:** 0.0.2
+**Version:** 0.0.3
 **License:** MIT
 **Requirements:** Node.js >= 20.0.0
 
@@ -15,11 +15,14 @@ Agent Orcha is a declarative TypeScript framework for building, managing, and sc
 1. **Declarative AI**: Define agents, workflows, and infrastructure in version-controlled YAML files
 2. **Model Agnostic**: Swap between OpenAI, Gemini, Anthropic, or local LLMs (Ollama, LM Studio) without code changes
 3. **Universal Tooling**: Leverage Model Context Protocol (MCP) to connect agents to any external service, API, or database
-4. **RAG Native**: Built-in vector store integration (Chroma, Memory) for semantic search and knowledge retrieval
-5. **Robust Workflow Engine**: Orchestrate complex multi-agent sequences with parallel execution, conditional logic, and state management
-6. **Production Ready**: High-performance Fastify REST API, Server-Sent Events (SSE) for streaming, comprehensive logging
-7. **Developer Experience**: Full TypeScript support, intuitive CLI, modular architecture
-8. **Extensible Functions**: Custom JavaScript functions to extend agent capabilities with zero boilerplate
+4. **Knowledge Stores**: Built-in vector stores (Chroma, Pinecone, Qdrant, Memory) and GraphRAG knowledge graphs for semantic search, entity analysis, and knowledge retrieval
+5. **LangGraph Workflows**: Autonomous prompt-driven workflows with ReAct/single-turn modes, tool/agent discovery, and human-in-the-loop
+6. **Robust Workflow Engine**: Orchestrate complex multi-agent sequences with parallel execution, conditional logic, and state management
+7. **Agent Orcha Studio**: Built-in web dashboard with agent testing, knowledge browsing, workflow execution, MCP management, and in-browser IDE
+8. **Conversation Memory**: Session-based memory with FIFO management and automatic TTL cleanup
+9. **Structured Output**: JSON schema validation for agent responses
+10. **Extensible Functions**: Custom JavaScript functions to extend agent capabilities with zero boilerplate
+11. **AI-First Design**: YAML configurations are ideal for LLMs to read, write, and maintain
 
 ## Quick Start
 
@@ -34,7 +37,7 @@ This creates a project with:
 - agents/ - Agent configuration files
 - workflows/ - Workflow definition files
 - functions/ - Custom JavaScript functions
-- vectors/ - Vector store configurations and data
+- knowledge/ - Knowledge store configurations and data
 - llm.json - LLM and embedding provider settings
 - mcp.json - MCP server configuration
 
@@ -102,7 +105,7 @@ output:
 ```bash
 npx agent-orcha start
 # Server runs on http://localhost:3000
-# Web UI available at http://localhost:3000
+# Agent Orcha Studio available at http://localhost:3000
 ```
 
 ### 5. Invoke Agent
@@ -147,12 +150,20 @@ prompt:                         # Prompt configuration (required)
 
 tools:                          # Available tools (optional)
   - mcp:<server-name>           # MCP server tools
-  - vector:<store-name>         # Vector store search
+  - knowledge:<store-name>      # Knowledge store search
   - function:<function-name>    # Custom functions
-  - builtin:<tool-name>         # Built-in tools
+  - builtin:<tool-name>         # Built-in tools (e.g., ask_user)
 
 output:                         # Output formatting (optional)
   format: text | json | structured
+  schema:                       # Required when format is "structured"
+    type: object
+    properties:
+      <field>:
+        type: string | number | boolean | array | object
+        description: string
+        enum: [values]
+    required: [field1, field2]
 
 metadata:                       # Custom metadata (optional)
   category: string
@@ -162,7 +173,7 @@ metadata:                       # Custom metadata (optional)
 **Example Agent with Tools:**
 ```yaml
 name: researcher
-description: Researches topics using web fetch and vector search
+description: Researches topics using web fetch and knowledge search
 version: "1.0.0"
 
 llm:
@@ -179,22 +190,89 @@ prompt:
 
 tools:
   - mcp:fetch              # Web fetch MCP server
-  - vector:knowledge       # Vector store search
+  - knowledge:docs         # Knowledge store search
   - function:custom-tool   # Custom function
 
 output:
   format: text
 ```
 
+**Agent with Structured Output:**
+```yaml
+name: sentiment-analyzer
+description: Analyzes sentiment with structured output
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0
+
+prompt:
+  system: |
+    Analyze the sentiment of the provided text.
+  inputVariables:
+    - text
+
+output:
+  format: structured
+  schema:
+    type: object
+    properties:
+      sentiment:
+        type: string
+        enum: [positive, negative, neutral]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+      keywords:
+        type: array
+        items:
+          type: string
+    required:
+      - sentiment
+      - confidence
+```
+
+### Conversation Memory
+
+Agents automatically support conversation memory when a `sessionId` is provided in API calls. No agent-level configuration is required.
+
+```bash
+# First message in a session
+curl -X POST http://localhost:3000/api/agents/chatbot/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"message": "My name is Alice"}, "sessionId": "user-123"}'
+
+# Follow-up message (agent remembers context)
+curl -X POST http://localhost:3000/api/agents/chatbot/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"message": "What is my name?"}, "sessionId": "user-123"}'
+```
+
+Memory settings (global, configured in orchestrator):
+- `maxMessagesPerSession`: 50 (default) - FIFO eviction when exceeded
+- `sessionTTL`: optional, in milliseconds - automatic cleanup of expired sessions
+
+Session management endpoints:
+- `GET /api/agents/sessions/stats` - Session statistics
+- `GET /api/agents/sessions/:sessionId` - Get session details
+- `DELETE /api/agents/sessions/:sessionId` - Clear session messages
+
 ### Workflows
 
-Workflows orchestrate multiple agents in defined sequences with support for parallel execution, conditional logic, and state management.
+Workflows orchestrate multiple agents. Two types are supported: step-based (`type: steps`) and LangGraph (`type: langgraph`).
+
+#### Step-Based Workflows
+
+Step-based workflows define explicit sequences with support for parallel execution, conditional logic, and state management.
 
 **Workflow Schema:**
 ```yaml
 name: string                    # Unique identifier (required)
 description: string             # Human-readable description (required)
 version: string                 # Semantic version (default: "1.0.0")
+type: steps                     # Optional, "steps" is default
 
 input:                          # Input schema (required)
   schema:
@@ -212,8 +290,8 @@ steps:                          # Workflow steps (required)
       <key>: "{{steps.stepId.output}}"   # From previous step
     condition: string           # Optional conditional execution
     retry:                      # Optional retry configuration
-      maxAttempts: number
-      delay: number
+      maxAttempts: number       # Default: 3
+      delay: number             # Milliseconds (default: 1000)
     output:
       key: string
 
@@ -244,7 +322,7 @@ metadata:                       # Custom metadata (optional)
 - `{{steps.stepId.output.nested.path}}` - Access nested output
 - `{{steps.stepId.metadata.duration}}` - Access step metadata
 
-**Example Workflow:**
+**Example Step-Based Workflow:**
 ```yaml
 name: research-paper
 description: Research a topic and write a comprehensive paper
@@ -297,20 +375,157 @@ output:
   researchFindings: "{{steps.research.output}}"
 ```
 
-### Vector Stores
+#### LangGraph Workflows
 
-Vector stores enable semantic search and RAG capabilities. They load documents, create embeddings, and provide similarity search.
+Autonomous, prompt-driven workflows using LangGraph. The agent decides which tools and agents to call based on the prompt.
+
+**LangGraph Schema:**
+```yaml
+name: string                    # Unique identifier (required)
+description: string             # Human-readable description (required)
+version: string                 # Semantic version (default: "1.0.0")
+type: langgraph                 # Required for LangGraph workflows
+
+input:                          # Input schema (required)
+  schema:
+    <field_name>:
+      type: string | number | boolean | array | object
+      required: boolean
+      description: string
+
+prompt:                         # Prompt configuration (required)
+  system: string                # System message with instructions
+  goal: string                  # Goal template (supports {{input.*}} interpolation)
+
+graph:                          # LangGraph configuration (required)
+  model: string                 # LLM config name from llm.json
+
+  executionMode: react | single-turn  # Default: react
+  # react: Full ReAct loop, multiple rounds of tool calls
+  # single-turn: Calls tools once and returns
+
+  tools:                        # Tool discovery config
+    mode: all | include | exclude | none  # Default: all
+    sources:                    # Tool source types (default: all)
+      - mcp
+      - knowledge
+      - function
+      - builtin
+    include: [string]           # Tool names to include (for mode: include)
+    exclude: [string]           # Tool names to exclude (for mode: exclude)
+
+  agents:                       # Agent discovery config
+    mode: all | include | exclude | none  # Default: all
+    include: [string]           # Agent names to include
+    exclude: [string]           # Agent names to exclude
+
+  maxIterations: number         # Max tool-calling iterations (default: 10)
+  timeout: number               # Timeout in ms (default: 300000)
+
+output:                         # Output extraction (required)
+  <key>: "{{state.messages[-1].content}}"
+
+config:                         # Workflow configuration (optional)
+  onError: stop | continue | retry
+
+metadata:                       # Custom metadata (optional)
+  category: string
+  tags: [string]
+```
+
+**Execution Modes:**
+
+| Mode | Behavior | Best For |
+|------|----------|----------|
+| `single-turn` | Calls tools once, then returns | Research, data gathering, straightforward tasks |
+| `react` | Multiple rounds of tool calls with reasoning | Complex multi-step problems, iterative analysis |
+
+**Human-in-the-Loop:** LangGraph workflows support the `builtin:ask_user` tool. When called, the workflow pauses (via `NodeInterrupt`) and waits for user input. Include `builtin` in tool sources to enable it.
+
+**Example LangGraph Workflow:**
+```yaml
+name: langgraph-research
+description: Autonomous research using tool discovery
+version: "1.0.0"
+type: langgraph
+
+input:
+  schema:
+    topic:
+      type: string
+      required: true
+
+prompt:
+  system: |
+    You are a research assistant with access to tools and agents.
+    Identify all tools you need, call them in parallel, then synthesize results.
+  goal: "Research and analyze: {{input.topic}}"
+
+graph:
+  model: default
+  executionMode: single-turn
+  tools:
+    mode: all
+    sources: [mcp, knowledge, function, builtin]
+  agents:
+    mode: all
+  maxIterations: 10
+  timeout: 300000
+
+output:
+  analysis: "{{state.messages[-1].content}}"
+```
+
+### Knowledge Stores
+
+Knowledge stores enable semantic search and RAG capabilities. They are configured in `*.knowledge.yaml` files in the `knowledge/` directory. Two kinds: `vector` (default) and `graph-rag`.
+
+#### Vector Knowledge Stores
+
+Traditional vector stores with embeddings for semantic search.
 
 **Vector Store Schema:**
 ```yaml
 name: string                    # Unique identifier (required)
 description: string             # Human-readable description (required)
+kind: vector                    # Optional (vector is default)
 
 source:                         # Data source (required)
-  type: directory | file | url
+  # Directory source
+  type: directory
   path: string                  # Path relative to project root
   pattern: string               # Glob pattern for directories
   recursive: boolean            # Recursive search (default: true)
+
+  # File source
+  type: file
+  path: string                  # Single file path
+
+  # Database source
+  type: database
+  connectionString: string      # postgresql:// or mysql://
+  query: string                 # SQL query
+  contentColumn: string         # Column with content (default: "content")
+  metadataColumns: [string]     # Columns for metadata
+  batchSize: number             # Rows per batch (default: 100)
+
+  # Web source
+  type: web
+  url: string                   # URL to scrape
+  selector: string              # CSS selector (optional)
+  headers:                      # Custom headers (optional)
+    Authorization: "Bearer TOKEN"
+
+  # S3 source
+  type: s3
+  bucket: string                # S3 bucket name
+  prefix: string                # Folder filter (optional)
+  endpoint: string              # Custom S3 endpoint (for MinIO/Wasabi)
+  region: string                # Default: us-east-1
+  accessKeyId: string           # Optional (uses env vars if omitted)
+  secretAccessKey: string       # Optional (uses env vars if omitted)
+  pattern: string               # File glob pattern (optional)
+  forcePathStyle: boolean       # Default: false (set true for MinIO)
 
 loader:                         # Document loader (required)
   type: text | pdf | csv | json | markdown
@@ -323,29 +538,31 @@ splitter:                       # Text chunking (required)
 embedding: string               # Reference to embedding config (default: "default")
 
 store:                          # Vector store backend (required)
-  type: memory | chroma
+  type: memory | chroma | pinecone | qdrant
   options:
     path: string                # Storage path (for chroma)
     collectionName: string      # Collection name
-    url: string                 # Server URL (for chroma)
+    url: string                 # Server URL (for chroma, qdrant)
 
 search:                         # Search configuration (optional)
   defaultK: number              # Results per search (default: 4)
   scoreThreshold: number        # Minimum similarity (0-1)
 ```
 
-**Vector Store Types:**
+**Store Types:**
 1. **Memory** - In-memory storage, fast but not persistent, recreates embeddings on startup
 2. **Chroma** - Persistent local storage, embeddings cached and reused across restarts
+3. **Pinecone** - Managed cloud vector database
+4. **Qdrant** - High-performance open-source vector database
 
 **Example Vector Store:**
 ```yaml
-name: knowledge
+name: docs
 description: Knowledge base for semantic search
 
 source:
   type: directory
-  path: vectors/sample-data
+  path: knowledge/sample-data
   pattern: "*.txt"
 
 loader:
@@ -364,6 +581,133 @@ store:
 search:
   defaultK: 4
   scoreThreshold: 0.2
+```
+
+#### GraphRAG Knowledge Stores
+
+Entity extraction and knowledge graph with community detection for advanced analysis.
+
+**How GraphRAG Works:**
+1. **Extraction**: Documents are split and an LLM extracts entities and relationships
+2. **Graph Building**: Entities become nodes, relationships become edges
+3. **Community Detection**: Louvain algorithm groups related entities into communities
+4. **Community Summaries**: An LLM generates summaries for each community
+5. **Search**: Local search finds specific entities; global search analyzes community summaries
+
+**GraphRAG Schema:**
+```yaml
+name: string                    # Unique identifier (required)
+kind: graph-rag                 # Required for GraphRAG
+description: string             # Human-readable description (required)
+
+source:                         # Same source types as vector (required)
+  type: directory | file | database | web | s3
+
+loader:                         # Document loader (required)
+  type: text | pdf | csv | json | markdown
+
+splitter:                       # Text chunking (required)
+  type: character | recursive | token | markdown
+  chunkSize: number
+  chunkOverlap: number
+
+embedding: string               # Embedding config name from llm.json
+
+graph:                          # Graph configuration (required)
+  extraction:                   # Entity extraction config
+    llm: string                 # LLM name from llm.json (default: "default")
+    entityTypes:                # Optional - omit for automatic extraction
+      - name: string
+        description: string
+    relationshipTypes:          # Optional - omit for automatic extraction
+      - name: string
+        description: string
+
+  communities:                  # Community detection config
+    algorithm: louvain          # Only supported algorithm
+    resolution: number          # Louvain resolution (default: 1.0)
+    minSize: number             # Min community size (default: 2)
+    summaryLlm: string          # LLM for community summaries (default: "default")
+
+  store:                        # Graph store backend
+    type: memory | neo4j        # Default: memory
+    options: {}                 # Store-specific options
+
+  cache:                        # Graph cache config
+    enabled: boolean            # Default: true
+    directory: string           # Default: ".graph-cache"
+
+search:                         # Search configuration (optional)
+  defaultK: number              # Results per search (default: 10)
+  localSearch:                  # Entity neighborhood search
+    maxDepth: number            # Graph traversal depth (default: 2)
+  globalSearch:                 # Community-level search
+    topCommunities: number      # Communities to consider (default: 5)
+    llm: string                 # LLM for synthesis (default: "default")
+```
+
+**Example GraphRAG Store:**
+```yaml
+name: call-center-analysis
+kind: graph-rag
+description: GraphRAG for analyzing call center transcripts
+
+source:
+  type: directory
+  path: knowledge/transcripts
+  pattern: "*.txt"
+  recursive: true
+
+loader:
+  type: text
+
+splitter:
+  type: recursive
+  chunkSize: 2000
+  chunkOverlap: 200
+
+embedding: default
+
+graph:
+  extraction:
+    llm: default
+    entityTypes:
+      - name: Agent
+        description: "Call center representative"
+      - name: Customer
+        description: "Person calling"
+      - name: Vehicle
+        description: "Car discussed"
+      - name: Outcome
+        description: "Result of the call"
+    relationshipTypes:
+      - name: HANDLED_BY
+        description: "Call was handled by an agent"
+      - name: INTERESTED_IN
+        description: "Customer interest in vehicle"
+      - name: RESULTED_IN
+        description: "Call resulted in outcome"
+
+  communities:
+    algorithm: louvain
+    resolution: 1.0
+    minSize: 2
+    summaryLlm: default
+
+  store:
+    type: memory
+
+  cache:
+    enabled: true
+    directory: .graph-cache
+
+search:
+  defaultK: 10
+  localSearch:
+    maxDepth: 2
+  globalSearch:
+    topCommunities: 5
+    llm: default
 ```
 
 ### Functions
@@ -400,36 +744,29 @@ export const metadata = {
 };
 ```
 
-**Example Function (Fibonacci Calculator):**
+**Example Function (Calculator):**
 ```javascript
 export default {
-  name: 'fibonacci',
-  description: 'Returns the nth Fibonacci number (0-based indexing)',
+  name: 'calculator',
+  description: 'Performs basic arithmetic operations',
 
   parameters: {
-    n: {
-      type: 'number',
-      description: 'The index (0-based, max 100)',
+    a: { type: 'number', description: 'First number' },
+    b: { type: 'number', description: 'Second number' },
+    operation: {
+      type: 'enum',
+      values: ['add', 'subtract', 'multiply', 'divide'],
+      description: 'Operation to perform',
     },
   },
 
-  execute: async ({ n }) => {
-    if (n < 0 || !Number.isInteger(n)) {
-      throw new Error('Index must be a non-negative integer');
+  execute: async ({ a, b, operation }) => {
+    switch (operation) {
+      case 'add': return `${a} + ${b} = ${a + b}`;
+      case 'subtract': return `${a} - ${b} = ${a - b}`;
+      case 'multiply': return `${a} * ${b} = ${a * b}`;
+      case 'divide': return `${a} / ${b} = ${a / b}`;
     }
-    if (n > 100) {
-      throw new Error('Index too large (max 100)');
-    }
-
-    if (n === 0) return 'Fibonacci(0) = 0';
-    if (n === 1) return 'Fibonacci(1) = 1';
-
-    let prev = 0, curr = 1;
-    for (let i = 2; i <= n; i++) {
-      [prev, curr] = [curr, prev + curr];
-    }
-
-    return `Fibonacci(${n}) = ${curr}`;
   },
 };
 ```
@@ -437,7 +774,7 @@ export default {
 **Using Functions in Agents:**
 ```yaml
 name: math-assistant
-description: Assistant that can calculate Fibonacci numbers
+description: Assistant that can perform calculations
 
 llm:
   name: default
@@ -446,12 +783,12 @@ llm:
 prompt:
   system: |
     You are a math assistant.
-    Use the fibonacci tool to calculate Fibonacci numbers.
+    Use the calculator tool to perform calculations.
   inputVariables:
     - query
 
 tools:
-  - function:fibonacci    # References fibonacci.function.js
+  - function:calculator    # References calculator.function.js
 
 output:
   format: text
@@ -467,10 +804,12 @@ Model Context Protocol (MCP) servers provide external tools to agents. Configure
   "version": "1.0.0",
   "servers": {
     "<server-name>": {
-      "transport": "streamable-http | stdio | sse",
+      "transport": "streamable-http | stdio | sse | sse-only",
       "url": "https://server-url/mcp",
+      "headers": { "key": "value" },
       "command": "node",
       "args": ["./mcp-server.js"],
+      "env": { "KEY": "VALUE" },
       "timeout": 30000,
       "enabled": true,
       "description": "Server description"
@@ -479,10 +818,20 @@ Model Context Protocol (MCP) servers provide external tools to agents. Configure
   "globalOptions": {
     "throwOnLoadError": false,
     "prefixToolNameWithServerName": true,
+    "additionalToolNamePrefix": "",
     "defaultToolTimeout": 30000
   }
 }
 ```
+
+**Transport Types:**
+
+| Transport | Use Case | Required Fields |
+|-----------|----------|----------------|
+| `stdio` | Local CLI tools | `command`, `args` |
+| `streamable-http` | Remote HTTP servers | `url` |
+| `sse` | Server-Sent Events | `url` |
+| `sse-only` | SSE without HTTP fallback | `url` |
 
 **Example MCP Configuration:**
 ```json
@@ -495,6 +844,12 @@ Model Context Protocol (MCP) servers provide external tools to agents. Configure
       "description": "Web fetch capabilities",
       "timeout": 30000,
       "enabled": true
+    },
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "description": "File system access"
     }
   }
 }
@@ -505,6 +860,20 @@ Model Context Protocol (MCP) servers provide external tools to agents. Configure
 tools:
   - mcp:fetch    # All tools from "fetch" server
 ```
+
+### Agent Orcha Studio
+
+Agent Orcha Studio is a built-in web dashboard available at `http://localhost:3000` when the server is running. It provides a visual interface for managing and testing your entire Agent Orcha setup.
+
+**Studio Tabs:**
+
+| Tab | Description |
+|-----|-------------|
+| **Agents** | Browse agents, invoke with custom input, stream responses, manage conversation sessions |
+| **Knowledge** | Browse and search knowledge stores (vector + GraphRAG), view entities/communities for GraphRAG stores |
+| **MCP** | Browse MCP servers, view available tools, call tools directly |
+| **Workflows** | Browse and execute workflows (step-based and LangGraph), stream execution progress |
+| **IDE** | In-browser file editor with file tree, syntax highlighting (YAML, JSON, JS), save with hot-reload |
 
 ## REST API Reference
 
@@ -532,7 +901,7 @@ Response:
     "name": "agent1",
     "description": "Agent description",
     "version": "1.0.0",
-    "tools": ["mcp:fetch", "vector:knowledge"]
+    "tools": ["mcp:fetch", "knowledge:docs"]
   }
 ]
 ```
@@ -563,7 +932,8 @@ Request:
   "input": {
     "topic": "your topic",
     "context": "additional context"
-  }
+  },
+  "sessionId": "optional-session-id"
 }
 
 Response:
@@ -571,8 +941,10 @@ Response:
   "output": "Agent response text",
   "metadata": {
     "tokensUsed": 150,
-    "toolCalls": ["fetch", "vector_search"],
-    "duration": 1234
+    "toolCalls": ["fetch", "knowledge_search"],
+    "duration": 1234,
+    "sessionId": "optional-session-id",
+    "messagesInSession": 2
   }
 }
 ```
@@ -586,10 +958,46 @@ Request:
 {
   "input": {
     "query": "your query"
-  }
+  },
+  "sessionId": "optional-session-id"
 }
 
 Response: Server-Sent Events stream with incremental output
+```
+
+**Session Statistics**
+```
+GET /api/agents/sessions/stats
+
+Response:
+{
+  "activeSessions": 5,
+  "totalMessages": 42
+}
+```
+
+**Get Session Details**
+```
+GET /api/agents/sessions/:sessionId
+
+Response:
+{
+  "sessionId": "user-123",
+  "messages": [...],
+  "messageCount": 10,
+  "createdAt": 1706000000000,
+  "lastAccessedAt": 1706001000000
+}
+```
+
+**Delete Session**
+```
+DELETE /api/agents/sessions/:sessionId
+
+Response:
+{
+  "success": true
+}
 ```
 
 ### Workflows Endpoints
@@ -604,7 +1012,7 @@ Response:
     "name": "workflow1",
     "description": "Workflow description",
     "version": "1.0.0",
-    "steps": [...]
+    "type": "steps"
   }
 ]
 ```
@@ -618,6 +1026,7 @@ Response:
   "name": "workflow1",
   "description": "Workflow description",
   "version": "1.0.0",
+  "type": "steps",
   "input": { "schema": {...} },
   "steps": [...],
   "config": { "timeout": 300000 },
@@ -656,31 +1065,48 @@ Response:
 }
 ```
 
-### Vector Stores Endpoints
-
-**List All Vector Stores**
+**Stream Workflow (SSE)**
 ```
-GET /api/vectors
+POST /api/workflows/:name/stream
+Content-Type: application/json
+
+Request:
+{
+  "input": {
+    "topic": "research topic"
+  }
+}
+
+Response: Server-Sent Events stream with step progress updates
+```
+
+### Knowledge Endpoints
+
+**List All Knowledge Stores**
+```
+GET /api/knowledge
 
 Response:
 [
   {
-    "name": "knowledge",
+    "name": "docs",
     "description": "Knowledge base",
+    "kind": "vector",
     "documentCount": 42,
     "storeType": "memory"
   }
 ]
 ```
 
-**Get Vector Store Config**
+**Get Knowledge Store Config**
 ```
-GET /api/vectors/:name
+GET /api/knowledge/:name
 
 Response:
 {
-  "name": "knowledge",
+  "name": "docs",
   "description": "Knowledge base",
+  "kind": "vector",
   "source": {...},
   "loader": {...},
   "splitter": {...},
@@ -689,9 +1115,9 @@ Response:
 }
 ```
 
-**Search Vector Store**
+**Search Knowledge Store**
 ```
-POST /api/vectors/:name/search
+POST /api/knowledge/:name/search
 Content-Type: application/json
 
 Request:
@@ -712,9 +1138,9 @@ Response:
 }
 ```
 
-**Refresh Vector Store (Reload Documents)**
+**Refresh Knowledge Store (Reload Documents)**
 ```
-POST /api/vectors/:name/refresh
+POST /api/knowledge/:name/refresh
 
 Response:
 {
@@ -724,9 +1150,9 @@ Response:
 }
 ```
 
-**Add Documents to Vector Store**
+**Add Documents to Knowledge Store**
 ```
-POST /api/vectors/:name/add
+POST /api/knowledge/:name/add
 Content-Type: application/json
 
 Request:
@@ -743,6 +1169,247 @@ Response:
 {
   "success": true,
   "documentsAdded": 1
+}
+```
+
+**Get GraphRAG Entities**
+```
+GET /api/knowledge/:name/entities
+
+Response:
+[
+  {
+    "id": "entity-1",
+    "type": "Person",
+    "name": "Alice",
+    "description": "...",
+    "properties": {...}
+  }
+]
+```
+
+**Get GraphRAG Communities**
+```
+GET /api/knowledge/:name/communities
+
+Response:
+[
+  {
+    "id": "community-1",
+    "nodeIds": ["entity-1", "entity-2"],
+    "summary": "...",
+    "title": "..."
+  }
+]
+```
+
+**Get GraphRAG Edges**
+```
+GET /api/knowledge/:name/edges
+
+Response:
+[
+  {
+    "id": "edge-1",
+    "type": "WORKS_WITH",
+    "sourceId": "entity-1",
+    "targetId": "entity-2",
+    "description": "...",
+    "weight": 1.0
+  }
+]
+```
+
+### LLM Endpoints
+
+**List All LLM Configurations**
+```
+GET /api/llm
+
+Response:
+[
+  {
+    "name": "default",
+    "model": "gpt-4o",
+    "provider": "openai"
+  }
+]
+```
+
+**Get LLM Config**
+```
+GET /api/llm/:name
+```
+
+**Chat with LLM**
+```
+POST /api/llm/:name/chat
+Content-Type: application/json
+
+Request:
+{
+  "message": "Hello, how are you?"
+}
+
+Response:
+{
+  "output": "I'm doing well, thank you!"
+}
+```
+
+**Stream LLM Chat (SSE)**
+```
+POST /api/llm/:name/stream
+Content-Type: application/json
+
+Request:
+{
+  "message": "Hello"
+}
+
+Response: Server-Sent Events stream
+```
+
+### Functions Endpoints
+
+**List All Functions**
+```
+GET /api/functions
+
+Response:
+[
+  {
+    "name": "calculator",
+    "description": "Performs arithmetic operations",
+    "parameters": {...}
+  }
+]
+```
+
+**Get Function Details**
+```
+GET /api/functions/:name
+```
+
+**Call Function**
+```
+POST /api/functions/:name/call
+Content-Type: application/json
+
+Request:
+{
+  "arguments": {
+    "a": 10,
+    "b": 5,
+    "operation": "add"
+  }
+}
+
+Response:
+{
+  "result": "10 + 5 = 15"
+}
+```
+
+### MCP Endpoints
+
+**List MCP Servers**
+```
+GET /api/mcp
+
+Response:
+[
+  {
+    "name": "fetch",
+    "description": "Web fetch capabilities",
+    "transport": "streamable-http",
+    "enabled": true
+  }
+]
+```
+
+**Get MCP Server Details**
+```
+GET /api/mcp/:name
+```
+
+**Get MCP Server Tools**
+```
+GET /api/mcp/:name/tools
+
+Response:
+[
+  {
+    "name": "fetch",
+    "description": "Fetch a URL",
+    "inputSchema": {...}
+  }
+]
+```
+
+**Call MCP Tool**
+```
+POST /api/mcp/:name/call
+Content-Type: application/json
+
+Request:
+{
+  "tool": "fetch",
+  "arguments": {
+    "url": "https://example.com"
+  }
+}
+
+Response:
+{
+  "result": "..."
+}
+```
+
+### Files Endpoints (IDE)
+
+**Get File Tree**
+```
+GET /api/files/tree
+
+Response:
+{
+  "tree": [
+    {
+      "name": "agents",
+      "type": "directory",
+      "children": [
+        { "name": "example.agent.yaml", "type": "file" }
+      ]
+    }
+  ]
+}
+```
+
+**Read File**
+```
+GET /api/files/read?path=agents/example.agent.yaml
+
+Response:
+{
+  "content": "name: example\n..."
+}
+```
+
+**Write File**
+```
+PUT /api/files/write
+Content-Type: application/json
+
+Request:
+{
+  "path": "agents/example.agent.yaml",
+  "content": "name: example\n..."
+}
+
+Response:
+{
+  "success": true
 }
 ```
 
@@ -763,9 +1430,11 @@ npx agent-orcha init [directory]
 npx agent-orcha start
 
 # Starts Fastify server on port 3000 (configurable via PORT env var)
+# Agent Orcha Studio available at the same URL
 # Environment variables:
 #   PORT - Server port (default: 3000)
 #   HOST - Server host (default: 0.0.0.0)
+#   ORCHA_BASE_DIR - Base directory for config files (default: current directory)
 ```
 
 **Help**
@@ -796,6 +1465,13 @@ const result = await orchestrator.agents.invoke('researcher', {
 
 console.log(result.output);
 
+// Invoke an agent with session memory
+const chatResult = await orchestrator.agents.invoke(
+  'chatbot',
+  { message: 'Hello' },
+  { sessionId: 'user-123' }
+);
+
 // Run a workflow
 const workflowResult = await orchestrator.workflows.run('research-paper', {
   topic: 'artificial intelligence'
@@ -803,8 +1479,8 @@ const workflowResult = await orchestrator.workflows.run('research-paper', {
 
 console.log(workflowResult.output);
 
-// Search vector store
-const searchResults = await orchestrator.vectors.search('knowledge', {
+// Search knowledge store
+const searchResults = await orchestrator.knowledge.search('docs', {
   query: 'semantic search',
   k: 4
 });
@@ -821,13 +1497,15 @@ await orchestrator.close();
 my-project/
 ├── agents/                     # Agent YAML configurations
 │   ├── researcher.agent.yaml
-│   └── writer.agent.yaml
+│   └── chatbot.agent.yaml
 ├── workflows/                  # Workflow YAML definitions
-│   └── research-paper.workflow.yaml
+│   ├── research.workflow.yaml
+│   └── langgraph.workflow.yaml
 ├── functions/                  # Custom JavaScript functions
-│   └── fibonacci.function.js
-├── vectors/                    # Vector store configs and data
-│   ├── knowledge.vector.yaml
+│   └── calculator.function.js
+├── knowledge/                  # Knowledge store configs and data
+│   ├── docs.knowledge.yaml
+│   ├── graph.knowledge.yaml
 │   └── sample-data/
 │       └── documents.txt
 ├── llm.json                    # LLM and embedding configurations
@@ -842,38 +1520,48 @@ my-project/
 # Server Configuration
 PORT=3000                       # Server port (default: 3000)
 HOST=0.0.0.0                   # Server host (default: 0.0.0.0)
+ORCHA_BASE_DIR=./my-project    # Base directory for config files (default: current directory)
+CORS_ORIGIN=true               # CORS origin policy (default: true)
 
-# LLM API Keys (can be set here or in llm.json)
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=...
+# Note: LLM API keys are configured in llm.json, not via environment variables
+
+# AWS/S3 (for S3 knowledge sources when not in YAML)
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+S3_ENDPOINT=http://localhost:9000  # Custom S3 endpoint (MinIO, Wasabi)
+
+# Database (for database knowledge sources when not in YAML)
+DATABASE_URL=postgresql://user:pass@localhost:5432/db
+MYSQL_URL=mysql://user:pass@localhost:3306/db
 ```
 
 ## Tool Types Reference
 
-1. **Function Tools** - Custom JavaScript/TypeScript functions in functions/
-   ```yaml
-   tools:
-     - function:fibonacci
-     - function:custom-tool
-   ```
-
-2. **MCP Tools** - External tools from MCP servers
+1. **MCP Tools** - External tools from MCP servers
    ```yaml
    tools:
      - mcp:fetch              # All tools from "fetch" server
+     - mcp:filesystem         # All tools from "filesystem" server
    ```
 
-3. **Vector Tools** - Semantic search on vector stores
+2. **Knowledge Tools** - Semantic search on knowledge stores
    ```yaml
    tools:
-     - vector:knowledge       # Search "knowledge" store
+     - knowledge:docs         # Search "docs" knowledge store
+   ```
+
+3. **Function Tools** - Custom JavaScript/TypeScript functions in functions/
+   ```yaml
+   tools:
+     - function:calculator
+     - function:fibonacci
    ```
 
 4. **Built-in Tools** - Framework-provided tools
    ```yaml
    tools:
-     - builtin:tool_name
+     - builtin:ask_user       # Human-in-the-loop (LangGraph only)
    ```
 
 ## Production Deployment
@@ -890,24 +1578,31 @@ EXPOSE 3000
 CMD ["npx", "agent-orcha", "start"]
 ```
 
-### Chroma Vector Store Setup
+### Knowledge Store Setup
 
+**Chroma (Persistent Vector Store):**
 ```bash
-# Option 1: Run Chroma with Docker
+# Run Chroma with Docker
 docker run -p 8000:8000 chromadb/chroma
 
-# Option 2: Install and run locally
+# Or install and run locally
 pip install chromadb
 chroma run --path .chroma --port 8000
+```
+
+**Neo4j (Persistent Graph Store for GraphRAG):**
+```bash
+# Run Neo4j with Docker
+docker run -p 7474:7474 -p 7687:7687 neo4j
 ```
 
 ### Configuration Best Practices
 
 1. **LLM Configuration**: Store API keys in environment variables, not in llm.json
-2. **Vector Stores**: Use Chroma for production (persistent), Memory for development
+2. **Knowledge Stores**: Use Chroma/Pinecone/Qdrant for production (persistent), Memory for development
 3. **Timeouts**: Configure appropriate timeouts for workflows based on expected duration
 4. **Error Handling**: Set onError strategy in workflows (stop, continue, retry)
-5. **Logging**: Use environment variables to control log levels
+5. **GraphRAG Caching**: Enable graph caching to avoid re-extracting entities on restart
 
 ## Examples
 
@@ -934,12 +1629,12 @@ output:
   format: text
 ```
 
-### Example 2: Research Agent with Tools
+### Example 2: Research Agent with Knowledge Search
 
 ```yaml
 # agents/researcher.agent.yaml
 name: researcher
-description: Research agent with web fetch and vector search
+description: Research agent with web fetch and knowledge search
 version: "1.0.0"
 
 llm:
@@ -958,7 +1653,7 @@ prompt:
 
 tools:
   - mcp:fetch
-  - vector:knowledge
+  - knowledge:docs
 
 output:
   format: text
@@ -1009,6 +1704,140 @@ output:
   fullAnalysis: "{{steps.analyze.output}}"
 ```
 
+### Example 4: LangGraph Autonomous Workflow
+
+```yaml
+# workflows/autonomous.workflow.yaml
+name: autonomous-research
+description: Autonomous research using LangGraph
+version: "1.0.0"
+type: langgraph
+
+input:
+  schema:
+    topic:
+      type: string
+      required: true
+
+prompt:
+  system: |
+    You are a research assistant with access to tools and agents.
+    Use available tools to gather information, then synthesize a comprehensive report.
+  goal: "Research and provide a thorough analysis of: {{input.topic}}"
+
+graph:
+  model: default
+  executionMode: react
+  tools:
+    mode: all
+    sources: [mcp, knowledge, function, builtin]
+  agents:
+    mode: all
+  maxIterations: 10
+  timeout: 300000
+
+output:
+  analysis: "{{state.messages[-1].content}}"
+```
+
+### Example 5: Agent with Structured Output
+
+```yaml
+# agents/data-extractor.agent.yaml
+name: data-extractor
+description: Extracts structured data from text
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0
+
+prompt:
+  system: |
+    Extract structured information from the provided text.
+  inputVariables:
+    - text
+
+output:
+  format: structured
+  schema:
+    type: object
+    properties:
+      people:
+        type: array
+        items:
+          type: object
+      locations:
+        type: array
+        items:
+          type: string
+      dates:
+        type: array
+        items:
+          type: string
+    required:
+      - people
+      - locations
+```
+
+### Example 6: GraphRAG Knowledge Store
+
+```yaml
+# knowledge/transcripts.knowledge.yaml
+name: transcripts
+kind: graph-rag
+description: Transcript analysis with entity extraction
+
+source:
+  type: directory
+  path: knowledge/transcripts
+  pattern: "*.txt"
+
+loader:
+  type: text
+
+splitter:
+  type: recursive
+  chunkSize: 2000
+  chunkOverlap: 200
+
+embedding: default
+
+graph:
+  extraction:
+    llm: default
+    entityTypes:
+      - name: Person
+        description: "A person mentioned in the text"
+      - name: Organization
+        description: "A company or organization"
+      - name: Topic
+        description: "A subject being discussed"
+    relationshipTypes:
+      - name: WORKS_FOR
+        description: "Person works for organization"
+      - name: DISCUSSED
+        description: "Topic was discussed"
+  communities:
+    algorithm: louvain
+    resolution: 1.0
+    minSize: 2
+    summaryLlm: default
+  store:
+    type: memory
+  cache:
+    enabled: true
+    directory: .graph-cache
+
+search:
+  defaultK: 10
+  localSearch:
+    maxDepth: 2
+  globalSearch:
+    topCommunities: 5
+    llm: default
+```
+
 ## Troubleshooting
 
 ### Common Issues
@@ -1018,10 +1847,11 @@ output:
    - Check baseUrl for local models (LM Studio, Ollama)
    - Ensure model name matches provider configuration
 
-2. **Vector Store Errors**
+2. **Knowledge Store Errors**
    - For Chroma: Verify Chroma server is running on specified URL
    - Check embedding model configuration in llm.json
    - Ensure source documents exist at specified paths
+   - For GraphRAG: Check that extraction LLM is configured and accessible
 
 3. **MCP Server Errors**
    - Verify MCP server is accessible at specified URL
@@ -1032,6 +1862,12 @@ output:
    - Check step dependencies and template syntax
    - Verify agent names referenced in steps exist
    - Review timeout configuration for long-running workflows
+   - For LangGraph: Check maxIterations to prevent runaway loops
+
+5. **Session/Memory Issues**
+   - Ensure consistent sessionId across requests
+   - Check session TTL hasn't expired
+   - Memory is in-process; sessions are lost on server restart
 
 ## Additional Resources
 
@@ -1042,6 +1878,22 @@ output:
 - **Discussions:** https://github.com/ddalcu/agent-orcha/discussions
 
 ## Version History
+
+- **0.0.3** (Current)
+  - Knowledge stores replace vector stores (vectors/ -> knowledge/, .vector.yaml -> .knowledge.yaml)
+  - GraphRAG knowledge stores with entity extraction and community detection
+  - LangGraph autonomous workflows with tool/agent discovery
+  - Agent Orcha Studio web dashboard with in-browser IDE
+  - Conversation memory with session management
+  - Structured output with JSON schema validation
+  - New data sources: database (PostgreSQL/MySQL), S3 (AWS/MinIO), web scraping
+  - New store types: Pinecone, Qdrant
+  - Custom functions API and MCP management API
+  - Files API for in-browser editing with hot-reload
+
+- **0.0.2**
+  - Streaming improvements
+  - Bug fixes and stability
 
 - **0.0.1** (Initial Release)
   - Declarative YAML-based agent configuration
@@ -1055,4 +1907,4 @@ output:
 
 ---
 
-Last Updated: 2026-01-21
+Last Updated: 2026-01-29

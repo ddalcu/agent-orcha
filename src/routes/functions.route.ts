@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { logger } from '../../lib/logger.js';
 
 interface FunctionParams {
@@ -32,8 +33,22 @@ export const functionsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(404).send({ error: `Function "${request.params.name}" not found` });
       }
 
-      // Get the tool's schema
+      // Get the tool's schema and convert Zod to JSON Schema
       const tool = func.tool;
+      const jsonSchema = zodToJsonSchema(tool.schema, {
+        name: func.name,
+        $refStrategy: 'none',
+      });
+
+      // Extract the actual schema from $ref if present
+      let finalSchema = jsonSchema;
+      if (jsonSchema.$ref && jsonSchema.definitions) {
+        // Extract the schema name from $ref (e.g., "#/definitions/calculator" -> "calculator")
+        const refName = jsonSchema.$ref.split('/').pop();
+        if (refName && jsonSchema.definitions[refName]) {
+          finalSchema = jsonSchema.definitions[refName];
+        }
+      }
 
       return {
         name: func.name,
@@ -41,7 +56,7 @@ export const functionsRoutes: FastifyPluginAsync = async (fastify) => {
         version: func.metadata.version || null,
         author: func.metadata.author || null,
         tags: func.metadata.tags || [],
-        schema: tool.schema,
+        schema: finalSchema,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

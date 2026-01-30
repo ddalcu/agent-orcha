@@ -112,7 +112,7 @@ export class McpView extends Component {
         });
     }
 
-    selectItem(type, item, serverName) {
+    async selectItem(type, item, serverName) {
         this.selectedItem = { type, item, serverName };
         const execArea = this.querySelector('#executionArea');
         execArea.classList.remove('hidden');
@@ -120,8 +120,19 @@ export class McpView extends Component {
         this.querySelector('#selectedName').textContent = item.name;
         this.querySelector('#selectedDesc').textContent = item.description || '';
 
+        // For functions, fetch full details including schema
+        let schema = item.inputSchema || item.schema || {};
+        if (type === 'function' && !item.schema) {
+            try {
+                const fullFunc = await api.getFunction(item.name);
+                schema = fullFunc.schema || {};
+                this.selectedItem.item = fullFunc; // Update with full details
+            } catch (e) {
+                console.error('Failed to fetch function schema:', e);
+            }
+        }
+
         // Generate placeholder JSON
-        const schema = item.inputSchema || item.schema || {}; // Tool uses inputSchema, Function uses schema
         const placeholder = this.generateJsonFromSchema(schema);
         this.querySelector('#argsInput').value = JSON.stringify(placeholder, null, 2);
 
@@ -134,19 +145,134 @@ export class McpView extends Component {
     }
 
     generateJsonFromSchema(schema) {
-        if (!schema || (!schema.properties && !schema.shape)) return {};
-        // Very basic generation
-        const props = schema.properties || (schema.shape ? this.zodShapeToProps(schema.shape) : {});
-        const res = {};
-        for (const key in props) {
-            res[key] = "";
+        if (!schema) return {};
+
+        // Handle $ref - resolve the reference
+        if (schema.$ref && schema.definitions) {
+            const refName = schema.$ref.split('/').pop();
+            if (refName && schema.definitions[refName]) {
+                schema = schema.definitions[refName];
+            }
         }
-        return res;
+
+        // Handle JSON Schema structure (standard format)
+        if (schema.type === 'object' && schema.properties) {
+            return this.generateFromJsonSchema(schema);
+        }
+
+        // Handle MCP tools inputSchema
+        if (schema.properties) {
+            return this.generateFromJsonSchema(schema);
+        }
+
+        // Handle legacy Zod schema structure (shouldn't happen anymore)
+        if (schema.shape) {
+            return this.generateFromZodShape(schema.shape);
+        }
+
+        return {};
     }
 
-    zodShapeToProps(shape) {
-        // Simplified Zod shape handler
-        return Object.keys(shape).reduce((acc, k) => { acc[k] = {}; return acc; }, {});
+    generateFromZodShape(shape) {
+        const result = {};
+
+        for (const [key, fieldSchema] of Object.entries(shape)) {
+            result[key] = this.getPlaceholderValue(fieldSchema);
+        }
+
+        return result;
+    }
+
+    generateFromJsonSchema(schema) {
+        const result = {};
+        const properties = schema.properties || {};
+
+        for (const [key, prop] of Object.entries(properties)) {
+            result[key] = this.getJsonSchemaPlaceholder(prop);
+        }
+
+        return result;
+    }
+
+    getPlaceholderValue(fieldSchema) {
+        if (!fieldSchema) return '';
+
+        // Handle Zod schema with _def
+        const def = fieldSchema._def;
+        if (!def) return '';
+
+        const typeName = def.typeName;
+
+        // Handle optional/default values
+        if (typeName === 'ZodOptional' || typeName === 'ZodDefault') {
+            const innerDef = def.innerType?._def || def;
+            if (def.defaultValue !== undefined) {
+                return def.defaultValue();
+            }
+            return this.getPlaceholderValue({ _def: innerDef });
+        }
+
+        // Generate placeholder based on type
+        switch (typeName) {
+            case 'ZodString':
+                return def.description || '';
+            case 'ZodNumber':
+                return 0;
+            case 'ZodBoolean':
+                return false;
+            case 'ZodArray':
+                return [];
+            case 'ZodObject':
+                if (def.shape) {
+                    return this.generateFromZodShape(def.shape());
+                }
+                return {};
+            case 'ZodEnum':
+                const values = def.values;
+                return values && values.length > 0 ? values[0] : '';
+            default:
+                return '';
+        }
+    }
+
+    getJsonSchemaPlaceholder(prop) {
+        // Handle default values first
+        if (prop.default !== undefined) {
+            return prop.default;
+        }
+
+        const type = prop.type;
+
+        switch (type) {
+            case 'string':
+                if (prop.enum && prop.enum.length > 0) {
+                    return prop.enum[0];
+                }
+                // Use description as hint if available
+                if (prop.description) {
+                    return `<${prop.description}>`;
+                }
+                return '';
+            case 'number':
+            case 'integer':
+                return 0;
+            case 'boolean':
+                return false;
+            case 'array':
+                // If array has items schema, create one example item
+                if (prop.items) {
+                    const exampleItem = this.getJsonSchemaPlaceholder(prop.items);
+                    return [exampleItem];
+                }
+                return [];
+            case 'object':
+                if (prop.properties) {
+                    return this.generateFromJsonSchema(prop);
+                }
+                return {};
+            default:
+                return '';
+        }
     }
 
     postRender() {

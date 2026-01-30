@@ -43,7 +43,7 @@ graph:
   # Tool discovery
   tools:
     mode: all
-    sources: [mcp, vector, function, builtin]
+    sources: [mcp, knowledge, function, builtin]
 
   # Agent discovery
   agents:

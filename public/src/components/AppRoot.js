@@ -60,7 +60,7 @@ export class AppRoot extends Component {
                     <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
                         Agent Orcha
                     </h1>
-                    <p class="text-gray-400 mt-2">Orchestrating AI Agents with Power</p>
+                    <p class="text-gray-400 mt-2">Declare the system. Orcha handles the REST.</p>
                 </div>
 
                 <nav-bar class="flex-shrink-0"></nav-bar>

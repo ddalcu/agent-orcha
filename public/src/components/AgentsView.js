@@ -552,6 +552,28 @@ export class AgentsView extends Component {
                 // Scroll to bottom when tool ends (output preview added)
                 container.scrollTop = container.scrollHeight;
             }
+        } else if (event.type === 'result') {
+            if (loadingDots) {
+                loadingDots.remove();
+                bubble.querySelector('.max-w-4xl').classList.remove('py-4');
+                bubble.querySelector('.max-w-4xl').classList.add('py-3');
+                contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+                contentDiv.innerHTML = '';
+            }
+
+            // Display structured output as formatted JSON
+            const resultContainer = document.createElement('div');
+            resultContainer.className = 'bg-dark-bg/50 border border-dark-border rounded-lg p-4';
+
+            const resultPre = document.createElement('pre');
+            resultPre.className = 'text-sm text-gray-300 font-mono whitespace-pre-wrap overflow-x-auto';
+            resultPre.textContent = JSON.stringify(event.output, null, 2);
+
+            resultContainer.appendChild(resultPre);
+            contentDiv.appendChild(resultContainer);
+
+            // Scroll to bottom
+            container.scrollTop = container.scrollHeight;
         }
     }
 

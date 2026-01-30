@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  agent-orcha:
+    build: .
+    volumes:
+      - ./orcha-data:/data
+    environment:
+      - ORCHA_BASE_DIR=/data
+    working_dir: /app
+    # Command to run (optional, since it's the ENTRYPOINT in Dockerfile)
+    # command: --help
