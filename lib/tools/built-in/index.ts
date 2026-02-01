@@ -1,2 +1,9 @@
 export { createKnowledgeSearchTool } from './knowledge-search.tool.js';
 export { createAskUserTool } from './ask-user.tool.js';
+export { createKnowledgeCypherTool } from './knowledge-cypher.tool.js';
+export { createKnowledgeTraverseTool } from './knowledge-traverse.tool.js';
+export { createKnowledgeEntityLookupTool } from './knowledge-entity-lookup.tool.js';
+export { createKnowledgeGraphSchemaTool } from './knowledge-graph-schema.tool.js';
+export { createKnowledgeSqlTool } from './knowledge-sql.tool.js';
+export { createKnowledgeTools, buildGraphSchemaDescription } from './knowledge-tools-factory.js';
+export { validateReadonlyCypher, validateReadonlySql } from './query-validators.js';

@@ -5,6 +5,7 @@ import './NavBar.js';
 import './AgentsView.js';
 import './WorkflowsView.js';
 import './KnowledgeView.js';
+import './GraphView.js';
 import './McpView.js';
 import './IdeView.js';
 
@@ -42,6 +43,7 @@ export class AppRoot extends Component {
             case 'agents': el = document.createElement('agents-view'); break;
             case 'workflows': el = document.createElement('workflows-view'); break;
             case 'knowledge': el = document.createElement('knowledge-view'); break;
+            case 'graph': el = document.createElement('graph-view'); break;
             case 'mcp': el = document.createElement('mcp-view'); break;
             case 'ide': el = document.createElement('ide-view'); break;
             default: el = document.createElement('agents-view'); break;

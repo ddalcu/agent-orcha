@@ -1,17 +1,25 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { Orchestrator } from '../lib/index.js';
-import { createServer } from './server.js';
-import { logger } from '../lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Add environment variable configuration
+// Resolve base directory first, then load .env from it
 const baseDir = process.env.ORCHA_BASE_DIR
   ? path.resolve(process.env.ORCHA_BASE_DIR)
   : path.resolve(__dirname, '..');
+
+const envPath = path.join(baseDir, '.env');
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+} else {
+  dotenv.config();
+}
+
+import { Orchestrator } from '../lib/index.js';
+import { createServer } from './server.js';
+import { logger } from '../lib/logger.js';
 
 function resolveResource(name: string): string {
   const resourcePath = path.join(baseDir, name);

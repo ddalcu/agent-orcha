@@ -156,6 +156,11 @@ export class MemoryGraphStore implements GraphStore {
     this.communities = [];
   }
 
+  async clearByKnowledgeBase(_kbName: string): Promise<void> {
+    // Memory stores are per-instance, so clearing the whole graph is equivalent
+    await this.clear();
+  }
+
   /**
    * Returns the underlying graphology instance for community detection.
    */

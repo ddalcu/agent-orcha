@@ -3,7 +3,7 @@ import type { MCPClientManager } from '../mcp/mcp-client.js';
 import type { KnowledgeStoreManager } from '../knowledge/knowledge-store-manager.js';
 import type { FunctionLoader } from '../functions/function-loader.js';
 import type { ToolReference } from '../agents/types.js';
-import { createKnowledgeSearchTool } from './built-in/knowledge-search.tool.js';
+import { createKnowledgeTools } from './built-in/knowledge-tools-factory.js';
 import { logger } from '../logger.js';
 
 export class ToolRegistry {
@@ -61,11 +61,11 @@ export class ToolRegistry {
           await this.knowledgeStores.initialize(name);
           const initializedStore = this.knowledgeStores.get(name);
           if (initializedStore) {
-            return [createKnowledgeSearchTool(name, initializedStore)];
+            return createKnowledgeTools(name, initializedStore);
           }
           return [];
         }
-        return [createKnowledgeSearchTool(name, store)];
+        return createKnowledgeTools(name, store);
       }
 
       case 'function': {
@@ -136,11 +136,11 @@ export class ToolRegistry {
           store = await this.knowledgeStores.initialize(config.name);
         }
 
-        // Create knowledge search tool
-        const tool = createKnowledgeSearchTool(config.name, store);
-        tools.push(tool);
+        // Create all knowledge tools for this store
+        const knowledgeTools = createKnowledgeTools(config.name, store);
+        tools.push(...knowledgeTools);
       } catch (error) {
-        logger.warn(`Failed to create knowledge search tool for "${config.name}":`, error);
+        logger.warn(`Failed to create knowledge tools for "${config.name}":`, error);
       }
     }
 

@@ -76,10 +76,21 @@
             <li><a href="#conversation-memory">Conversation Memory</a></li>
             <li><a href="#workflows">Workflows</a></li>
             <li><a href="#langgraph-workflows">LangGraph Workflows</a></li>
-            <li><a href="#knowledge-stores">Knowledge Stores</a></li>
-            <li><a href="#graphrag">GraphRAG</a></li>
             <li><a href="#functions">Functions</a></li>
             <li><a href="#mcp-servers">MCP Servers</a></li>
+          </ul>
+
+          <h4>Knowledge Stores</h4>
+          <ul>
+            <li><a href="#knowledge-stores">Overview</a></li>
+            <li><a href="#vector-stores">Vector Stores</a></li>
+            <li><a href="#graphrag">GraphRAG</a></li>
+            <li><a href="#extraction-modes">Extraction Modes</a></li>
+            <li><a href="#direct-mapping">Direct Mapping</a></li>
+            <li><a href="#source-types">Source Types</a></li>
+            <li><a href="#graph-store-backends">Graph Store Backends</a></li>
+            <li><a href="#search-configuration">Search Configuration</a></li>
+            <li><a href="#knowledge-caching">Caching</a></li>
           </ul>
 
           <h4>API Reference</h4>
@@ -725,112 +736,6 @@ output:
         <h4>Human-in-the-Loop</h4>
         <p>LangGraph workflows support the <code>builtin:ask_user</code> tool. When called, the workflow pauses and waits for user input via <code>NodeInterrupt</code>.</p>
 
-        <h3 id="knowledge-stores" class="mt-xl">Knowledge Stores</h3>
-        <p>Knowledge stores enable semantic search and RAG capabilities. Define them in YAML files within the <code>knowledge/</code> directory. Two kinds: <strong>vector</strong> (default) and <strong>graph-rag</strong>.</p>
-
-        <h4>Vector Knowledge Schema</h4>
-        <div class="code-block">
-          <div class="code-header">
-            <span class="code-language">YAML</span>
-            <button class="code-copy-btn" data-copy-target="knowledge-schema">Copy</button>
-          </div>
-          <div class="code-content">
-            <pre id="knowledge-schema"><code>name: string                    # Unique identifier (required)
-description: string             # Human-readable description (required)
-kind: vector                    # Optional (vector is default)
-
-source:                         # Data source (required)
-  type: directory | file | database | web | s3
-  path: string                  # Path relative to project root
-  pattern: string               # Glob pattern for directories
-  recursive: boolean            # Recursive search (default: true)
-  # Database: connectionString, query, contentColumn, metadataColumns, batchSize
-  # Web: url, selector, headers
-  # S3: bucket, prefix, endpoint, region, accessKeyId, secretAccessKey, pattern, forcePathStyle
-
-loader:                         # Document loader (required)
-  type: text | pdf | csv | json | markdown
-
-splitter:                       # Text chunking (required)
-  type: character | recursive | token | markdown
-  chunkSize: number             # Characters per chunk (default: 1000)
-  chunkOverlap: number          # Overlap between chunks (default: 200)
-
-embedding: string               # Reference to embedding config (default: "default")
-
-store:                          # Vector store backend (required)
-  type: memory | chroma | pinecone | qdrant
-  options:
-    path: string                # Storage path (for chroma)
-    collectionName: string      # Collection name
-    url: string                 # Server URL (for chroma, qdrant)
-
-search:                         # Search configuration (optional)
-  defaultK: number              # Results per search (default: 4)
-  scoreThreshold: number        # Minimum similarity (0-1)</code></pre>
-          </div>
-        </div>
-
-        <h3 id="graphrag" class="mt-xl">GraphRAG</h3>
-        <p>GraphRAG knowledge stores extract entities and relationships from documents, build a knowledge graph, detect communities, and enable entity-level and thematic search.</p>
-
-        <h4>GraphRAG Schema</h4>
-        <div class="code-block">
-          <div class="code-header">
-            <span class="code-language">YAML</span>
-            <button class="code-copy-btn" data-copy-target="graphrag-schema">Copy</button>
-          </div>
-          <div class="code-content">
-            <pre id="graphrag-schema"><code>name: string
-kind: graph-rag                 # Required for GraphRAG
-description: string
-
-source:                         # Same source types as vector
-  type: directory | file | database | web | s3
-
-loader:
-  type: text | pdf | csv | json | markdown
-
-splitter:
-  type: character | recursive | token | markdown
-  chunkSize: number
-  chunkOverlap: number
-
-embedding: string
-
-graph:
-  extraction:                   # Entity extraction
-    llm: string                 # LLM from llm.json (default: "default")
-    entityTypes:                # Optional (omit for auto-extraction)
-      - name: string
-        description: string
-    relationshipTypes:          # Optional
-      - name: string
-        description: string
-
-  communities:                  # Community detection
-    algorithm: louvain
-    resolution: number          # Default: 1.0
-    minSize: number             # Default: 2
-    summaryLlm: string          # Default: "default"
-
-  store:
-    type: memory | neo4j        # Default: memory
-
-  cache:
-    enabled: boolean            # Default: true
-    directory: string           # Default: ".graph-cache"
-
-search:
-  defaultK: number              # Default: 10
-  localSearch:
-    maxDepth: number            # Default: 2
-  globalSearch:
-    topCommunities: number      # Default: 5
-    llm: string                 # Default: "default"</code></pre>
-          </div>
-        </div>
-
         <h3 id="functions" class="mt-xl">Functions</h3>
         <p>Functions are custom JavaScript tools that extend agent capabilities. They're simple to create and require no dependencies.</p>
 
@@ -943,6 +848,416 @@ export const metadata = {
 }</code></pre>
           </div>
         </div>
+
+        <!-- Knowledge Stores -->
+        <h2 id="knowledge-stores" class="mt-2xl">Knowledge Stores</h2>
+        <p>Knowledge stores enable semantic search and RAG (Retrieval-Augmented Generation) capabilities. Define them in YAML files within the <code>knowledge/</code> directory. Agent Orcha supports two kinds: <strong>vector</strong> (default) for traditional similarity search, and <strong>graph-rag</strong> for entity-level knowledge graphs with community detection.</p>
+
+        <h3 id="vector-stores">Vector Knowledge Stores</h3>
+        <p>Vector stores chunk your documents, embed them, and store the vectors for similarity search. This is the default <code>kind</code> and works well for most RAG use cases.</p>
+
+        <h4>Vector Knowledge Schema</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="knowledge-schema">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="knowledge-schema"><code>name: string                    # Unique identifier (required)
+description: string             # Human-readable description (required)
+kind: vector                    # Optional (vector is default)
+
+source:                         # Data source (required)
+  type: directory | file | database | web | s3
+
+loader:                         # Document loader (required)
+  type: text | pdf | csv | json | markdown
+
+splitter:                       # Text chunking (required)
+  type: character | recursive | token | markdown
+  chunkSize: number             # Characters per chunk (default: 1000)
+  chunkOverlap: number          # Overlap between chunks (default: 200)
+
+embedding: string               # Reference to embedding config in llm.json (default: "default")
+
+store:                          # Vector store backend
+  type: memory | chroma | pinecone | qdrant
+  options:
+    path: string                # Storage path (for chroma)
+    collectionName: string      # Collection name
+    url: string                 # Server URL (for chroma, qdrant)
+
+search:                         # Search configuration (optional)
+  defaultK: number              # Results per search (default: 4)
+  scoreThreshold: number        # Minimum similarity score (0-1)</code></pre>
+          </div>
+        </div>
+
+        <h3 id="graphrag" class="mt-xl">GraphRAG Knowledge Stores</h3>
+        <p>GraphRAG stores go beyond vector search by extracting entities and relationships from your documents, building a knowledge graph, detecting communities via the Louvain algorithm, and summarizing those communities with an LLM. This enables both <strong>local search</strong> (entity-level, neighborhood traversal) and <strong>global search</strong> (thematic, community-level summaries).</p>
+
+        <h4>GraphRAG Schema</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="graphrag-schema">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="graphrag-schema"><code>name: string
+kind: graph-rag                 # Required for GraphRAG
+description: string
+
+source:                         # Same source types as vector
+  type: directory | file | database | web | s3
+
+loader:
+  type: text | pdf | csv | json | markdown
+
+splitter:
+  type: character | recursive | token | markdown
+  chunkSize: number
+  chunkOverlap: number
+
+embedding: string
+
+graph:
+  extractionMode: llm | direct  # How entities are extracted (default: "llm")
+
+  extraction:                   # LLM extraction settings (used when extractionMode: llm)
+    llm: string                 # LLM config from llm.json (default: "default")
+    entityTypes:                # Optional - omit for auto-extraction
+      - name: string
+        description: string
+    relationshipTypes:          # Optional
+      - name: string
+        description: string
+
+  directMapping:                # Direct mapping settings (used when extractionMode: direct)
+    entities:
+      - type: string            # Entity type name
+        idColumn: string        # Column used as unique ID
+        nameColumn: string      # Column used as display name
+        properties: [string]    # Columns to include as properties
+    relationships:
+      - type: string            # Relationship type name
+        source: string          # Source entity type
+        target: string          # Target entity type
+        sourceIdColumn: string  # Column linking to source entity
+        targetIdColumn: string  # Column linking to target entity
+
+  communities:                  # Community detection
+    algorithm: louvain
+    resolution: number          # Default: 1.0
+    minSize: number             # Default: 2
+    summaryLlm: string          # Default: "default"
+
+  store:
+    type: memory | neo4j        # Default: memory
+    options:                    # Required for neo4j
+      uri: string               # e.g. bolt://localhost:7687
+      username: string
+      password: string
+      database: string          # Optional
+
+  cache:
+    enabled: boolean            # Default: true
+    directory: string           # Default: ".graph-cache"
+
+search:
+  defaultK: number              # Default: 10
+  localSearch:
+    maxDepth: number            # Graph traversal depth (default: 2)
+  globalSearch:
+    topCommunities: number      # Communities to consider (default: 5)
+    llm: string                 # LLM for synthesis (default: "default")</code></pre>
+          </div>
+        </div>
+
+        <h3 id="extraction-modes" class="mt-xl">Extraction Modes</h3>
+        <p>GraphRAG supports two extraction modes that determine how entities and relationships are discovered from your source data. Set this via <code>graph.extractionMode</code> in your knowledge YAML.</p>
+
+        <h4>LLM Extraction (<code>extractionMode: llm</code>)</h4>
+        <p>Each document chunk is sent to an LLM with a prompt asking it to identify entities, their types, descriptions, and relationships. The LLM interprets unstructured content and infers the graph structure. You can optionally constrain extraction by specifying <code>entityTypes</code> and <code>relationshipTypes</code>, or omit them to let the LLM discover entities freely.</p>
+
+        <h4>Direct Mapping (<code>extractionMode: direct</code>)</h4>
+        <p>Entities and relationships are mapped deterministically from structured data columns using the <code>directMapping</code> configuration. Each row produces entities based on column values, and relationships are created from foreign key references. No LLM calls are made during extraction (embedding still uses the configured embedding model).</p>
+
+        <h4>Comparison</h4>
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th><code>llm</code></th>
+              <th><code>direct</code></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Best for</strong></td>
+              <td>Unstructured text (articles, docs, HTML, transcripts)</td>
+              <td>Structured data (database queries with clear columns)</td>
+            </tr>
+            <tr>
+              <td><strong>Entities</strong></td>
+              <td>Inferred by LLM from content</td>
+              <td>Mapped 1:1 from columns you define</td>
+            </tr>
+            <tr>
+              <td><strong>Relationships</strong></td>
+              <td>Inferred by LLM</td>
+              <td>Defined explicitly in config</td>
+            </tr>
+            <tr>
+              <td><strong>LLM cost</strong></td>
+              <td>API calls per chunk (can be significant for large datasets)</td>
+              <td>Zero LLM calls for extraction</td>
+            </tr>
+            <tr>
+              <td><strong>Determinism</strong></td>
+              <td>Non-deterministic (results vary per run)</td>
+              <td>Deterministic (same input = same graph)</td>
+            </tr>
+            <tr>
+              <td><strong>Data preservation</strong></td>
+              <td>LLM may miss or hallucinate entities</td>
+              <td>100% data preservation from source columns</td>
+            </tr>
+            <tr>
+              <td><strong>Setup effort</strong></td>
+              <td>Minimal (just configure LLM)</td>
+              <td>Requires defining entity/relationship mappings</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p><strong>Tip:</strong> You can define both <code>extraction</code> and <code>directMapping</code> in the same config and switch between them by changing <code>extractionMode</code>. This is useful for experimenting with both approaches on the same data.</p>
+
+        <h3 id="direct-mapping" class="mt-xl">Direct Mapping Configuration</h3>
+        <p>Direct mapping is designed for database sources where entities and relationships are already implicit in the schema. Instead of asking an LLM to interpret text, you define exactly which columns map to which entity types.</p>
+
+        <h4>Example: Blog Posts with Authors</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="direct-mapping-example">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="direct-mapping-example"><code>name: blog-posts
+kind: graph-rag
+description: Blog posts with authors
+
+source:
+  type: database
+  connectionString: postgresql://user:pass@localhost:5432/blog
+  query: |
+    SELECT p.id, p.title, p.slug, p.html AS content,
+           u.name AS author_name, u.email AS author_email
+    FROM posts p
+    LEFT JOIN users u ON p.author_id = u.id
+    WHERE p.status = 'published'
+  contentColumn: content
+  metadataColumns: [id, title, slug, author_name, author_email]
+
+loader:
+  type: text
+
+splitter:
+  type: recursive
+  chunkSize: 2000
+  chunkOverlap: 300
+
+embedding: default
+
+graph:
+  extractionMode: direct
+
+  directMapping:
+    entities:
+      - type: Post
+        idColumn: id
+        nameColumn: title
+        properties: [title, slug, content]
+
+      - type: Author
+        idColumn: author_email
+        nameColumn: author_name
+        properties: [author_name, author_email]
+
+    relationships:
+      - type: WROTE
+        source: Author
+        target: Post
+        sourceIdColumn: author_email
+        targetIdColumn: id
+
+  store:
+    type: neo4j
+    options:
+      uri: bolt://localhost:7687
+      username: neo4j
+      password: your-password
+
+search:
+  defaultK: 10</code></pre>
+          </div>
+        </div>
+
+        <p>Each entity definition maps a row's columns to a graph node. The <code>idColumn</code> determines uniqueness (duplicate IDs are merged), <code>nameColumn</code> sets the display name, and <code>properties</code> lists which columns to attach as node properties. Relationships connect entities via their ID columns.</p>
+
+        <h3 id="source-types" class="mt-xl">Source Types</h3>
+        <p>Both vector and GraphRAG knowledge stores support the same source types for loading documents.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Description</th>
+              <th>Key Options</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>directory</code></td>
+              <td>Load files from a local directory</td>
+              <td><code>path</code>, <code>pattern</code> (glob), <code>recursive</code></td>
+            </tr>
+            <tr>
+              <td><code>file</code></td>
+              <td>Load a single file</td>
+              <td><code>path</code></td>
+            </tr>
+            <tr>
+              <td><code>database</code></td>
+              <td>Query PostgreSQL or MySQL</td>
+              <td><code>connectionString</code>, <code>query</code>, <code>contentColumn</code>, <code>metadataColumns</code>, <code>batchSize</code></td>
+            </tr>
+            <tr>
+              <td><code>web</code></td>
+              <td>Scrape a web page</td>
+              <td><code>url</code>, <code>selector</code> (CSS), <code>headers</code></td>
+            </tr>
+            <tr>
+              <td><code>s3</code></td>
+              <td>Load from S3 or S3-compatible storage (MinIO, Wasabi)</td>
+              <td><code>bucket</code>, <code>prefix</code>, <code>endpoint</code>, <code>region</code>, <code>pattern</code>, <code>forcePathStyle</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>Paths for <code>directory</code> and <code>file</code> sources are relative to the project root. Database connection strings and S3 credentials can also be provided via environment variables.</p>
+
+        <h3 id="graph-store-backends" class="mt-xl">Graph Store Backends</h3>
+        <p>GraphRAG stores support two backend types for persisting the knowledge graph.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Persistence</th>
+              <th>Community Detection</th>
+              <th>Best For</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>memory</code></td>
+              <td>In-process only (rebuilt from cache on restart)</td>
+              <td>Supported (Louvain algorithm)</td>
+              <td>Development, small datasets, quick iteration</td>
+            </tr>
+            <tr>
+              <td><code>neo4j</code></td>
+              <td>Persistent across restarts</td>
+              <td>Not yet supported (communities loaded from cache)</td>
+              <td>Production, large graphs, external graph queries</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Neo4j Configuration</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="neo4j-config">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="neo4j-config"><code>graph:
+  store:
+    type: neo4j
+    options:
+      uri: bolt://localhost:7687
+      username: neo4j
+      password: your-password
+      database: neo4j             # Optional, defaults to "neo4j"</code></pre>
+          </div>
+        </div>
+
+        <p>When using Neo4j, the graph persists across server restarts. On startup, the factory detects existing nodes and skips the extraction pipeline. To force a full re-extraction (e.g., after changing <code>extractionMode</code>), use the Re-index button in the Studio or call <code>POST /api/knowledge/:name/index</code>.</p>
+
+        <h3 id="search-configuration" class="mt-xl">Search Configuration</h3>
+        <p>Search behavior differs between vector and GraphRAG stores.</p>
+
+        <h4>Vector Search</h4>
+        <p>Vector stores use cosine similarity to find the most relevant chunks. Configure via the <code>search</code> block:</p>
+        <ul>
+          <li><code>defaultK</code> &mdash; Number of results returned per search (default: 4)</li>
+          <li><code>scoreThreshold</code> &mdash; Minimum similarity score to include a result (0-1, optional)</li>
+        </ul>
+
+        <h4>GraphRAG Search</h4>
+        <p>GraphRAG stores automatically detect whether a query needs <strong>local</strong> or <strong>global</strong> search:</p>
+        <ul>
+          <li><strong>Local search</strong> &mdash; For specific entity queries (e.g., "What did Alice write?"). Finds the closest entities by embedding similarity, then traverses the graph neighborhood up to <code>maxDepth</code> hops.</li>
+          <li><strong>Global search</strong> &mdash; For broad thematic queries (e.g., "What are the main topics?"). Uses community summaries to provide high-level answers synthesized by an LLM.</li>
+        </ul>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="search-config">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="search-config"><code>search:
+  defaultK: 10                  # Results per search
+  localSearch:
+    maxDepth: 2                 # Graph traversal hops (default: 2)
+  globalSearch:
+    topCommunities: 5           # Communities to consider (default: 5)
+    llm: default                # LLM for synthesizing community answers</code></pre>
+          </div>
+        </div>
+
+        <h3 id="knowledge-caching" class="mt-xl">Caching</h3>
+        <p>Both vector and GraphRAG stores support caching to avoid reprocessing on server restart.</p>
+
+        <h4>Vector Store Cache</h4>
+        <p>Memory-based vector stores automatically cache their embeddings to disk. On restart, the cache is validated against source file hashes &mdash; if sources haven't changed, vectors are restored from cache without re-embedding.</p>
+
+        <h4>GraphRAG Cache</h4>
+        <p>GraphRAG stores cache extracted entities, relationships, communities, and node embeddings. The cache is validated using a hash of the document contents. Configure caching in the <code>graph.cache</code> block:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+            <button class="code-copy-btn" data-copy-target="cache-config">Copy</button>
+          </div>
+          <div class="code-content">
+            <pre id="cache-config"><code>graph:
+  cache:
+    enabled: true               # Default: true
+    directory: .graph-cache     # Relative to project root (default: ".graph-cache")</code></pre>
+          </div>
+        </div>
+
+        <p>The cache is automatically invalidated when source content changes. To force a full rebuild, use the Re-index button or delete the cache directory.</p>
+
+        <p><strong>Startup behavior with caching:</strong></p>
+        <ol>
+          <li><strong>Persistent store has data</strong> (Neo4j) &mdash; Graph is used as-is, extraction is skipped entirely</li>
+          <li><strong>Cache exists with node embeddings</strong> (memory stores) &mdash; Graph is rebuilt from cache without loading documents or running extraction</li>
+          <li><strong>Cache exists but source hash changed</strong> &mdash; Full pipeline runs (load, split, extract, embed, build, cache)</li>
+          <li><strong>No cache</strong> &mdash; Full pipeline runs from scratch</li>
+        </ol>
 
         <!-- API Reference -->
         <h2 id="api-reference" class="mt-2xl">API Reference</h2>

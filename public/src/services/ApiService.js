@@ -60,6 +60,24 @@ export class ApiService {
         return res.json();
     }
 
+    async getKnowledgeStatus(name) {
+        const res = await fetch(`/api/knowledge/${name}/status`);
+        return res.json();
+    }
+
+    async indexKnowledgeStore(name) {
+        const res = await fetch(`/api/knowledge/${name}/index`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        return res.json();
+    }
+
+    indexKnowledgeStoreStream(name) {
+        return new EventSource(`/api/knowledge/${name}/index/stream`);
+    }
+
     async getLLMs() {
         const res = await fetch('/api/llm');
         return res.json();
@@ -134,6 +152,20 @@ export class ApiService {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path: filePath, content })
+        });
+        return res.json();
+    }
+
+    async getNeo4jConfig() {
+        const res = await fetch('/api/graph/config');
+        return res.json();
+    }
+
+    async getGraphData(cypherQuery) {
+        const res = await fetch('/api/graph/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: cypherQuery })
         });
         return res.json();
     }

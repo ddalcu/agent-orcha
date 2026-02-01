@@ -163,6 +163,10 @@ export class DatabaseLoader extends BaseDocumentLoader {
       }
     }
 
+    // Store the full row data in metadata for direct mapping
+    // This allows GraphRAG direct mode to access all SQL columns
+    metadata._rawRow = row;
+
     return new Document({
       pageContent,
       metadata,

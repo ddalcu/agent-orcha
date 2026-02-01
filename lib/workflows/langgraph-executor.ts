@@ -12,6 +12,7 @@ import type {
 import type { InterruptManager } from './interrupt-manager.js';
 import { ToolDiscovery } from '../tools/tool-discovery.js';
 import { LLMFactory } from '../llm/llm-factory.js';
+import { logLLMCallStart, logLLMCallEnd } from '../llm/llm-call-logger.js';
 import { logger } from '../logger.js';
 
 /**
@@ -307,10 +308,22 @@ export class LangGraphExecutor {
             ? `${definition.prompt.system}\n\nIMPORTANT: You have received tool results. Provide your final answer now without calling any more tools.`
             : definition.prompt.system;
 
+        const caller = `LangGraph: ${definition.name}`;
+        const { startTime: llmStart, stats } = logLLMCallStart({
+          caller,
+          systemPrompt,
+          messages: state.messages,
+          tools: shouldBindTools ? tools : undefined,
+        });
+
         const response = await modelToUse.invoke([
           { role: 'system', content: systemPrompt },
           ...state.messages,
         ]);
+
+        const responseContent = 'content' in response ? String(response.content) : '';
+        logLLMCallEnd(caller, llmStart, stats, { contentLength: responseContent.length });
+
         return { messages: [response] };
       })
       .addNode('tools', async (state: any) => {

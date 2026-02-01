@@ -21,7 +21,8 @@ import type {
   LangGraphWorkflowDefinition,
   InterruptState,
 } from './workflows/types.js';
-import type { KnowledgeStoreInstance, KnowledgeConfig } from './knowledge/types.js';
+import type { KnowledgeStoreInstance, KnowledgeConfig, KnowledgeStoreMetadata, IndexingProgressCallback } from './knowledge/types.js';
+import type { KnowledgeMetadataManager } from './knowledge/knowledge-store-metadata.js';
 import type { StructuredTool } from '@langchain/core/tools';
 import { logger } from './logger.js';
 
@@ -113,11 +114,7 @@ export class Orchestrator {
     await this.agentLoader.loadAll();
     await this.workflowLoader.loadAll();
     await this.knowledgeStoreManager.loadAll();
-
-    // Initialize all knowledge stores on startup (load documents and create embeddings)
-    logger.info('[Orchestrator] Initializing knowledge stores...');
-    await this.knowledgeStoreManager.initializeAll();
-    logger.info('[Orchestrator] Knowledge stores ready');
+    logger.info('[Orchestrator] Knowledge configs loaded (stores will initialize on demand)');
 
     this.initialized = true;
   }
@@ -159,8 +156,14 @@ export class Orchestrator {
       listConfigs: () => this.knowledgeStoreManager.listConfigs(),
       get: (name: string) => this.knowledgeStoreManager.get(name),
       getConfig: (name: string) => this.knowledgeStoreManager.getConfig(name),
-      initialize: (name: string) => this.knowledgeStoreManager.initialize(name),
-      refresh: (name: string) => this.knowledgeStoreManager.refresh(name),
+      initialize: (name: string, onProgress?: IndexingProgressCallback) =>
+        this.knowledgeStoreManager.initialize(name, onProgress),
+      refresh: (name: string, onProgress?: IndexingProgressCallback) =>
+        this.knowledgeStoreManager.refresh(name, onProgress),
+      getStatus: (name: string) => this.knowledgeStoreManager.getStatus(name),
+      getAllStatuses: () => this.knowledgeStoreManager.getAllStatuses(),
+      getMetadataManager: () => this.knowledgeStoreManager.getMetadataManager(),
+      isIndexing: (name: string) => this.knowledgeStoreManager.isIndexing(name),
     };
   }
 
@@ -499,8 +502,12 @@ interface KnowledgeAccessor {
   listConfigs: () => KnowledgeConfig[];
   get: (name: string) => KnowledgeStoreInstance | undefined;
   getConfig: (name: string) => KnowledgeConfig | undefined;
-  initialize: (name: string) => Promise<KnowledgeStoreInstance>;
-  refresh: (name: string) => Promise<void>;
+  initialize: (name: string, onProgress?: IndexingProgressCallback) => Promise<KnowledgeStoreInstance>;
+  refresh: (name: string, onProgress?: IndexingProgressCallback) => Promise<void>;
+  getStatus: (name: string) => Promise<KnowledgeStoreMetadata | null>;
+  getAllStatuses: () => Promise<Map<string, KnowledgeStoreMetadata>>;
+  getMetadataManager: () => KnowledgeMetadataManager;
+  isIndexing: (name: string) => boolean;
 }
 
 interface MCPAccessor {

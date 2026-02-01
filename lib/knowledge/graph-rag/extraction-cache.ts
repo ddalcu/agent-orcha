@@ -1,16 +1,18 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import type { CachedGraphData, CacheMetadata, ExtractedEntity, ExtractedRelationship, Community } from './types.js';
+import type { CachedGraphData, CacheMetadata, ExtractedEntity, ExtractedRelationship, Community, GraphNode } from './types.js';
 import { createLogger } from '../../logger.js';
 
 const logger = createLogger('ExtractionCache');
 
 const CONFIG_VERSION = '1.0';
+const CACHE_METADATA_FILE = 'cache-metadata.json';
 
 /**
  * File-based JSON cache for graph extraction results.
  * Invalidates when source document content changes (SHA-256 hash).
+ * Uses 'cache-metadata.json' to avoid collision with KnowledgeMetadataManager's 'metadata.json'.
  */
 export class ExtractionCache {
   private cacheDir: string;
@@ -31,11 +33,26 @@ export class ExtractionCache {
   }
 
   /**
+   * Check if cache files exist (without source hash validation).
+   * Used for cache-first restore on startup to avoid loading documents.
+   */
+  async hasCache(): Promise<boolean> {
+    try {
+      const metadataPath = path.join(this.cacheDir, CACHE_METADATA_FILE);
+      const content = await fs.readFile(metadataPath, 'utf-8');
+      const metadata: CacheMetadata = JSON.parse(content);
+      return metadata.configVersion === CONFIG_VERSION;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Check if valid cache exists for the given source hash.
    */
   async isValid(sourceHash: string): Promise<boolean> {
     try {
-      const metadataPath = path.join(this.cacheDir, 'metadata.json');
+      const metadataPath = path.join(this.cacheDir, CACHE_METADATA_FILE);
       const content = await fs.readFile(metadataPath, 'utf-8');
       const metadata: CacheMetadata = JSON.parse(content);
       return metadata.sourceHash === sourceHash && metadata.configVersion === CONFIG_VERSION;
@@ -49,7 +66,7 @@ export class ExtractionCache {
    */
   async load(): Promise<CachedGraphData> {
     const [metadataRaw, entitiesRaw, relationshipsRaw, communitiesRaw] = await Promise.all([
-      fs.readFile(path.join(this.cacheDir, 'metadata.json'), 'utf-8'),
+      fs.readFile(path.join(this.cacheDir, CACHE_METADATA_FILE), 'utf-8'),
       fs.readFile(path.join(this.cacheDir, 'entities.json'), 'utf-8'),
       fs.readFile(path.join(this.cacheDir, 'relationships.json'), 'utf-8'),
       fs.readFile(path.join(this.cacheDir, 'communities.json'), 'utf-8'),
@@ -81,13 +98,42 @@ export class ExtractionCache {
     };
 
     await Promise.all([
-      fs.writeFile(path.join(this.cacheDir, 'metadata.json'), JSON.stringify(metadata, null, 2)),
+      fs.writeFile(path.join(this.cacheDir, CACHE_METADATA_FILE), JSON.stringify(metadata, null, 2)),
       fs.writeFile(path.join(this.cacheDir, 'entities.json'), JSON.stringify(entities, null, 2)),
       fs.writeFile(path.join(this.cacheDir, 'relationships.json'), JSON.stringify(relationships, null, 2)),
       fs.writeFile(path.join(this.cacheDir, 'communities.json'), JSON.stringify(communities, null, 2)),
     ]);
 
     logger.info(`Cache saved to ${this.cacheDir} (${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities)`);
+  }
+
+  /**
+   * Save graph nodes with their embeddings to cache.
+   */
+  async saveNodes(nodes: GraphNode[]): Promise<void> {
+    try {
+      await fs.mkdir(this.cacheDir, { recursive: true });
+      await fs.writeFile(
+        path.join(this.cacheDir, 'nodes.json'),
+        JSON.stringify(nodes)
+      );
+      logger.info(`Saved ${nodes.length} nodes with embeddings to cache`);
+    } catch (error) {
+      logger.warn(`Failed to save nodes cache: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Load cached graph nodes with embeddings.
+   */
+  async loadNodes(): Promise<GraphNode[] | null> {
+    try {
+      const raw = await fs.readFile(path.join(this.cacheDir, 'nodes.json'), 'utf-8');
+      const nodes: GraphNode[] = JSON.parse(raw);
+      return nodes;
+    } catch {
+      return null;
+    }
   }
 
   /**

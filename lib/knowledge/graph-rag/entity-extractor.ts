@@ -82,9 +82,73 @@ export class EntityExtractor {
       ? `\n\nRelationship types to extract:\n${this.relationshipTypes.map((t) => `- ${t.name}: ${t.description}`).join('\n')}`
       : '\n\nExtract all meaningful relationships between entities.';
 
-    return `You are an entity and relationship extraction system. Given a text document, extract structured entities and relationships.
+    return `You are an expert entity and relationship extraction system for building knowledge graphs. Given a text document, extract structured entities and relationships.
+
+CRITICAL: Extract BOTH entities AND relationships. Relationships are equally important as entities for building a connected knowledge graph!
 ${entityTypesSection}
 ${relationshipTypesSection}
+
+For each relationship you extract:
+1. Identify the source entity (with exact name and type from your entities list)
+2. Identify the target entity (with exact name and type from your entities list)
+3. Use one of the specified relationship types above
+4. Provide a brief description of how they are related
+5. Assign an appropriate weight (0.0 to 1.0)
+
+IMPORTANT GUIDELINES:
+- Extract ALL relationships between entities mentioned in the text, not just obvious ones
+- A single entity can have multiple relationships with different entities
+- Relationships should connect entities that appear together in the text
+- Use consistent entity names when the same entity appears multiple times
+- Be comprehensive - missing relationships will result in disconnected graph nodes
+
+Example for "John Smith wrote a blog post about Artificial Intelligence and Machine Learning":
+
+entities: [
+  { "name": "John Smith", "type": "Author", "description": "Blog post author" },
+  { "name": "AI blog post", "type": "Post", "description": "Article about artificial intelligence" },
+  { "name": "Artificial Intelligence", "type": "Topic", "description": "Field of computer science" },
+  { "name": "Machine Learning", "type": "Topic", "description": "Subset of AI focused on learning from data" }
+]
+
+relationships: [
+  {
+    "sourceName": "John Smith",
+    "sourceType": "Author",
+    "targetName": "AI blog post",
+    "targetType": "Post",
+    "type": "WROTE",
+    "description": "John Smith authored this post",
+    "weight": 1.0
+  },
+  {
+    "sourceName": "AI blog post",
+    "sourceType": "Post",
+    "targetName": "Artificial Intelligence",
+    "targetType": "Topic",
+    "type": "DISCUSSES",
+    "description": "Post discusses AI as main topic",
+    "weight": 1.0
+  },
+  {
+    "sourceName": "AI blog post",
+    "sourceType": "Post",
+    "targetName": "Machine Learning",
+    "targetType": "Topic",
+    "type": "DISCUSSES",
+    "description": "Post discusses machine learning",
+    "weight": 0.8
+  },
+  {
+    "sourceName": "Artificial Intelligence",
+    "sourceType": "Topic",
+    "targetName": "Machine Learning",
+    "targetType": "Topic",
+    "type": "RELATES_TO",
+    "description": "ML is a subset of AI",
+    "weight": 0.9
+  }
+]
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -113,7 +177,8 @@ Rules:
 - Use consistent naming for the same entity across extractions
 - Relationship weight should be 0.0 to 1.0 (1.0 = very strong relationship)
 - Every entity in a relationship must also appear in the entities array
-- Be thorough but precise - extract real entities, not generic concepts`;
+- Be thorough but precise - extract real entities, not generic concepts
+- Extract relationships comprehensively - a disconnected entity graph has limited value`;
   }
 
   private buildUserPrompt(content: string): string {
@@ -131,7 +196,7 @@ Rules:
         name: String(e.name ?? '').trim(),
         type: String(e.type ?? 'Unknown').trim(),
         description: String(e.description ?? '').trim(),
-        properties: { sourceChunkId: chunkId },
+        properties: { sourceChunkIds: [chunkId] },
       })).filter((e: ExtractedEntity) => e.name.length > 0);
 
       const relationships: ExtractedRelationship[] = (parsed.relationships ?? []).map((r: any) => ({
@@ -174,17 +239,18 @@ Rules:
           existing.description = entity.description;
         }
         const existingChunks = existing.properties.sourceChunkIds as string[] ?? [];
-        const newChunkId = entity.properties.sourceChunkId as string;
-        if (newChunkId && !existingChunks.includes(newChunkId)) {
-          existingChunks.push(newChunkId);
+        const newChunkIds = entity.properties.sourceChunkIds as string[] ?? [];
+        for (const chunkId of newChunkIds) {
+          if (chunkId && !existingChunks.includes(chunkId)) {
+            existingChunks.push(chunkId);
+          }
         }
         existing.properties.sourceChunkIds = existingChunks;
       } else {
-        const chunkId = entity.properties.sourceChunkId as string;
         entityMap.set(key, {
           ...entity,
           properties: {
-            sourceChunkIds: chunkId ? [chunkId] : [],
+            sourceChunkIds: entity.properties.sourceChunkIds ?? [],
           },
         });
         nameNormMap.set(key, entity.name);

@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Release 0.0.5
+
+### Added
+
+- **Knowledge Graph Agent Tools**: New suite of built-in tools automatically registered for agents based on knowledge store configuration
+  - `knowledge_cypher` — Execute read-only Cypher queries against Neo4j-backed graph stores
+  - `knowledge_sql` — Execute read-only SQL queries against database-backed knowledge stores
+  - `knowledge_entity_lookup` — Look up entities by name or type in the graph
+  - `knowledge_traverse` — Traverse relationships from a given entity
+  - `knowledge_graph_schema` — Introspect graph schema (node labels, relationship types, property keys)
+  - Tools are created via `KnowledgeToolsFactory` and include read-only query validators to prevent mutations
+
+- **Direct SQL-to-Graph Mapping**: New `DirectMapper` for `graph-rag` stores with `extractionMode: 'direct'`
+  - Maps SQL query results directly to graph entities and relationships without LLM extraction
+  - Guarantees 100% data preservation — all rows contribute to the graph
+
+- **LLM Call Observability**: New `LLMCallLogger` integrated into `AgentExecutor` and `LangGraphExecutor`
+  - Logs context size breakdown (system prompt, messages, tool definitions)
+  - Estimated token counts and per-tool size breakdown
+  - Response metrics with call duration
+
+- **On-Demand Indexing with SSE Progress**: Knowledge stores are no longer initialized eagerly on startup
+  - `POST /api/knowledge/:name/index` — Trigger async indexing
+  - `GET /api/knowledge/:name/index/stream` — SSE stream for real-time indexing progress (phases: loading, chunking, embedding, extracting, building, done/error)
+  - `GET /api/knowledge/:name/status` — Get store metadata (status, counts, last indexed time, duration)
+
+- **Vector Store Cache**: New `VectorStoreCache` that persists in-memory vector stores to disk
+  - Content-hash invalidation to avoid re-embedding unchanged documents on restart
+
+- **Knowledge Store Metadata**: New `KnowledgeMetadataManager` for persistent tracking of indexing status
+  - Tracks document/chunk/entity/edge/community counts, embedding model, and error state
+
+- **Neo4j Graph Visualization**: New `GraphView` UI component in Agent Orcha Studio
+  - Interactive graph exploration via neo4jd3 with Cypher query execution
+  - Node/relationship inspection, drag-to-lock, dark theme
+  - New `/api/graph` route for direct Neo4j query execution
+
+### Changed
+
+- **Enhanced Neo4j Graph Store** — Added `getSchema()`, `findEntities()`, and `getRelationships()` methods for richer graph introspection and traversal
+- **Enhanced Graph RAG Factory** — Supports direct mapping mode, improved extraction caching, and progress callback reporting throughout the indexing pipeline
+- **Enhanced Knowledge List API** — `GET /api/knowledge` now returns full status metadata including indexing state, counts, extraction mode, and store type
+- **Enhanced KnowledgeView UI** — Status badges, index/re-index buttons, progress bars, and richer store detail display
+- **Improved .env Loading** — Both CLI (`start` command) and programmatic entry (`src/index.ts`) now explicitly load `.env` from the project root before any imports that depend on env vars
+- Knowledge stores now initialize lazily on first access instead of eagerly at startup
+
+### Dependencies
+
+- Added `neo4jd3@^0.0.5`
+
 ## Release 0.0.3
 
 ### Breaking Changes

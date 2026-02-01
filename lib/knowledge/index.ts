@@ -1,5 +1,6 @@
 export { KnowledgeStoreFactory } from './knowledge-store-factory.js';
 export { KnowledgeStoreManager } from './knowledge-store-manager.js';
+export { KnowledgeMetadataManager, createDefaultMetadata } from './knowledge-store-metadata.js';
 export {
   KnowledgeConfigSchema,
   VectorKnowledgeConfigSchema,
@@ -33,6 +34,11 @@ export type {
   SearchResult,
   DocumentInput,
   KnowledgeStoreInstance,
+  KnowledgeStoreMetadata,
+  KnowledgeStoreStatus,
+  IndexingProgressEvent,
+  IndexingProgressCallback,
+  IndexingPhase,
 } from './types.js';
 export { DatabaseLoader, WebLoader, S3Loader } from './loaders/index.js';
 export { getPool, closeAllPools, getDatabaseType, detectFileType, isSupportedFileType } from './utils/index.js';

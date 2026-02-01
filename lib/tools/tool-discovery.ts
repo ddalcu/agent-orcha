@@ -7,7 +7,7 @@ import type { GraphToolConfig, GraphAgentConfig } from '../workflows/types.js';
 import type { AgentLoader } from '../agents/agent-loader.js';
 import type { AgentExecutor } from '../agents/agent-executor.js';
 import { AgentToolWrapper } from './agent-tool-wrapper.js';
-import { createKnowledgeSearchTool } from './built-in/knowledge-search.tool.js';
+import { createKnowledgeTools } from './built-in/knowledge-tools-factory.js';
 import { createAskUserTool } from './built-in/ask-user.tool.js';
 import { logger } from '../logger.js';
 
@@ -154,12 +154,12 @@ export class ToolDiscovery {
             store = await this.knowledgeStoreManager.initialize(config.name);
           }
 
-          // Create knowledge search tool
-          const tool = createKnowledgeSearchTool(config.name, store);
-          tools.push(tool);
-          logger.info(`Discovered knowledge search tool for "${config.name}"`);
+          // Create all knowledge tools for this store
+          const knowledgeTools = createKnowledgeTools(config.name, store);
+          tools.push(...knowledgeTools);
+          logger.info(`Discovered ${knowledgeTools.length} knowledge tool(s) for "${config.name}"`);
         } catch (error) {
-          logger.warn(`Failed to create knowledge search tool for "${config.name}":`, error);
+          logger.warn(`Failed to create knowledge tools for "${config.name}":`, error);
         }
       }
     } catch (error) {

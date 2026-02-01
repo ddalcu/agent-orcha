@@ -11,6 +11,7 @@ import { llmRoutes } from './routes/llm.route.js';
 import { mcpRoutes } from './routes/mcp.route.js';
 import { functionsRoutes } from './routes/functions.route.js';
 import { filesRoutes } from './routes/files.route.js';
+import { graphRoutes } from './routes/graph.route.js';
 import { getPinoConfig } from '../lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -49,6 +50,7 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   await fastify.register(mcpRoutes, { prefix: '/api/mcp' });
   await fastify.register(functionsRoutes, { prefix: '/api/functions' });
   await fastify.register(filesRoutes, { prefix: '/api/files' });
+  await fastify.register(graphRoutes, { prefix: '/api/graph' });
 
   return fastify;
 }

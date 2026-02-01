@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { GraphConfigSchema, GraphSearchConfigSchema } from './graph-rag/types.js';
+import type { KnowledgeStoreMetadata, IndexingProgressCallback } from './knowledge-store-metadata.js';
 
 // Directory source configuration
 export const DirectorySourceConfigSchema = z.object({
@@ -158,5 +159,8 @@ export interface KnowledgeStoreInstance {
   config: KnowledgeConfig;
   search: (query: string, k?: number) => Promise<SearchResult[]>;
   addDocuments: (documents: DocumentInput[]) => Promise<void>;
-  refresh: () => Promise<void>;
+  refresh: (onProgress?: IndexingProgressCallback) => Promise<void>;
+  getMetadata: () => KnowledgeStoreMetadata;
 }
+
+export type { KnowledgeStoreMetadata, KnowledgeStoreStatus, IndexingProgressEvent, IndexingProgressCallback, IndexingPhase } from './knowledge-store-metadata.js';

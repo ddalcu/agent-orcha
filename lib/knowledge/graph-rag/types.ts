@@ -42,6 +42,10 @@ export interface GraphStore {
   getAllNodes(): Promise<GraphNode[]>;
   getAllEdges(): Promise<GraphEdge[]>;
   clear(): Promise<void>;
+  clearByKnowledgeBase(kbName: string): Promise<void>;
+
+  /** Run a raw read query against the underlying store (e.g. Cypher for Neo4j). Optional — only graph stores with a query language implement this. */
+  query?(cypher: string, params?: Record<string, unknown>): Promise<Record<string, unknown>[]>;
 }
 
 // --- Extraction Types ---
@@ -127,8 +131,32 @@ export const GlobalSearchConfigSchema = z.object({
   llm: z.string().default('default'),
 });
 
+// --- Direct Mapping Types ---
+
+export interface EntityMapping {
+  type: string;
+  idColumn: string;
+  nameColumn?: string;
+  properties: (string | Record<string, string>)[];
+}
+
+export interface RelationshipMapping {
+  type: string;
+  source: string;
+  target: string;
+  sourceIdColumn: string;
+  targetIdColumn: string;
+}
+
+export interface DirectMappingConfig {
+  entities: EntityMapping[];
+  relationships?: RelationshipMapping[];
+}
+
 export const GraphConfigSchema = z.object({
+  extractionMode: z.enum(['llm', 'direct']).optional().default('llm'),
   extraction: GraphExtractionConfigSchema.optional().default({}),
+  directMapping: z.any().optional(), // DirectMappingConfig - using any to avoid complex zod schema
   communities: GraphCommunitiesConfigSchema.optional().default({}),
   store: GraphStoreConfigSchema.optional().default({}),
   cache: GraphCacheConfigSchema.optional().default({}),

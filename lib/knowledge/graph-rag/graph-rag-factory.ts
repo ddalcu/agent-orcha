@@ -13,6 +13,7 @@ import type { GraphRagKnowledgeConfig } from '../types.js';
 import { MemoryGraphStore } from './memory-graph-store.js';
 import { Neo4jGraphStore } from './neo4j-graph-store.js';
 import { EntityExtractor } from './entity-extractor.js';
+import { DirectMapper } from './direct-mapper.js';
 import { ExtractionCache } from './extraction-cache.js';
 import { CommunityDetector } from './community-detector.js';
 import { CommunitySummarizer } from './community-summarizer.js';
@@ -21,6 +22,7 @@ import { GlobalSearch } from './global-search.js';
 import { detectSearchMode } from './search-mode-detector.js';
 import { LLMFactory } from '../../llm/llm-factory.js';
 import { KnowledgeStoreFactory } from '../knowledge-store-factory.js';
+import { createDefaultMetadata, type IndexingProgressCallback } from '../knowledge-store-metadata.js';
 import { createLogger } from '../../logger.js';
 import * as path from 'path';
 
@@ -39,128 +41,250 @@ export class GraphRagFactory {
     return this.graphStores.get(name);
   }
 
-  static async create(config: GraphRagKnowledgeConfig, projectRoot: string): Promise<KnowledgeStoreInstance> {
+  static async create(
+    config: GraphRagKnowledgeConfig,
+    projectRoot: string,
+    cacheDir?: string,
+    onProgress?: IndexingProgressCallback
+  ): Promise<KnowledgeStoreInstance> {
     const graphConfig = config.graph;
     const searchConfig = config.search;
 
+    let metadata = createDefaultMetadata(config.name, 'graph-rag');
+    metadata.embeddingModel = config.embedding;
+
     logger.info(`Creating GraphRAG store "${config.name}"...`);
 
-    // 1. Load and split documents (reuse existing infrastructure)
-    logger.info('Loading documents...');
-    const documents = await KnowledgeStoreFactory.loadDocuments(config, projectRoot);
-    logger.info(`Loaded ${documents.length} document(s)`);
-
-    const splitDocs = await KnowledgeStoreFactory.splitDocuments(config, documents);
-    logger.info(`Split into ${splitDocs.length} chunk(s)`);
-
-    // 2. Create embeddings for entity descriptions
+    // Create embeddings and graph store
     const embeddings = KnowledgeStoreFactory.createEmbeddings(config.embedding);
+    const store = this.createGraphStore(graphConfig, config.name);
 
-    // 3. Create graph store
-    const store = this.createGraphStore(graphConfig);
-
-    // 4. Check cache
+    // Set up cache
     const cacheEnabled = graphConfig.cache.enabled;
-    const cachePath = path.resolve(projectRoot, graphConfig.cache.directory);
-    const cache = new ExtractionCache(cachePath, config.name);
-
-    const docContents = splitDocs.map((d) => d.pageContent);
-    const sourceHash = ExtractionCache.computeSourceHash(docContents);
+    const cacheBase = cacheDir ? path.dirname(cacheDir) : graphConfig.cache.directory;
+    const cache = new ExtractionCache(cacheBase, config.name);
 
     let entities: ExtractedEntity[] = [];
     let relationships: ExtractedRelationship[] = [];
     let communities: Community[] = [];
+    let restored = false;
 
-    let cacheHit = false;
-    if (cacheEnabled && await cache.isValid(sourceHash)) {
-      try {
-        logger.info('Cache HIT - loading from cache');
-        const cached = await cache.load();
-        entities = cached.entities;
-        relationships = cached.relationships;
-        communities = cached.communities;
-        cacheHit = true;
-      } catch (cacheError) {
-        logger.warn(`Cache load failed, falling back to extraction: ${cacheError instanceof Error ? cacheError.message : String(cacheError)}`);
-      }
-    }
+    // --- Path 1: Store already has data for THIS knowledge base (Neo4j persistence across restarts) ---
+    // getAllNodes/getAllEdges are scoped to this KB via BELONGS_TO_KB when knowledgeBaseName is set
+    const kbNodeId = normalizeId(config.name, 'KnowledgeBase');
+    const kbNode = await store.getNode(kbNodeId);
+    if (kbNode) {
+      const ownNodes = await store.getAllNodes();
+      const ownEdges = await store.getAllEdges();
 
-    if (!cacheHit) {
-      if (cacheEnabled) {
-        logger.info('Cache MISS - running extraction pipeline');
-      }
+      if (ownNodes.length > 0) {
+        logger.info(`Store has ${ownNodes.length} nodes for "${config.name}" (persistent store), skipping pipeline`);
+        onProgress?.({ name: config.name, phase: 'loading', progress: 50, message: 'Restoring from persistent store...' });
 
-      // 5. Entity extraction
-      const extractionLlm = LLMFactory.create(graphConfig.extraction.llm);
-      const extractor = new EntityExtractor({
-        llm: extractionLlm,
-        entityTypes: graphConfig.extraction.entityTypes,
-        relationshipTypes: graphConfig.extraction.relationshipTypes,
-      });
+        communities = await store.getCommunities();
 
-      const chunks = splitDocs.map((doc, idx) => ({
-        id: `chunk-${idx}`,
-        content: doc.pageContent,
-      }));
-
-      const extracted = await extractor.extractFromChunks(chunks);
-      entities = extracted.entities;
-      relationships = extracted.relationships;
-
-      // 6. Build graph
-      const nodes = await this.buildNodes(entities, embeddings);
-      const edges = this.buildEdges(relationships, nodes);
-
-      await store.addNodes(nodes);
-      await store.addEdges(edges);
-
-      // 7. Community detection
-      if (store instanceof MemoryGraphStore) {
-        const detector = new CommunityDetector(graphConfig.communities);
-        communities = await detector.detect(store);
-
-        // 8. Community summarization
-        if (communities.length > 0) {
-          const summaryLlm = LLMFactory.create(graphConfig.communities.summaryLlm);
-          const summarizer = new CommunitySummarizer(summaryLlm);
-          communities = await summarizer.summarize(communities, store);
+        // If communities empty (Neo4j doesn't persist them), try loading from cache
+        if (communities.length === 0 && cacheEnabled && await cache.hasCache()) {
+          try {
+            const cached = await cache.load();
+            communities = cached.communities;
+            await store.setCommunities(communities);
+            entities = cached.entities;
+            relationships = cached.relationships;
+          } catch {
+            logger.warn('Failed to load communities from cache for persistent store');
+          }
         }
-      } else {
-        // Neo4j: community detection not yet supported directly
+
+        metadata.entityCount = ownNodes.length;
+        metadata.edgeCount = ownEdges.length;
+        metadata.communityCount = communities.length;
+        restored = true;
+      }
+    }
+
+    // --- Path 2: Restore from disk cache (memory stores on restart) ---
+    if (!restored && cacheEnabled && await cache.hasCache()) {
+      try {
+        const cachedNodes = await cache.loadNodes();
+        if (cachedNodes && cachedNodes.length > 0) {
+          logger.info('Cache found with node embeddings - restoring without loading documents...');
+          onProgress?.({ name: config.name, phase: 'loading', progress: 10, message: 'Restoring from cache...' });
+
+          const cached = await cache.load();
+          entities = cached.entities;
+          relationships = cached.relationships;
+          communities = cached.communities;
+
+          onProgress?.({ name: config.name, phase: 'building', progress: 50, message: 'Rebuilding graph from cache...' });
+          await this.populateStore(store, config, cachedNodes, relationships, communities);
+
+          metadata.entityCount = entities.length;
+          metadata.edgeCount = relationships.length;
+          metadata.communityCount = communities.length;
+          restored = true;
+
+          logger.info(`GraphRAG "${config.name}" restored from cache: ${cachedNodes.length} nodes`);
+        } else {
+          logger.info('Cache found but no node embeddings - falling through to full pipeline');
+        }
+      } catch (cacheError) {
+        logger.warn(`Cache restore failed, falling through to full pipeline: ${cacheError instanceof Error ? cacheError.message : String(cacheError)}`);
+        entities = [];
+        relationships = [];
         communities = [];
-        logger.warn('Community detection not supported for Neo4j store (use memory store)');
-      }
-
-      await store.setCommunities(communities);
-
-      // 9. Save to cache
-      if (cacheEnabled) {
-        await cache.save(sourceHash, entities, relationships, communities);
       }
     }
 
-    // If loading from cache, we need to rebuild the graph store
-    if (cacheEnabled && entities.length > 0 && (await store.getAllNodes()).length === 0) {
-      const nodes = await this.buildNodes(entities, embeddings);
-      const edges = this.buildEdges(relationships, nodes);
-      await store.addNodes(nodes);
-      await store.addEdges(edges);
-      await store.setCommunities(communities);
+    // --- Path 3: Full pipeline (load docs, extract, embed, build, cache) ---
+    if (!restored) {
+      onProgress?.({ name: config.name, phase: 'loading', progress: 5, message: 'Loading documents...' });
+      logger.info('Loading documents...');
+      const documents = await KnowledgeStoreFactory.loadDocuments(config, projectRoot);
+      logger.info(`Loaded ${documents.length} document(s)`);
+      metadata.documentCount = documents.length;
+
+      onProgress?.({ name: config.name, phase: 'splitting', progress: 15, message: `Splitting ${documents.length} documents...` });
+      const splitDocs = await KnowledgeStoreFactory.splitDocuments(config, documents);
+      logger.info(`Split into ${splitDocs.length} chunk(s)`);
+      metadata.chunkCount = splitDocs.length;
+
+      // Compute source hash for cache validation
+      const docContents = splitDocs.map((d) => d.pageContent);
+      const sourceHash = ExtractionCache.computeSourceHash(docContents);
+      metadata.sourceHashes = await KnowledgeStoreFactory.computeFileHashes(config, projectRoot);
+
+      let cachedNodes: GraphNode[] | null = null;
+      let cacheHit = false;
+
+      // Check cache with source hash validation
+      if (cacheEnabled && await cache.isValid(sourceHash)) {
+        try {
+          logger.info('Cache HIT - loading from cache');
+          onProgress?.({ name: config.name, phase: 'loading', progress: 20, message: 'Loading from cache...' });
+          const cached = await cache.load();
+          entities = cached.entities;
+          relationships = cached.relationships;
+          communities = cached.communities;
+
+          cachedNodes = await cache.loadNodes();
+          if (cachedNodes) {
+            logger.info(`Loaded ${cachedNodes.length} cached nodes with embeddings`);
+          }
+
+          cacheHit = true;
+        } catch (cacheError) {
+          logger.warn(`Cache load failed, falling back to extraction: ${cacheError instanceof Error ? cacheError.message : String(cacheError)}`);
+        }
+      }
+
+      if (!cacheHit) {
+        if (cacheEnabled) {
+          logger.info('Cache MISS - running extraction pipeline');
+        }
+
+        // Entity extraction
+        if (graphConfig.extractionMode === 'direct' && graphConfig.directMapping) {
+          onProgress?.({ name: config.name, phase: 'extracting', progress: 30, message: 'Running direct mapping...' });
+          logger.info(`Using direct mapping mode for ${config.name}`);
+          const result = DirectMapper.mapQueryResults(documents, graphConfig.directMapping);
+          entities = result.entities;
+          relationships = result.relationships;
+          logger.info(`Direct mapping: ${entities.length} entities, ${relationships.length} relationships`);
+        } else {
+          onProgress?.({ name: config.name, phase: 'extracting', progress: 30, message: 'Extracting entities with LLM...' });
+          logger.info(`Using LLM extraction mode for ${config.name}`);
+          const extractionLlm = LLMFactory.create(graphConfig.extraction.llm);
+          const extractor = new EntityExtractor({
+            llm: extractionLlm,
+            entityTypes: graphConfig.extraction.entityTypes,
+            relationshipTypes: graphConfig.extraction.relationshipTypes,
+          });
+
+          const chunks = splitDocs.map((doc, idx) => ({
+            id: `chunk-${idx}`,
+            content: doc.pageContent,
+          }));
+
+          const extracted = await extractor.extractFromChunks(chunks);
+          entities = extracted.entities;
+          relationships = extracted.relationships;
+        }
+
+        // Build graph
+        onProgress?.({ name: config.name, phase: 'embedding', progress: 55, message: `Embedding ${entities.length} entities...` });
+        const nodes = await this.buildNodes(entities, embeddings);
+
+        onProgress?.({ name: config.name, phase: 'building', progress: 65, message: 'Building graph...' });
+        await this.populateStore(store, config, nodes, relationships, []);
+
+        // Community detection
+        onProgress?.({ name: config.name, phase: 'building', progress: 75, message: 'Detecting communities...' });
+        if (store instanceof MemoryGraphStore) {
+          const detector = new CommunityDetector(graphConfig.communities);
+          communities = await detector.detect(store);
+
+          if (communities.length > 0) {
+            onProgress?.({ name: config.name, phase: 'building', progress: 80, message: `Summarizing ${communities.length} communities...` });
+            const summaryLlm = LLMFactory.create(graphConfig.communities.summaryLlm);
+            const summarizer = new CommunitySummarizer(summaryLlm);
+            communities = await summarizer.summarize(communities, store);
+          }
+        } else {
+          communities = [];
+          logger.warn('Community detection not supported for Neo4j store (use memory store)');
+        }
+
+        await store.setCommunities(communities);
+
+        // Save to cache
+        if (cacheEnabled) {
+          onProgress?.({ name: config.name, phase: 'caching', progress: 90, message: 'Saving to cache...' });
+          await cache.save(sourceHash, entities, relationships, communities);
+          await cache.saveNodes(nodes);
+        }
+      }
+
+      // Cache hit but store empty: rebuild from cached data
+      if (cacheHit && entities.length > 0 && (await store.getAllNodes()).length === 0) {
+        onProgress?.({ name: config.name, phase: 'building', progress: 60, message: 'Rebuilding graph from cache...' });
+
+        let nodes: GraphNode[];
+        if (cachedNodes && cachedNodes.length > 0) {
+          nodes = cachedNodes;
+          logger.info(`Using ${nodes.length} cached nodes (skipping embedding)`);
+        } else {
+          onProgress?.({ name: config.name, phase: 'embedding', progress: 50, message: `Re-embedding ${entities.length} entities...` });
+          nodes = await this.buildNodes(entities, embeddings);
+        }
+
+        await this.populateStore(store, config, nodes, relationships, communities);
+
+        if (!cachedNodes && cacheEnabled) {
+          await cache.saveNodes(nodes);
+        }
+      }
+
+      // Update metadata counts
+      metadata.entityCount = entities.length;
+      metadata.edgeCount = relationships.length;
+      metadata.communityCount = communities.length;
     }
 
-    logger.info(`GraphRAG "${config.name}" ready: ${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities`);
+    logger.info(`GraphRAG "${config.name}" ready: ${metadata.entityCount} entities, ${metadata.edgeCount} edges, ${metadata.communityCount} communities`);
 
     // Register graph store for API access
     this.graphStores.set(config.name, store);
 
-    // 10. Create search instances
+    // Create search instances
     const localSearch = new LocalSearch(store, embeddings, searchConfig.localSearch);
     const globalSearchLlm = LLMFactory.create(searchConfig.globalSearch.llm);
     const globalSearch = new GlobalSearch(store, globalSearchLlm, searchConfig.globalSearch);
 
-    // 11. Return KnowledgeStoreInstance
+    onProgress?.({ name: config.name, phase: 'done', progress: 100, message: 'Complete' });
+
     return {
-      config: config as any, // GraphRagKnowledgeConfig is compatible with KnowledgeConfig via the union
+      config: config as any,
       search: async (query: string, k?: number): Promise<SearchResult[]> => {
         const numResults = k ?? searchConfig.defaultK;
         const mode = detectSearchMode(query);
@@ -174,19 +298,76 @@ export class GraphRagFactory {
       addDocuments: async (): Promise<void> => {
         logger.warn('addDocuments not supported for GraphRAG stores - use refresh() instead');
       },
-      refresh: async (): Promise<void> => {
+      refresh: async (refreshOnProgress?: IndexingProgressCallback): Promise<void> => {
         logger.info(`Refreshing GraphRAG store "${config.name}"...`);
-        await store.clear();
+
+        const newSourceHashes = await KnowledgeStoreFactory.computeFileHashes(config, projectRoot);
+        const hashesChanged = JSON.stringify(metadata.sourceHashes) !== JSON.stringify(newSourceHashes);
+
+        if (!hashesChanged) {
+          logger.info(`No source changes detected for "${config.name}", skipping refresh`);
+          return;
+        }
+
+        await store.clearByKnowledgeBase(config.name);
         if (cacheEnabled) {
           await cache.clear();
         }
-        // Re-run the full pipeline
-        await GraphRagFactory.create(config, projectRoot);
+        await GraphRagFactory.create(config, projectRoot, cacheDir, refreshOnProgress);
       },
+      getMetadata: () => ({ ...metadata }),
     };
   }
 
-  private static createGraphStore(config: GraphConfig): GraphStore {
+  /**
+   * Populate a graph store with nodes, edges, KB master node, and communities.
+   */
+  private static async populateStore(
+    store: GraphStore,
+    config: GraphRagKnowledgeConfig,
+    nodes: GraphNode[],
+    relationships: ExtractedRelationship[],
+    communities: Community[]
+  ): Promise<void> {
+    const edges = this.buildEdges(relationships, nodes);
+    await store.addNodes(nodes);
+    await store.addEdges(edges);
+
+    // Add knowledge base master node
+    const kbNodeId = normalizeId(config.name, 'KnowledgeBase');
+    const kbNode: GraphNode = {
+      id: kbNodeId,
+      type: 'KnowledgeBase',
+      name: config.name,
+      description: config.description || `Knowledge base: ${config.name}`,
+      properties: {
+        sourceType: config.source.type,
+        createdAt: new Date().toISOString(),
+        totalEntities: nodes.length,
+        totalRelationships: edges.length,
+      },
+      sourceChunkIds: [],
+      embedding: [],
+    };
+    await store.addNodes([kbNode]);
+
+    const kbEdges: GraphEdge[] = nodes.map((node, idx) => ({
+      id: `kb-edge-${idx}`,
+      type: 'BELONGS_TO_KB',
+      sourceId: node.id,
+      targetId: kbNodeId,
+      description: `Entity belongs to ${config.name} knowledge base`,
+      weight: 1.0,
+      properties: {},
+    }));
+    await store.addEdges(kbEdges);
+
+    if (communities.length > 0) {
+      await store.setCommunities(communities);
+    }
+  }
+
+  private static createGraphStore(config: GraphConfig, knowledgeBaseName: string): GraphStore {
     switch (config.store.type) {
       case 'neo4j': {
         const opts = config.store.options as Record<string, string>;
@@ -195,6 +376,7 @@ export class GraphRagFactory {
           username: opts.username ?? 'neo4j',
           password: opts.password ?? 'password',
           database: opts.database,
+          knowledgeBaseName,
         });
       }
       case 'memory':
@@ -217,7 +399,6 @@ export class GraphRagFactory {
       embeddingVectors = await embeddings.embedDocuments(descriptions);
     } catch (error) {
       logger.error(`Failed to embed entity descriptions: ${error instanceof Error ? error.message : String(error)}`);
-      // Fall back to empty embeddings
       embeddingVectors = entities.map(() => []);
     }
 
@@ -244,21 +425,21 @@ export class GraphRagFactory {
   private static buildEdges(relationships: ExtractedRelationship[], nodes: GraphNode[]): GraphEdge[] {
     const nodeIdMap = new Map<string, string>();
     for (const node of nodes) {
-      const key = `${node.name.toLowerCase()}::${node.type.toLowerCase()}`;
+      const key = normalizeId(node.name, node.type);
       nodeIdMap.set(key, node.id);
     }
 
     const edges: GraphEdge[] = [];
     for (let i = 0; i < relationships.length; i++) {
       const rel = relationships[i]!;
-      const sourceKey = `${rel.sourceName.toLowerCase()}::${rel.sourceType.toLowerCase()}`;
-      const targetKey = `${rel.targetName.toLowerCase()}::${rel.targetType.toLowerCase()}`;
+      const sourceKey = normalizeId(rel.sourceName, rel.sourceType);
+      const targetKey = normalizeId(rel.targetName, rel.targetType);
 
       const sourceId = nodeIdMap.get(sourceKey);
       const targetId = nodeIdMap.get(targetKey);
 
       if (!sourceId || !targetId) {
-        logger.debug(`Skipping relationship: missing node for ${rel.sourceName} -> ${rel.targetName}`);
+        logger.warn(`Skipping relationship ${rel.type}: missing node for ${rel.sourceName} (${rel.sourceType}) -> ${rel.targetName} (${rel.targetType})`);
         continue;
       }
 

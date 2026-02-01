@@ -1,6 +1,16 @@
+import dotenv from 'dotenv';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
-import 'dotenv/config';
+
+// Load .env from the project root (cwd), which is the CLI convention
+const cliEnvPath = path.join(process.cwd(), '.env');
+if (fsSync.existsSync(cliEnvPath)) {
+  dotenv.config({ path: cliEnvPath });
+} else {
+  dotenv.config();
+}
+
 import { Orchestrator } from '../../../lib/index.js';
 import { createServer } from '../../server.js';
 import { logger } from '../../../lib/logger.js';

@@ -9,6 +9,7 @@ export class NavBar extends Component {
             { id: 'agents', label: 'Agents', icon: 'fa-robot', color: 'blue' },
             { id: 'workflows', label: 'Workflows', icon: 'fa-project-diagram', color: 'purple' },
             { id: 'knowledge', label: 'Knowledge', icon: 'fa-brain', color: 'orange' },
+            { id: 'graph', label: 'Graph', icon: 'fa-network-wired', color: 'pink' },
             { id: 'mcp', label: 'MCP', icon: 'fa-server', color: 'cyan' },
             { id: 'ide', label: 'IDE', icon: 'fa-code', color: 'green' }
         ];

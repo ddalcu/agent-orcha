@@ -4,9 +4,9 @@ import pino from 'pino';
  * Shared Pino configuration that can be used by both the standalone logger and Fastify
  */
 export function getPinoConfig() {
-  const logLevel = process.env.LOG_LEVEL || 'info';
+  const logLevel = process.env.LOG_LEVEL || 'debug';
   const isDevelopment = process.env.NODE_ENV !== 'production';
-
+  console.log("LogLevel", logLevel);
   return {
     level: logLevel,
     transport: isDevelopment

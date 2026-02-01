@@ -1,3 +1,5 @@
+import * as fs from 'fs/promises';
+import * as crypto from 'crypto';
 import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory';
 import { Chroma } from '@langchain/community/vectorstores/chroma';
 import { OpenAIEmbeddings } from '@langchain/openai';
@@ -17,22 +19,58 @@ import { getEmbeddingConfig } from '../llm/llm-config.js';
 import { detectProvider } from '../llm/provider-detector.js';
 import { createLogger } from '../logger.js';
 import { DatabaseLoader, WebLoader, S3Loader } from './loaders/index.js';
+import { VectorStoreCache } from './vector-store-cache.js';
+import { createDefaultMetadata, type KnowledgeStoreMetadata, type IndexingProgressCallback } from './knowledge-store-metadata.js';
 
 const logger = createLogger('KnowledgeFactory');
 const searchLogger = createLogger('KnowledgeSearch');
 
 export class KnowledgeStoreFactory {
-  static async create(config: VectorKnowledgeConfig, projectRoot: string): Promise<KnowledgeStoreInstance> {
+  static async create(
+    config: VectorKnowledgeConfig,
+    projectRoot: string,
+    cacheDir?: string,
+    onProgress?: IndexingProgressCallback
+  ): Promise<KnowledgeStoreInstance> {
+    const embeddingConfigName = config.embedding;
+    const embeddings = this.createEmbeddings(embeddingConfigName);
+    const isMemoryStore = config.store.type === 'memory' || config.store.type === 'pinecone' || config.store.type === 'qdrant';
+
+    let metadata = createDefaultMetadata(config.name, 'vector');
+    metadata.embeddingModel = embeddingConfigName;
+
+    // Try loading from cache for memory-based stores
+    if (isMemoryStore && cacheDir) {
+      const cache = new VectorStoreCache(cacheDir, config.name);
+      onProgress?.({ name: config.name, phase: 'loading', progress: 5, message: 'Checking cache...' });
+
+      const sourceHashes = await this.computeFileHashes(config, projectRoot);
+      const cached = await cache.load(embeddings, embeddingConfigName, sourceHashes);
+
+      if (cached) {
+        logger.info(`"${config.name}" restored from cache (${cached.vectorCount} vectors)`);
+        onProgress?.({ name: config.name, phase: 'done', progress: 100, message: 'Restored from cache' });
+
+        metadata.documentCount = cached.vectorCount;
+        metadata.chunkCount = cached.vectorCount;
+        metadata.sourceHashes = sourceHashes;
+
+        return this.wrapAsInstance(config, cached.store, embeddings, metadata, projectRoot, cacheDir);
+      }
+    }
+
+    onProgress?.({ name: config.name, phase: 'loading', progress: 10, message: 'Loading documents...' });
     logger.info(`Loading documents for "${config.name}"...`);
     const documents = await this.loadDocuments(config, projectRoot);
     logger.info(`Loaded ${documents.length} document(s)`);
+    metadata.documentCount = documents.length;
 
+    onProgress?.({ name: config.name, phase: 'splitting', progress: 30, message: `Splitting ${documents.length} documents...` });
     const splitDocs = await this.splitDocuments(config, documents);
     logger.info(`Split into ${splitDocs.length} chunk(s)`);
+    metadata.chunkCount = splitDocs.length;
 
-    const embeddingConfigName = config.embedding;
     logger.info(`Using embedding config: "${embeddingConfigName}"`);
-    const embeddings = this.createEmbeddings(embeddingConfigName);
 
     // Test embeddings to ensure they work correctly
     if (splitDocs.length > 0) {
@@ -54,10 +92,33 @@ export class KnowledgeStoreFactory {
       }
     }
 
+    onProgress?.({ name: config.name, phase: 'embedding', progress: 50, message: `Embedding ${splitDocs.length} chunks...` });
     logger.info(`Building knowledge store...`);
     const store = await this.createStore(config, splitDocs, embeddings, projectRoot);
     logger.info(`Knowledge store "${config.name}" ready`);
 
+    // Save to cache for memory-based stores
+    if (isMemoryStore && cacheDir && store instanceof MemoryVectorStore) {
+      onProgress?.({ name: config.name, phase: 'caching', progress: 90, message: 'Saving to cache...' });
+      const sourceHashes = await this.computeFileHashes(config, projectRoot);
+      metadata.sourceHashes = sourceHashes;
+      const cache = new VectorStoreCache(cacheDir, config.name);
+      await cache.save(store, embeddingConfigName, sourceHashes);
+    }
+
+    onProgress?.({ name: config.name, phase: 'done', progress: 100, message: 'Complete' });
+
+    return this.wrapAsInstance(config, store, embeddings, metadata, projectRoot, cacheDir);
+  }
+
+  private static wrapAsInstance(
+    config: VectorKnowledgeConfig,
+    store: VectorStore,
+    embeddings: Embeddings,
+    metadata: KnowledgeStoreMetadata,
+    projectRoot: string,
+    cacheDir?: string
+  ): KnowledgeStoreInstance {
     return {
       config,
       search: async (query: string, k?: number): Promise<SearchResult[]> => {
@@ -66,22 +127,17 @@ export class KnowledgeStoreFactory {
 
         try {
           // Expand short queries - some embedding models struggle with very short or terse text
-          // Expand if less than 30 chars or less than 4 words to ensure better embedding quality
           let searchQuery = query.trim();
           const wordCount = searchQuery.split(/\s+/).filter(w => w.length > 0).length;
           if (searchQuery.length < 30 || wordCount < 4) {
             searchLogger.warn(`Query is short (${searchQuery.length} chars, ${wordCount} words), expanding with context`);
-            // Add context based on the knowledge store description to make query more descriptive
-            const storeContext = config.description 
+            const storeContext = config.description
               ? `${config.description.toLowerCase()} information about`
               : 'information about';
             searchQuery = `${storeContext} ${searchQuery}`;
             searchLogger.info(`Expanded query: "${searchQuery}"`);
           }
 
-          // Note: We validate the embedding here for diagnostics, but MemoryVectorStore
-          // will embed the query again internally. If our validation fails but the store's
-          // embedding works, we'll still get results.
           let queryEmbedding: number[] | null = null;
           try {
             queryEmbedding = await embeddings.embedQuery(searchQuery);
@@ -93,7 +149,6 @@ export class KnowledgeStoreFactory {
                 searchLogger.warn(`Validation embedding contains ${invalidValues.length} invalid values (NaN/Inf) - proceeding with search`);
               } else if (isZeroVector) {
                 searchLogger.warn(`Validation embedding is a zero vector for query: "${searchQuery}"`);
-                // Try with original query if we expanded it
                 if (searchQuery !== query) {
                   searchLogger.warn(`Trying original query instead`);
                   try {
@@ -118,14 +173,10 @@ export class KnowledgeStoreFactory {
           } catch (embedError) {
             const embedErrorMessage = embedError instanceof Error ? embedError.message : String(embedError);
             searchLogger.warn(`Query validation embedding failed: ${embedErrorMessage} - proceeding with search anyway`);
-            // Don't return - let MemoryVectorStore try embedding internally
           }
 
-          // MemoryVectorStore will embed the query internally using its stored embeddings instance
-          // Use the query that worked best (original or expanded)
           const results = await store.similaritySearchWithScore(searchQuery, numResults);
 
-          // Filter out NaN scores and log warnings with more details
           const validResults = results.filter(([doc, score]) => {
             if (isNaN(score) || !isFinite(score)) {
               searchLogger.warn(`Invalid score detected: ${score} for document: "${doc.pageContent.substring(0, 50)}..."`);
@@ -136,12 +187,9 @@ export class KnowledgeStoreFactory {
 
           searchLogger.info(`Raw results: ${results.length}, valid: ${validResults.length}, scores: ${validResults.map(([, s]) => s.toFixed(3)).join(', ')}`);
 
-          // If all results have NaN scores, this indicates the embedding API failed
-          // Try a fallback: return all documents with a low score so the agent at least gets some context
           if (validResults.length === 0 && results.length > 0) {
             searchLogger.error(`All results have invalid scores - embedding API may be failing`);
             searchLogger.error(`This is a critical issue - returning empty results. Check embedding API at ${config.embedding}`);
-            // Return empty - the agent will need to handle this
             return [];
           }
 
@@ -170,12 +218,104 @@ export class KnowledgeStoreFactory {
         }));
         await store.addDocuments(langchainDocs);
       },
-      refresh: async (): Promise<void> => {
+      refresh: async (refreshOnProgress?: IndexingProgressCallback): Promise<void> => {
+        refreshOnProgress?.({ name: config.name, phase: 'loading', progress: 10, message: 'Loading documents...' });
         const newDocs = await this.loadDocuments(config, projectRoot);
         const splitNewDocs = await this.splitDocuments(config, newDocs);
-        await store.addDocuments(splitNewDocs);
+        refreshOnProgress?.({ name: config.name, phase: 'splitting', progress: 30, message: `Split into ${splitNewDocs.length} chunks...` });
+
+        // For memory stores: compute hashes and do incremental update
+        if (store instanceof MemoryVectorStore && cacheDir) {
+          const newSourceHashes = await this.computeFileHashes(config, projectRoot);
+          const changedSources = new Set<string>();
+          const removedSources = new Set<string>();
+
+          // Find changed and new sources
+          for (const [source, hash] of Object.entries(newSourceHashes)) {
+            if (metadata.sourceHashes[source] !== hash) {
+              changedSources.add(source);
+            }
+          }
+          // Find removed sources
+          for (const source of Object.keys(metadata.sourceHashes)) {
+            if (!(source in newSourceHashes)) {
+              removedSources.add(source);
+            }
+          }
+
+          if (changedSources.size === 0 && removedSources.size === 0) {
+            logger.info(`No changes detected for "${config.name}", skipping refresh`);
+            return;
+          }
+
+          logger.info(`Refreshing "${config.name}": ${changedSources.size} changed, ${removedSources.size} removed`);
+          refreshOnProgress?.({ name: config.name, phase: 'embedding', progress: 50, message: `Updating ${changedSources.size} changed sources...` });
+
+          // Filter out vectors from changed/removed sources
+          const sourcesToRemove = new Set([...changedSources, ...removedSources]);
+          (store as any).memoryVectors = (store as any).memoryVectors.filter(
+            (v: any) => !sourcesToRemove.has(v.metadata?.source ?? '')
+          );
+
+          // Add new docs only from changed sources
+          const docsToAdd = splitNewDocs.filter(
+            (doc) => changedSources.has(doc.metadata?.source ?? '')
+          );
+
+          if (docsToAdd.length > 0) {
+            await store.addDocuments(docsToAdd);
+          }
+
+          // Update metadata
+          metadata.sourceHashes = newSourceHashes;
+          metadata.documentCount = newDocs.length;
+          metadata.chunkCount = (store as any).memoryVectors.length;
+
+          // Save updated cache
+          refreshOnProgress?.({ name: config.name, phase: 'caching', progress: 90, message: 'Saving to cache...' });
+          const cache = new VectorStoreCache(cacheDir, config.name);
+          await cache.save(store, metadata.embeddingModel, newSourceHashes);
+        } else {
+          // Non-memory stores: re-add all docs
+          refreshOnProgress?.({ name: config.name, phase: 'embedding', progress: 50, message: `Re-embedding ${splitNewDocs.length} chunks...` });
+          await store.addDocuments(splitNewDocs);
+          metadata.documentCount = newDocs.length;
+          metadata.chunkCount = splitNewDocs.length;
+        }
       },
+      getMetadata: () => ({ ...metadata }),
     };
+  }
+
+  static async computeFileHashes(
+    config: KnowledgeConfig,
+    projectRoot: string
+  ): Promise<Record<string, string>> {
+    const hashes: Record<string, string> = {};
+
+    if (config.source.type === 'directory') {
+      const sourcePath = path.join(projectRoot, config.source.path);
+      const pattern = config.source.pattern ?? '*';
+      const files = await glob(pattern, { cwd: sourcePath, absolute: true });
+      for (const file of files) {
+        const content = await fs.readFile(file);
+        hashes[file] = crypto.createHash('sha256').update(content).digest('hex');
+      }
+    } else if (config.source.type === 'file') {
+      const sourcePath = path.join(projectRoot, config.source.path);
+      const content = await fs.readFile(sourcePath);
+      hashes[sourcePath] = crypto.createHash('sha256').update(content).digest('hex');
+    } else if (config.source.type === 'database') {
+      // For database, hash the query string as a proxy
+      hashes['database:query'] = crypto.createHash('sha256').update(config.source.query).digest('hex');
+    } else if (config.source.type === 'web') {
+      hashes['web:url'] = crypto.createHash('sha256').update(config.source.url).digest('hex');
+    } else if (config.source.type === 's3') {
+      const key = `s3:${config.source.bucket}/${config.source.prefix ?? ''}`;
+      hashes[key] = crypto.createHash('sha256').update(key).digest('hex');
+    }
+
+    return hashes;
   }
 
   static async loadDocuments(config: KnowledgeConfig, projectRoot: string): Promise<Document[]> {
@@ -309,13 +449,9 @@ export class KnowledgeStoreFactory {
     return this.wrapWithValidation(baseEmbeddings, eosToken);
   }
 
-  /**
-   * Wraps embeddings with validation and optional EOS token support
-   */
   private static wrapWithValidation(embeddings: Embeddings, eosToken?: string): Embeddings {
     const appendToken = (text: string): string => {
       if (!eosToken) return text;
-      // Only append if not already present
       if (text.endsWith(eosToken)) {
         return text;
       }
@@ -332,7 +468,6 @@ export class KnowledgeStoreFactory {
       if (result.some(v => !isFinite(v))) {
         throw new Error(`${context}: Embedding contains NaN or Infinity values`);
       }
-      // Check for zero vector (usually indicates API failure)
       const isZeroVector = result.every(v => v === 0);
       if (isZeroVector) {
         throw new Error(`${context}: Embedding returned a zero vector - API may have failed or returned invalid data`);
@@ -347,11 +482,9 @@ export class KnowledgeStoreFactory {
       return result.map((embedding, idx) => validateEmbedding(embedding, `${context}[${idx}]`));
     };
 
-    // Store original methods
     const originalEmbedQuery = embeddings.embedQuery.bind(embeddings);
     const originalEmbedDocuments = embeddings.embedDocuments.bind(embeddings);
 
-    // Override with validation
     embeddings.embedQuery = async (text: string): Promise<number[]> => {
       try {
         const processedText = appendToken(text);
@@ -380,7 +513,6 @@ export class KnowledgeStoreFactory {
 
     return embeddings;
   }
-
 
   private static async createStore(
     config: VectorKnowledgeConfig,

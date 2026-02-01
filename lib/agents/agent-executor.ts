@@ -7,6 +7,7 @@ import { LLMFactory } from '../llm/llm-factory.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { ConversationStore } from '../memory/conversation-store.js';
 import { StructuredOutputWrapper } from './structured-output-wrapper.js';
+import { logLLMCallStart, logLLMCallEnd } from '../llm/llm-call-logger.js';
 import { logger } from '../logger.js';
 
 export class AgentExecutor {
@@ -83,11 +84,18 @@ export class AgentExecutor {
       const userMessage = this.formatUserMessage(definition, input);
       const messages = this.buildMessagesWithHistory(userMessage, sessionId);
 
-      logger.info(`[Agent: ${definition.name}] Invoking with ${tools.length} tools...`);
-      logger.info(`[Agent: ${definition.name}] User message: ${userMessage.substring(0, 100)}...`);
+      const caller = `Agent: ${definition.name}`;
+
       if (sessionId) {
-        logger.info(`[Agent: ${definition.name}] Using session: ${sessionId} with ${messages.length} messages`);
+        logger.info(`[${caller}] Using session: ${sessionId}`);
       }
+
+      const { startTime: llmStart, stats } = logLLMCallStart({
+        caller,
+        systemPrompt: definition.prompt.system,
+        messages,
+        tools,
+      });
 
       // Increase recursion limit to prevent premature termination
       // Default is 25, increase to 50 for complex workflows
@@ -100,7 +108,12 @@ export class AgentExecutor {
         }
       );
 
-      logger.info(`[Agent: ${definition.name}] Got ${result.messages?.length ?? 0} messages`);
+      const lastMsg = result.messages?.[result.messages.length - 1];
+      const responseContent = lastMsg && 'content' in lastMsg ? String(lastMsg.content) : '';
+      logLLMCallEnd(caller, llmStart, stats, {
+        contentLength: responseContent.length,
+        messageCount: result.messages?.length ?? 0,
+      });
 
       if (!result.messages || result.messages.length === 0) {
         logger.warn(`[Agent: ${definition.name}] No messages returned`);
@@ -199,7 +212,18 @@ export class AgentExecutor {
       this.conversationStore.addMessage(sessionId, new HumanMessage(userMessage));
     }
 
+    const caller = `Agent: ${definition.name}`;
+    const { startTime: llmStart, stats } = logLLMCallStart({
+      caller,
+      systemPrompt: definition.prompt.system,
+      messages: allMessages,
+    });
+
     const result = await llm.invoke(allMessages);
+
+    logLLMCallEnd(caller, llmStart, stats, {
+      contentLength: typeof result.content === 'string' ? result.content.length : JSON.stringify(result.content).length,
+    });
 
     let output: string | Record<string, unknown>;
 
@@ -273,6 +297,14 @@ export class AgentExecutor {
       const userMessage = this.formatUserMessage(definition, actualInput);
       const messages = this.buildMessagesWithHistory(userMessage, sessionId);
 
+      const caller = `Agent: ${definition.name}`;
+      const { startTime: llmStart, stats } = logLLMCallStart({
+        caller,
+        systemPrompt: definition.prompt.system,
+        messages,
+        tools,
+      });
+
       const eventStream = await agent.streamEvents(
         { messages },
         {
@@ -310,6 +342,10 @@ export class AgentExecutor {
         }
       }
 
+      logLLMCallEnd(caller, llmStart, stats, {
+        contentLength: accumulatedOutput.length,
+      });
+
       // Handle structured output
       if (definition.output?.format === 'structured' && finalMessage) {
         const structuredOutput = this.extractStructuredOutput(finalMessage);
@@ -339,6 +375,13 @@ export class AgentExecutor {
         this.conversationStore.addMessage(sessionId, new HumanMessage(userMessage));
       }
 
+      const caller = `Agent: ${definition.name}`;
+      const { startTime: llmStart, stats } = logLLMCallStart({
+        caller,
+        systemPrompt: definition.prompt.system,
+        messages: allMessages,
+      });
+
       const stream = await llm.stream(allMessages);
 
       let accumulatedOutput = '';
@@ -351,6 +394,10 @@ export class AgentExecutor {
           yield { type: 'content', content: chunk.content };
         }
       }
+
+      logLLMCallEnd(caller, llmStart, stats, {
+        contentLength: accumulatedOutput.length,
+      });
 
       // Handle structured output
       if (definition.output?.format === 'structured' && finalChunk) {
