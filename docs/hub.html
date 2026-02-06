@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO Meta Tags -->
+  <title>Community Hub - Agent Orcha | Browse Agents, Skills, Workflows & More</title>
+  <meta name="description" content="Browse community-contributed agents, skills, MCP configs, knowledge stores, functions, workflows, and full projects for Agent Orcha.">
+  <meta name="keywords" content="agent orcha hub, community agents, AI skills, MCP tools, workflows, knowledge stores, functions">
+  <meta name="author" content="Agent Orcha">
+
+  <!-- Open Graph Tags -->
+  <meta property="og:title" content="Community Hub - Agent Orcha">
+  <meta property="og:description" content="Browse community-contributed components for Agent Orcha.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ddalcu.github.io/agent-orcha/hub.html">
+
+  <!-- Twitter Card Tags -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Community Hub - Agent Orcha">
+  <meta name="twitter:description" content="Browse community-contributed components for Agent Orcha.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-container">
+      <a href="index.html" class="nav-logo">
+        <img src="assets/images/logo-only.png" alt="Agent Orcha Logo">
+        <span>Agent Orcha</span>
+      </a>
+      <button class="nav-toggle" aria-label="Toggle navigation">☰</button>
+      <ul class="nav-links">
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="hub.html" class="active">Hub</a></li>
+        <li><a href="https://github.com/ddalcu/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-npm"></i> NPM</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hub-hero">
+    <div class="container">
+      <h1 class="fade-in">Community Hub</h1>
+      <p class="fade-in">Browse and discover agents, skills, workflows, functions, and more built by the community.</p>
+    </div>
+  </section>
+
+  <!-- Category Tabs + Card Grid -->
+  <section class="section-sm">
+    <div class="container">
+      <div class="hub-tabs fade-in" id="hub-tabs">
+        <button class="hub-tab active" data-type="all">All</button>
+        <button class="hub-tab" data-type="agent"><i class="fa-solid fa-robot"></i> Agents</button>
+        <button class="hub-tab" data-type="skill"><i class="fa-solid fa-wand-magic-sparkles"></i> Skills</button>
+        <button class="hub-tab" data-type="mcp"><i class="fa-solid fa-server"></i> MCP</button>
+        <button class="hub-tab" data-type="knowledge"><i class="fa-solid fa-brain"></i> Knowledge</button>
+        <button class="hub-tab" data-type="function"><i class="fa-solid fa-code"></i> Functions</button>
+        <button class="hub-tab" data-type="workflow"><i class="fa-solid fa-project-diagram"></i> Workflows</button>
+        <button class="hub-tab" data-type="project"><i class="fa-solid fa-box-open"></i> Projects</button>
+      </div>
+      <div class="features-grid" id="hub-grid"></div>
+      <div class="hub-empty hidden" id="hub-empty">
+        <i class="fa-solid fa-box-open"></i>
+        No items found for this category yet. Want to contribute? Submit a pull request!
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h4>Product</h4>
+          <ul class="footer-links">
+            <li><a href="documentation.html">Documentation</a></li>
+            <li><a href="documentation.html#quick-start">Quick Start</a></li>
+            <li><a href="documentation.html#examples">Examples</a></li>
+            <li><a href="documentation.html#api-reference">API Reference</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>Community</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/ddalcu/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/issues" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Issues</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/discussions" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Discussions</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>Resources</h4>
+          <ul class="footer-links">
+            <li><a href="https://www.npmjs.com/package/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-npm"></i> NPM Package</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/blob/main/README.md" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> README</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/blob/main/LICENSE" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> License</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>About</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
+            <li>Version 0.0.3</li>
+            <li>MIT License</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Agent Orcha. Released under the MIT License. 100% open source and forever free.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="assets/js/main.js"></script>
+  <script>
+    (function () {
+      var TYPE_META = {
+        agent:     { icon: 'fa-robot',              color: 'agent' },
+        skill:     { icon: 'fa-wand-magic-sparkles', color: 'skill' },
+        mcp:       { icon: 'fa-server',             color: 'mcp' },
+        knowledge: { icon: 'fa-brain',              color: 'knowledge' },
+        function:  { icon: 'fa-code',               color: 'function' },
+        workflow:  { icon: 'fa-project-diagram',    color: 'workflow' },
+        project:   { icon: 'fa-box-open',           color: 'project' }
+      };
+
+      var grid = document.getElementById('hub-grid');
+      var emptyEl = document.getElementById('hub-empty');
+      var tabs = document.getElementById('hub-tabs');
+      var registry = [];
+      var activeType = 'all';
+
+      function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      function renderCards(items) {
+        if (items.length === 0) {
+          grid.innerHTML = '';
+          emptyEl.classList.remove('hidden');
+          return;
+        }
+        emptyEl.classList.add('hidden');
+
+        grid.innerHTML = items.map(function (item) {
+          var meta = TYPE_META[item.type] || TYPE_META.project;
+          var tagsHtml = (item.tags || []).map(function (tag) {
+            return '<span class="hub-card-tag">' + escapeHtml(tag) + '</span>';
+          }).join('');
+
+          return (
+            '<a class="hub-card-link" href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener">' +
+              '<div class="card">' +
+                '<div class="hub-card-header">' +
+                  '<div class="card-icon hub-card-icon--' + meta.color + '"><i class="fa-solid ' + meta.icon + '"></i></div>' +
+                  '<h3 class="card-title">' + escapeHtml(item.name) + '</h3>' +
+                '</div>' +
+                '<span class="hub-card-badge hub-card-badge--' + meta.color + '">' + escapeHtml(item.type) + '</span>' +
+                '<p class="card-description">' + escapeHtml(item.description) + '</p>' +
+                '<div class="hub-card-meta">' +
+                  '<span><i class="fa-solid fa-user"></i> ' + escapeHtml(item.author) + '</span>' +
+                  '<div class="hub-card-tags">' + tagsHtml + '</div>' +
+                '</div>' +
+              '</div>' +
+            '</a>'
+          );
+        }).join('');
+      }
+
+      function filterAndRender() {
+        var items = activeType === 'all'
+          ? registry
+          : registry.filter(function (item) { return item.type === activeType; });
+        renderCards(items);
+      }
+
+      tabs.addEventListener('click', function (e) {
+        var btn = e.target.closest('.hub-tab');
+        if (!btn) return;
+        tabs.querySelector('.hub-tab.active').classList.remove('active');
+        btn.classList.add('active');
+        activeType = btn.getAttribute('data-type');
+        filterAndRender();
+      });
+
+      fetch('hub-registry.json')
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          registry = data;
+          filterAndRender();
+        })
+        .catch(function () {
+          grid.innerHTML = '';
+          emptyEl.classList.remove('hidden');
+          emptyEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>Failed to load registry data.';
+        });
+    })();
+  </script>
+</body>
+</html>

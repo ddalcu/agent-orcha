@@ -60,6 +60,7 @@ export class LLMFactory {
       modelName: config.model,
       openAIApiKey: config.apiKey,
       maxTokens: config.maxTokens,
+      streamUsage: true,
       configuration: config.baseUrl ? { baseURL: config.baseUrl } : undefined,
     };
 

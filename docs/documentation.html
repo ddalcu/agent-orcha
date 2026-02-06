@@ -47,6 +47,7 @@
       <ul class="nav-links">
         <li><a href="index.html">Home</a></li>
         <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="hub.html">Hub</a></li>
         <li><a href="https://github.com/ddalcu/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub</a></li>
         <li><a href="https://www.npmjs.com/package/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-npm"></i> NPM</a></li>
       </ul>
@@ -78,6 +79,7 @@
             <li><a href="#langgraph-workflows">LangGraph Workflows</a></li>
             <li><a href="#functions">Functions</a></li>
             <li><a href="#mcp-servers">MCP Servers</a></li>
+            <li><a href="#skills">Skills</a></li>
           </ul>
 
           <h4>Knowledge Stores</h4>
@@ -102,6 +104,7 @@
                 <li><a href="#workflows-api">Workflows API</a></li>
                 <li><a href="#knowledge-api">Knowledge API</a></li>
                 <li><a href="#functions-api">Functions API</a></li>
+                <li><a href="#skills-api">Skills API</a></li>
                 <li><a href="#mcp-api">MCP API</a></li>
                 <li><a href="#files-api">Files API</a></li>
                 <li><a href="#llm-api">LLM API</a></li>
@@ -849,6 +852,128 @@ export const metadata = {
           </div>
         </div>
 
+        <!-- Skills -->
+        <h3 id="skills" class="mt-xl">Skills</h3>
+        <p>Skills are prompt augmentation units that expand what an agent knows how to do. Unlike tools or functions, skills are <strong>not executable code</strong> &mdash; they are knowledge and instruction bundles (Markdown files) that get injected into an agent's system prompt at runtime.</p>
+
+        <h4>Directory Structure</h4>
+        <p>Each skill lives in its own directory under <code>skills/</code>:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+          </div>
+          <div class="code-content">
+            <pre><code>skills/
+  weather/
+    SKILL.md
+  spotify-player/
+    SKILL.md
+  my-custom-skill/
+    SKILL.md</code></pre>
+          </div>
+        </div>
+
+        <h4>SKILL.md Format</h4>
+        <p>A SKILL.md file has optional YAML frontmatter followed by Markdown content:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Markdown</span>
+          </div>
+          <div class="code-content">
+            <pre><code>---
+name: weather
+description: Fetch weather information using free APIs
+---
+
+# Weather Information
+
+You can provide weather info using these services...
+
+## Quick Weather (wttr.in)
+
+```bash
+curl -s "wttr.in/London?format=3"
+```</code></pre>
+          </div>
+        </div>
+
+        <p>The frontmatter fields:</p>
+        <ul>
+          <li><strong>name</strong> &mdash; Unique skill identifier. If omitted, the directory name is used.</li>
+          <li><strong>description</strong> &mdash; Human-readable description shown in the UI and API.</li>
+        </ul>
+
+        <h4>Agent Configuration</h4>
+        <p>Attach skills to agents in their YAML definition file:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+          </div>
+          <div class="code-content">
+            <pre><code># Specific skills by name
+name: my-agent
+description: An agent with weather skills
+llm: default
+prompt:
+  system: You are a helpful assistant.
+  inputVariables:
+    - query
+skills:
+  - weather
+  - spotify-player
+
+# Or attach all available skills
+skills:
+  mode: all</code></pre>
+          </div>
+        </div>
+
+        <h4>How It Works</h4>
+        <p>When an agent with skills is invoked, the skill content is appended to the agent's system prompt before the LLM call. Each skill is wrapped in <code>&lt;skill name="..."&gt;</code> delimiters so the LLM can distinguish between different skill instructions.</p>
+
+        <h4>Creating Custom Skills</h4>
+        <ol>
+          <li>Create a directory under <code>skills/</code> with your skill name.</li>
+          <li>Add a <code>SKILL.md</code> file with frontmatter and instructions.</li>
+          <li>Reference the skill name in your agent's <code>skills</code> array.</li>
+          <li>Restart the server or use hot-reload to pick up changes.</li>
+        </ol>
+
+        <h4>Community Skills Registry</h4>
+        <p>Community-contributed skills that you can copy into your project:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Author</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>skill-creator</strong></td>
+              <td>Guides the creation of new SKILL.md files</td>
+              <td>Agent Orcha</td>
+            </tr>
+            <tr>
+              <td><strong>weather</strong></td>
+              <td>Weather info via wttr.in and Open-Meteo</td>
+              <td>Agent Orcha</td>
+            </tr>
+            <tr>
+              <td><strong>spotify-player</strong></td>
+              <td>Spotify playback control via spogo CLI</td>
+              <td>Agent Orcha</td>
+            </tr>
+            <tr>
+              <td><strong>wacli</strong></td>
+              <td>WhatsApp messaging via wacli CLI</td>
+              <td>Agent Orcha</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Want to contribute a skill? Add it to <code>templates/skills/</code> and submit a pull request to the repository.</p>
+
         <!-- Knowledge Stores -->
         <h2 id="knowledge-stores" class="mt-2xl">Knowledge Stores</h2>
         <p>Knowledge stores enable semantic search and RAG (Retrieval-Augmented Generation) capabilities. Define them in YAML files within the <code>knowledge/</code> directory. Agent Orcha supports two kinds: <strong>vector</strong> (default) for traditional similarity search, and <strong>graph-rag</strong> for entity-level knowledge graphs with community detection.</p>
@@ -1553,6 +1678,29 @@ Response:
               <td>POST</td>
               <td><code>/api/functions/:name/call</code></td>
               <td>Call a function</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="skills-api" class="mt-xl">Skills API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/skills</code></td>
+              <td>List all skills (name, description)</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/skills/:name</code></td>
+              <td>Get skill details (name, description, content)</td>
             </tr>
           </tbody>
         </table>

@@ -39,12 +39,16 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { name } = request.params;
       const { input, sessionId } = request.body;
+      const taskManager = fastify.orchestrator.tasks.getManager();
+      const task = taskManager.track('agent', name, input, sessionId);
 
       try {
         const result = await fastify.orchestrator.runAgent(name, input, sessionId);
+        taskManager.resolve(task.id, result);
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        taskManager.reject(task.id, error);
 
         if (message.includes('not found')) {
           return reply.status(404).send({ error: message });
@@ -60,6 +64,8 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { name } = request.params;
       const { input, sessionId } = request.body;
+      const taskManager = fastify.orchestrator.tasks.getManager();
+      const task = taskManager.track('agent', name, input, sessionId);
 
       reply.raw.setHeader('Content-Type', 'text/event-stream');
       reply.raw.setHeader('Cache-Control', 'no-cache');
@@ -77,10 +83,12 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
           }
         }
 
+        taskManager.resolve(task.id, { output: 'stream completed' });
         reply.raw.write('data: [DONE]\n\n');
         reply.raw.end();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        taskManager.reject(task.id, error);
         reply.raw.write(`data: ${JSON.stringify({ error: message })}\n\n`);
         reply.raw.end();
       }

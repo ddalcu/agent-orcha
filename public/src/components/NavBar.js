@@ -11,6 +11,8 @@ export class NavBar extends Component {
             { id: 'knowledge', label: 'Knowledge', icon: 'fa-brain', color: 'orange' },
             { id: 'graph', label: 'Graph', icon: 'fa-network-wired', color: 'pink' },
             { id: 'mcp', label: 'MCP', icon: 'fa-server', color: 'cyan' },
+            { id: 'skills', label: 'Skills', icon: 'fa-wand-magic-sparkles', color: 'teal' },
+            { id: 'monitor', label: 'Monitor', icon: 'fa-tasks', color: 'indigo' },
             { id: 'ide', label: 'IDE', icon: 'fa-code', color: 'green' }
         ];
     }

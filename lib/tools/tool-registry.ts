@@ -11,15 +11,18 @@ export class ToolRegistry {
   private knowledgeStores: KnowledgeStoreManager;
   private functionLoader: FunctionLoader;
   private builtInTools: Map<string, StructuredTool> = new Map();
+  private sandboxTool: StructuredTool | null;
 
   constructor(
     mcpClient: MCPClientManager,
     knowledgeStores: KnowledgeStoreManager,
-    functionLoader: FunctionLoader
+    functionLoader: FunctionLoader,
+    sandboxTool: StructuredTool | null = null,
   ) {
     this.mcpClient = mcpClient;
     this.knowledgeStores = knowledgeStores;
     this.functionLoader = functionLoader;
+    this.sandboxTool = sandboxTool;
   }
 
   async resolveTools(toolRefs: ToolReference[]): Promise<StructuredTool[]> {
@@ -76,6 +79,14 @@ export class ToolRegistry {
       case 'builtin': {
         const builtin = this.builtInTools.get(name);
         return builtin ? [builtin] : [];
+      }
+
+      case 'sandbox': {
+        if (!this.sandboxTool) {
+          logger.warn('Sandbox tool requested but sandbox is not configured');
+          return [];
+        }
+        return [this.sandboxTool];
       }
 
       default:
@@ -159,5 +170,12 @@ export class ToolRegistry {
    */
   getAllBuiltInTools(): StructuredTool[] {
     return Array.from(this.builtInTools.values());
+  }
+
+  /**
+   * Gets the sandbox tool if configured.
+   */
+  getAllSandboxTools(): StructuredTool[] {
+    return this.sandboxTool ? [this.sandboxTool] : [];
   }
 }

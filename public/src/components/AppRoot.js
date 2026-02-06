@@ -7,6 +7,8 @@ import './WorkflowsView.js';
 import './KnowledgeView.js';
 import './GraphView.js';
 import './McpView.js';
+import './SkillsView.js';
+import './MonitorView.js';
 import './IdeView.js';
 
 export class AppRoot extends Component {
@@ -45,6 +47,8 @@ export class AppRoot extends Component {
             case 'knowledge': el = document.createElement('knowledge-view'); break;
             case 'graph': el = document.createElement('graph-view'); break;
             case 'mcp': el = document.createElement('mcp-view'); break;
+            case 'skills': el = document.createElement('skills-view'); break;
+            case 'monitor': el = document.createElement('monitor-view'); break;
             case 'ide': el = document.createElement('ide-view'); break;
             default: el = document.createElement('agents-view'); break;
         }

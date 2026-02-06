@@ -9,11 +9,17 @@ import { InterruptManager } from './workflows/interrupt-manager.js';
 import { KnowledgeStoreManager } from './knowledge/knowledge-store-manager.js';
 import { MCPClientManager } from './mcp/mcp-client.js';
 import { FunctionLoader, type LoadedFunction } from './functions/function-loader.js';
+import { SkillLoader, type Skill } from './skills/index.js';
 import { ToolRegistry } from './tools/tool-registry.js';
 import { ToolDiscovery } from './tools/tool-discovery.js';
 import { MCPConfigSchema } from './mcp/types.js';
 import { loadLLMConfig } from './llm/llm-config.js';
 import { ConversationStore } from './memory/conversation-store.js';
+import { TaskManager } from './tasks/task-manager.js';
+import { DockerManager } from './sandbox/docker-manager.js';
+import { createSandboxExecTool } from './sandbox/sandbox-tool.js';
+import { SandboxConfigSchema } from './sandbox/types.js';
+import type { SandboxConfig } from './sandbox/types.js';
 import type { AgentDefinition, AgentResult } from './agents/types.js';
 import type {
   WorkflowDefinition,
@@ -32,8 +38,10 @@ export interface OrchestratorConfig {
   workflowsDir?: string;
   knowledgeDir?: string;
   functionsDir?: string;
+  skillsDir?: string;
   mcpConfigPath?: string;
   llmConfigPath?: string;
+  sandboxConfigPath?: string;
 }
 
 export class Orchestrator {
@@ -46,11 +54,15 @@ export class Orchestrator {
   private langGraphExecutor!: LangGraphExecutor;
   private knowledgeStoreManager: KnowledgeStoreManager;
   private functionLoader: FunctionLoader;
+  private skillLoader: SkillLoader;
   private mcpClient!: MCPClientManager;
   private toolRegistry!: ToolRegistry;
   private toolDiscovery!: ToolDiscovery;
   private interruptManager!: InterruptManager;
   private conversationStore: ConversationStore;
+  private taskManager!: TaskManager;
+  private dockerManager: DockerManager | null = null;
+  private sandboxConfig: SandboxConfig | null = null;
 
   private initialized = false;
 
@@ -61,8 +73,10 @@ export class Orchestrator {
       workflowsDir: config.workflowsDir ?? path.join(config.projectRoot, 'workflows'),
       knowledgeDir: config.knowledgeDir ?? path.join(config.projectRoot, 'knowledge'),
       functionsDir: config.functionsDir ?? path.join(config.projectRoot, 'functions'),
+      skillsDir: config.skillsDir ?? path.join(config.projectRoot, 'skills'),
       mcpConfigPath: config.mcpConfigPath ?? path.join(config.projectRoot, 'mcp.json'),
       llmConfigPath: config.llmConfigPath ?? path.join(config.projectRoot, 'llm.json'),
+      sandboxConfigPath: config.sandboxConfigPath ?? path.join(config.projectRoot, 'sandbox.json'),
     };
 
     this.agentLoader = new AgentLoader(this.config.agentsDir);
@@ -72,6 +86,7 @@ export class Orchestrator {
       this.config.projectRoot
     );
     this.functionLoader = new FunctionLoader(this.config.functionsDir);
+    this.skillLoader = new SkillLoader(this.config.skillsDir);
     this.conversationStore = new ConversationStore({
       maxMessagesPerSession: 50,
       sessionTTL: 3600000, // 1 hour
@@ -88,15 +103,26 @@ export class Orchestrator {
     await this.loadMCPConfig();
     await this.mcpClient.initialize();
 
-    // Load function tools
+    // Load function tools and skills
     await this.functionLoader.loadAll();
+    await this.skillLoader.loadAll();
+
+    // Load sandbox config
+    await this.loadSandboxConfig();
+    let sandboxTool = null;
+    if (this.sandboxConfig?.enabled && this.dockerManager) {
+      sandboxTool = createSandboxExecTool(this.dockerManager, this.sandboxConfig);
+      this.dockerManager.startPruning();
+      logger.info('[Orchestrator] Sandbox enabled');
+    }
 
     this.toolRegistry = new ToolRegistry(
       this.mcpClient,
       this.knowledgeStoreManager,
-      this.functionLoader
+      this.functionLoader,
+      sandboxTool,
     );
-    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore);
+    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
 
     // Initialize LangGraph components
@@ -116,6 +142,8 @@ export class Orchestrator {
     await this.knowledgeStoreManager.loadAll();
     logger.info('[Orchestrator] Knowledge configs loaded (stores will initialize on demand)');
 
+    this.taskManager = new TaskManager(this);
+
     this.initialized = true;
   }
 
@@ -132,6 +160,29 @@ export class Orchestrator {
         servers: {},
       });
     }
+  }
+
+  private async loadSandboxConfig(): Promise<void> {
+    try {
+      const content = await fs.readFile(this.config.sandboxConfigPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      this.sandboxConfig = SandboxConfigSchema.parse(parsed);
+      if (this.sandboxConfig.enabled) {
+        this.dockerManager = new DockerManager(this.sandboxConfig);
+      }
+    } catch {
+      logger.debug('[Orchestrator] No sandbox.json found or invalid config, sandbox disabled');
+      this.sandboxConfig = null;
+      this.dockerManager = null;
+    }
+  }
+
+  get sandbox(): SandboxAccessor {
+    return {
+      getConfig: () => this.sandboxConfig,
+      getDockerManager: () => this.dockerManager,
+      isEnabled: () => this.sandboxConfig?.enabled ?? false,
+    };
   }
 
   get agents(): AgentAccessor {
@@ -182,6 +233,21 @@ export class Orchestrator {
     };
   }
 
+  get skills(): SkillAccessor {
+    return {
+      list: () => this.skillLoader.list(),
+      get: (name: string) => this.skillLoader.get(name),
+      names: () => this.skillLoader.names(),
+      has: (name: string) => this.skillLoader.has(name),
+    };
+  }
+
+  get tasks(): TaskAccessor {
+    return {
+      getManager: () => this.taskManager,
+    };
+  }
+
   get projectRoot(): string {
     return this.config.projectRoot;
   }
@@ -221,9 +287,32 @@ export class Orchestrator {
       return 'function';
     }
 
+    if (relativePath.endsWith('SKILL.md')) {
+      await this.skillLoader.loadOne(absolutePath);
+      return 'skill';
+    }
+
     if (relativePath === 'llm.json') {
       await loadLLMConfig(this.config.llmConfigPath);
       return 'llm';
+    }
+
+    if (relativePath === 'sandbox.json') {
+      if (this.dockerManager) {
+        await this.dockerManager.close();
+      }
+      await this.loadSandboxConfig();
+      if (this.sandboxConfig?.enabled && this.dockerManager) {
+        const sandboxTool = createSandboxExecTool(this.dockerManager, this.sandboxConfig);
+        this.toolRegistry = new ToolRegistry(
+          this.mcpClient,
+          this.knowledgeStoreManager,
+          this.functionLoader,
+          sandboxTool,
+        );
+        this.dockerManager.startPruning();
+      }
+      return 'sandbox';
     }
 
     return 'none';
@@ -470,11 +559,17 @@ export class Orchestrator {
   }
 
   async close(): Promise<void> {
+    if (this.dockerManager) {
+      await this.dockerManager.close();
+    }
     if (this.mcpClient) {
       await this.mcpClient.close();
     }
     if (this.conversationStore) {
       this.conversationStore.destroy();
+    }
+    if (this.taskManager) {
+      this.taskManager.destroy();
     }
   }
 
@@ -521,10 +616,27 @@ interface FunctionAccessor {
   names: () => string[];
 }
 
+interface SkillAccessor {
+  list: () => Skill[];
+  get: (name: string) => Skill | undefined;
+  names: () => string[];
+  has: (name: string) => boolean;
+}
+
 interface MemoryAccessor {
   getStore: () => ConversationStore;
   clearSession: (sessionId: string) => void;
   getSessionCount: () => number;
   getMessageCount: (sessionId: string) => number;
   hasSession: (sessionId: string) => boolean;
+}
+
+interface TaskAccessor {
+  getManager: () => TaskManager;
+}
+
+interface SandboxAccessor {
+  getConfig: () => SandboxConfig | null;
+  getDockerManager: () => DockerManager | null;
+  isEnabled: () => boolean;
 }

@@ -280,6 +280,25 @@
       display: none;
     }
 
+    /* Animation delay utilities (avoid inline styles) */
+    .animation-delay-200 {
+      animation-delay: 0.2s;
+    }
+
+    .animation-delay-400 {
+      animation-delay: 0.4s;
+    }
+
+    /* Stream status bar pulse */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .animate-pulse-dot {
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
     .markdown-content blockquote {
       border-left: 3px solid #475569;
       padding-left: 1em;

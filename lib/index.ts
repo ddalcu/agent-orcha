@@ -76,6 +76,26 @@ export {
 export { FunctionLoader } from './functions/index.js';
 export type { FunctionMetadata, LoadedFunction } from './functions/index.js';
 
+// Skills
+export { SkillLoader, AgentSkillsConfigSchema } from './skills/index.js';
+export type { Skill, AgentSkillsConfig } from './skills/index.js';
+
 // Memory
 export { ConversationStore } from './memory/index.js';
 export type { ConversationStoreConfig, ConversationSession } from './memory/index.js';
+
+// Tasks
+export { TaskStore, TaskManager } from './tasks/index.js';
+export type {
+  Task,
+  TaskStatus,
+  TaskKind,
+  TaskStoreConfig,
+  TaskInputRequest,
+  SubmitAgentParams,
+  SubmitWorkflowParams,
+} from './tasks/index.js';
+
+// Sandbox
+export { DockerManager, createSandboxExecTool, SandboxConfigSchema } from './sandbox/index.js';
+export type { SandboxConfig, ContainerInfo, ExecResult } from './sandbox/index.js';

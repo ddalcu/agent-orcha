@@ -6,6 +6,7 @@ import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions } 
 import { LLMFactory } from '../llm/llm-factory.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { ConversationStore } from '../memory/conversation-store.js';
+import type { SkillLoader } from '../skills/skill-loader.js';
 import { StructuredOutputWrapper } from './structured-output-wrapper.js';
 import { logLLMCallStart, logLLMCallEnd } from '../llm/llm-call-logger.js';
 import { logger } from '../logger.js';
@@ -13,24 +14,55 @@ import { logger } from '../logger.js';
 export class AgentExecutor {
   private toolRegistry: ToolRegistry;
   private conversationStore: ConversationStore;
+  private skillLoader?: SkillLoader;
 
-  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore) {
+  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, skillLoader?: SkillLoader) {
     this.toolRegistry = toolRegistry;
     this.conversationStore = conversationStore;
+    this.skillLoader = skillLoader;
   }
 
   async createInstance(definition: AgentDefinition): Promise<AgentInstance> {
-    let llm = LLMFactory.create(definition.llm);
+    // Resolve skills and augment system prompt if configured
+    let augmentedDefinition = definition;
+    let skillsNeedSandbox = false;
+
+    if (definition.skills && this.skillLoader) {
+      const { content, needsSandbox } = this.skillLoader.resolveForAgentWithMeta(definition.skills);
+      skillsNeedSandbox = needsSandbox;
+      if (content) {
+        augmentedDefinition = {
+          ...definition,
+          prompt: {
+            ...definition.prompt,
+            system: `${definition.prompt.system}\n\n${content}`,
+          },
+        };
+      }
+    }
+
+    let llm = LLMFactory.create(augmentedDefinition.llm);
 
     // Wrap LLM with structured output if configured
-    llm = StructuredOutputWrapper.wrapLLM(llm, definition.output);
+    llm = StructuredOutputWrapper.wrapLLM(llm, augmentedDefinition.output);
 
-    const tools = await this.toolRegistry.resolveTools(definition.tools);
+    const tools = await this.toolRegistry.resolveTools(augmentedDefinition.tools);
+
+    // Auto-inject sandbox tool if any skill requires it
+    if (skillsNeedSandbox) {
+      const sandboxTools = this.toolRegistry.getAllSandboxTools();
+      if (sandboxTools.length > 0) {
+        tools.push(...sandboxTools);
+        logger.info(`[AgentExecutor] Auto-injected sandbox tool for agent: ${definition.name}`);
+      } else {
+        logger.warn(`[AgentExecutor] Skill requires sandbox but sandbox is not configured`);
+      }
+    }
 
     return {
-      definition,
-      invoke: async (input) => this.invoke(definition, llm, tools, input),
-      stream: (input) => this.stream(definition, llm, tools, input),
+      definition: augmentedDefinition,
+      invoke: async (input) => this.invoke(augmentedDefinition, llm, tools, input),
+      stream: (input) => this.stream(augmentedDefinition, llm, tools, input),
     };
   }
 
@@ -144,9 +176,11 @@ export class AgentExecutor {
         output = String(lastMessage);
       }
 
-      // Store AI response in session
+      // Extract tool call summaries from the message chain and store with response
       if (sessionId && typeof output === 'string') {
-        this.conversationStore.addMessage(sessionId, new AIMessage(output));
+        const toolSummaries = this.extractToolSummariesFromMessages(result.messages);
+        const storedMessage = this.buildStoredMessage(output, toolSummaries);
+        this.conversationStore.addMessage(sessionId, new AIMessage(storedMessage));
       }
 
       if (typeof output === 'string' && (!output || output === 'null' || output === 'undefined')) {
@@ -314,50 +348,94 @@ export class AgentExecutor {
 
       let accumulatedOutput = '';
       let finalMessage: unknown = null;
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      const toolCallSummaries: Array<{ tool: string; input: unknown; output: unknown }> = [];
+      const pendingToolCalls = new Map<string, { tool: string; input: unknown }>();
 
-      for await (const event of eventStream) {
-        if (event.event === 'on_chat_model_stream') {
-          const chunk = event.data.chunk;
-          if (chunk.content) {
-            accumulatedOutput += chunk.content;
-            yield { type: 'content', content: chunk.content };
+      try {
+        for await (const event of eventStream) {
+          if (event.event === 'on_chat_model_stream') {
+            const chunk = event.data.chunk;
+            const text = this.extractTextContent(chunk.content);
+            if (text) {
+              accumulatedOutput += text;
+              yield { type: 'content', content: text };
+            }
+          } else if (event.event === 'on_chat_model_end') {
+            finalMessage = event.data.output;
+            const um = (event.data.output as any)?.usage_metadata;
+            if (um) {
+              totalInputTokens += um.input_tokens || 0;
+              totalOutputTokens += um.output_tokens || 0;
+            }
+          } else if (event.event === 'on_tool_start') {
+            pendingToolCalls.set(event.run_id, { tool: event.name, input: event.data.input });
+            yield {
+              type: 'tool_start',
+              tool: event.name,
+              input: event.data.input,
+              runId: event.run_id,
+            };
+          } else if (event.event === 'on_tool_end') {
+            const pending = pendingToolCalls.get(event.run_id);
+            toolCallSummaries.push({
+              tool: event.name,
+              input: pending?.input ?? null,
+              output: event.data.output,
+            });
+            pendingToolCalls.delete(event.run_id);
+            yield {
+              type: 'tool_end',
+              tool: event.name,
+              output: event.data.output,
+              runId: event.run_id,
+            };
           }
-        } else if (event.event === 'on_chat_model_end') {
-          // Capture the final message for structured output extraction
-          finalMessage = event.data.output;
-        } else if (event.event === 'on_tool_start') {
-          yield {
-            type: 'tool_start',
-            tool: event.name,
-            input: event.data.input,
-            runId: event.run_id,
-          };
-        } else if (event.event === 'on_tool_end') {
-          yield {
-            type: 'tool_end',
-            tool: event.name,
-            output: event.data.output,
-            runId: event.run_id,
-          };
         }
+      } catch (streamError) {
+        const errorMsg = streamError instanceof Error ? streamError.message : String(streamError);
+        logger.error(`[Agent: ${definition.name}] Stream error after tool calls:`, streamError);
+        yield { type: 'error', error: errorMsg };
+
+        // Still store what we have so far
+        if (sessionId && (accumulatedOutput || toolCallSummaries.length > 0)) {
+          const partialMessage = this.buildStoredMessage(
+            accumulatedOutput || '(agent encountered an error)',
+            toolCallSummaries
+          );
+          this.conversationStore.addMessage(sessionId, new AIMessage(partialMessage));
+        }
+        return;
       }
 
       logLLMCallEnd(caller, llmStart, stats, {
         contentLength: accumulatedOutput.length,
       });
 
+      // Build the message to store: text response + tool call summaries
+      const storedMessage = this.buildStoredMessage(accumulatedOutput, toolCallSummaries);
+
       // Handle structured output
       if (definition.output?.format === 'structured' && finalMessage) {
         const structuredOutput = this.extractStructuredOutput(finalMessage);
         yield { type: 'result', output: structuredOutput };
 
-        // Store structured output as JSON string in session
         if (sessionId) {
           this.conversationStore.addMessage(sessionId, new AIMessage(JSON.stringify(structuredOutput)));
         }
-      } else if (sessionId && accumulatedOutput) {
-        // Store AI response in session after streaming completes
-        this.conversationStore.addMessage(sessionId, new AIMessage(accumulatedOutput));
+      } else if (sessionId && storedMessage) {
+        this.conversationStore.addMessage(sessionId, new AIMessage(storedMessage));
+      }
+
+      // Yield usage stats if available
+      if (totalInputTokens > 0 || totalOutputTokens > 0) {
+        yield {
+          type: 'usage',
+          input_tokens: totalInputTokens,
+          output_tokens: totalOutputTokens,
+          total_tokens: totalInputTokens + totalOutputTokens,
+        };
       }
     } else {
       const userMessage = this.formatUserMessage(definition, actualInput);
@@ -412,6 +490,17 @@ export class AgentExecutor {
         // Store AI response in session after streaming completes
         this.conversationStore.addMessage(sessionId, new AIMessage(accumulatedOutput));
       }
+
+      // Yield usage stats from the final chunk if available
+      const um = (finalChunk as any)?.usage_metadata;
+      if (um) {
+        yield {
+          type: 'usage',
+          input_tokens: um.input_tokens ?? 0,
+          output_tokens: um.output_tokens ?? 0,
+          total_tokens: um.total_tokens ?? 0,
+        };
+      }
     }
   }
 
@@ -441,6 +530,66 @@ export class AgentExecutor {
     }
 
     return messages;
+  }
+
+  private extractTextContent(content: unknown): string {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((block: any) => block.type === 'text' && block.text)
+        .map((block: any) => block.text)
+        .join('');
+    }
+    return '';
+  }
+
+  private buildStoredMessage(
+    textResponse: string,
+    toolSummaries: Array<{ tool: string; input: unknown; output: unknown }>
+  ): string {
+    if (toolSummaries.length === 0) return textResponse;
+
+    const summaryLines = toolSummaries.map((tc) => {
+      const inputStr = typeof tc.input === 'string' ? tc.input : JSON.stringify(tc.input);
+      const outputStr = typeof tc.output === 'string' ? tc.output : JSON.stringify(tc.output);
+      // Truncate to keep token usage reasonable
+      const truncated = (s: string, max: number) => s.length > max ? s.slice(0, max) + '...' : s;
+      return `[Tool: ${tc.tool}] Input: ${truncated(inputStr, 200)} → Output: ${truncated(outputStr, 500)}`;
+    });
+
+    return `${textResponse}\n\n<tool_history>\n${summaryLines.join('\n')}\n</tool_history>`;
+  }
+
+  private extractToolSummariesFromMessages(
+    messages: unknown[]
+  ): Array<{ tool: string; input: unknown; output: unknown }> {
+    const summaries: Array<{ tool: string; input: unknown; output: unknown }> = [];
+    if (!messages) return summaries;
+
+    // Collect tool call inputs from AIMessages (tool_calls array)
+    const toolCallInputs = new Map<string, { name: string; args: unknown }>();
+    for (const msg of messages) {
+      const m = msg as any;
+      if (m?._getType?.() === 'ai' && Array.isArray(m.tool_calls)) {
+        for (const tc of m.tool_calls) {
+          toolCallInputs.set(tc.id, { name: tc.name, args: tc.args });
+        }
+      }
+    }
+
+    // Match ToolMessages to their inputs
+    for (const msg of messages) {
+      const m = msg as any;
+      if (m?._getType?.() === 'tool') {
+        const callInfo = toolCallInputs.get(m.tool_call_id);
+        summaries.push({
+          tool: m.name ?? callInfo?.name ?? 'unknown',
+          input: callInfo?.args ?? null,
+          output: m.content ?? null,
+        });
+      }
+    }
+    return summaries;
   }
 
   private extractStructuredOutput(message: unknown): Record<string, unknown> {

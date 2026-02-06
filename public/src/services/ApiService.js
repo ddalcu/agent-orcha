@@ -15,11 +15,12 @@ export class ApiService {
         return res.json();
     }
 
-    async streamAgent(name, input, sessionId) {
+    async streamAgent(name, input, sessionId, { signal } = {}) {
         return fetch(`/api/agents/${name}/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input, sessionId })
+            body: JSON.stringify({ input, sessionId }),
+            signal
         });
     }
 
@@ -92,11 +93,12 @@ export class ApiService {
         return res.json();
     }
 
-    async streamLLM(name, message) {
+    async streamLLM(name, message, { signal } = {}) {
         return fetch(`/api/llm/${name}/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
+            body: JSON.stringify({ message }),
+            signal
         });
     }
 
@@ -137,6 +139,16 @@ export class ApiService {
         });
         return res.json();
     }
+    async getSkills() {
+        const res = await fetch('/api/skills');
+        return res.json();
+    }
+
+    async getSkill(name) {
+        const res = await fetch(`/api/skills/${encodeURIComponent(name)}`);
+        return res.json();
+    }
+
     async getFileTree() {
         const res = await fetch('/api/files/tree');
         return res.json();
@@ -154,6 +166,87 @@ export class ApiService {
             body: JSON.stringify({ path: filePath, content })
         });
         return res.json();
+    }
+
+    async getResourceTemplate(type, name) {
+        const res = await fetch(`/api/files/template?type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}`);
+        return res.json();
+    }
+
+    async createFile(filePath, content = '') {
+        const res = await fetch('/api/files/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath, content })
+        });
+        return res.json();
+    }
+
+    async renameFile(oldPath, newPath) {
+        const res = await fetch('/api/files/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ oldPath, newPath })
+        });
+        return res.json();
+    }
+
+    async deleteFile(filePath) {
+        const res = await fetch('/api/files/delete', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath })
+        });
+        return res.json();
+    }
+
+    async getTasks(queryString = '') {
+        const url = queryString ? `/api/tasks?${queryString}` : '/api/tasks';
+        const res = await fetch(url);
+        return res.json();
+    }
+
+    async getTask(id) {
+        const res = await fetch(`/api/tasks/${id}`);
+        return res.json();
+    }
+
+    async submitAgentTask(agent, input, sessionId) {
+        const res = await fetch('/api/tasks/agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agent, input, sessionId })
+        });
+        return res.json();
+    }
+
+    async submitWorkflowTask(workflow, input) {
+        const res = await fetch('/api/tasks/workflow', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workflow, input })
+        });
+        return res.json();
+    }
+
+    async cancelTask(id) {
+        const res = await fetch(`/api/tasks/${id}/cancel`, {
+            method: 'POST'
+        });
+        return res.json();
+    }
+
+    async respondToTask(id, response) {
+        const res = await fetch(`/api/tasks/${id}/respond`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ response })
+        });
+        return res.json();
+    }
+
+    streamTask(id) {
+        return new EventSource(`/api/tasks/${id}/stream`);
     }
 
     async getNeo4jConfig() {

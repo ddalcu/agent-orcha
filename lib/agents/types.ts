@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { AgentLLMRefSchema } from '../llm/types.js';
+import { AgentSkillsConfigSchema } from '../skills/types.js';
 
 export const ToolReferenceSchema = z.union([
   z.string(),
   z.object({
     name: z.string(),
-    source: z.enum(['mcp', 'knowledge', 'builtin', 'custom']),
+    source: z.enum(['mcp', 'knowledge', 'builtin', 'custom', 'sandbox']),
     config: z.record(z.unknown()).optional(),
   }),
 ]);
@@ -25,6 +26,7 @@ export const AgentDefinitionSchema = z.object({
     inputVariables: z.array(z.string()).default([]),
   }),
   tools: z.array(ToolReferenceSchema).default([]),
+  skills: AgentSkillsConfigSchema.optional(),
   output: OutputConfigSchema.optional(),
   metadata: z.record(z.unknown()).optional(),
 });

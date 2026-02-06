@@ -93,7 +93,7 @@ export const LangGraphWorkflowSchema = z.object({
 });
 
 // Step-based workflow (existing)
-const StepBasedWorkflowSchema = z.object({
+export const StepBasedWorkflowSchema = z.object({
   name: z.string().describe('Unique workflow identifier'),
   description: z.string().describe('Human-readable description'),
   version: z.string().default('1.0.0'),
