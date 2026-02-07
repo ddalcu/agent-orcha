@@ -18,6 +18,9 @@ import { ConversationStore } from './memory/conversation-store.js';
 import { TaskManager } from './tasks/task-manager.js';
 import { DockerManager } from './sandbox/docker-manager.js';
 import { createSandboxExecTool } from './sandbox/sandbox-tool.js';
+import { createSandboxReadTool, createSandboxWriteTool, createSandboxEditTool } from './sandbox/sandbox-file-tools.js';
+import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web-tools.js';
+import { createSandboxBrowserTool } from './sandbox/sandbox-browser-tool.js';
 import { SandboxConfigSchema } from './sandbox/types.js';
 import type { SandboxConfig } from './sandbox/types.js';
 import type { AgentDefinition, AgentResult } from './agents/types.js';
@@ -109,18 +112,13 @@ export class Orchestrator {
 
     // Load sandbox config
     await this.loadSandboxConfig();
-    let sandboxTool = null;
-    if (this.sandboxConfig?.enabled && this.dockerManager) {
-      sandboxTool = createSandboxExecTool(this.dockerManager, this.sandboxConfig);
-      this.dockerManager.startPruning();
-      logger.info('[Orchestrator] Sandbox enabled');
-    }
+    const sandboxTools = this.buildSandboxTools();
 
     this.toolRegistry = new ToolRegistry(
       this.mcpClient,
       this.knowledgeStoreManager,
       this.functionLoader,
-      sandboxTool,
+      sandboxTools,
     );
     this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
@@ -175,6 +173,27 @@ export class Orchestrator {
       this.sandboxConfig = null;
       this.dockerManager = null;
     }
+  }
+
+  private buildSandboxTools(): Map<string, StructuredTool> {
+    const tools = new Map<string, StructuredTool>();
+
+    if (!this.sandboxConfig?.enabled || !this.dockerManager) {
+      return tools;
+    }
+
+    tools.set('exec', createSandboxExecTool(this.dockerManager, this.sandboxConfig));
+    tools.set('read', createSandboxReadTool(this.dockerManager, this.sandboxConfig));
+    tools.set('write', createSandboxWriteTool(this.dockerManager, this.sandboxConfig));
+    tools.set('edit', createSandboxEditTool(this.dockerManager, this.sandboxConfig));
+    tools.set('web_fetch', createSandboxWebFetchTool(this.dockerManager, this.sandboxConfig));
+    tools.set('web_search', createSandboxWebSearchTool(this.dockerManager, this.sandboxConfig));
+    tools.set('browser', createSandboxBrowserTool(this.dockerManager, this.sandboxConfig));
+
+    this.dockerManager.startPruning();
+    logger.info('[Orchestrator] Sandbox enabled with tools: ' + Array.from(tools.keys()).join(', '));
+
+    return tools;
   }
 
   get sandbox(): SandboxAccessor {
@@ -302,16 +321,13 @@ export class Orchestrator {
         await this.dockerManager.close();
       }
       await this.loadSandboxConfig();
-      if (this.sandboxConfig?.enabled && this.dockerManager) {
-        const sandboxTool = createSandboxExecTool(this.dockerManager, this.sandboxConfig);
-        this.toolRegistry = new ToolRegistry(
-          this.mcpClient,
-          this.knowledgeStoreManager,
-          this.functionLoader,
-          sandboxTool,
-        );
-        this.dockerManager.startPruning();
-      }
+      const sandboxTools = this.buildSandboxTools();
+      this.toolRegistry = new ToolRegistry(
+        this.mcpClient,
+        this.knowledgeStoreManager,
+        this.functionLoader,
+        sandboxTools,
+      );
       return 'sandbox';
     }
 
@@ -337,7 +353,8 @@ export class Orchestrator {
   async *streamAgent(
     name: string,
     input: Record<string, unknown>,
-    sessionId?: string
+    sessionId?: string,
+    signal?: AbortSignal,
   ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
     this.ensureInitialized();
 
@@ -347,7 +364,7 @@ export class Orchestrator {
     }
 
     const instance = await this.agentExecutor.createInstance(definition);
-    yield* instance.stream({ input, sessionId });
+    yield* instance.stream({ input, sessionId, signal });
   }
 
   async runWorkflow(name: string, input: Record<string, unknown>): Promise<WorkflowResult> {

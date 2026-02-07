@@ -85,6 +85,7 @@ export class AgentExecutor {
   private parseInvokeOptions(input: Record<string, unknown> | AgentInvokeOptions): {
     input: Record<string, unknown>;
     sessionId?: string;
+    signal?: AbortSignal;
   } {
     // Check if this is AgentInvokeOptions by checking for both 'input' property and if sessionId is present
     if ('input' in input && typeof input.input === 'object' && input.input !== null) {
@@ -92,6 +93,7 @@ export class AgentExecutor {
       return {
         input: options.input,
         sessionId: options.sessionId,
+        signal: options.signal,
       };
     }
     // Otherwise treat as direct input
@@ -136,7 +138,7 @@ export class AgentExecutor {
           messages,
         },
         {
-          recursionLimit: 50,
+          recursionLimit: 200,
         }
       );
 
@@ -319,7 +321,7 @@ export class AgentExecutor {
     tools: StructuredTool[],
     input: Record<string, unknown> | AgentInvokeOptions
   ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
-    const { input: actualInput, sessionId } = this.parseInvokeOptions(input);
+    const { input: actualInput, sessionId, signal } = this.parseInvokeOptions(input);
 
     if (tools.length > 0) {
       const agent = createAgent({
@@ -343,6 +345,8 @@ export class AgentExecutor {
         { messages },
         {
           version: 'v2',
+          recursionLimit: 200,
+          signal,
         }
       );
 
@@ -460,7 +464,7 @@ export class AgentExecutor {
         messages: allMessages,
       });
 
-      const stream = await llm.stream(allMessages);
+      const stream = await llm.stream(allMessages, { signal });
 
       let accumulatedOutput = '';
       let finalChunk: unknown = null;

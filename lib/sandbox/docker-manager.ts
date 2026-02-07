@@ -92,6 +92,16 @@ export class DockerManager {
       args.push('--cap-drop', cap);
     }
 
+    // Capability adds
+    for (const cap of this.config.capAdd) {
+      args.push('--cap-add', cap);
+    }
+
+    // DNS servers
+    for (const dns of this.config.dns) {
+      args.push('--dns', dns);
+    }
+
     // Environment variables
     for (const [key, value] of Object.entries(this.config.env)) {
       args.push('--env', `${key}=${value}`);

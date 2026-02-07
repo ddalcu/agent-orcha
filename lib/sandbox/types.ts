@@ -13,6 +13,8 @@ export const SandboxConfigSchema = z.object({
   maxAge: z.number().default(604_800_000), // 7d
   commandTimeout: z.number().default(30_000), // 30s default per-command
   capDrop: z.array(z.string()).default(['ALL']),
+  capAdd: z.array(z.string()).default([]),
+  dns: z.array(z.string()).default([]),
   initCommands: z.array(z.string()).default([]),
   env: z.record(z.string()).default({}),
   binds: z.array(z.string()).default([]),

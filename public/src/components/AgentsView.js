@@ -636,7 +636,7 @@ export class AgentsView extends Component {
                         <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-400"></div>
                     </div>
                 </div>
-                <div class="tool-invocations space-y-2 mt-2"></div>
+                <div class="tool-invocations flex flex-wrap gap-1.5 mt-2"></div>
             </div>
         `;
 
@@ -711,11 +711,11 @@ export class AgentsView extends Component {
             const toolId = `tool-${event.runId}`;
             const toolEl = document.createElement('div');
             toolEl.id = toolId;
-            toolEl.className = 'bg-dark-bg/50 border border-dark-border rounded-lg p-2 text-sm text-gray-400 font-mono flex items-center gap-2';
+            toolEl.className = 'tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-gray-400 font-mono';
             toolEl.dataset.toolInput = typeof event.input === 'string' ? event.input : JSON.stringify(event.input, null, 2);
             toolEl.innerHTML = `
-                <i class="fas fa-cog animate-spin text-blue-400"></i>
-                <span>Using ${this.escapeHtml(event.tool)}...</span>
+                <i class="fas fa-circle-notch animate-spin text-blue-400 text-[10px]"></i>
+                <span>${this.escapeHtml(event.tool)}</span>
              `;
             toolsDiv.appendChild(toolEl);
             container.scrollTop = container.scrollHeight;
@@ -727,26 +727,26 @@ export class AgentsView extends Component {
                 const toolInput = toolEl.dataset.toolInput || '';
                 const toolOutput = typeof event.output === 'string' ? event.output : JSON.stringify(event.output, null, 2);
 
-                toolEl.className = 'tool-invocation-item bg-dark-bg/30 border border-dark-border/50 rounded-lg text-sm text-gray-500 font-mono';
+                toolEl.className = 'tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
                 toolEl.innerHTML = '';
 
-                // Clickable header row
-                const header = document.createElement('button');
-                header.className = 'tool-invocation-header flex items-center gap-2 w-full p-2 text-left cursor-pointer hover:bg-dark-bg/50 rounded-lg transition-colors';
-                header.innerHTML = `
-                    <i class="fas fa-chevron-right text-[10px] text-gray-500 transition-transform tool-chevron"></i>
-                    <i class="fas fa-check text-green-500 text-xs"></i>
-                    <span class="flex-1 truncate">${this.escapeHtml(event.tool)}</span>
-                    <span class="text-xs text-gray-600 truncate max-w-[200px]">${this.escapeHtml(toolOutput).slice(0, 60)}</span>
+                // Pill content (icon + name)
+                const pillContent = document.createElement('span');
+                pillContent.className = 'inline-flex items-center gap-1.5';
+                pillContent.innerHTML = `
+                    <i class="fas fa-check text-green-500 text-[10px]"></i>
+                    <span>${this.escapeHtml(event.tool)}</span>
                 `;
+                toolEl.appendChild(pillContent);
 
-                // Expandable details panel
+                // Popover details panel (positioned below the pill)
                 const details = document.createElement('div');
-                details.className = 'tool-invocation-details hidden border-t border-dark-border/50 p-3 space-y-3';
+                details.className = 'tool-invocation-details hidden absolute left-0 top-full mt-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
 
                 // Input section
                 if (toolInput) {
                     const inputSection = document.createElement('div');
+                    inputSection.className = 'p-3 border-b border-dark-border/50';
                     inputSection.innerHTML = `<div class="text-xs font-semibold text-gray-400 mb-1">Input</div>`;
                     const inputPre = document.createElement('pre');
                     inputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar';
@@ -757,6 +757,7 @@ export class AgentsView extends Component {
 
                 // Output section
                 const outputSection = document.createElement('div');
+                outputSection.className = 'p-3';
                 outputSection.innerHTML = `<div class="text-xs font-semibold text-gray-400 mb-1">Output</div>`;
                 const outputPre = document.createElement('pre');
                 outputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar';
@@ -764,25 +765,26 @@ export class AgentsView extends Component {
                 outputSection.appendChild(outputPre);
                 details.appendChild(outputSection);
 
-                // Toggle expand/collapse
-                header.addEventListener('click', (e) => {
+                toolEl.appendChild(details);
+
+                // Toggle popover on click
+                toolEl.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    const chevron = header.querySelector('.tool-chevron');
-                    const isHidden = details.classList.contains('hidden');
-                    if (isHidden) {
-                        details.classList.remove('hidden');
-                        chevron.classList.remove('fa-chevron-right');
-                        chevron.classList.add('fa-chevron-down');
-                    } else {
-                        details.classList.add('hidden');
-                        chevron.classList.remove('fa-chevron-down');
-                        chevron.classList.add('fa-chevron-right');
-                    }
+                    // Close any other open popovers
+                    toolsDiv.querySelectorAll('.tool-invocation-details:not(.hidden)').forEach(d => {
+                        if (d !== details) d.classList.add('hidden');
+                    });
+                    details.classList.toggle('hidden');
                 });
 
-                toolEl.appendChild(header);
-                toolEl.appendChild(details);
+                // Close popover when clicking outside
+                const closeHandler = (e) => {
+                    if (!toolEl.contains(e.target)) {
+                        details.classList.add('hidden');
+                    }
+                };
+                document.addEventListener('click', closeHandler, { capture: true });
                 container.scrollTop = container.scrollHeight;
             }
         } else if (event.type === 'result') {

@@ -57,6 +57,7 @@ export interface AgentResult {
 export interface AgentInvokeOptions {
   input: Record<string, unknown>;
   sessionId?: string;
+  signal?: AbortSignal;
 }
 
 export interface AgentInstance {

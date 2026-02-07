@@ -6,10 +6,19 @@ import { logger } from '../logger.js';
 export class TaskManager {
   private store: TaskStore;
   private orchestrator: Orchestrator;
+  private abortControllers = new Map<string, AbortController>();
 
   constructor(orchestrator: Orchestrator, config?: TaskStoreConfig) {
     this.orchestrator = orchestrator;
     this.store = new TaskStore(config);
+  }
+
+  registerAbort(taskId: string, controller: AbortController): void {
+    this.abortControllers.set(taskId, controller);
+  }
+
+  unregisterAbort(taskId: string): void {
+    this.abortControllers.delete(taskId);
   }
 
   submitAgent(params: SubmitAgentParams): Task {
@@ -101,6 +110,14 @@ export class TaskManager {
     if (task.status === 'completed' || task.status === 'failed' || task.status === 'canceled') {
       return undefined;
     }
+
+    // Abort the in-flight LLM/agent stream if one is registered
+    const controller = this.abortControllers.get(id);
+    if (controller && !controller.signal.aborted) {
+      controller.abort();
+      logger.info(`[TaskManager] Aborted stream for task ${id}`);
+    }
+    this.abortControllers.delete(id);
 
     return this.store.update(id, { status: 'canceled', completedAt: Date.now() });
   }
