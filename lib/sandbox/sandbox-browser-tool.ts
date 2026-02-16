@@ -5,169 +5,308 @@ import type { DockerManager } from './docker-manager.js';
 import type { SandboxConfig } from './types.js';
 
 /**
- * Stateless Playwright helper script that runs inside the container.
- * Each invocation launches a fresh browser, navigates to the given URL,
- * performs the action, and exits. No state persists between calls.
- *
- * Usage: echo '{"action":"snapshot","url":"https://..."}' | node /workspace/.browser-helper.js
+ * Persistent Node.js HTTP server that runs inside the container.
+ * Launches Chromium once on startup and keeps it alive across requests.
+ * Accepts batched actions via POST /actions.
+ * Auto-exits after 5 minutes of inactivity.
  */
-const BROWSER_HELPER_SCRIPT = `
+const BROWSER_SERVER_SCRIPT = `
+const http = require('http');
 const { chromium } = require('playwright');
 const fs = require('fs');
 
-async function main() {
-  let input = '';
-  for await (const chunk of process.stdin) {
-    input += chunk;
+const PORT = 9222;
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+let browser = null;
+let page = null;
+let idleTimer = null;
+
+function resetIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    try { if (browser) await browser.close(); } catch (_) {}
+    process.exit(0);
+  }, IDLE_TIMEOUT_MS);
+}
+
+async function ensurePage() {
+  if (!page || page.isClosed()) {
+    page = await browser.newPage();
   }
+  return page;
+}
 
-  const cmd = JSON.parse(input.trim());
+async function executeAction(action) {
+  const p = await ensurePage();
 
-  const browser = await chromium.launch({
+  switch (action.action) {
+    case 'navigate': {
+      await p.goto(action.url, { waitUntil: 'domcontentloaded', timeout: action.timeout || 15000 });
+      return { title: await p.title(), url: p.url() };
+    }
+    case 'screenshot': {
+      const dest = action.path || '/workspace/screenshot.png';
+      await p.screenshot({ path: dest, fullPage: action.fullPage || false });
+      const b64 = fs.readFileSync(dest).toString('base64');
+      return { path: dest, base64Length: b64.length, base64: b64.substring(0, 200) + '...' };
+    }
+    case 'click': {
+      await p.click(action.selector, { timeout: action.timeout || 5000 });
+      return { clicked: action.selector, title: await p.title(), url: p.url() };
+    }
+    case 'type': {
+      await p.type(action.selector, action.text, { delay: action.delay || 50 });
+      return { typed: action.text, into: action.selector };
+    }
+    case 'fill': {
+      await p.fill(action.selector, action.value);
+      return { filled: action.selector, value: action.value };
+    }
+    case 'content': {
+      const text = await p.evaluate(() => document.body.innerText);
+      return { title: await p.title(), url: p.url(), content: text.substring(0, 50000), truncated: text.length > 50000 };
+    }
+    case 'snapshot': {
+      const title = await p.title();
+      const url = p.url();
+      const text = await p.evaluate(() => document.body.innerText);
+      return { title, url, content: text.substring(0, 30000), truncated: text.length > 30000 };
+    }
+    case 'evaluate': {
+      const evalResult = await p.evaluate(action.script);
+      return { result: JSON.stringify(evalResult) };
+    }
+    case 'wait': {
+      const ms = action.timeout || 1000;
+      await new Promise(r => setTimeout(r, ms));
+      return { waited: ms };
+    }
+    case 'new_page': {
+      if (page && !page.isClosed()) await page.close();
+      page = await browser.newPage();
+      return { newPage: true };
+    }
+    default:
+      return { error: 'Unknown action: ' + action.action };
+  }
+}
+
+async function handleActions(actions) {
+  const results = [];
+  for (const action of actions) {
+    try {
+      const result = await executeAction(action);
+      results.push({ success: true, action: action.action, ...result });
+      if (result.error && action.stopOnError !== false) break;
+    } catch (err) {
+      results.push({ success: false, action: action.action, error: err.message });
+      if (action.stopOnError !== false) break;
+    }
+  }
+  return results;
+}
+
+(async () => {
+  browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
+  page = await browser.newPage();
 
-  const page = await browser.newPage();
-  let result = {};
+  const server = http.createServer(async (req, res) => {
+    resetIdleTimer();
 
-  try {
-    if (cmd.url) {
-      await page.goto(cmd.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    if (req.method === 'GET' && req.url === '/health') {
+      const currentUrl = (page && !page.isClosed()) ? page.url() : null;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), url: currentUrl }));
+      return;
     }
 
-    switch (cmd.action) {
-      case 'navigate': {
-        result = { title: await page.title(), url: page.url() };
-        break;
+    if (req.method === 'POST' && req.url === '/actions') {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      try {
+        const { actions } = JSON.parse(body);
+        if (!Array.isArray(actions) || actions.length === 0) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'actions must be a non-empty array' }));
+          return;
+        }
+        const results = await handleActions(actions);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ results }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
       }
-      case 'screenshot': {
-        const p = cmd.path || '/workspace/screenshot.png';
-        await page.screenshot({ path: p, fullPage: cmd.fullPage || false });
-        const b64 = fs.readFileSync(p).toString('base64');
-        result = { path: p, base64Length: b64.length, base64: b64.substring(0, 200) + '...' };
-        break;
-      }
-      case 'click':
-        await page.click(cmd.selector, { timeout: 5000 });
-        result = { clicked: cmd.selector, title: await page.title(), url: page.url() };
-        break;
-      case 'type':
-        await page.type(cmd.selector, cmd.text, { delay: cmd.delay || 50 });
-        result = { typed: cmd.text, into: cmd.selector };
-        break;
-      case 'fill':
-        await page.fill(cmd.selector, cmd.value);
-        result = { filled: cmd.selector, value: cmd.value };
-        break;
-      case 'content': {
-        const text = await page.evaluate(() => document.body.innerText);
-        result = { title: await page.title(), url: page.url(), content: text.substring(0, 50000), truncated: text.length > 50000 };
-        break;
-      }
-      case 'snapshot': {
-        const title = await page.title();
-        const url = page.url();
-        const text = await page.evaluate(() => document.body.innerText);
-        result = { title, url, content: text.substring(0, 30000), truncated: text.length > 30000 };
-        break;
-      }
-      case 'evaluate': {
-        const evalResult = await page.evaluate(cmd.script);
-        result = { result: JSON.stringify(evalResult) };
-        break;
-      }
-      default:
-        result = { error: 'Unknown action: ' + cmd.action };
+      return;
     }
-  } finally {
-    await browser.close();
-  }
 
-  console.log(JSON.stringify(result));
-}
+    if (req.method === 'POST' && req.url === '/reset') {
+      try {
+        if (page && !page.isClosed()) await page.close();
+        page = await browser.newPage();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'reset' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
 
-main().catch(err => {
-  console.log(JSON.stringify({ error: err.message }));
+    res.writeHead(404);
+    res.end('Not found');
+  });
+
+  server.listen(PORT, '127.0.0.1', () => {
+    resetIdleTimer();
+    console.log('BROWSER_SERVER_READY on port ' + PORT);
+  });
+})().catch(err => {
+  console.error('Server startup failed:', err.message);
   process.exit(1);
 });
 `.trim();
 
+const BrowserActionSchema = z.object({
+  action: z.enum([
+    'navigate', 'screenshot', 'click', 'type', 'fill',
+    'content', 'snapshot', 'evaluate', 'wait', 'new_page',
+  ]).describe('The browser action to perform'),
+  url: z.string().optional().describe('URL to navigate to (required for "navigate")'),
+  selector: z.string().optional().describe('CSS selector for click/type/fill actions'),
+  text: z.string().optional().describe('Text to type (for "type" action)'),
+  value: z.string().optional().describe('Value to fill (for "fill" action)'),
+  script: z.string().optional().describe('JavaScript to evaluate (for "evaluate" action)'),
+  path: z.string().optional().describe('File path for screenshot (defaults to /workspace/screenshot.png)'),
+  fullPage: z.boolean().optional().describe('Take full-page screenshot (for "screenshot" action)'),
+  timeout: z.number().optional().describe('Timeout in ms for the action or wait duration'),
+  delay: z.number().optional().describe('Typing delay in ms (for "type" action)'),
+  stopOnError: z.boolean().optional().describe('Stop batch on this action\'s error (default: true)'),
+});
+
 /**
  * Creates a tool for browser automation inside the Docker sandbox container.
- * Uses Playwright + Chromium installed in the container via initCommands.
- * Each call is stateless: launches a browser, navigates, performs action, exits.
+ * Uses a persistent Chromium instance via an in-container HTTP server.
+ * Supports batching multiple actions per call for efficiency.
  */
 export function createSandboxBrowserTool(
   dockerManager: DockerManager,
   config: SandboxConfig,
 ): StructuredTool {
   let containerName: string | null = null;
-  let helperWritten = false;
+  let serverScriptWritten = false;
+  let serverRunning = false;
+
+  async function ensureServer(): Promise<void> {
+    if (!containerName) {
+      await dockerManager.ensureImage(config.image);
+      containerName = await dockerManager.getOrCreateContainer('default');
+    }
+
+    // Write server script once per session
+    if (!serverScriptWritten) {
+      const b64 = Buffer.from(BROWSER_SERVER_SCRIPT, 'utf-8').toString('base64');
+      await dockerManager.execInContainer(
+        containerName,
+        `echo '${b64}' | base64 -d > /workspace/.browser-server.js`,
+      );
+      serverScriptWritten = true;
+    }
+
+    // Check if server is already responding
+    if (serverRunning) {
+      const health = await dockerManager.execInContainer(
+        containerName,
+        `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9222/health`,
+        undefined,
+        5_000,
+      );
+      if (health.exitCode === 0 && health.stdout.trim() === '200') {
+        return;
+      }
+      serverRunning = false;
+    }
+
+    // Start the server in the background
+    await dockerManager.execInContainer(
+      containerName,
+      `nohup node /workspace/.browser-server.js > /workspace/.browser-server.log 2>&1 &`,
+      undefined,
+      5_000,
+    );
+
+    // Poll until the server is ready (up to 15 attempts, 500ms apart)
+    for (let i = 0; i < 15; i++) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const health = await dockerManager.execInContainer(
+        containerName,
+        `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9222/health`,
+        undefined,
+        5_000,
+      );
+      if (health.exitCode === 0 && health.stdout.trim() === '200') {
+        serverRunning = true;
+        return;
+      }
+    }
+
+    throw new Error('Browser server failed to start within timeout');
+  }
+
+  async function sendActions(actions: unknown[]): Promise<string> {
+    const payload = JSON.stringify({ actions });
+    const b64 = Buffer.from(payload, 'utf-8').toString('base64');
+    const command = `echo '${b64}' | base64 -d | curl -s -X POST -H 'Content-Type: application/json' -d @- http://127.0.0.1:9222/actions`;
+
+    const result = await dockerManager.execInContainer(
+      containerName!,
+      command,
+      undefined,
+      60_000,
+    );
+
+    if (result.exitCode !== 0) {
+      serverRunning = false;
+      throw new Error(result.stderr || `Browser action failed (exit code ${result.exitCode})`);
+    }
+
+    return result.stdout.trim();
+  }
 
   return tool(
-    async ({ action, url, selector, text, value, script, path, fullPage }) => {
-      if (!containerName) {
-        await dockerManager.ensureImage(config.image);
-        containerName = await dockerManager.getOrCreateContainer('default');
+    async ({ actions }) => {
+      try {
+        await ensureServer();
+        const raw = await sendActions(actions);
+
+        // Parse to validate, then return
+        try {
+          const parsed = JSON.parse(raw);
+          return JSON.stringify(parsed, null, 2);
+        } catch {
+          return raw;
+        }
+      } catch (err: unknown) {
+        serverRunning = false;
+        const message = err instanceof Error ? err.message : String(err);
+        return JSON.stringify({ error: message });
       }
-
-      // Write the helper script once per session
-      if (!helperWritten) {
-        const b64 = Buffer.from(BROWSER_HELPER_SCRIPT, 'utf-8').toString('base64');
-        await dockerManager.execInContainer(
-          containerName,
-          `echo '${b64}' | base64 -d > /workspace/.browser-helper.js`,
-        );
-        helperWritten = true;
-      }
-
-      const cmd: Record<string, unknown> = { action };
-      if (url) cmd.url = url;
-      if (selector) cmd.selector = selector;
-      if (text) cmd.text = text;
-      if (value) cmd.value = value;
-      if (script) cmd.script = script;
-      if (path) cmd.path = path;
-      if (fullPage !== undefined) cmd.fullPage = fullPage;
-
-      const cmdJson = JSON.stringify(cmd);
-      const escapedCmd = cmdJson.replace(/'/g, "'\\''");
-
-      const result = await dockerManager.execInContainer(
-        containerName,
-        `echo '${escapedCmd}' | node /workspace/.browser-helper.js`,
-        undefined,
-        30_000,
-      );
-
-      if (result.exitCode !== 0) {
-        return JSON.stringify({
-          error: result.stderr || `Browser action failed (exit code ${result.exitCode})`,
-          stdout: result.stdout,
-        });
-      }
-
-      return result.stdout.trim();
     },
     {
       name: 'sandbox_browser',
       description:
-        'Control a headless Chromium browser inside the Docker sandbox container using Playwright. ' +
-        'Each call is stateless — provide a url with every action to navigate first. ' +
-        'Actions: navigate, screenshot, click, type, fill, content, snapshot, evaluate.',
+        'Control a persistent headless Chromium browser inside the Docker sandbox. ' +
+        'The browser stays alive between calls — state, cookies, and the current URL carry over. ' +
+        'Send one or more actions per call (batching is more efficient). ' +
+        'Actions: navigate, screenshot, click, type, fill, content, snapshot, evaluate, wait, new_page. ' +
+        'Use "new_page" to reset browser state when you need a fresh page.',
       schema: z.object({
-        action: z.enum([
-          'navigate', 'screenshot', 'click', 'type', 'fill',
-          'content', 'snapshot', 'evaluate',
-        ]).describe('The browser action to perform'),
-        url: z.string().optional().describe('URL to navigate to before performing the action (required for most actions)'),
-        selector: z.string().optional().describe('CSS selector for click/type/fill actions'),
-        text: z.string().optional().describe('Text to type (for "type" action)'),
-        value: z.string().optional().describe('Value to fill (for "fill" action)'),
-        script: z.string().optional().describe('JavaScript to evaluate (for "evaluate" action)'),
-        path: z.string().optional().describe('File path for screenshot (defaults to /workspace/screenshot.png)'),
-        fullPage: z.boolean().optional().describe('Take full-page screenshot (for "screenshot" action)'),
+        actions: z.array(BrowserActionSchema).min(1).max(10)
+          .describe('Array of browser actions to execute sequentially'),
       }),
     },
   );

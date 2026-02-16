@@ -99,3 +99,13 @@ export type {
 // Sandbox
 export { DockerManager, createSandboxExecTool, SandboxConfigSchema } from './sandbox/index.js';
 export type { SandboxConfig, ContainerInfo, ExecResult } from './sandbox/index.js';
+
+// Integrations
+export { IntegrationManager } from './integrations/integration-manager.js';
+export { CollabnookConnector } from './integrations/collabnook.js';
+export { IntegrationSchema } from './integrations/types.js';
+export type { Integration, CollabnookIntegration } from './integrations/types.js';
+
+// Triggers
+export { TriggerManager, TriggerSchema, CronTriggerHandler, WebhookTriggerHandler } from './triggers/index.js';
+export type { Trigger, CronTrigger, WebhookTrigger } from './triggers/index.js';

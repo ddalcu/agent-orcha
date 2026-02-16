@@ -15,7 +15,7 @@ import type { Document } from '@langchain/core/documents';
 import type { Embeddings } from '@langchain/core/embeddings';
 import type { VectorStore } from '@langchain/core/vectorstores';
 import type { KnowledgeConfig, VectorKnowledgeConfig, KnowledgeStoreInstance, SearchResult, DocumentInput } from './types.js';
-import { getEmbeddingConfig } from '../llm/llm-config.js';
+import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.js';
 import { detectProvider } from '../llm/provider-detector.js';
 import { createLogger } from '../logger.js';
 import { DatabaseLoader, WebLoader, S3Loader } from './loaders/index.js';
@@ -418,7 +418,7 @@ export class KnowledgeStoreFactory {
         logger.info('Creating Gemini embeddings');
         baseEmbeddings = new GoogleGenerativeAIEmbeddings({
           modelName: embeddingConfig.model,
-          apiKey: embeddingConfig.apiKey,
+          apiKey: resolveApiKey('gemini', embeddingConfig.apiKey),
         });
         break;
       case 'openai':
@@ -427,7 +427,7 @@ export class KnowledgeStoreFactory {
       default: {
         const openAIConfig: any = {
           modelName: embeddingConfig.model,
-          openAIApiKey: embeddingConfig.apiKey,
+          openAIApiKey: resolveApiKey(provider, embeddingConfig.apiKey),
           configuration: embeddingConfig.baseUrl ? { baseURL: embeddingConfig.baseUrl } : undefined,
           // CRITICAL: Force float encoding to get number arrays instead of base64 strings
           // LM Studio and other local servers need this to return valid embeddings

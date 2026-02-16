@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import type { Orchestrator } from '../lib/index.js';
+import { TriggerManager } from '../lib/triggers/trigger-manager.js';
 import { agentsRoutes } from './routes/agents.route.js';
 import { workflowsRoutes } from './routes/workflows.route.js';
 import { knowledgeRoutes } from './routes/knowledge.route.js';
@@ -55,6 +56,11 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   await fastify.register(filesRoutes, { prefix: '/api/files' });
   await fastify.register(graphRoutes, { prefix: '/api/graph' });
   await fastify.register(tasksRoutes, { prefix: '/api/tasks' });
+
+  // Start triggers (cron + webhooks) after all routes are registered
+  const triggerManager = new TriggerManager();
+  await triggerManager.start(orchestrator, fastify);
+  orchestrator.triggers.setManager(triggerManager);
 
   return fastify;
 }

@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { AgentLLMRefSchema } from '../llm/types.js';
 import { AgentSkillsConfigSchema } from '../skills/types.js';
+import { IntegrationSchema } from '../integrations/types.js';
+import { TriggerSchema } from '../triggers/types.js';
 
 export const ToolReferenceSchema = z.union([
   z.string(),
@@ -29,6 +31,8 @@ export const AgentDefinitionSchema = z.object({
   skills: AgentSkillsConfigSchema.optional(),
   output: OutputConfigSchema.optional(),
   metadata: z.record(z.unknown()).optional(),
+  integrations: z.array(IntegrationSchema).optional(),
+  triggers: z.array(TriggerSchema).optional(),
 });
 
 export type ToolReference = z.infer<typeof ToolReferenceSchema>;

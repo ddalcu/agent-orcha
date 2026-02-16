@@ -98,6 +98,14 @@ async function main(): Promise<void> {
 
   const server = await createServer(orchestrator);
 
+  const triggerManager = orchestrator.triggers.getManager();
+  if (triggerManager) {
+    const total = triggerManager.cronCount + triggerManager.webhookCount;
+    if (total > 0) {
+      logger.info(`Loaded ${triggerManager.cronCount} cron trigger(s), ${triggerManager.webhookCount} webhook trigger(s)`);
+    }
+  }
+
   const shutdown = async (): Promise<void> => {
     logger.info('\nShutting down...');
     await server.close();

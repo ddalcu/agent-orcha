@@ -2,9 +2,9 @@ import { ChatOpenAI } from '@langchain/openai';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatAnthropic } from '@langchain/anthropic';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { getModelConfig, type ModelConfig } from './llm-config.js';
+import { getModelConfig, resolveApiKey, type ModelConfig } from './llm-config.js';
 import { resolveAgentLLMRef, type AgentLLMRef } from './types.js';
-import { detectProvider } from './provider-detector.js';
+import { detectProvider, type LLMProvider } from './provider-detector.js';
 import { logger } from '../logger.js';
 
 export class LLMFactory {
@@ -42,7 +42,7 @@ export class LLMFactory {
         llm = this.createAnthropic(config, temperature);
         break;
       case 'local':
-        llm = this.createLocal(config, temperature);
+        llm = this.createLocal(config, temperature, 'local');
         break;
       default:
         throw new Error(`Unsupported provider: ${provider}`);
@@ -55,13 +55,14 @@ export class LLMFactory {
   /**
    * Create OpenAI LLM instance
    */
-  private static createOpenAI(config: ModelConfig, temperature?: number): BaseChatModel {
+  private static createOpenAI(config: ModelConfig, temperature?: number, provider: LLMProvider = 'openai'): BaseChatModel {
+    const apiKey = resolveApiKey(provider, config.apiKey);
     const options: any = {
       modelName: config.model,
-      openAIApiKey: config.apiKey,
+      apiKey,
       maxTokens: config.maxTokens,
       streamUsage: true,
-      configuration: config.baseUrl ? { baseURL: config.baseUrl } : undefined,
+      configuration: config.baseUrl ? { baseURL: config.baseUrl, apiKey } : undefined,
     };
 
     if (temperature !== undefined) {
@@ -75,9 +76,10 @@ export class LLMFactory {
    * Create Google Gemini LLM instance
    */
   private static createGemini(config: ModelConfig, temperature?: number): BaseChatModel {
+    const apiKey = resolveApiKey('gemini', config.apiKey);
     const options: any = {
       model: config.model,
-      apiKey: config.apiKey,
+      apiKey,
       maxOutputTokens: config.maxTokens,
     };
 
@@ -92,9 +94,10 @@ export class LLMFactory {
    * Create Anthropic Claude LLM instance
    */
   private static createAnthropic(config: ModelConfig, temperature?: number): BaseChatModel {
+    const apiKey = resolveApiKey('anthropic', config.apiKey);
     const options: any = {
       modelName: config.model,
-      anthropicApiKey: config.apiKey,
+      anthropicApiKey: apiKey,
       maxTokens: config.maxTokens,
     };
 
@@ -109,8 +112,8 @@ export class LLMFactory {
    * Create Local LLM instance (OpenAI-compatible)
    * Used for LM Studio, Ollama, and other OpenAI-compatible local servers
    */
-  private static createLocal(config: ModelConfig, temperature?: number): BaseChatModel {
-    return this.createOpenAI(config, temperature);
+  private static createLocal(config: ModelConfig, temperature?: number, provider: LLMProvider = 'local'): BaseChatModel {
+    return this.createOpenAI(config, temperature, provider);
   }
 
   private static getCacheKey(name: string, temperature: number): string {

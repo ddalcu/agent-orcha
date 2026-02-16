@@ -22,6 +22,8 @@ import { createSandboxReadTool, createSandboxWriteTool, createSandboxEditTool } 
 import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web-tools.js';
 import { createSandboxBrowserTool } from './sandbox/sandbox-browser-tool.js';
 import { SandboxConfigSchema } from './sandbox/types.js';
+import { IntegrationManager } from './integrations/integration-manager.js';
+import { TriggerManager } from './triggers/trigger-manager.js';
 import type { SandboxConfig } from './sandbox/types.js';
 import type { AgentDefinition, AgentResult } from './agents/types.js';
 import type {
@@ -66,6 +68,8 @@ export class Orchestrator {
   private taskManager!: TaskManager;
   private dockerManager: DockerManager | null = null;
   private sandboxConfig: SandboxConfig | null = null;
+  private integrationManager: IntegrationManager | null = null;
+  private triggerManager: TriggerManager | null = null;
 
   private initialized = false;
 
@@ -143,6 +147,10 @@ export class Orchestrator {
     this.taskManager = new TaskManager(this);
 
     this.initialized = true;
+
+    // Start integrations after initialization (non-blocking)
+    this.integrationManager = new IntegrationManager();
+    await this.integrationManager.start(this);
   }
 
   private async loadMCPConfig(): Promise<void> {
@@ -264,6 +272,24 @@ export class Orchestrator {
   get tasks(): TaskAccessor {
     return {
       getManager: () => this.taskManager,
+    };
+  }
+
+  get integrations(): IntegrationAccessor {
+    return {
+      getChannelContext: (agentName: string) => {
+        return this.integrationManager?.getChannelContext(agentName) ?? '';
+      },
+      postMessage: (agentName: string, message: string) => {
+        this.integrationManager?.postMessage(agentName, message);
+      },
+    };
+  }
+
+  get triggers(): TriggerAccessor {
+    return {
+      getManager: () => this.triggerManager,
+      setManager: (manager: TriggerManager) => { this.triggerManager = manager; },
     };
   }
 
@@ -576,6 +602,12 @@ export class Orchestrator {
   }
 
   async close(): Promise<void> {
+    if (this.triggerManager) {
+      this.triggerManager.close();
+    }
+    if (this.integrationManager) {
+      this.integrationManager.close();
+    }
     if (this.dockerManager) {
       await this.dockerManager.close();
     }
@@ -650,6 +682,16 @@ interface MemoryAccessor {
 
 interface TaskAccessor {
   getManager: () => TaskManager;
+}
+
+interface TriggerAccessor {
+  getManager: () => TriggerManager | null;
+  setManager: (manager: TriggerManager) => void;
+}
+
+interface IntegrationAccessor {
+  getChannelContext: (agentName: string) => string;
+  postMessage: (agentName: string, message: string) => void;
 }
 
 interface SandboxAccessor {

@@ -6,6 +6,7 @@ export {
   listModelConfigs,
   listEmbeddingConfigs,
   isLLMConfigLoaded,
+  resolveApiKey,
 } from './llm-config.js';
 export type { ModelConfig, EmbeddingModelConfig, LLMJsonConfig } from './llm-config.js';
 export { AgentLLMRefSchema, resolveAgentLLMRef } from './types.js';
