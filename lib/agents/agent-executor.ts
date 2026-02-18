@@ -2,24 +2,34 @@ import { createAgent } from "langchain";
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { StructuredTool } from '@langchain/core/tools';
-import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions } from './types.js';
+import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions, AgentMemoryConfig } from './types.js';
 import { LLMFactory } from '../llm/llm-factory.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { ConversationStore } from '../memory/conversation-store.js';
 import type { SkillLoader } from '../skills/skill-loader.js';
+import type { MemoryManager } from '../memory/memory-manager.js';
+import { createMemorySaveTool } from '../tools/built-in/memory-save.tool.js';
 import { StructuredOutputWrapper } from './structured-output-wrapper.js';
 import { logLLMCallStart, logLLMCallEnd } from '../llm/llm-call-logger.js';
 import { logger } from '../logger.js';
+
+function isAbortError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  if (err instanceof Error && err.name === 'AbortError') return true;
+  return false;
+}
 
 export class AgentExecutor {
   private toolRegistry: ToolRegistry;
   private conversationStore: ConversationStore;
   private skillLoader?: SkillLoader;
+  private memoryManager?: MemoryManager;
 
-  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, skillLoader?: SkillLoader) {
+  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, skillLoader?: SkillLoader, memoryManager?: MemoryManager) {
     this.toolRegistry = toolRegistry;
     this.conversationStore = conversationStore;
     this.skillLoader = skillLoader;
+    this.memoryManager = memoryManager;
   }
 
   async createInstance(definition: AgentDefinition): Promise<AgentInstance> {
@@ -41,12 +51,32 @@ export class AgentExecutor {
       }
     }
 
+    // Resolve memory and augment system prompt if configured
+    const memoryConfig = this.normalizeMemoryConfig(definition.memory);
+    if (memoryConfig && this.memoryManager) {
+      const memoryContent = await this.memoryManager.load(definition.name);
+      const memoryPrompt = this.buildMemoryPrompt(memoryContent, memoryConfig.maxLines);
+      augmentedDefinition = {
+        ...augmentedDefinition,
+        prompt: {
+          ...augmentedDefinition.prompt,
+          system: `${augmentedDefinition.prompt.system}\n\n${memoryPrompt}`,
+        },
+      };
+    }
+
     let llm = LLMFactory.create(augmentedDefinition.llm);
 
     // Wrap LLM with structured output if configured
     llm = StructuredOutputWrapper.wrapLLM(llm, augmentedDefinition.output);
 
     const tools = await this.toolRegistry.resolveTools(augmentedDefinition.tools);
+
+    // Auto-inject memory tool if configured
+    if (memoryConfig && this.memoryManager) {
+      tools.push(createMemorySaveTool(this.memoryManager, definition.name, memoryConfig.maxLines));
+      logger.info(`[AgentExecutor] Auto-injected save_memory tool for agent: ${definition.name}`);
+    }
 
     // Auto-inject sandbox tool if any skill requires it
     if (skillsNeedSandbox) {
@@ -131,14 +161,15 @@ export class AgentExecutor {
         tools,
       });
 
-      // Increase recursion limit to prevent premature termination
-      // Default is 25, increase to 50 for complex workflows
+      logger.info(`[${caller}] Reaching LLM provider...`);
+
       const result = await agent.invoke(
         {
           messages,
         },
         {
           recursionLimit: 200,
+          signal: undefined,
         }
       );
 
@@ -213,9 +244,12 @@ export class AgentExecutor {
         },
       };
     } catch (error) {
-      logger.error(`[Agent: ${definition.name}] Error:`, error);
+      const errorMsg = isAbortError(error)
+        ? 'Request was aborted'
+        : (error instanceof Error ? error.message : String(error));
+      logger.error(`[Agent: ${definition.name}] Error: ${errorMsg}`);
       return {
-        output: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
+        output: `Agent error: ${errorMsg}`,
         metadata: {
           duration: Date.now() - startTime,
           toolCalls: [],
@@ -254,6 +288,8 @@ export class AgentExecutor {
       systemPrompt: definition.prompt.system,
       messages: allMessages,
     });
+
+    logger.info(`[${caller}] Reaching LLM provider...`);
 
     const result = await llm.invoke(allMessages);
 
@@ -341,6 +377,8 @@ export class AgentExecutor {
         tools,
       });
 
+      logger.info(`[${caller}] Reaching LLM provider...`);
+
       const eventStream = await agent.streamEvents(
         { messages },
         {
@@ -398,8 +436,10 @@ export class AgentExecutor {
           }
         }
       } catch (streamError) {
-        const errorMsg = streamError instanceof Error ? streamError.message : String(streamError);
-        logger.error(`[Agent: ${definition.name}] Stream error after tool calls:`, streamError);
+        const errorMsg = isAbortError(streamError)
+          ? 'Request was aborted'
+          : (streamError instanceof Error ? streamError.message : String(streamError));
+        logger.error(`[Agent: ${definition.name}] Stream error: ${errorMsg}`);
         yield { type: 'error', error: errorMsg };
 
         // Still store what we have so far
@@ -463,6 +503,8 @@ export class AgentExecutor {
         systemPrompt: definition.prompt.system,
         messages: allMessages,
       });
+
+      logger.info(`[${caller}] Reaching LLM provider...`);
 
       const stream = await llm.stream(allMessages, { signal });
 
@@ -594,6 +636,39 @@ export class AgentExecutor {
       }
     }
     return summaries;
+  }
+
+  private normalizeMemoryConfig(
+    raw?: AgentMemoryConfig
+  ): { enabled: boolean; maxLines: number } | null {
+    if (!raw) return null;
+    if (typeof raw === 'boolean') return raw ? { enabled: true, maxLines: 100 } : null;
+    if (!raw.enabled) return null;
+    return { enabled: true, maxLines: raw.maxLines ?? 100 };
+  }
+
+  private buildMemoryPrompt(content: string, maxLines: number): string {
+    const memoryBlock = content
+      ? `<long_term_memory>\n${content}\n</long_term_memory>`
+      : '<long_term_memory>\n(empty - no memories saved yet)\n</long_term_memory>';
+
+    const instructions = `<memory_instructions>
+You have long-term memory that persists across conversations.
+
+The content inside <long_term_memory> above is your current saved memory.
+
+You have a "save_memory" tool to update your memory. When you call it, provide the COMPLETE updated memory content (it replaces the entire file, it does not append).
+
+Guidelines for using your memory:
+- Save important facts, user preferences, decisions, and key context worth remembering
+- Keep entries concise: use short bullet points, not full paragraphs
+- Remove outdated or irrelevant entries when saving to keep memory focused
+- Do not save trivial or easily re-derivable information
+- Organize entries by topic or category when it helps clarity
+- Your memory is limited to approximately ${maxLines} lines, so prioritize what matters most
+</memory_instructions>`;
+
+    return `${memoryBlock}\n\n${instructions}`;
   }
 
   private extractStructuredOutput(message: unknown): Record<string, unknown> {

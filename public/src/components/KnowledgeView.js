@@ -402,9 +402,6 @@ export class KnowledgeView extends Component {
 
     storeBadge(type) {
         const storeType = type || 'memory';
-        if (storeType === 'neo4j') {
-            return '<span class="text-xs font-medium px-2 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700/50">neo4j</span>';
-        }
         return `<span class="text-xs font-medium px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700">${this.escapeHtml(storeType)}</span>`;
     }
 

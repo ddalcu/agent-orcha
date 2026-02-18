@@ -21,9 +21,11 @@ export class CronTriggerHandler {
       try {
         log.info(`Cron firing for agent "${this.agentName}"`);
         const channelContext = this.orchestrator.integrations.getChannelContext(this.agentName);
-        const input = channelContext
-          ? { ...this.trigger.input, channelContext }
-          : { ...this.trigger.input };
+        const members = this.orchestrator.integrations.getChannelMembers(this.agentName);
+        const memberList = members.map(m => m.name).join(', ');
+        const input: Record<string, unknown> = { ...this.trigger.input };
+        if (channelContext) input.channelContext = channelContext;
+        if (memberList) input.channelMembers = memberList;
         const result = await this.orchestrator.runAgent(this.agentName, input, sessionId);
         const message = typeof result.output === 'string' ? result.output : JSON.stringify(result.output);
         this.orchestrator.integrations.postMessage(this.agentName, message);

@@ -7,7 +7,7 @@ import { validateReadonlyCypher } from './query-validators.js';
 import { buildGraphSchemaDescription } from './knowledge-tools-factory.js';
 
 /**
- * Create a Cypher query tool for a Neo4j-backed graph-rag knowledge base.
+ * Create a Cypher query tool for a graph-rag knowledge base that supports Cypher queries.
  */
 export function createKnowledgeCypherTool(
   name: string,
@@ -50,7 +50,7 @@ export function createKnowledgeCypherTool(
     },
     {
       name: `knowledge_cypher_${name}`,
-      description: `Run a readonly Cypher query against the "${name}" Neo4j knowledge graph.
+      description: `Run a readonly Cypher query against the "${name}" knowledge graph.
 
 ${schemaInfo}
 
@@ -59,7 +59,7 @@ ${exampleQueries}
 
 RESTRICTIONS: Only read queries allowed (MATCH, RETURN, WITH, WHERE, ORDER BY, UNION, UNWIND, OPTIONAL MATCH). No CREATE, DELETE, MERGE, SET, REMOVE, or DROP.
 
-TIPS: Use this for precise queries when you know the graph schema. For exploratory questions, prefer knowledge_search_${name} or knowledge_traverse_${name}.`,
+TIPS: Use this for precise queries when you know the graph schema. For exploratory questions, prefer knowledge_search_${name} or knowledge_traverse_${name}. Call knowledge_graph_schema_${name} first to discover available entity types and relationships.`,
       schema: z.object({
         query: z.string().describe('A readonly Cypher query (MATCH ... RETURN ...)'),
         params: z.record(z.unknown()).optional().describe('Query parameters (e.g. { name: "value" })'),

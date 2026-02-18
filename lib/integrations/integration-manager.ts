@@ -1,4 +1,4 @@
-import { CollabnookConnector } from './collabnook.js';
+import { CollabnookConnector, type ChannelMember } from './collabnook.js';
 import { createLogger } from '../logger.js';
 import type { Orchestrator } from '../orchestrator.js';
 import type { AgentDefinition } from '../agents/types.js';
@@ -33,6 +33,24 @@ export class IntegrationManager {
     if (!agentConnectors || agentConnectors.length === 0) return '';
 
     return agentConnectors.map(c => c.getRecentMessages()).filter(Boolean).join('\n');
+  }
+
+  getChannelMembers(agentName: string): ChannelMember[] {
+    const agentConnectors = this.connectors.get(agentName);
+    if (!agentConnectors || agentConnectors.length === 0) return [];
+
+    // Merge members from all connectors, dedup by userId
+    const seen = new Set<string>();
+    const members: ChannelMember[] = [];
+    for (const connector of agentConnectors) {
+      for (const member of connector.getChannelMembers()) {
+        if (!seen.has(member.userId)) {
+          seen.add(member.userId);
+          members.push(member);
+        }
+      }
+    }
+    return members;
   }
 
   postMessage(agentName: string, message: string): void {
@@ -70,7 +88,14 @@ export class IntegrationManager {
     const sessionId = `integration-${agent.name}-${config.channel}`;
 
     const onCommand = async (command: string, requesterName: string): Promise<string> => {
-      const input = { [inputVar]: `Request from ${requesterName}: ${command}` };
+      const members = connector.getChannelMembers();
+      const memberList = members.map(m => m.name).join(', ');
+      const input: Record<string, unknown> = {
+        [inputVar]: `Request from ${requesterName}: ${command}`,
+      };
+      if (memberList) {
+        input.channelMembers = memberList;
+      }
       const result = await orchestrator.runAgent(agent.name, input, sessionId);
       return typeof result.output === 'string'
         ? result.output

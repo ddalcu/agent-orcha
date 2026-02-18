@@ -116,7 +116,7 @@ export function createKnowledgeGraphSchemaTool(
     },
     {
       name: `knowledge_graph_schema_${name}`,
-      description: `Discover the schema of the "${name}" knowledge graph — entity types, relationship types, property names, and counts. Use this first when exploring an unfamiliar graph to understand its structure before running queries.
+      description: `Discover the schema of the "${name}" knowledge graph — entity types, relationship types, property names, counts, and database table definitions. Use this FIRST when exploring an unfamiliar graph to understand its structure before running queries.
 
 TIPS: Call with includeExamples=true to see sample entities of each type. Use the entity types and relationship types from the output to write precise Cypher or traversal queries.`,
       schema: z.object({

@@ -20,22 +20,25 @@ prompt:
     - Reference previous context from the conversation when relevant
     - If you don't know something, say so honestly
     - Keep responses chat-friendly (not too long)
+    - You can tag/mention other users or agents in the channel using @username syntax (e.g. @Alice, @ResearchBot)
+    - The channelMembers field lists who is currently in the channel — use it to know who you can tag
   inputVariables:
     - query
     - channelContext
+    - channelMembers
 
 output:
   format: text
 
 integrations:
   - type: collabnook
-    url: ws://collabnook.com/ws
+    url: wss://collabnook.com/ws
     channel: general
     botName: Chatbot
 
 triggers:
   - type: cron
-    schedule: "*/2 * * * *"
+    schedule: "*/30 * * * *"
     input:
       query: |
         You are posting a scheduled status report to the chat channel.

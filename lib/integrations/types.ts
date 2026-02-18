@@ -6,6 +6,7 @@ const CollabnookIntegrationSchema = z.object({
   channel: z.string(),
   botName: z.string(),
   password: z.string().optional(),
+  replyDelay: z.number().optional(),
 });
 
 // Add new types to this union as needed (slack, whatsapp, etc.)

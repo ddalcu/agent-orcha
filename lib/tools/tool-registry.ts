@@ -12,17 +12,20 @@ export class ToolRegistry {
   private functionLoader: FunctionLoader;
   private builtInTools: Map<string, StructuredTool> = new Map();
   private sandboxTools: Map<string, StructuredTool>;
+  private projectTools: Map<string, StructuredTool>;
 
   constructor(
     mcpClient: MCPClientManager,
     knowledgeStores: KnowledgeStoreManager,
     functionLoader: FunctionLoader,
     sandboxTools: Map<string, StructuredTool> = new Map(),
+    projectTools: Map<string, StructuredTool> = new Map(),
   ) {
     this.mcpClient = mcpClient;
     this.knowledgeStores = knowledgeStores;
     this.functionLoader = functionLoader;
     this.sandboxTools = sandboxTools;
+    this.projectTools = projectTools;
   }
 
   async resolveTools(toolRefs: ToolReference[]): Promise<StructuredTool[]> {
@@ -88,6 +91,15 @@ export class ToolRegistry {
           return [];
         }
         return [sandboxTool];
+      }
+
+      case 'project': {
+        const projectTool = this.projectTools.get(name);
+        if (!projectTool) {
+          logger.warn(`Project tool "${name}" not found (available: ${Array.from(this.projectTools.keys()).join(', ') || 'none'})`);
+          return [];
+        }
+        return [projectTool];
       }
 
       default:
@@ -178,5 +190,12 @@ export class ToolRegistry {
    */
   getAllSandboxTools(): StructuredTool[] {
     return Array.from(this.sandboxTools.values());
+  }
+
+  /**
+   * Gets all project tools.
+   */
+  getAllProjectTools(): StructuredTool[] {
+    return Array.from(this.projectTools.values());
   }
 }

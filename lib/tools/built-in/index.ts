@@ -7,3 +7,4 @@ export { createKnowledgeGraphSchemaTool } from './knowledge-graph-schema.tool.js
 export { createKnowledgeSqlTool } from './knowledge-sql.tool.js';
 export { createKnowledgeTools, buildGraphSchemaDescription } from './knowledge-tools-factory.js';
 export { validateReadonlyCypher, validateReadonlySql } from './query-validators.js';
+export { createMemorySaveTool } from './memory-save.tool.js';

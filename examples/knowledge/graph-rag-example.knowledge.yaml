@@ -47,7 +47,7 @@ graph:
     summaryLlm: default
 
   store:
-    type: memory  # memory | neo4j
+    type: memory
     options: {}
 
   cache:

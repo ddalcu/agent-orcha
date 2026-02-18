@@ -816,7 +816,7 @@ graph:                             # Graph configuration (required)
     summaryLlm: string             # LLM for community summaries (default: "default")
 
   store:                           # Graph store backend
-    type: memory | neo4j           # Default: memory
+    type: memory                   # Default: memory
     options: {}                    # Store-specific options
 
   cache:                           # Graph cache config

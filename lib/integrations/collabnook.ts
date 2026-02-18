@@ -5,6 +5,11 @@ import type { CollabnookIntegration } from './types.js';
 const RECONNECT_DELAY = 3000;
 const MAX_MESSAGE_LOG_CHARS = 4000;
 
+export interface ChannelMember {
+  userId: string;
+  name: string;
+}
+
 type OnCommand = (command: string, requesterName: string) => Promise<string>;
 
 export class CollabnookConnector {
@@ -24,6 +29,7 @@ export class CollabnookConnector {
   private nameSuffix = 0;
   private messageLog: string[] = [];
   private messageLogChars = 0;
+  private members: Map<string, string> = new Map(); // name → userId
 
   constructor(
     config: CollabnookIntegration,
@@ -56,6 +62,10 @@ export class CollabnookConnector {
 
   getRecentMessages(): string {
     return this.messageLog.join('\n');
+  }
+
+  getChannelMembers(): ChannelMember[] {
+    return Array.from(this.members.entries()).map(([name, userId]) => ({ userId, name }));
   }
 
   private doConnect(onFirstOpen?: () => void): void {
@@ -103,7 +113,34 @@ export class CollabnookConnector {
   }
 
   private sendChat(text: string): void {
-    this.send({ type: 'chat', text });
+    const mentions = this.resolveMentions(text);
+    const msg: Record<string, unknown> = { type: 'chat', text };
+    if (mentions.length > 0) {
+      msg.mentions = mentions;
+    }
+    this.send(msg);
+  }
+
+  /**
+   * Scan text for @username patterns and resolve them to userIds
+   * using the known channel members.
+   */
+  private resolveMentions(text: string): Array<{ userId: string }> {
+    const seen = new Set<string>();
+    const mentions: Array<{ userId: string }> = [];
+
+    for (const match of text.matchAll(/@([\w-]+)/g)) {
+      const name = match[1]!;
+      if (seen.has(name)) continue;
+      seen.add(name);
+
+      const userId = this.members.get(name);
+      if (userId) {
+        mentions.push({ userId });
+      }
+    }
+
+    return mentions;
   }
 
   private dispatch(msg: Record<string, unknown>): void {
@@ -113,6 +150,9 @@ export class CollabnookConnector {
       case 'channel-list': return this.handleChannelList(msg);
       case 'channel-joined': return this.handleChannelJoined(msg);
       case 'chat': return this.handleChat(msg);
+      case 'user-joined': return this.handleUserJoined(msg);
+      case 'user-left': return this.handleUserLeft(msg);
+      case 'user-list': return this.handleUserList(msg);
     }
   }
 
@@ -166,6 +206,7 @@ export class CollabnookConnector {
     }
     this.send(joinMsg);
     this.send({ type: 'switch-channel', channelId: target.id });
+    this.send({ type: 'get-users' });
     this.log.info(`Joining channel: #${target.name}`);
   }
 
@@ -176,8 +217,43 @@ export class CollabnookConnector {
       this.targetChannelId = msg.channelId as string;
       this.pendingCreate = false;
       this.send({ type: 'switch-channel', channelId: this.targetChannelId });
+      this.send({ type: 'get-users' });
       this.log.info(`Created and joined channel #${msg.channelName}`);
     }
+
+    // Populate members from the join response if available
+    const users = msg.users as Array<{ id: string; name: string }> | undefined;
+    if (users) {
+      for (const user of users) {
+        this.members.set(user.name, user.id);
+      }
+    }
+  }
+
+  private handleUserJoined(msg: Record<string, unknown>): void {
+    const name = msg.name as string;
+    const userId = msg.userId as string;
+    if (name && userId) {
+      this.members.set(name, userId);
+    }
+  }
+
+  private handleUserLeft(msg: Record<string, unknown>): void {
+    const name = msg.name as string;
+    if (name) {
+      this.members.delete(name);
+    }
+  }
+
+  private handleUserList(msg: Record<string, unknown>): void {
+    const users = msg.users as Array<{ id: string; name: string }> | undefined;
+    if (!users) return;
+    for (const user of users) {
+      if (user.name && user.id) {
+        this.members.set(user.name, user.id);
+      }
+    }
+    this.log.info(`Channel members: ${Array.from(this.members.keys()).join(', ')}`);
   }
 
   private logMessage(name: string, text: string): void {
@@ -193,12 +269,18 @@ export class CollabnookConnector {
 
   private handleChat(msg: Record<string, unknown>): void {
     const senderName = msg.name as string;
+    const senderId = msg.userId as string;
     const text = msg.text as string;
+
+    // Track all senders as channel members
+    if (senderName && senderId) {
+      this.members.set(senderName, senderId);
+    }
 
     // Log all messages (including bot's own) for channel context
     this.logMessage(senderName, text);
 
-    if (msg.userId === this.userId) return;
+    if (senderId === this.userId) return;
 
     const mentions = msg.mentions as Array<{ userId: string }> | undefined;
     if (!mentions || !mentions.some(m => m.userId === this.userId)) return;
@@ -221,11 +303,18 @@ export class CollabnookConnector {
     this.executeTask(command, requesterName);
   }
 
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   private async executeTask(command: string, requesterName: string): Promise<void> {
     this.busy = true;
     const startTime = Date.now();
     this.log.info(`Task from ${requesterName}: ${command}`);
-    this.sendChat(`**Task received** from ${requesterName}\n> ${command}`);
+
+    if (this.config.replyDelay) {
+      await this.delay(this.config.replyDelay);
+    }
 
     try {
       const result = await this.onCommand(command, requesterName);

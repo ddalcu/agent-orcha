@@ -15,6 +15,7 @@ import { ToolDiscovery } from './tools/tool-discovery.js';
 import { MCPConfigSchema } from './mcp/types.js';
 import { loadLLMConfig } from './llm/llm-config.js';
 import { ConversationStore } from './memory/conversation-store.js';
+import { MemoryManager } from './memory/memory-manager.js';
 import { TaskManager } from './tasks/task-manager.js';
 import { DockerManager } from './sandbox/docker-manager.js';
 import { createSandboxExecTool } from './sandbox/sandbox-tool.js';
@@ -22,6 +23,7 @@ import { createSandboxReadTool, createSandboxWriteTool, createSandboxEditTool } 
 import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web-tools.js';
 import { createSandboxBrowserTool } from './sandbox/sandbox-browser-tool.js';
 import { SandboxConfigSchema } from './sandbox/types.js';
+import { buildProjectTools, type ProjectToolDeps, type ProjectResourceSummary } from './tools/project/project-tools.js';
 import { IntegrationManager } from './integrations/integration-manager.js';
 import { TriggerManager } from './triggers/trigger-manager.js';
 import type { SandboxConfig } from './sandbox/types.js';
@@ -68,6 +70,7 @@ export class Orchestrator {
   private taskManager!: TaskManager;
   private dockerManager: DockerManager | null = null;
   private sandboxConfig: SandboxConfig | null = null;
+  private memoryManager: MemoryManager;
   private integrationManager: IntegrationManager | null = null;
   private triggerManager: TriggerManager | null = null;
 
@@ -98,6 +101,7 @@ export class Orchestrator {
       maxMessagesPerSession: 50,
       sessionTTL: 3600000, // 1 hour
     });
+    this.memoryManager = new MemoryManager(config.projectRoot);
   }
 
   async initialize(): Promise<void> {
@@ -117,14 +121,16 @@ export class Orchestrator {
     // Load sandbox config
     await this.loadSandboxConfig();
     const sandboxTools = this.buildSandboxTools();
+    const projectTools = this.buildProjectToolsMap();
 
     this.toolRegistry = new ToolRegistry(
       this.mcpClient,
       this.knowledgeStoreManager,
       this.functionLoader,
       sandboxTools,
+      projectTools,
     );
-    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader);
+    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader, this.memoryManager);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
 
     // Initialize LangGraph components
@@ -204,6 +210,21 @@ export class Orchestrator {
     return tools;
   }
 
+  private buildProjectToolsMap(): Map<string, StructuredTool> {
+    const deps: ProjectToolDeps = {
+      projectRoot: this.config.projectRoot,
+      reloadFile: (relativePath: string) => this.reloadFile(relativePath),
+      listResources: (): ProjectResourceSummary => ({
+        agents: this.agentLoader.list().map(a => ({ name: a.name, description: a.description })),
+        workflows: this.workflowLoader.list().map(w => ({ name: w.name, description: w.description })),
+        skills: this.skillLoader.list().map(s => ({ name: s.name, description: s.description })),
+        functions: this.functionLoader.list().map(f => ({ name: f.name, description: f.metadata.description })),
+        knowledge: this.knowledgeStoreManager.listConfigs().map(k => ({ name: k.name, description: k.description })),
+      }),
+    };
+    return buildProjectTools(deps);
+  }
+
   get sandbox(): SandboxAccessor {
     return {
       getConfig: () => this.sandboxConfig,
@@ -280,6 +301,9 @@ export class Orchestrator {
       getChannelContext: (agentName: string) => {
         return this.integrationManager?.getChannelContext(agentName) ?? '';
       },
+      getChannelMembers: (agentName: string) => {
+        return this.integrationManager?.getChannelMembers(agentName) ?? [];
+      },
       postMessage: (agentName: string, message: string) => {
         this.integrationManager?.postMessage(agentName, message);
       },
@@ -304,6 +328,12 @@ export class Orchestrator {
       getSessionCount: () => this.conversationStore.getSessionCount(),
       getMessageCount: (sessionId: string) => this.conversationStore.getMessageCount(sessionId),
       hasSession: (sessionId: string) => this.conversationStore.hasSession(sessionId),
+    };
+  }
+
+  get longTermMemory(): LongTermMemoryAccessor {
+    return {
+      load: (agentName: string) => this.memoryManager.load(agentName),
     };
   }
 
@@ -348,11 +378,13 @@ export class Orchestrator {
       }
       await this.loadSandboxConfig();
       const sandboxTools = this.buildSandboxTools();
+      const projectTools = this.buildProjectToolsMap();
       this.toolRegistry = new ToolRegistry(
         this.mcpClient,
         this.knowledgeStoreManager,
         this.functionLoader,
         sandboxTools,
+        projectTools,
       );
       return 'sandbox';
     }
@@ -680,6 +712,10 @@ interface MemoryAccessor {
   hasSession: (sessionId: string) => boolean;
 }
 
+interface LongTermMemoryAccessor {
+  load: (agentName: string) => Promise<string>;
+}
+
 interface TaskAccessor {
   getManager: () => TaskManager;
 }
@@ -691,6 +727,7 @@ interface TriggerAccessor {
 
 interface IntegrationAccessor {
   getChannelContext: (agentName: string) => string;
+  getChannelMembers: (agentName: string) => Array<{ userId: string; name: string }>;
   postMessage: (agentName: string, message: string) => void;
 }
 

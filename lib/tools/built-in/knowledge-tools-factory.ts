@@ -1,7 +1,6 @@
 import type { StructuredTool } from '@langchain/core/tools';
 import type { KnowledgeStoreInstance, GraphRagKnowledgeConfig } from '../../knowledge/types.js';
 import { GraphRagFactory } from '../../knowledge/graph-rag/graph-rag-factory.js';
-import { Neo4jGraphStore } from '../../knowledge/graph-rag/neo4j-graph-store.js';
 import { createKnowledgeSearchTool } from './knowledge-search.tool.js';
 import { createKnowledgeCypherTool } from './knowledge-cypher.tool.js';
 import { createKnowledgeTraverseTool } from './knowledge-traverse.tool.js';
@@ -16,7 +15,7 @@ const logger = createLogger('KnowledgeToolsFactory');
  * Create the full toolset for a knowledge base based on its type.
  *
  * - Vector KBs get: search
- * - Graph-rag KBs get: search + traverse + entity_lookup + graph_schema (+ cypher if Neo4j)
+ * - Graph-rag KBs get: search + traverse + entity_lookup + graph_schema (+ cypher if store supports queries)
  * - Database-sourced KBs additionally get: sql
  */
 export function createKnowledgeTools(name: string, store: KnowledgeStoreInstance): StructuredTool[] {
@@ -31,8 +30,8 @@ export function createKnowledgeTools(name: string, store: KnowledgeStoreInstance
     const graphStore = GraphRagFactory.getGraphStore(name);
 
     if (graphStore) {
-      // Cypher tool — only for Neo4j stores
-      if (graphStore instanceof Neo4jGraphStore) {
+      // Cypher tool — for any graph store that implements query()
+      if (graphStore.query) {
         tools.push(createKnowledgeCypherTool(name, config, graphStore));
       }
 

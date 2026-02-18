@@ -37,6 +37,54 @@ async function ensurePage() {
   return page;
 }
 
+// DOM-to-markdown converter for use inside p.evaluate()
+const domToMarkdown = function() {
+  const SKIP = new Set(['SCRIPT','STYLE','NAV','FOOTER','HEADER','ASIDE','NOSCRIPT','SVG','IFRAME']);
+  const BT = String.fromCharCode(96);
+  const BT3 = BT.repeat(3);
+  function walk(node) {
+    if (node.nodeType === 3) return node.textContent || '';
+    if (node.nodeType !== 1) return '';
+    if (SKIP.has(node.tagName)) return '';
+    const kids = Array.from(node.childNodes).map(walk).join('');
+    const t = kids.trim();
+    switch (node.tagName) {
+      case 'H1': return '\\n# ' + t + '\\n';
+      case 'H2': return '\\n## ' + t + '\\n';
+      case 'H3': return '\\n### ' + t + '\\n';
+      case 'H4': return '\\n#### ' + t + '\\n';
+      case 'H5': return '\\n##### ' + t + '\\n';
+      case 'H6': return '\\n###### ' + t + '\\n';
+      case 'P': case 'DIV': case 'SECTION': case 'ARTICLE': case 'MAIN':
+        return t ? '\\n\\n' + t + '\\n' : '';
+      case 'BR': return '\\n';
+      case 'STRONG': case 'B': return '**' + kids + '**';
+      case 'EM': case 'I': return '*' + kids + '*';
+      case 'A': {
+        const href = node.getAttribute('href');
+        return href && t ? '[' + t + '](' + href + ')' : t;
+      }
+      case 'UL': case 'OL': return '\\n' + kids + '\\n';
+      case 'LI': return '\\n- ' + t;
+      case 'PRE': return '\\n' + BT3 + '\\n' + kids + '\\n' + BT3 + '\\n';
+      case 'CODE': {
+        if (node.parentNode && node.parentNode.tagName === 'PRE') return kids;
+        return BT + kids + BT;
+      }
+      case 'BLOCKQUOTE': return '\\n> ' + t.replace(/\\n/g, '\\n> ') + '\\n';
+      case 'HR': return '\\n---\\n';
+      case 'IMG': {
+        const alt = node.getAttribute('alt') || '';
+        const src = node.getAttribute('src') || '';
+        return src ? '![' + alt + '](' + src + ')' : '';
+      }
+      default: return kids;
+    }
+  }
+  let r = walk(document.body);
+  return r.replace(/\\n{3,}/g, '\\n\\n').trim();
+};
+
 async function executeAction(action) {
   const p = await ensurePage();
 
@@ -64,14 +112,14 @@ async function executeAction(action) {
       return { filled: action.selector, value: action.value };
     }
     case 'content': {
-      const text = await p.evaluate(() => document.body.innerText);
-      return { title: await p.title(), url: p.url(), content: text.substring(0, 50000), truncated: text.length > 50000 };
+      const md = await p.evaluate(domToMarkdown);
+      return { title: await p.title(), url: p.url(), content: md.substring(0, 50000), truncated: md.length > 50000 };
     }
     case 'snapshot': {
       const title = await p.title();
       const url = p.url();
-      const text = await p.evaluate(() => document.body.innerText);
-      return { title, url, content: text.substring(0, 30000), truncated: text.length > 30000 };
+      const md = await p.evaluate(domToMarkdown);
+      return { title, url, content: md.substring(0, 30000), truncated: md.length > 30000 };
     }
     case 'evaluate': {
       const evalResult = await p.evaluate(action.script);

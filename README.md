@@ -30,6 +30,12 @@ Agent Orcha enables you to:
 - **Create local functions** to give your agents the ability to call your own custom code
 - **Manage everything** through a web-based Studio dashboard with built-in IDE
 
+## Architecture
+
+<p align="center">
+  <img src="docs/architecture.svg" alt="Agent Orcha Architecture" width="100%" />
+</p>
+
 ### Alpha Status and Security Notice
 
 **This project is currently in ALPHA state.** No security precautions have been implemented yet. This software should **ALWAYS** be deployed behind a firewall without open access to its APIs. It is designed for **internal use only** and should never be exposed directly to the public internet.

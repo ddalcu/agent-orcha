@@ -3,6 +3,7 @@ import * as path from 'path';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
 import { AgentDefinitionSchema, type AgentDefinition } from './types.js';
+import { logger } from '../logger.js';
 
 export class AgentLoader {
   private agentsDir: string;
@@ -17,8 +18,13 @@ export class AgentLoader {
 
     for (const file of files) {
       const filePath = path.join(this.agentsDir, file);
-      const agent = await this.loadOne(filePath);
-      this.agents.set(agent.name, agent);
+      try {
+        const agent = await this.loadOne(filePath);
+        this.agents.set(agent.name, agent);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn(`[AgentLoader] Skipping invalid agent file "${file}": ${message}`);
+      }
     }
 
     return this.agents;

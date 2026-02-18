@@ -6,9 +6,97 @@ import type { SandboxConfig } from './types.js';
 
 const MAX_OUTPUT_CHARS = 50_000;
 
+// Python HTML-to-markdown converter using only stdlib
+const HTML_TO_MD_SCRIPT = `
+import sys, re
+from html.parser import HTMLParser
+
+BT = chr(96)
+BT3 = BT * 3
+SKIP_TAGS = {'script','style','nav','footer','header','aside','noscript','svg','iframe'}
+
+class H2M(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.out = []
+        self.skip = 0
+        self.href = None
+        self.ltxt = []
+        self.inlink = False
+        self.pre = False
+        self.ld = 0
+
+    def handle_starttag(self, tag, attrs):
+        t = tag.lower()
+        if t in SKIP_TAGS:
+            self.skip += 1
+            return
+        if self.skip: return
+        d = dict(attrs)
+        if t in ('h1','h2','h3','h4','h5','h6'):
+            self.out.append('\\n' + '#' * int(t[1]) + ' ')
+        elif t == 'a':
+            self.inlink = True
+            self.href = d.get('href', '')
+            self.ltxt = []
+        elif t in ('strong','b'): self.out.append('**')
+        elif t in ('em','i'): self.out.append('*')
+        elif t in ('p','div','section','article','main'): self.out.append('\\n\\n')
+        elif t == 'br': self.out.append('\\n')
+        elif t in ('ul','ol'):
+            self.ld += 1
+            self.out.append('\\n')
+        elif t == 'li': self.out.append('\\n' + '  ' * (self.ld - 1) + '- ')
+        elif t == 'pre':
+            self.pre = True
+            self.out.append('\\n' + BT3 + '\\n')
+        elif t == 'code' and not self.pre: self.out.append(BT)
+        elif t == 'blockquote': self.out.append('\\n> ')
+        elif t == 'hr': self.out.append('\\n---\\n')
+        elif t == 'img':
+            alt = d.get('alt', '')
+            src = d.get('src', '')
+            if src: self.out.append(f'![{alt}]({src})')
+
+    def handle_endtag(self, tag):
+        t = tag.lower()
+        if t in SKIP_TAGS:
+            self.skip = max(0, self.skip - 1)
+            return
+        if self.skip: return
+        if t in ('h1','h2','h3','h4','h5','h6'): self.out.append('\\n')
+        elif t == 'a':
+            txt = ''.join(self.ltxt).strip()
+            if self.href and txt: self.out.append(f'[{txt}]({self.href})')
+            elif txt: self.out.append(txt)
+            self.inlink = False
+        elif t in ('strong','b'): self.out.append('**')
+        elif t in ('em','i'): self.out.append('*')
+        elif t in ('ul','ol'):
+            self.ld = max(0, self.ld - 1)
+            self.out.append('\\n')
+        elif t == 'pre':
+            self.pre = False
+            self.out.append('\\n' + BT3 + '\\n')
+        elif t == 'code' and not self.pre: self.out.append(BT)
+
+    def handle_data(self, data):
+        if self.skip: return
+        if self.inlink: self.ltxt.append(data)
+        else:
+            if not self.pre: data = re.sub(r'[ \\t]+', ' ', data)
+            self.out.append(data)
+
+p = H2M()
+p.feed(sys.stdin.read())
+r = ''.join(p.out)
+r = re.sub(r'\\n{3,}', '\\n\\n', r).strip()
+print(r)
+`.trim();
+
 /**
- * Creates a tool that fetches web content using curl + lynx inside the Docker sandbox container.
- * For HTML pages, converts to readable text using lynx. For non-HTML, returns raw content.
+ * Creates a tool that fetches web content using curl inside the Docker sandbox container.
+ * HTML pages are converted to clean markdown for reduced context.
  */
 export function createSandboxWebFetchTool(
   dockerManager: DockerManager,
@@ -39,10 +127,15 @@ export function createSandboxWebFetchTool(
       if (raw) {
         command = `curl -sS -L -m 15 --max-filesize 2097152 '${escapedUrl}'`;
       } else {
-        // Use lynx if available for HTML-to-text, fall back to curl
+        // Write HTML-to-markdown converter and pipe curl output through it
+        const scriptB64 = Buffer.from(HTML_TO_MD_SCRIPT, 'utf-8').toString('base64');
+        await dockerManager.execInContainer(
+          containerName,
+          `echo '${scriptB64}' | base64 -d > /tmp/_html2md.py`,
+        );
         command =
           `curl -sS -L -m 15 --max-filesize 2097152 '${escapedUrl}' | ` +
-          `(lynx -stdin -dump -width=120 2>/dev/null || cat)`;
+          `python3 /tmp/_html2md.py`;
       }
 
       const result = await dockerManager.execInContainer(
@@ -75,7 +168,7 @@ export function createSandboxWebFetchTool(
       name: 'sandbox_web_fetch',
       description:
         'Fetch the content of a web page or API endpoint from inside the Docker sandbox container. ' +
-        'HTML is automatically converted to readable text. Use raw=true for API responses or non-HTML content.',
+        'HTML is automatically converted to clean markdown. Use raw=true for API responses or non-HTML content.',
       schema: z.object({
         url: z
           .string()
@@ -84,7 +177,7 @@ export function createSandboxWebFetchTool(
           .boolean()
           .optional()
           .default(false)
-          .describe('Return raw content without HTML-to-text conversion'),
+          .describe('Return raw content without HTML-to-markdown conversion'),
       }),
     },
   );
@@ -122,7 +215,7 @@ for i, (href, title) in enumerate(links[:10]):
     if i < len(snippets):
         snippet = re.sub(r'<[^>]+>', '', snippets[i]).strip()
         snippet = html.unescape(snippet)
-    results.append(f"{i+1}. {title}\\n   URL: {url}\\n   {snippet}")
+    results.append(f"{i+1}. [{title}]({url})\\n   {snippet}")
 
 if results:
     print("\\n\\n".join(results))

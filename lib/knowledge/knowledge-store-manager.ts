@@ -31,12 +31,40 @@ export class KnowledgeStoreManager {
 
     for (const file of files) {
       const filePath = path.join(this.knowledgeDir, file);
-      await this.loadOne(filePath);
+      try {
+        await this.loadOne(filePath);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn(`Skipping invalid knowledge file "${file}": ${message}`);
+      }
     }
 
     // Reset any metadata stuck in 'indexing' from a previous interrupted run
     const names = Array.from(this.configs.keys());
     await this.metadataManager.resetStaleIndexing(names);
+
+    // Auto-restore previously indexed stores from cache
+    await this.restoreIndexedStores();
+  }
+
+  /**
+   * Restore stores that were previously indexed (status='indexed' in metadata).
+   * They will load from disk cache without re-extracting, which is fast.
+   */
+  private async restoreIndexedStores(): Promise<void> {
+    const statuses = await this.getAllStatuses();
+
+    for (const [name, metadata] of statuses) {
+      if (metadata.status !== 'indexed') continue;
+      if (this.stores.has(name)) continue;
+
+      try {
+        logger.info(`Restoring "${name}" from cache...`);
+        await this.initialize(name);
+      } catch (error) {
+        logger.warn(`Failed to restore "${name}": ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 
   async loadOne(filePath: string): Promise<KnowledgeConfig> {

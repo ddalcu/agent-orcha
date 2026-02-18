@@ -440,7 +440,8 @@ export class AgentsView extends Component {
                         const parsed = JSON.parse(data);
 
                         if (parsed.error) {
-                            throw new Error(parsed.error);
+                            this.updateResponseError(responseId, `Error: ${parsed.error}`);
+                            return fullContent;
                         }
 
                         if (parsed.type === 'usage') {

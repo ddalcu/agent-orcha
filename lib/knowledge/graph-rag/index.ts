@@ -1,6 +1,5 @@
 export { GraphRagFactory } from './graph-rag-factory.js';
 export { MemoryGraphStore } from './memory-graph-store.js';
-export { Neo4jGraphStore } from './neo4j-graph-store.js';
 export { EntityExtractor } from './entity-extractor.js';
 export { ExtractionCache } from './extraction-cache.js';
 export { CommunityDetector } from './community-detector.js';

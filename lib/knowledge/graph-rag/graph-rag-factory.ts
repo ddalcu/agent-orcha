@@ -11,7 +11,6 @@ import type {
 import type { KnowledgeStoreInstance, SearchResult } from '../types.js';
 import type { GraphRagKnowledgeConfig } from '../types.js';
 import { MemoryGraphStore } from './memory-graph-store.js';
-import { Neo4jGraphStore } from './neo4j-graph-store.js';
 import { EntityExtractor } from './entity-extractor.js';
 import { DirectMapper } from './direct-mapper.js';
 import { ExtractionCache } from './extraction-cache.js';
@@ -57,7 +56,7 @@ export class GraphRagFactory {
 
     // Create embeddings and graph store
     const embeddings = KnowledgeStoreFactory.createEmbeddings(config.embedding);
-    const store = this.createGraphStore(graphConfig, config.name);
+    const store = this.createGraphStore(graphConfig);
 
     // Set up cache
     const cacheEnabled = graphConfig.cache.enabled;
@@ -69,7 +68,7 @@ export class GraphRagFactory {
     let communities: Community[] = [];
     let restored = false;
 
-    // --- Path 1: Store already has data for THIS knowledge base (Neo4j persistence across restarts) ---
+    // --- Path 1: Store already has data for THIS knowledge base (persistent store across restarts) ---
     // getAllNodes/getAllEdges are scoped to this KB via BELONGS_TO_KB when knowledgeBaseName is set
     const kbNodeId = normalizeId(config.name, 'KnowledgeBase');
     const kbNode = await store.getNode(kbNodeId);
@@ -83,7 +82,7 @@ export class GraphRagFactory {
 
         communities = await store.getCommunities();
 
-        // If communities empty (Neo4j doesn't persist them), try loading from cache
+        // If communities empty (not persisted in DB), try loading from cache
         if (communities.length === 0 && cacheEnabled && await cache.hasCache()) {
           try {
             const cached = await cache.load();
@@ -232,7 +231,7 @@ export class GraphRagFactory {
           }
         } else {
           communities = [];
-          logger.warn('Community detection not supported for Neo4j store (use memory store)');
+          logger.warn('Community detection only supported for memory store');
         }
 
         await store.setCommunities(communities);
@@ -367,22 +366,8 @@ export class GraphRagFactory {
     }
   }
 
-  private static createGraphStore(config: GraphConfig, knowledgeBaseName: string): GraphStore {
-    switch (config.store.type) {
-      case 'neo4j': {
-        const opts = config.store.options as Record<string, string>;
-        return new Neo4jGraphStore({
-          uri: opts.uri ?? 'bolt://localhost:7687',
-          username: opts.username ?? 'neo4j',
-          password: opts.password ?? 'password',
-          database: opts.database,
-          knowledgeBaseName,
-        });
-      }
-      case 'memory':
-      default:
-        return new MemoryGraphStore();
-    }
+  private static createGraphStore(_config: GraphConfig): GraphStore {
+    return new MemoryGraphStore();
   }
 
   /**

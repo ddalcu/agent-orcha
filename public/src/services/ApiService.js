@@ -249,17 +249,23 @@ export class ApiService {
         return new EventSource(`/api/tasks/${id}/stream`);
     }
 
-    async getNeo4jConfig() {
+    async getGraphConfig() {
         const res = await fetch('/api/graph/config');
         return res.json();
     }
 
-    async getGraphData(cypherQuery) {
-        const res = await fetch('/api/graph/query', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: cypherQuery })
-        });
+    async getGraphKnowledgeBases() {
+        const res = await fetch('/api/graph/knowledge-bases');
+        return res.json();
+    }
+
+    async getGraphFull(limit = 300) {
+        const res = await fetch(`/api/graph/full?limit=${limit}`);
+        return res.json();
+    }
+
+    async getGraphNeighbors(nodeId, depth = 1) {
+        const res = await fetch(`/api/graph/neighbors/${encodeURIComponent(nodeId)}?depth=${depth}`);
         return res.json();
     }
 }

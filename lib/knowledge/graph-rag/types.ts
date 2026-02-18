@@ -44,7 +44,7 @@ export interface GraphStore {
   clear(): Promise<void>;
   clearByKnowledgeBase(kbName: string): Promise<void>;
 
-  /** Run a raw read query against the underlying store (e.g. Cypher for Neo4j). Optional — only graph stores with a query language implement this. */
+  /** Run a raw read Cypher query against the underlying store. Optional — only graph stores with a query language implement this. */
   query?(cypher: string, params?: Record<string, unknown>): Promise<Record<string, unknown>[]>;
 }
 
@@ -113,7 +113,7 @@ export const GraphCommunitiesConfigSchema = z.object({
 });
 
 export const GraphStoreConfigSchema = z.object({
-  type: z.enum(['memory', 'neo4j']).default('memory'),
+  type: z.enum(['memory']).default('memory'),
   options: z.record(z.unknown()).optional().default({}),
 });
 
