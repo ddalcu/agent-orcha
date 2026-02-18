@@ -10,7 +10,6 @@ export {
   FileSourceConfigSchema,
   DatabaseSourceConfigSchema,
   WebSourceConfigSchema,
-  S3SourceConfigSchema,
   LoaderConfigSchema,
   SplitterConfigSchema,
   EmbeddingRefSchema,
@@ -26,7 +25,6 @@ export type {
   FileSourceConfig,
   DatabaseSourceConfig,
   WebSourceConfig,
-  S3SourceConfig,
   LoaderConfig,
   SplitterConfig,
   StoreConfig,
@@ -40,7 +38,7 @@ export type {
   IndexingProgressCallback,
   IndexingPhase,
 } from './types.js';
-export { DatabaseLoader, WebLoader, S3Loader } from './loaders/index.js';
+export { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.js';
 export { getPool, closeAllPools, getDatabaseType, detectFileType, isSupportedFileType } from './utils/index.js';
 
 // Graph RAG exports

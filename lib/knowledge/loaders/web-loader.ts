@@ -1,4 +1,4 @@
-import { CheerioWebBaseLoader } from '@langchain/community/document_loaders/web/cheerio';
+import * as cheerio from 'cheerio';
 import { Document } from '@langchain/core/documents';
 import type { WebSourceConfig } from '../types.js';
 import { createLogger } from '../../logger.js';
@@ -25,43 +25,45 @@ export class WebLoader {
     }
 
     try {
-      const loaderOptions: any = {};
-
-      // Add custom headers if provided
+      const fetchOptions: RequestInit = {};
       if (headers) {
-        loaderOptions.requestOptions = { headers };
+        fetchOptions.headers = headers;
       }
 
-      // Add CSS selector if provided
-      if (selector) {
-        loaderOptions.selector = selector;
+      const response = await fetch(url, fetchOptions);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const loader = new CheerioWebBaseLoader(url, loaderOptions);
-      const documents = await loader.load();
+      const html = await response.text();
+      const $ = cheerio.load(html);
 
-      logger.info(`Loaded ${documents.length} document(s) from ${url}`);
+      // Remove script and style elements
+      $('script, style').remove();
 
-      // Add source URL to metadata
-      documents.forEach((doc) => {
-        doc.metadata.source = url;
-        doc.metadata.selector = selector || 'body';
-      });
+      const target = selector || 'body';
+      const text = $(target).text().replace(/\s+/g, ' ').trim();
 
-      return documents;
+      if (!text) {
+        logger.warn(`No text content found for selector "${target}" at ${url}`);
+        return [];
+      }
+
+      logger.info(`Loaded 1 document from ${url}`);
+
+      return [new Document({
+        pageContent: text,
+        metadata: { source: url, selector: target },
+      })];
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Failed to load web content: ${errorMessage}`);
 
-      // Provide helpful error messages for common issues
       if (errorMessage.includes('404')) {
         throw new Error(`Web page not found (404): ${url}`);
       }
       if (errorMessage.includes('ENOTFOUND') || errorMessage.includes('ETIMEDOUT')) {
         throw new Error(`Network error loading ${url}: ${errorMessage}`);
-      }
-      if (errorMessage.includes('selector')) {
-        throw new Error(`Invalid CSS selector "${selector}": ${errorMessage}`);
       }
 
       throw new Error(`Failed to load web content from ${url}: ${errorMessage}`);

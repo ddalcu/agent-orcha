@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory';
+import { MemoryVectorStore } from './memory-vector-store.js';
 import type { Embeddings } from '@langchain/core/embeddings';
 import { createLogger } from '../logger.js';
 

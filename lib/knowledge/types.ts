@@ -34,26 +34,12 @@ export const WebSourceConfigSchema = z.object({
   headers: z.record(z.string()).optional().describe('Custom headers for the request'),
 });
 
-// S3 source configuration
-export const S3SourceConfigSchema = z.object({
-  type: z.literal('s3'),
-  endpoint: z.string().optional().describe('Custom S3 endpoint (for MinIO, Wasabi, etc.)'),
-  bucket: z.string().describe('S3 bucket name'),
-  prefix: z.string().optional().describe('Folder/prefix filter'),
-  region: z.string().default('us-east-1').describe('AWS region'),
-  accessKeyId: z.string().optional().describe('AWS access key ID (or use AWS_ACCESS_KEY_ID env var)'),
-  secretAccessKey: z.string().optional().describe('AWS secret access key (or use AWS_SECRET_ACCESS_KEY env var)'),
-  pattern: z.string().optional().describe('Glob pattern for file filtering (e.g., "*.pdf")'),
-  forcePathStyle: z.boolean().default(false).describe('Use path-style URLs (required for MinIO and some S3-compatible services)'),
-});
-
 // Discriminated union of all source types
 export const SourceConfigSchema = z.discriminatedUnion('type', [
   DirectorySourceConfigSchema,
   FileSourceConfigSchema,
   DatabaseSourceConfigSchema,
   WebSourceConfigSchema,
-  S3SourceConfigSchema,
 ]);
 
 export const LoaderConfigSchema = z.object({
@@ -72,7 +58,7 @@ export const SplitterConfigSchema = z.object({
 export const EmbeddingRefSchema = z.string().default('default');
 
 export const StoreConfigSchema = z.object({
-  type: z.enum(['memory', 'chroma', 'pinecone', 'qdrant']).default('memory'),
+  type: z.enum(['memory']).default('memory'),
   options: z.record(z.unknown()).optional(),
 });
 
@@ -134,7 +120,6 @@ export type DirectorySourceConfig = z.infer<typeof DirectorySourceConfigSchema>;
 export type FileSourceConfig = z.infer<typeof FileSourceConfigSchema>;
 export type DatabaseSourceConfig = z.infer<typeof DatabaseSourceConfigSchema>;
 export type WebSourceConfig = z.infer<typeof WebSourceConfigSchema>;
-export type S3SourceConfig = z.infer<typeof S3SourceConfigSchema>;
 export type SourceConfig = z.infer<typeof SourceConfigSchema>;
 export type LoaderConfig = z.infer<typeof LoaderConfigSchema>;
 export type SplitterConfig = z.infer<typeof SplitterConfigSchema>;

@@ -122,8 +122,6 @@ export class KnowledgeStoreManager {
       logger.info(`Source: database (${config.source.connectionString.split('@')[1] || 'unknown'})`);
     } else if (config.source.type === 'web') {
       logger.info(`Source: web (${config.source.url})`);
-    } else if (config.source.type === 's3') {
-      logger.info(`Source: s3 (bucket: ${config.source.bucket})`);
     }
 
     // Set status to indexing

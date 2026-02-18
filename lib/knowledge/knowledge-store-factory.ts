@@ -1,13 +1,8 @@
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
-import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory';
-import { Chroma } from '@langchain/community/vectorstores/chroma';
+import { MemoryVectorStore } from './memory-vector-store.js';
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
-import { TextLoader } from '@langchain/classic/document_loaders/fs/text';
-import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
-import { CSVLoader } from '@langchain/community/document_loaders/fs/csv';
-import { JSONLoader } from '@langchain/classic/document_loaders/fs/json';
 import { CharacterTextSplitter, RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { glob } from 'glob';
 import * as path from 'path';
@@ -18,7 +13,7 @@ import type { KnowledgeConfig, VectorKnowledgeConfig, KnowledgeStoreInstance, Se
 import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.js';
 import { detectProvider } from '../llm/provider-detector.js';
 import { createLogger } from '../logger.js';
-import { DatabaseLoader, WebLoader, S3Loader } from './loaders/index.js';
+import { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.js';
 import { VectorStoreCache } from './vector-store-cache.js';
 import { createDefaultMetadata, type KnowledgeStoreMetadata, type IndexingProgressCallback } from './knowledge-store-metadata.js';
 
@@ -34,13 +29,12 @@ export class KnowledgeStoreFactory {
   ): Promise<KnowledgeStoreInstance> {
     const embeddingConfigName = config.embedding;
     const embeddings = this.createEmbeddings(embeddingConfigName);
-    const isMemoryStore = config.store.type === 'memory' || config.store.type === 'pinecone' || config.store.type === 'qdrant';
 
     let metadata = createDefaultMetadata(config.name, 'vector');
     metadata.embeddingModel = embeddingConfigName;
 
-    // Try loading from cache for memory-based stores
-    if (isMemoryStore && cacheDir) {
+    // Try loading from cache
+    if (cacheDir) {
       const cache = new VectorStoreCache(cacheDir, config.name);
       onProgress?.({ name: config.name, phase: 'loading', progress: 5, message: 'Checking cache...' });
 
@@ -94,11 +88,11 @@ export class KnowledgeStoreFactory {
 
     onProgress?.({ name: config.name, phase: 'embedding', progress: 50, message: `Embedding ${splitDocs.length} chunks...` });
     logger.info(`Building knowledge store...`);
-    const store = await this.createStore(config, splitDocs, embeddings, projectRoot);
+    const store = await MemoryVectorStore.fromDocuments(splitDocs, embeddings);
     logger.info(`Knowledge store "${config.name}" ready`);
 
-    // Save to cache for memory-based stores
-    if (isMemoryStore && cacheDir && store instanceof MemoryVectorStore) {
+    // Save to cache
+    if (cacheDir) {
       onProgress?.({ name: config.name, phase: 'caching', progress: 90, message: 'Saving to cache...' });
       const sourceHashes = await this.computeFileHashes(config, projectRoot);
       metadata.sourceHashes = sourceHashes;
@@ -224,19 +218,16 @@ export class KnowledgeStoreFactory {
         const splitNewDocs = await this.splitDocuments(config, newDocs);
         refreshOnProgress?.({ name: config.name, phase: 'splitting', progress: 30, message: `Split into ${splitNewDocs.length} chunks...` });
 
-        // For memory stores: compute hashes and do incremental update
         if (store instanceof MemoryVectorStore && cacheDir) {
           const newSourceHashes = await this.computeFileHashes(config, projectRoot);
           const changedSources = new Set<string>();
           const removedSources = new Set<string>();
 
-          // Find changed and new sources
           for (const [source, hash] of Object.entries(newSourceHashes)) {
             if (metadata.sourceHashes[source] !== hash) {
               changedSources.add(source);
             }
           }
-          // Find removed sources
           for (const source of Object.keys(metadata.sourceHashes)) {
             if (!(source in newSourceHashes)) {
               removedSources.add(source);
@@ -251,13 +242,11 @@ export class KnowledgeStoreFactory {
           logger.info(`Refreshing "${config.name}": ${changedSources.size} changed, ${removedSources.size} removed`);
           refreshOnProgress?.({ name: config.name, phase: 'embedding', progress: 50, message: `Updating ${changedSources.size} changed sources...` });
 
-          // Filter out vectors from changed/removed sources
           const sourcesToRemove = new Set([...changedSources, ...removedSources]);
           (store as any).memoryVectors = (store as any).memoryVectors.filter(
             (v: any) => !sourcesToRemove.has(v.metadata?.source ?? '')
           );
 
-          // Add new docs only from changed sources
           const docsToAdd = splitNewDocs.filter(
             (doc) => changedSources.has(doc.metadata?.source ?? '')
           );
@@ -266,17 +255,14 @@ export class KnowledgeStoreFactory {
             await store.addDocuments(docsToAdd);
           }
 
-          // Update metadata
           metadata.sourceHashes = newSourceHashes;
           metadata.documentCount = newDocs.length;
           metadata.chunkCount = (store as any).memoryVectors.length;
 
-          // Save updated cache
           refreshOnProgress?.({ name: config.name, phase: 'caching', progress: 90, message: 'Saving to cache...' });
           const cache = new VectorStoreCache(cacheDir, config.name);
           await cache.save(store, metadata.embeddingModel, newSourceHashes);
         } else {
-          // Non-memory stores: re-add all docs
           refreshOnProgress?.({ name: config.name, phase: 'embedding', progress: 50, message: `Re-embedding ${splitNewDocs.length} chunks...` });
           await store.addDocuments(splitNewDocs);
           metadata.documentCount = newDocs.length;
@@ -306,38 +292,25 @@ export class KnowledgeStoreFactory {
       const content = await fs.readFile(sourcePath);
       hashes[sourcePath] = crypto.createHash('sha256').update(content).digest('hex');
     } else if (config.source.type === 'database') {
-      // For database, hash the query string as a proxy
       hashes['database:query'] = crypto.createHash('sha256').update(config.source.query).digest('hex');
     } else if (config.source.type === 'web') {
       hashes['web:url'] = crypto.createHash('sha256').update(config.source.url).digest('hex');
-    } else if (config.source.type === 's3') {
-      const key = `s3:${config.source.bucket}/${config.source.prefix ?? ''}`;
-      hashes[key] = crypto.createHash('sha256').update(key).digest('hex');
     }
 
     return hashes;
   }
 
   static async loadDocuments(config: KnowledgeConfig, projectRoot: string): Promise<Document[]> {
-    // Handle database sources
     if (config.source.type === 'database') {
       logger.info(`Loading from database source`);
       const dbLoader = new DatabaseLoader(config.source);
       return dbLoader.load();
     }
 
-    // Handle web sources
     if (config.source.type === 'web') {
       logger.info(`Loading from web source`);
       const webLoader = new WebLoader(config.source);
       return webLoader.load();
-    }
-
-    // Handle S3 sources
-    if (config.source.type === 's3') {
-      logger.info(`Loading from S3 source`);
-      const s3Loader = new S3Loader(config.source);
-      return s3Loader.load();
     }
 
     // Handle file-based sources (directory and file)
@@ -360,15 +333,12 @@ export class KnowledgeStoreFactory {
       return allDocs;
     }
 
-    // Handle single file source
     if (config.source.type === 'file') {
       const loader = this.createLoader(config.loader.type, sourcePath);
       return loader.load();
     }
 
-    // This should never be reached due to discriminated union exhaustiveness
-    const _exhaustiveCheck: never = config.source;
-    throw new Error(`Unknown source type: ${(_exhaustiveCheck as any).type}`);
+    throw new Error(`Unknown source type: ${(config.source as any).type}`);
   }
 
   private static createLoader(type: string, filePath: string) {
@@ -429,12 +399,9 @@ export class KnowledgeStoreFactory {
           modelName: embeddingConfig.model,
           openAIApiKey: resolveApiKey(provider, embeddingConfig.apiKey),
           configuration: embeddingConfig.baseUrl ? { baseURL: embeddingConfig.baseUrl } : undefined,
-          // CRITICAL: Force float encoding to get number arrays instead of base64 strings
-          // LM Studio and other local servers need this to return valid embeddings
           encodingFormat: 'float',
         };
 
-        // Add dimensions if specified
         if (embeddingConfig.dimensions) {
           openAIConfig.dimensions = embeddingConfig.dimensions;
         }
@@ -445,7 +412,6 @@ export class KnowledgeStoreFactory {
       }
     }
 
-    // Wrap embeddings to add validation and EOS token support
     return this.wrapWithValidation(baseEmbeddings, eosToken);
   }
 
@@ -512,45 +478,5 @@ export class KnowledgeStoreFactory {
     };
 
     return embeddings;
-  }
-
-  private static async createStore(
-    config: VectorKnowledgeConfig,
-    docs: Document[],
-    embeddings: Embeddings,
-    projectRoot: string
-  ): Promise<VectorStore> {
-    switch (config.store.type) {
-      case 'chroma': {
-        const chromaPath = config.store.options?.path
-          ? path.resolve(projectRoot, config.store.options.path as string)
-          : path.resolve(projectRoot, '.chroma');
-
-        const collectionName = config.store.options?.collectionName as string ?? config.name;
-        const url = config.store.options?.url as string ?? 'http://localhost:8000';
-
-        logger.info(`Using Chroma at ${url} (collection: ${collectionName}, path: ${chromaPath})`);
-
-        return Chroma.fromDocuments(docs, embeddings, {
-          collectionName,
-          url,
-          collectionMetadata: {
-            'hnsw:space': 'cosine',
-          },
-        });
-      }
-
-      case 'memory':
-        return MemoryVectorStore.fromDocuments(docs, embeddings);
-
-      case 'pinecone':
-      case 'qdrant':
-        logger.warn(`Store type "${config.store.type}" not yet implemented, falling back to memory`);
-        return MemoryVectorStore.fromDocuments(docs, embeddings);
-
-      default:
-        logger.warn(`Unknown store type "${config.store.type}", falling back to memory`);
-        return MemoryVectorStore.fromDocuments(docs, embeddings);
-    }
   }
 }

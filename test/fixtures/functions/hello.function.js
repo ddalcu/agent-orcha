@@ -2,11 +2,7 @@ export default {
     name: "hello",
     description: "Say hello",
     parameters: {
-        type: "object",
-        properties: {
-            name: { type: "string" }
-        },
-        required: ["name"]
+        name: { type: "string", description: "Name to greet" }
     },
     execute: async ({ name }) => {
         return `Hello, ${name}!`;
