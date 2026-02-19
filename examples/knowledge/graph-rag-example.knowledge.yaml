@@ -1,6 +1,5 @@
 name: call-center-analysis
-kind: graph-rag
-description: GraphRAG knowledge base for analyzing call center transcripts
+description: Knowledge base with entity extraction for analyzing call center transcripts
 
 source:
   type: directory
@@ -18,7 +17,7 @@ splitter:
 
 embedding: default  # References embedding config in llm.json
 
-# Graph-specific configuration
+# Graph-specific configuration (enables entity extraction)
 graph:
   extraction:
     llm: default  # LLM from llm.json for entity extraction
@@ -40,27 +39,8 @@ graph:
       - name: RESULTED_IN
         description: "Call resulted in an outcome"
 
-  communities:
-    algorithm: louvain
-    resolution: 1.0
-    minSize: 2
-    summaryLlm: default
-
-  store:
-    type: memory
-    options: {}
-
-  cache:
-    enabled: true
-    directory: .graph-cache
-
 search:
   defaultK: 10
-  localSearch:
-    maxDepth: 2
-  globalSearch:
-    topCommunities: 5
-    llm: default
 
 metadata:
   category: graph-rag-example

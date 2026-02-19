@@ -1,6 +1,6 @@
 import type { StructuredTool } from '../types/llm-types.ts';
 import type { MCPClientManager } from '../mcp/mcp-client.ts';
-import type { KnowledgeStoreManager } from '../knowledge/knowledge-store-manager.ts';
+import type { KnowledgeStore } from '../knowledge/knowledge-store.ts';
 import type { FunctionLoader } from '../functions/function-loader.ts';
 import type { ToolReference } from '../agents/types.ts';
 import { createKnowledgeTools } from './built-in/knowledge-tools-factory.ts';
@@ -8,7 +8,7 @@ import { logger } from '../logger.ts';
 
 export class ToolRegistry {
   private mcpClient: MCPClientManager;
-  private knowledgeStores: KnowledgeStoreManager;
+  private knowledgeStores: KnowledgeStore;
   private functionLoader: FunctionLoader;
   private builtInTools: Map<string, StructuredTool> = new Map();
   private sandboxTools: Map<string, StructuredTool>;
@@ -16,7 +16,7 @@ export class ToolRegistry {
 
   constructor(
     mcpClient: MCPClientManager,
-    knowledgeStores: KnowledgeStoreManager,
+    knowledgeStores: KnowledgeStore,
     functionLoader: FunctionLoader,
     sandboxTools: Map<string, StructuredTool> = new Map(),
     projectTools: Map<string, StructuredTool> = new Map(),
@@ -67,11 +67,13 @@ export class ToolRegistry {
           await this.knowledgeStores.initialize(name);
           const initializedStore = this.knowledgeStores.get(name);
           if (initializedStore) {
-            return createKnowledgeTools(name, initializedStore);
+            const sqliteStore = this.knowledgeStores.getSqliteStore(name);
+            return createKnowledgeTools(name, initializedStore, sqliteStore);
           }
           return [];
         }
-        return createKnowledgeTools(name, store);
+        const sqliteStore = this.knowledgeStores.getSqliteStore(name);
+        return createKnowledgeTools(name, store, sqliteStore);
       }
 
       case 'function': {
@@ -124,11 +126,6 @@ export class ToolRegistry {
     return Array.from(this.builtInTools.keys());
   }
 
-  // Methods for bulk tool discovery (used by ReAct workflows)
-
-  /**
-   * Gets all MCP tools from all servers.
-   */
   async getAllMCPTools(): Promise<StructuredTool[]> {
     const serverNames = this.mcpClient.getServerNames();
     const allTools: StructuredTool[] = [];
@@ -145,23 +142,19 @@ export class ToolRegistry {
     return allTools;
   }
 
-  /**
-   * Gets all knowledge search tools for all configured knowledge stores.
-   */
   async getAllKnowledgeTools(): Promise<StructuredTool[]> {
     const configs = this.knowledgeStores.listConfigs();
     const tools: StructuredTool[] = [];
 
     for (const config of configs) {
       try {
-        // Initialize store if needed
         let store = this.knowledgeStores.get(config.name);
         if (!store) {
           store = await this.knowledgeStores.initialize(config.name);
         }
 
-        // Create all knowledge tools for this store
-        const knowledgeTools = createKnowledgeTools(config.name, store);
+        const sqliteStore = this.knowledgeStores.getSqliteStore(config.name);
+        const knowledgeTools = createKnowledgeTools(config.name, store, sqliteStore);
         tools.push(...knowledgeTools);
       } catch (error) {
         logger.warn(`Failed to create knowledge tools for "${config.name}":`, error);
@@ -171,30 +164,18 @@ export class ToolRegistry {
     return tools;
   }
 
-  /**
-   * Gets all custom function tools.
-   */
   getAllFunctionTools(): StructuredTool[] {
     return this.functionLoader.list().map((f) => f.tool);
   }
 
-  /**
-   * Gets all built-in tools.
-   */
   getAllBuiltInTools(): StructuredTool[] {
     return Array.from(this.builtInTools.values());
   }
 
-  /**
-   * Gets the sandbox tool if configured.
-   */
   getAllSandboxTools(): StructuredTool[] {
     return Array.from(this.sandboxTools.values());
   }
 
-  /**
-   * Gets all project tools.
-   */
   getAllProjectTools(): StructuredTool[] {
     return Array.from(this.projectTools.values());
   }

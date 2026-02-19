@@ -1,7 +1,7 @@
-import type { ChatModel } from '../../types/llm-types.ts';
-import { humanMessage, systemMessage } from '../../types/llm-types.ts';
+import type { ChatModel } from '../types/llm-types.ts';
+import { humanMessage, systemMessage } from '../types/llm-types.ts';
 import type { EntityTypeConfig, RelationshipTypeConfig, ExtractedEntity, ExtractedRelationship, ExtractionResult } from './types.ts';
-import { createLogger } from '../../logger.ts';
+import { createLogger } from '../logger.ts';
 
 const logger = createLogger('EntityExtractor');
 

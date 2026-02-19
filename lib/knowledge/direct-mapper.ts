@@ -1,5 +1,5 @@
 import type { ExtractedEntity, ExtractedRelationship, DirectMappingConfig } from './types.ts';
-import { createLogger } from '../../logger.ts';
+import { createLogger } from '../logger.ts';
 
 const logger = createLogger('DirectMapper');
 

@@ -1,7 +1,7 @@
 import type { StructuredTool } from '../types/llm-types.ts';
 import type { ToolRegistry } from './tool-registry.ts';
 import type { MCPClientManager } from '../mcp/mcp-client.ts';
-import type { KnowledgeStoreManager } from '../knowledge/knowledge-store-manager.ts';
+import type { KnowledgeStore } from '../knowledge/knowledge-store.ts';
 import type { FunctionLoader } from '../functions/function-loader.ts';
 import type { GraphToolConfig, GraphAgentConfig } from '../workflows/types.ts';
 import type { AgentLoader } from '../agents/agent-loader.ts';
@@ -17,7 +17,7 @@ import { logger } from '../logger.ts';
  */
 export class ToolDiscovery {
   private mcpClient: MCPClientManager;
-  private knowledgeStoreManager: KnowledgeStoreManager;
+  private knowledgeStores: KnowledgeStore;
   private functionLoader: FunctionLoader;
   private agentLoader: AgentLoader;
   private agentExecutor: AgentExecutor;
@@ -25,25 +25,21 @@ export class ToolDiscovery {
   constructor(
     _toolRegistry: ToolRegistry,
     mcpClient: MCPClientManager,
-    knowledgeStoreManager: KnowledgeStoreManager,
+    knowledgeStores: KnowledgeStore,
     functionLoader: FunctionLoader,
     agentLoader: AgentLoader,
     agentExecutor: AgentExecutor
   ) {
     this.mcpClient = mcpClient;
-    this.knowledgeStoreManager = knowledgeStoreManager;
+    this.knowledgeStores = knowledgeStores;
     this.functionLoader = functionLoader;
     this.agentLoader = agentLoader;
     this.agentExecutor = agentExecutor;
   }
 
-  /**
-   * Discovers all tools based on configuration.
-   */
   async discoverAll(config: GraphToolConfig): Promise<StructuredTool[]> {
     const tools: StructuredTool[] = [];
 
-    // Discover from each source
     for (const source of config.sources) {
       switch (source) {
         case 'mcp':
@@ -64,9 +60,6 @@ export class ToolDiscovery {
     return this.filterTools(tools, config);
   }
 
-  /**
-   * Discovers agent tools based on configuration.
-   */
   async discoverAgents(config: GraphAgentConfig): Promise<StructuredTool[]> {
     if (config.mode === 'none') {
       return [];
@@ -77,7 +70,6 @@ export class ToolDiscovery {
 
     if (config.mode === 'all') {
       agentNames = allAgentNames;
-      // Apply exclusions
       if (config.exclude) {
         agentNames = agentNames.filter((name) => !config.exclude!.includes(name));
       }
@@ -94,16 +86,12 @@ export class ToolDiscovery {
     return AgentToolWrapper.createTools(agentNames, this.agentLoader, this.agentExecutor);
   }
 
-  /**
-   * Filters tools based on mode and include/exclude lists.
-   */
   private filterTools(tools: StructuredTool[], config: GraphToolConfig): StructuredTool[] {
     if (config.mode === 'none') {
       return [];
     }
 
     if (config.mode === 'all') {
-      // Apply exclusions
       if (config.exclude) {
         return tools.filter((t) => !config.exclude!.includes(t.name));
       }
@@ -124,9 +112,6 @@ export class ToolDiscovery {
     return tools;
   }
 
-  /**
-   * Discovers MCP tools from all servers.
-   */
   private async discoverMCP(): Promise<StructuredTool[]> {
     const allTools: StructuredTool[] = [];
 
@@ -149,25 +134,21 @@ export class ToolDiscovery {
     return allTools;
   }
 
-  /**
-   * Discovers knowledge search tools for all knowledge stores.
-   */
   private async discoverKnowledge(): Promise<StructuredTool[]> {
     const tools: StructuredTool[] = [];
 
     try {
-      const configs = this.knowledgeStoreManager.listConfigs();
+      const configs = this.knowledgeStores.listConfigs();
 
       for (const config of configs) {
         try {
-          // Initialize store if needed
-          let store = this.knowledgeStoreManager.get(config.name);
+          let store = this.knowledgeStores.get(config.name);
           if (!store) {
-            store = await this.knowledgeStoreManager.initialize(config.name);
+            store = await this.knowledgeStores.initialize(config.name);
           }
 
-          // Create all knowledge tools for this store
-          const knowledgeTools = createKnowledgeTools(config.name, store);
+          const sqliteStore = this.knowledgeStores.getSqliteStore(config.name);
+          const knowledgeTools = createKnowledgeTools(config.name, store, sqliteStore);
           tools.push(...knowledgeTools);
           logger.info(`Discovered ${knowledgeTools.length} knowledge tool(s) for "${config.name}"`);
         } catch (error) {
@@ -181,9 +162,6 @@ export class ToolDiscovery {
     return tools;
   }
 
-  /**
-   * Discovers custom function tools.
-   */
   private discoverFunction(): StructuredTool[] {
     try {
       const functions = this.functionLoader.list();
@@ -196,15 +174,9 @@ export class ToolDiscovery {
     }
   }
 
-  /**
-   * Discovers built-in tools (ask_user is always included).
-   */
   private discoverBuiltin(): StructuredTool[] {
     const tools: StructuredTool[] = [];
-
-    // ask_user tool is always included for HITL
     tools.push(createAskUserTool());
-
     logger.info(`Discovered ${tools.length} built-in tools`);
     return tools;
   }

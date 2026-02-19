@@ -10,7 +10,7 @@ export type KnowledgeStoreStatus = 'not_indexed' | 'indexing' | 'indexed' | 'err
 
 export interface KnowledgeStoreMetadata {
   name: string;
-  kind: 'vector' | 'graph-rag';
+  kind?: 'vector' | 'graph-rag'; // kept for backward compat, optional
   status: KnowledgeStoreStatus;
   lastIndexedAt: string | null;
   lastIndexDurationMs: number | null;
@@ -18,7 +18,7 @@ export interface KnowledgeStoreMetadata {
   chunkCount: number;
   entityCount: number;
   edgeCount: number;
-  communityCount: number;
+  communityCount?: number; // deprecated, kept for backward compat
   errorMessage: string | null;
   sourceHashes: Record<string, string>;
   embeddingModel: string;

@@ -1,35 +1,35 @@
 import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
 import type { StructuredTool } from '../../types/llm-types.ts';
-import type { GraphStore, GraphNode, GraphEdge } from '../../knowledge/graph-rag/types.ts';
-import type { KnowledgeConfig, GraphRagKnowledgeConfig } from '../../knowledge/types.ts';
+import type { SqliteStore, EntityRow, RelationshipRow } from '../../knowledge/sqlite-store.ts';
+import type { KnowledgeConfig } from '../../knowledge/types.ts';
 import { buildGraphSchemaDescription } from './knowledge-tools-factory.ts';
 
 const MAX_NODES = 50;
 
 /**
- * Create a graph traversal tool for a graph-rag knowledge base.
+ * Create a graph traversal tool for a knowledge base with entities.
  * Gets the neighborhood around an entity (N hops).
  */
 export function createKnowledgeTraverseTool(
   name: string,
   config: KnowledgeConfig,
-  graphStore: GraphStore
+  sqliteStore: SqliteStore
 ): StructuredTool {
-  const schemaInfo = buildGraphSchemaDescription(config as GraphRagKnowledgeConfig);
+  const schemaInfo = buildGraphSchemaDescription(config);
 
   return tool(
     async ({ entityName, entityId, depth }) => {
       const effectiveDepth = Math.min(Math.max(depth ?? 1, 1), 3);
       let targetId = entityId;
 
-      // If name given but no ID, search for a matching node
+      // If name given but no ID, search for a matching entity
       if (!targetId && entityName) {
         try {
-          const allNodes = await graphStore.getAllNodes();
+          const allEntities = sqliteStore.getAllEntities();
           const nameLower = entityName.toLowerCase();
-          const match = allNodes.find(
-            (n) => n.name.toLowerCase() === nameLower || n.name.toLowerCase().includes(nameLower)
+          const match = allEntities.find(
+            (e) => e.name.toLowerCase() === nameLower || e.name.toLowerCase().includes(nameLower)
           );
           if (!match) {
             return `No entity found matching name "${entityName}". Try a different name or use knowledge_entity_lookup_${name} to search.`;
@@ -45,16 +45,16 @@ export function createKnowledgeTraverseTool(
       }
 
       try {
-        const { nodes, edges } = await graphStore.getNeighbors(targetId, effectiveDepth);
+        const { entities, relationships } = sqliteStore.getNeighborhood(targetId, effectiveDepth);
 
-        if (nodes.length === 0) {
+        if (entities.length === 0) {
           return `No neighbors found for entity "${targetId}" at depth ${effectiveDepth}.`;
         }
 
-        const truncated = nodes.length > MAX_NODES;
-        const displayNodes = nodes.slice(0, MAX_NODES);
+        const truncated = entities.length > MAX_NODES;
+        const displayEntities = entities.slice(0, MAX_NODES);
 
-        return formatTraversalResult(displayNodes, edges, effectiveDepth, truncated, nodes.length);
+        return formatTraversalResult(displayEntities, relationships, effectiveDepth, truncated, entities.length);
       } catch (error) {
         return `Traversal error: ${error instanceof Error ? error.message : String(error)}`;
       }
@@ -76,46 +76,44 @@ TIPS: Use this to understand how an entity relates to others. Start with depth=1
 }
 
 function formatTraversalResult(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
+  entities: EntityRow[],
+  relationships: RelationshipRow[],
   depth: number,
   truncated: boolean,
   totalNodes: number
 ): string {
   const sections: string[] = [];
 
-  // Group nodes by type
-  const byType = new Map<string, GraphNode[]>();
-  for (const node of nodes) {
-    const list = byType.get(node.type) ?? [];
-    list.push(node);
-    byType.set(node.type, list);
+  // Group entities by type
+  const byType = new Map<string, EntityRow[]>();
+  for (const entity of entities) {
+    const list = byType.get(entity.type) ?? [];
+    list.push(entity);
+    byType.set(entity.type, list);
   }
 
-  sections.push(`NEIGHBORHOOD (depth=${depth}, ${nodes.length} nodes, ${edges.length} edges)${truncated ? ` [truncated from ${totalNodes}]` : ''}`);
+  sections.push(`NEIGHBORHOOD (depth=${depth}, ${entities.length} nodes, ${relationships.length} edges)${truncated ? ` [truncated from ${totalNodes}]` : ''}`);
 
-  // Nodes by type
   sections.push('\nNODES:');
-  for (const [type, typeNodes] of byType) {
-    sections.push(`  [${type}] (${typeNodes.length})`);
-    for (const node of typeNodes.slice(0, 20)) {
-      const desc = node.description ? ` — ${node.description.substring(0, 100)}` : '';
-      sections.push(`    - ${node.name} (id: ${node.id})${desc}`);
+  for (const [type, typeEntities] of byType) {
+    sections.push(`  [${type}] (${typeEntities.length})`);
+    for (const entity of typeEntities.slice(0, 20)) {
+      const desc = entity.description ? ` — ${entity.description.substring(0, 100)}` : '';
+      sections.push(`    - ${entity.name} (id: ${entity.id})${desc}`);
     }
-    if (typeNodes.length > 20) {
-      sections.push(`    ... and ${typeNodes.length - 20} more`);
+    if (typeEntities.length > 20) {
+      sections.push(`    ... and ${typeEntities.length - 20} more`);
     }
   }
 
-  // Edges
-  if (edges.length > 0) {
+  if (relationships.length > 0) {
     sections.push('\nEDGES:');
-    const displayEdges = edges.slice(0, 30);
+    const displayEdges = relationships.slice(0, 30);
     for (const edge of displayEdges) {
-      sections.push(`  (${edge.sourceId}) -[${edge.type}]-> (${edge.targetId})`);
+      sections.push(`  (${edge.source_id}) -[${edge.type}]-> (${edge.target_id})`);
     }
-    if (edges.length > 30) {
-      sections.push(`  ... and ${edges.length - 30} more edges`);
+    if (relationships.length > 30) {
+      sections.push(`  ... and ${relationships.length - 30} more edges`);
     }
   }
 

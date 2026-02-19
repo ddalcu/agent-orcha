@@ -1,10 +1,14 @@
-export { KnowledgeStoreFactory } from './knowledge-store-factory.ts';
-export { KnowledgeStoreManager } from './knowledge-store-manager.ts';
+export { KnowledgeStore } from './knowledge-store.ts';
+export { SqliteStore } from './sqlite-store.ts';
+export { EntityExtractor } from './entity-extractor.ts';
+export { DirectMapper } from './direct-mapper.ts';
 export { KnowledgeMetadataManager, createDefaultMetadata } from './knowledge-store-metadata.ts';
+
+// Backward compatibility alias
+export { KnowledgeStore as KnowledgeStoreManager } from './knowledge-store.ts';
+
 export {
   KnowledgeConfigSchema,
-  VectorKnowledgeConfigSchema,
-  GraphRagKnowledgeConfigSchema,
   SourceConfigSchema,
   DirectorySourceConfigSchema,
   FileSourceConfigSchema,
@@ -13,9 +17,13 @@ export {
   LoaderConfigSchema,
   SplitterConfigSchema,
   EmbeddingRefSchema,
-  StoreConfigSchema,
   SearchConfigSchema,
+  GraphConfigSchema,
+  GraphExtractionConfigSchema,
+  EntityTypeSchema,
+  RelationshipTypeSchema,
 } from './types.ts';
+
 export type {
   KnowledgeConfig,
   VectorKnowledgeConfig,
@@ -27,7 +35,6 @@ export type {
   WebSourceConfig,
   LoaderConfig,
   SplitterConfig,
-  StoreConfig,
   SearchConfig,
   SearchResult,
   DocumentInput,
@@ -37,17 +44,17 @@ export type {
   IndexingProgressEvent,
   IndexingProgressCallback,
   IndexingPhase,
+  GraphConfig,
+  GraphExtractionConfig,
+  EntityTypeConfig,
+  RelationshipTypeConfig,
+  ExtractedEntity,
+  ExtractedRelationship,
+  ExtractionResult,
+  EntityMapping,
+  RelationshipMapping,
+  DirectMappingConfig,
 } from './types.ts';
+
 export { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
 export { getPool, closeAllPools, getDatabaseType, detectFileType, isSupportedFileType } from './utils/index.ts';
-
-// Graph RAG exports
-export { GraphRagFactory } from './graph-rag/index.ts';
-export type {
-  GraphNode,
-  GraphEdge,
-  Community,
-  GraphStore,
-  GraphConfig,
-  GraphSearchConfig,
-} from './graph-rag/index.ts';

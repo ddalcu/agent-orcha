@@ -6,6 +6,8 @@ lcov.info
 tmp
 .chroma
 .graph-cache
+.knowledge-data
+.knowledge-cache
 /agents
 /workflows
 /vectors

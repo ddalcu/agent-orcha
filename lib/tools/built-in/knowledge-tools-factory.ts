@@ -1,8 +1,7 @@
 import type { StructuredTool } from '../../types/llm-types.ts';
-import type { KnowledgeStoreInstance, GraphRagKnowledgeConfig } from '../../knowledge/types.ts';
-import { GraphRagFactory } from '../../knowledge/graph-rag/graph-rag-factory.ts';
+import type { KnowledgeStoreInstance, KnowledgeConfig } from '../../knowledge/types.ts';
+import type { SqliteStore } from '../../knowledge/sqlite-store.ts';
 import { createKnowledgeSearchTool } from './knowledge-search.tool.ts';
-import { createKnowledgeCypherTool } from './knowledge-cypher.tool.ts';
 import { createKnowledgeTraverseTool } from './knowledge-traverse.tool.ts';
 import { createKnowledgeEntityLookupTool } from './knowledge-entity-lookup.tool.ts';
 import { createKnowledgeGraphSchemaTool } from './knowledge-graph-schema.tool.ts';
@@ -14,34 +13,26 @@ const logger = createLogger('KnowledgeToolsFactory');
 /**
  * Create the full toolset for a knowledge base based on its type.
  *
- * - Vector KBs get: search
- * - Graph-rag KBs get: search + traverse + entity_lookup + graph_schema (+ cypher if store supports queries)
+ * - All KBs get: search
+ * - KBs with entities get: search + traverse + entity_lookup + graph_schema
  * - Database-sourced KBs additionally get: sql
  */
-export function createKnowledgeTools(name: string, store: KnowledgeStoreInstance): StructuredTool[] {
+export function createKnowledgeTools(
+  name: string,
+  store: KnowledgeStoreInstance,
+  sqliteStore?: SqliteStore
+): StructuredTool[] {
   const config = store.config;
   const tools: StructuredTool[] = [];
 
   // 1. Always create search tool
   tools.push(createKnowledgeSearchTool(name, store));
 
-  // 2. Graph-rag tools
-  if (config.kind === 'graph-rag') {
-    const graphStore = GraphRagFactory.getGraphStore(name);
-
-    if (graphStore) {
-      // Cypher tool — for any graph store that implements query()
-      if (graphStore.query) {
-        tools.push(createKnowledgeCypherTool(name, config, graphStore));
-      }
-
-      // Traverse, entity lookup, and schema tools — any graph store
-      tools.push(createKnowledgeTraverseTool(name, config, graphStore));
-      tools.push(createKnowledgeEntityLookupTool(name, config, graphStore));
-      tools.push(createKnowledgeGraphSchemaTool(name, config, graphStore));
-    } else {
-      logger.warn(`No graph store found for "${name}" — only search tool will be available`);
-    }
+  // 2. Graph tools — if entities exist in the SQLite store
+  if (sqliteStore && sqliteStore.getEntityCount() > 0) {
+    tools.push(createKnowledgeTraverseTool(name, config, sqliteStore));
+    tools.push(createKnowledgeEntityLookupTool(name, config, sqliteStore));
+    tools.push(createKnowledgeGraphSchemaTool(name, config, sqliteStore));
   }
 
   // 3. SQL tool — if backed by a database source
@@ -55,18 +46,19 @@ export function createKnowledgeTools(name: string, store: KnowledgeStoreInstance
 }
 
 /**
- * Build a human-readable schema description from a graph-rag config.
+ * Build a human-readable schema description from a knowledge config with graph.
  * Used in tool descriptions to help LLMs understand the graph structure.
  */
-export function buildGraphSchemaDescription(config: GraphRagKnowledgeConfig): string {
+export function buildGraphSchemaDescription(config: KnowledgeConfig): string {
   const sections: string[] = [];
 
   sections.push(`Knowledge base: "${config.name}" — ${config.description ?? ''}`);
 
+  if (!config.graph) return sections.join('\n');
+
   if (config.graph.extractionMode === 'direct' && config.graph.directMapping) {
     const mapping = config.graph.directMapping;
 
-    // Entity types with properties
     const entityLines = mapping.entities.map((e: any) => {
       const props = (e.properties as any[]).map((p: any) =>
         typeof p === 'string' ? p : Object.values(p)[0]
@@ -75,7 +67,6 @@ export function buildGraphSchemaDescription(config: GraphRagKnowledgeConfig): st
     });
     sections.push(`ENTITY TYPES:\n${entityLines.join('\n')}`);
 
-    // Relationship types
     if (mapping.relationships && mapping.relationships.length > 0) {
       const relLines = mapping.relationships.map(
         (r: any) => `  (${r.source}) -[${r.type}]-> (${r.target})`

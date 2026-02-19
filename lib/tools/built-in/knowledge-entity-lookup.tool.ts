@@ -1,20 +1,20 @@
 import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
 import type { StructuredTool } from '../../types/llm-types.ts';
-import type { GraphStore, GraphNode } from '../../knowledge/graph-rag/types.ts';
-import type { KnowledgeConfig, GraphRagKnowledgeConfig } from '../../knowledge/types.ts';
+import type { SqliteStore, EntityRow } from '../../knowledge/sqlite-store.ts';
+import type { KnowledgeConfig } from '../../knowledge/types.ts';
 import { buildGraphSchemaDescription } from './knowledge-tools-factory.ts';
 
 /**
- * Create an entity lookup tool for a graph-rag knowledge base.
+ * Create an entity lookup tool for a knowledge base with entities.
  * Find entities by name, ID, or type.
  */
 export function createKnowledgeEntityLookupTool(
   name: string,
   config: KnowledgeConfig,
-  graphStore: GraphStore
+  sqliteStore: SqliteStore
 ): StructuredTool {
-  const schemaInfo = buildGraphSchemaDescription(config as GraphRagKnowledgeConfig);
+  const schemaInfo = buildGraphSchemaDescription(config);
 
   return tool(
     async ({ id, name: entityName, type, limit }) => {
@@ -23,11 +23,11 @@ export function createKnowledgeEntityLookupTool(
       // Direct ID lookup
       if (id) {
         try {
-          const node = await graphStore.getNode(id);
-          if (!node) {
+          const entity = sqliteStore.getEntity(id);
+          if (!entity) {
             return `No entity found with ID "${id}".`;
           }
-          return formatEntities([node]);
+          return formatEntities([entity]);
         } catch (error) {
           return `Lookup error: ${error instanceof Error ? error.message : String(error)}`;
         }
@@ -35,25 +35,22 @@ export function createKnowledgeEntityLookupTool(
 
       // Name and/or type search
       try {
-        const allNodes = await graphStore.getAllNodes();
-        let filtered = allNodes;
+        const allEntities = sqliteStore.getAllEntities();
+        let filtered = allEntities;
 
         // Filter by type first (exact match, case-insensitive)
         if (type) {
           const typeLower = type.toLowerCase();
-          filtered = filtered.filter((n) => n.type.toLowerCase() === typeLower);
+          filtered = filtered.filter((e) => e.type.toLowerCase() === typeLower);
         }
 
         // Filter by name (partial match, case-insensitive)
         if (entityName) {
           const nameLower = entityName.toLowerCase();
           filtered = filtered.filter(
-            (n) => n.name.toLowerCase().includes(nameLower) || n.id.toLowerCase().includes(nameLower)
+            (e) => e.name.toLowerCase().includes(nameLower) || e.id.toLowerCase().includes(nameLower)
           );
         }
-
-        // Exclude KnowledgeBase meta-nodes from results
-        filtered = filtered.filter((n) => n.type !== 'KnowledgeBase');
 
         if (filtered.length === 0) {
           const criteria: string[] = [];
@@ -87,35 +84,38 @@ TIPS: Use type filter to browse entities of a specific kind. Use name for search
   );
 }
 
-function formatEntities(nodes: GraphNode[], totalCount?: number): string {
+function formatEntities(entities: EntityRow[], totalCount?: number): string {
   const lines: string[] = [];
 
   if (totalCount) {
-    lines.push(`Found ${totalCount} entities (showing ${nodes.length}):\n`);
+    lines.push(`Found ${totalCount} entities (showing ${entities.length}):\n`);
   } else {
-    lines.push(`Found ${nodes.length} entity(ies):\n`);
+    lines.push(`Found ${entities.length} entity(ies):\n`);
   }
 
-  for (const node of nodes) {
-    lines.push(`[${node.type}] ${node.name}`);
-    lines.push(`  ID: ${node.id}`);
-    if (node.description) {
-      lines.push(`  Description: ${node.description.substring(0, 200)}`);
+  for (const entity of entities) {
+    lines.push(`[${entity.type}] ${entity.name}`);
+    lines.push(`  ID: ${entity.id}`);
+    if (entity.description) {
+      lines.push(`  Description: ${entity.description.substring(0, 200)}`);
     }
 
-    // Show key properties (skip internal/large ones)
-    const props = Object.entries(node.properties).filter(
-      ([key]) => !['sourceChunkIds', 'embedding'].includes(key)
-    );
-    if (props.length > 0) {
-      const propStrs = props
-        .slice(0, 8)
-        .map(([k, v]) => {
-          const val = typeof v === 'string' && v.length > 80 ? v.substring(0, 80) + '...' : v;
-          return `${k}: ${val}`;
-        });
-      lines.push(`  Properties: ${propStrs.join(', ')}`);
-    }
+    // Show key properties
+    try {
+      const props = JSON.parse(entity.properties);
+      const entries = Object.entries(props).filter(
+        ([key]) => !['sourceChunkIds', 'embedding'].includes(key)
+      );
+      if (entries.length > 0) {
+        const propStrs = entries
+          .slice(0, 8)
+          .map(([k, v]) => {
+            const val = typeof v === 'string' && v.length > 80 ? v.substring(0, 80) + '...' : v;
+            return `${k}: ${val}`;
+          });
+        lines.push(`  Properties: ${propStrs.join(', ')}`);
+      }
+    } catch { /* properties not valid JSON */ }
     lines.push('');
   }
 

@@ -99,6 +99,28 @@ export class GraphView extends Component {
      */
     toVisNodes(apiNodes) {
         return (apiNodes || []).map((n) => {
+            if (n.type === 'KnowledgeBase') {
+                return {
+                    id: n.id,
+                    label: n.name || n.id,
+                    title: n.description || n.name,
+                    shape: 'icon',
+                    icon: {
+                        face: '"Font Awesome 6 Free"',
+                        weight: '900',
+                        code: '\uf1c0',
+                        size: 50,
+                        color: '#3b82f6',
+                    },
+                    font: { color: '#e2e8f0', size: 14 },
+                    size: 40,
+                    _type: n.type,
+                    _name: n.name,
+                    _description: n.description,
+                    _properties: n.properties || {},
+                };
+            }
+
             const color = this.getColorForType(n.type);
             return {
                 id: n.id,
@@ -111,9 +133,8 @@ export class GraphView extends Component {
                     hover: { background: color, border: '#94a3b8' },
                 },
                 font: { color: '#e2e8f0', size: 12 },
-                shape: n.type === 'KnowledgeBase' ? 'diamond' : 'dot',
-                size: n.type === 'KnowledgeBase' ? 25 : 18,
-                // Store original data for sidebar
+                shape: 'dot',
+                size: 18,
                 _type: n.type,
                 _name: n.name,
                 _description: n.description,

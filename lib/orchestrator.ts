@@ -6,7 +6,7 @@ import { WorkflowLoader } from './workflows/workflow-loader.ts';
 import { WorkflowExecutor } from './workflows/workflow-executor.ts';
 import { ReactWorkflowExecutor } from './workflows/react-workflow-executor.ts';
 import { InterruptManager } from './workflows/interrupt-manager.ts';
-import { KnowledgeStoreManager } from './knowledge/knowledge-store-manager.ts';
+import { KnowledgeStore } from './knowledge/knowledge-store.ts';
 import { MCPClientManager } from './mcp/mcp-client.ts';
 import { FunctionLoader, type LoadedFunction } from './functions/function-loader.ts';
 import { SkillLoader, type Skill } from './skills/index.ts';
@@ -36,6 +36,7 @@ import type {
 } from './workflows/types.ts';
 import type { KnowledgeStoreInstance, KnowledgeConfig, KnowledgeStoreMetadata, IndexingProgressCallback } from './knowledge/types.ts';
 import type { KnowledgeMetadataManager } from './knowledge/knowledge-store-metadata.ts';
+import type { SqliteStore } from './knowledge/sqlite-store.ts';
 import type { StructuredTool } from './types/llm-types.ts';
 import { logger } from './logger.ts';
 
@@ -59,7 +60,7 @@ export class Orchestrator {
   private workflowLoader: WorkflowLoader;
   private workflowExecutor!: WorkflowExecutor;
   private reactWorkflowExecutor!: ReactWorkflowExecutor;
-  private knowledgeStoreManager: KnowledgeStoreManager;
+  private knowledgeStoreManager: KnowledgeStore;
   private functionLoader: FunctionLoader;
   private skillLoader: SkillLoader;
   private mcpClient!: MCPClientManager;
@@ -91,7 +92,7 @@ export class Orchestrator {
 
     this.agentLoader = new AgentLoader(this.config.agentsDir);
     this.workflowLoader = new WorkflowLoader(this.config.workflowsDir);
-    this.knowledgeStoreManager = new KnowledgeStoreManager(
+    this.knowledgeStoreManager = new KnowledgeStore(
       this.config.knowledgeDir,
       this.config.projectRoot
     );
@@ -255,6 +256,7 @@ export class Orchestrator {
       listConfigs: () => this.knowledgeStoreManager.listConfigs(),
       get: (name: string) => this.knowledgeStoreManager.get(name),
       getConfig: (name: string) => this.knowledgeStoreManager.getConfig(name),
+      getSqliteStore: (name: string) => this.knowledgeStoreManager.getSqliteStore(name),
       initialize: (name: string, onProgress?: IndexingProgressCallback) =>
         this.knowledgeStoreManager.initialize(name, onProgress),
       refresh: (name: string, onProgress?: IndexingProgressCallback) =>
@@ -678,6 +680,7 @@ interface KnowledgeAccessor {
   listConfigs: () => KnowledgeConfig[];
   get: (name: string) => KnowledgeStoreInstance | undefined;
   getConfig: (name: string) => KnowledgeConfig | undefined;
+  getSqliteStore: (name: string) => SqliteStore | undefined;
   initialize: (name: string, onProgress?: IndexingProgressCallback) => Promise<KnowledgeStoreInstance>;
   refresh: (name: string, onProgress?: IndexingProgressCallback) => Promise<void>;
   getStatus: (name: string) => Promise<KnowledgeStoreMetadata | null>;

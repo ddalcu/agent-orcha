@@ -1,6 +1,5 @@
 export { createKnowledgeSearchTool } from './knowledge-search.tool.ts';
 export { createAskUserTool } from './ask-user.tool.ts';
-export { createKnowledgeCypherTool } from './knowledge-cypher.tool.ts';
 export { createKnowledgeTraverseTool } from './knowledge-traverse.tool.ts';
 export { createKnowledgeEntityLookupTool } from './knowledge-entity-lookup.tool.ts';
 export { createKnowledgeGraphSchemaTool } from './knowledge-graph-schema.tool.ts';

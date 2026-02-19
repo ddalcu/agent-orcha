@@ -1,5 +1,4 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { GraphRagFactory } from '../../lib/knowledge/graph-rag/graph-rag-factory.ts';
 import type { IndexingProgressCallback } from '../../lib/knowledge/knowledge-store-metadata.ts';
 
 interface KnowledgeParams {
@@ -38,11 +37,8 @@ function removeSSEListener(name: string, listener: (event: string, data: string)
 }
 
 function broadcastSSE(name: string, event: string, data: string) {
-  // Store latest progress so reconnecting clients can catch up
   lastProgressEvents.set(name, { event, data });
 
-  // Clear stored progress on terminal events after a short delay,
-  // giving late-connecting SSE clients time to receive them
   const parsed = JSON.parse(data);
   if (parsed.phase === 'done' || parsed.phase === 'error') {
     setTimeout(() => lastProgressEvents.delete(name), 5000);
@@ -64,18 +60,14 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
 
     return configs.map((config) => {
       const status = statuses.get(config.name);
-      const isGraphRag = config.kind === 'graph-rag';
-      const graphConfig = isGraphRag ? (config as any).graph : null;
+      const hasGraph = !!config.graph;
       return {
         name: config.name,
-        kind: config.kind,
+        hasGraph,
         description: config.description,
         source: config.source,
-        store: isGraphRag ? (graphConfig?.store?.type ?? 'memory') : ((config as any).store?.type ?? 'memory'),
-        extractionMode: isGraphRag ? (graphConfig?.extractionMode ?? 'llm') : null,
-        defaultK: isGraphRag
-          ? ((config as any).search?.defaultK ?? 10)
-          : ((config as any).search?.defaultK ?? 4),
+        extractionMode: hasGraph ? (config.graph?.extractionMode ?? 'llm') : null,
+        defaultK: config.search?.defaultK ?? 4,
         status: status?.status ?? 'not_indexed',
         lastIndexedAt: status?.lastIndexedAt ?? null,
         lastIndexDurationMs: status?.lastIndexDurationMs ?? null,
@@ -83,7 +75,6 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
         chunkCount: status?.chunkCount ?? 0,
         entityCount: status?.entityCount ?? 0,
         edgeCount: status?.edgeCount ?? 0,
-        communityCount: status?.communityCount ?? 0,
         embeddingModel: status?.embeddingModel ?? config.embedding,
         errorMessage: status?.errorMessage ?? null,
         isIndexing: fastify.orchestrator.knowledge.isIndexing(config.name),
@@ -119,7 +110,7 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
       const statusData = await fastify.orchestrator.knowledge.getStatus(name);
       return {
         name,
-        kind: config.kind,
+        hasGraph: !!config.graph,
         isIndexing: fastify.orchestrator.knowledge.isIndexing(name),
         status: statusData?.status ?? 'not_indexed',
         lastIndexedAt: statusData?.lastIndexedAt ?? null,
@@ -128,7 +119,6 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
         chunkCount: statusData?.chunkCount ?? 0,
         entityCount: statusData?.entityCount ?? 0,
         edgeCount: statusData?.edgeCount ?? 0,
-        communityCount: statusData?.communityCount ?? 0,
         embeddingModel: statusData?.embeddingModel ?? config.embedding,
         errorMessage: statusData?.errorMessage ?? null,
       };
@@ -150,15 +140,12 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(409).send({ error: `"${name}" is already being indexed` });
       }
 
-      // Create progress callback that broadcasts to SSE listeners
       const onProgress: IndexingProgressCallback = (event) => {
         broadcastSSE(name, 'progress', JSON.stringify(event));
       };
 
-      // Check if store is already initialized (re-index vs first index)
       const existingStore = fastify.orchestrator.knowledge.get(name);
 
-      // Start indexing in background
       if (existingStore) {
         fastify.orchestrator.knowledge.refresh(name, onProgress).catch((error) => {
           broadcastSSE(name, 'error', JSON.stringify({
@@ -199,7 +186,6 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
       const listener = (event: string, data: string) => {
         reply.raw.write(`event: ${event}\ndata: ${data}\n\n`);
 
-        // Close connection on terminal events
         const parsed = JSON.parse(data);
         if (parsed.phase === 'done' || parsed.phase === 'error') {
           setTimeout(() => {
@@ -211,16 +197,13 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
 
       addSSEListener(name, listener);
 
-      // Send initial heartbeat
       reply.raw.write(`event: connected\ndata: {"name":"${name}"}\n\n`);
 
-      // Send last known progress so reconnecting clients catch up
       const lastProgress = lastProgressEvents.get(name);
       if (lastProgress) {
         reply.raw.write(`event: ${lastProgress.event}\ndata: ${lastProgress.data}\n\n`);
       }
 
-      // Clean up on client disconnect
       request.raw.on('close', () => {
         removeSSEListener(name, listener);
       });
@@ -299,69 +282,31 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
-  // --- Graph-RAG specific endpoints ---
+  // --- Entity endpoints (available for stores with entities) ---
 
   fastify.get<{ Params: KnowledgeParams }>(
     '/:name/entities',
     async (request, reply) => {
       const { name } = request.params;
-      const config = fastify.orchestrator.knowledge.getConfig(name);
+      const sqliteStore = fastify.orchestrator.knowledge.getSqliteStore(name);
 
-      if (!config) {
-        return reply.status(404).send({ error: 'Knowledge store not found', name });
+      if (!sqliteStore) {
+        return reply.status(404).send({ error: `Store not initialized for "${name}"` });
       }
 
-      if (config.kind !== 'graph-rag') {
-        return reply.status(400).send({ error: `"${name}" is not a graph-rag knowledge store` });
+      if (sqliteStore.getEntityCount() === 0) {
+        return reply.status(400).send({ error: `"${name}" has no entities` });
       }
 
-      const graphStore = GraphRagFactory.getGraphStore(name);
-      if (!graphStore) {
-        return reply.status(404).send({ error: `Graph store not initialized for "${name}"` });
-      }
-
-      const nodes = await graphStore.getAllNodes();
+      const entities = sqliteStore.getAllEntities();
       return {
-        count: nodes.length,
-        entities: nodes.map((n) => ({
-          id: n.id,
-          type: n.type,
-          name: n.name,
-          description: n.description,
-          sourceChunkIds: n.sourceChunkIds,
-        })),
-      };
-    }
-  );
-
-  fastify.get<{ Params: KnowledgeParams }>(
-    '/:name/communities',
-    async (request, reply) => {
-      const { name } = request.params;
-      const config = fastify.orchestrator.knowledge.getConfig(name);
-
-      if (!config) {
-        return reply.status(404).send({ error: 'Knowledge store not found', name });
-      }
-
-      if (config.kind !== 'graph-rag') {
-        return reply.status(400).send({ error: `"${name}" is not a graph-rag knowledge store` });
-      }
-
-      const graphStore = GraphRagFactory.getGraphStore(name);
-      if (!graphStore) {
-        return reply.status(404).send({ error: `Graph store not initialized for "${name}"` });
-      }
-
-      const communities = await graphStore.getCommunities();
-      return {
-        count: communities.length,
-        communities: communities.map((c) => ({
-          id: c.id,
-          title: c.title,
-          summary: c.summary,
-          nodeCount: c.nodeIds.length,
-          nodeIds: c.nodeIds,
+        count: entities.length,
+        entities: entities.map((e) => ({
+          id: e.id,
+          type: e.type,
+          name: e.name,
+          description: e.description,
+          sourceChunkIds: JSON.parse(e.source_chunk_ids),
         })),
       };
     }
@@ -371,31 +316,26 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
     '/:name/edges',
     async (request, reply) => {
       const { name } = request.params;
-      const config = fastify.orchestrator.knowledge.getConfig(name);
+      const sqliteStore = fastify.orchestrator.knowledge.getSqliteStore(name);
 
-      if (!config) {
-        return reply.status(404).send({ error: 'Knowledge store not found', name });
+      if (!sqliteStore) {
+        return reply.status(404).send({ error: `Store not initialized for "${name}"` });
       }
 
-      if (config.kind !== 'graph-rag') {
-        return reply.status(400).send({ error: `"${name}" is not a graph-rag knowledge store` });
+      if (sqliteStore.getEntityCount() === 0) {
+        return reply.status(400).send({ error: `"${name}" has no entities` });
       }
 
-      const graphStore = GraphRagFactory.getGraphStore(name);
-      if (!graphStore) {
-        return reply.status(404).send({ error: `Graph store not initialized for "${name}"` });
-      }
-
-      const edges = await graphStore.getAllEdges();
+      const relationships = sqliteStore.getAllRelationships();
       return {
-        count: edges.length,
-        edges: edges.map((e) => ({
-          id: e.id,
-          type: e.type,
-          sourceId: e.sourceId,
-          targetId: e.targetId,
-          description: e.description,
-          weight: e.weight,
+        count: relationships.length,
+        edges: relationships.map((r) => ({
+          id: r.id,
+          type: r.type,
+          sourceId: r.source_id,
+          targetId: r.target_id,
+          description: r.description,
+          weight: r.weight,
         })),
       };
     }

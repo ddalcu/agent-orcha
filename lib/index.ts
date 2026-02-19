@@ -39,7 +39,7 @@ export type {
 } from './workflows/index.ts';
 
 // Knowledge
-export { KnowledgeStoreFactory, KnowledgeStoreManager, GraphRagFactory } from './knowledge/index.ts';
+export { KnowledgeStore, KnowledgeStore as KnowledgeStoreManager, SqliteStore } from './knowledge/index.ts';
 export type {
   KnowledgeConfig,
   VectorKnowledgeConfig,
@@ -47,12 +47,10 @@ export type {
   KnowledgeStoreInstance,
   SearchResult,
   DocumentInput,
-  GraphNode,
-  GraphEdge,
-  Community,
-  GraphStore,
-  GraphConfig as GraphRagGraphConfig,
-  GraphSearchConfig,
+  GraphConfig as KnowledgeGraphConfig,
+  ExtractedEntity,
+  ExtractedRelationship,
+  ExtractionResult,
 } from './knowledge/index.ts';
 
 // LLM
