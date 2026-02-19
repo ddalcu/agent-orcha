@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { AgentLLMRefSchema } from '../llm/types.js';
-import { AgentSkillsConfigSchema } from '../skills/types.js';
-import { IntegrationSchema } from '../integrations/types.js';
-import { TriggerSchema } from '../triggers/types.js';
+import { AgentLLMRefSchema } from '../llm/types.ts';
+import { AgentSkillsConfigSchema } from '../skills/types.ts';
+import { IntegrationSchema } from '../integrations/types.ts';
+import { TriggerSchema } from '../triggers/types.ts';
 
 export const ToolReferenceSchema = z.union([
   z.string(),

@@ -1,29 +1,41 @@
-import type { StructuredTool } from '@langchain/core/tools';
-import type { ToolRegistry } from './tool-registry.js';
-import type { MCPClientManager } from '../mcp/mcp-client.js';
-import type { KnowledgeStoreManager } from '../knowledge/knowledge-store-manager.js';
-import type { FunctionLoader } from '../functions/function-loader.js';
-import type { GraphToolConfig, GraphAgentConfig } from '../workflows/types.js';
-import type { AgentLoader } from '../agents/agent-loader.js';
-import type { AgentExecutor } from '../agents/agent-executor.js';
-import { AgentToolWrapper } from './agent-tool-wrapper.js';
-import { createKnowledgeTools } from './built-in/knowledge-tools-factory.js';
-import { createAskUserTool } from './built-in/ask-user.tool.js';
-import { logger } from '../logger.js';
+import type { StructuredTool } from '../types/llm-types.ts';
+import type { ToolRegistry } from './tool-registry.ts';
+import type { MCPClientManager } from '../mcp/mcp-client.ts';
+import type { KnowledgeStoreManager } from '../knowledge/knowledge-store-manager.ts';
+import type { FunctionLoader } from '../functions/function-loader.ts';
+import type { GraphToolConfig, GraphAgentConfig } from '../workflows/types.ts';
+import type { AgentLoader } from '../agents/agent-loader.ts';
+import type { AgentExecutor } from '../agents/agent-executor.ts';
+import { AgentToolWrapper } from './agent-tool-wrapper.ts';
+import { createKnowledgeTools } from './built-in/knowledge-tools-factory.ts';
+import { createAskUserTool } from './built-in/ask-user.tool.ts';
+import { logger } from '../logger.ts';
 
 /**
- * Centralized tool discovery for LangGraph workflows.
+ * Centralized tool discovery for ReAct workflows.
  * Discovers tools from all configured sources and applies filtering.
  */
 export class ToolDiscovery {
+  private mcpClient: MCPClientManager;
+  private knowledgeStoreManager: KnowledgeStoreManager;
+  private functionLoader: FunctionLoader;
+  private agentLoader: AgentLoader;
+  private agentExecutor: AgentExecutor;
+
   constructor(
-    _toolRegistry: ToolRegistry, // Unused but kept for future use
-    private mcpClient: MCPClientManager,
-    private knowledgeStoreManager: KnowledgeStoreManager,
-    private functionLoader: FunctionLoader,
-    private agentLoader: AgentLoader,
-    private agentExecutor: AgentExecutor
-  ) {}
+    _toolRegistry: ToolRegistry,
+    mcpClient: MCPClientManager,
+    knowledgeStoreManager: KnowledgeStoreManager,
+    functionLoader: FunctionLoader,
+    agentLoader: AgentLoader,
+    agentExecutor: AgentExecutor
+  ) {
+    this.mcpClient = mcpClient;
+    this.knowledgeStoreManager = knowledgeStoreManager;
+    this.functionLoader = functionLoader;
+    this.agentLoader = agentLoader;
+    this.agentExecutor = agentExecutor;
+  }
 
   /**
    * Discovers all tools based on configuration.

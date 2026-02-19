@@ -1,5 +1,5 @@
-import type { ExtractedEntity, ExtractedRelationship, DirectMappingConfig } from './types.js';
-import { createLogger } from '../../logger.js';
+import type { ExtractedEntity, ExtractedRelationship, DirectMappingConfig } from './types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('DirectMapper');
 
@@ -13,7 +13,7 @@ export class DirectMapper {
    * Map SQL query results directly to entities and relationships.
    * Zero data loss - all rows contribute to the graph.
    *
-   * @param documents - LangChain documents with SQL row data in metadata._rawRow
+   * @param documents - Documents with SQL row data in metadata._rawRow
    * @param config - Direct mapping configuration specifying how to extract entities and relationships
    * @returns Extracted entities and relationships ready for graph building
    */

@@ -1,9 +1,9 @@
 import * as path from 'path';
 import { glob } from 'glob';
 import { pathToFileURL } from 'url';
-import type { StructuredTool } from '@langchain/core/tools';
-import { logger } from '../logger.js';
-import { wrapSimpleFunction, type SimpleFunctionDefinition } from './simple-function-wrapper.js';
+import type { StructuredTool } from '../types/llm-types.ts';
+import { logger } from '../logger.ts';
+import { wrapSimpleFunction, type SimpleFunctionDefinition } from './simple-function-wrapper.ts';
 
 export interface FunctionMetadata {
   name: string;
@@ -60,7 +60,7 @@ export class FunctionLoader {
           description: simpleDef.description,
         };
       }
-      // Check for advanced LangChain tool format
+      // Check for advanced StructuredTool format
       else if (module.default || this.hasToolExport(module)) {
         tool = module.default || this.findToolExport(module);
         metadata = module.metadata || {
@@ -71,7 +71,7 @@ export class FunctionLoader {
         throw new Error(
           'Function file must export either:\n' +
           '1. A simple function definition as default export, or\n' +
-          '2. A LangChain tool (named export ending in "Tool" or default export)'
+          '2. A StructuredTool (named export ending in "Tool" or default export)'
         );
       }
 

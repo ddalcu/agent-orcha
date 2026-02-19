@@ -1,13 +1,13 @@
-import type { StructuredTool } from '@langchain/core/tools';
-import type { KnowledgeStoreInstance, GraphRagKnowledgeConfig } from '../../knowledge/types.js';
-import { GraphRagFactory } from '../../knowledge/graph-rag/graph-rag-factory.js';
-import { createKnowledgeSearchTool } from './knowledge-search.tool.js';
-import { createKnowledgeCypherTool } from './knowledge-cypher.tool.js';
-import { createKnowledgeTraverseTool } from './knowledge-traverse.tool.js';
-import { createKnowledgeEntityLookupTool } from './knowledge-entity-lookup.tool.js';
-import { createKnowledgeGraphSchemaTool } from './knowledge-graph-schema.tool.js';
-import { createKnowledgeSqlTool } from './knowledge-sql.tool.js';
-import { createLogger } from '../../logger.js';
+import type { StructuredTool } from '../../types/llm-types.ts';
+import type { KnowledgeStoreInstance, GraphRagKnowledgeConfig } from '../../knowledge/types.ts';
+import { GraphRagFactory } from '../../knowledge/graph-rag/graph-rag-factory.ts';
+import { createKnowledgeSearchTool } from './knowledge-search.tool.ts';
+import { createKnowledgeCypherTool } from './knowledge-cypher.tool.ts';
+import { createKnowledgeTraverseTool } from './knowledge-traverse.tool.ts';
+import { createKnowledgeEntityLookupTool } from './knowledge-entity-lookup.tool.ts';
+import { createKnowledgeGraphSchemaTool } from './knowledge-graph-schema.tool.ts';
+import { createKnowledgeSqlTool } from './knowledge-sql.tool.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('KnowledgeToolsFactory');
 

@@ -2,8 +2,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
-import { AgentDefinitionSchema, type AgentDefinition } from './types.js';
-import { logger } from '../logger.js';
+import { AgentDefinitionSchema, type AgentDefinition } from './types.ts';
+import { logger } from '../logger.ts';
 
 export class AgentLoader {
   private agentsDir: string;

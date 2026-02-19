@@ -1,6 +1,6 @@
-import { BaseMessage } from '@langchain/core/messages';
-import type { ConversationSession, ConversationStoreConfig } from './types.js';
-import { logger } from '../logger.js';
+import type { BaseMessage } from '../types/llm-types.ts';
+import type { ConversationSession, ConversationStoreConfig } from './types.ts';
+import { logger } from '../logger.ts';
 
 export class ConversationStore {
   private sessions: Map<string, ConversationSession>;

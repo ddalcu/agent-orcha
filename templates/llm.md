@@ -1102,7 +1102,7 @@ All tool types and their prefixes for use in agent `tools` lists and LangGraph d
 |----------|---------|-------------|
 | `PORT` | `3000` | HTTP server port |
 | `HOST` | `0.0.0.0` | Server bind address |
-| `ORCHA_BASE_DIR` | Current directory | Base directory for all config files |
+| `WORKSPACE` | Current directory | Base directory for all config files |
 | `CORS_ORIGIN` | `true` | CORS origin policy |
 | `NODE_ENV` | - | Node.js environment |
 

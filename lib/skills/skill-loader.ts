@@ -2,8 +2,8 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
-import { logger } from '../logger.js';
-import type { Skill, AgentSkillsConfig } from './types.js';
+import { logger } from '../logger.ts';
+import type { Skill, AgentSkillsConfig } from './types.ts';
 
 export class SkillLoader {
   private skillsDir: string;

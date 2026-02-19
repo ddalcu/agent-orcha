@@ -1,12 +1,12 @@
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import type { EntityTypeConfig, RelationshipTypeConfig, ExtractedEntity, ExtractedRelationship, ExtractionResult } from './types.js';
-import { createLogger } from '../../logger.js';
+import type { ChatModel } from '../../types/llm-types.ts';
+import { humanMessage, systemMessage } from '../../types/llm-types.ts';
+import type { EntityTypeConfig, RelationshipTypeConfig, ExtractedEntity, ExtractedRelationship, ExtractionResult } from './types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('EntityExtractor');
 
 interface EntityExtractorOptions {
-  llm: BaseChatModel;
+  llm: ChatModel;
   entityTypes?: EntityTypeConfig[];
   relationshipTypes?: RelationshipTypeConfig[];
 }
@@ -15,7 +15,7 @@ interface EntityExtractorOptions {
  * LLM-based entity and relationship extraction from text chunks.
  */
 export class EntityExtractor {
-  private llm: BaseChatModel;
+  private llm: ChatModel;
   private entityTypes?: EntityTypeConfig[];
   private relationshipTypes?: RelationshipTypeConfig[];
 
@@ -60,15 +60,11 @@ export class EntityExtractor {
     const userPrompt = this.buildUserPrompt(content);
 
     const response = await this.llm.invoke([
-      new SystemMessage(systemPrompt),
-      new HumanMessage(userPrompt),
+      systemMessage(systemPrompt),
+      humanMessage(userPrompt),
     ]);
 
-    const responseText = typeof response.content === 'string'
-      ? response.content
-      : Array.isArray(response.content)
-        ? response.content.map((c) => (typeof c === 'string' ? c : 'text' in c ? c.text : '')).join('')
-        : '';
+    const responseText = response.content;
 
     return this.parseExtractionResponse(responseText, chunkId);
   }

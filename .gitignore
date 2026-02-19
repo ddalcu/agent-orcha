@@ -2,6 +2,7 @@
 node_modules
 .env
 dist
+lcov.info
 tmp
 .chroma
 .graph-cache

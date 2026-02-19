@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio';
-import { Document } from '@langchain/core/documents';
-import type { WebSourceConfig } from '../types.js';
-import { createLogger } from '../../logger.js';
+import type { Document } from '../../types/llm-types.ts';
+import type { WebSourceConfig } from '../types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('WebLoader');
 
@@ -51,10 +51,10 @@ export class WebLoader {
 
       logger.info(`Loaded 1 document from ${url}`);
 
-      return [new Document({
+      return [{
         pageContent: text,
         metadata: { source: url, selector: target },
-      })];
+      }];
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Failed to load web content: ${errorMessage}`);

@@ -1,6 +1,6 @@
 import type { AbstractGraph, Attributes } from 'graphology-types';
-import type { GraphStore, GraphNode, GraphEdge, Community } from './types.js';
-import { createLogger } from '../../logger.js';
+import type { GraphStore, GraphNode, GraphEdge, Community } from './types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('MemoryGraphStore');
 

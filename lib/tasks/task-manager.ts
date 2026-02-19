@@ -1,7 +1,7 @@
-import type { Orchestrator } from '../orchestrator.js';
-import type { SubmitAgentParams, SubmitWorkflowParams, Task, TaskKind, TaskStoreConfig } from './types.js';
-import { TaskStore } from './task-store.js';
-import { logger } from '../logger.js';
+import type { Orchestrator } from '../orchestrator.ts';
+import type { SubmitAgentParams, SubmitWorkflowParams, Task, TaskKind, TaskStoreConfig } from './types.ts';
+import { TaskStore } from './task-store.ts';
+import { logger } from '../logger.ts';
 
 export class TaskManager {
   private store: TaskStore;
@@ -65,7 +65,7 @@ export class TaskManager {
         const current = this.store.get(task.id);
         if (current?.status === 'canceled') return;
 
-        // Detect LangGraph interrupt
+        // Detect ReAct workflow interrupt
         const output = result.output as Record<string, unknown>;
         if (output.interrupted === true) {
           this.store.update(task.id, {
@@ -135,7 +135,7 @@ export class TaskManager {
     });
 
     this.orchestrator
-      .resumeLangGraphWorkflow(task.target, threadId, response)
+      .resumeReactWorkflow(task.target, threadId, response)
       .then((result) => {
         const current = this.store.get(id);
         if (current?.status === 'canceled') return;

@@ -1,6 +1,6 @@
-export { KnowledgeStoreFactory } from './knowledge-store-factory.js';
-export { KnowledgeStoreManager } from './knowledge-store-manager.js';
-export { KnowledgeMetadataManager, createDefaultMetadata } from './knowledge-store-metadata.js';
+export { KnowledgeStoreFactory } from './knowledge-store-factory.ts';
+export { KnowledgeStoreManager } from './knowledge-store-manager.ts';
+export { KnowledgeMetadataManager, createDefaultMetadata } from './knowledge-store-metadata.ts';
 export {
   KnowledgeConfigSchema,
   VectorKnowledgeConfigSchema,
@@ -15,7 +15,7 @@ export {
   EmbeddingRefSchema,
   StoreConfigSchema,
   SearchConfigSchema,
-} from './types.js';
+} from './types.ts';
 export type {
   KnowledgeConfig,
   VectorKnowledgeConfig,
@@ -37,12 +37,12 @@ export type {
   IndexingProgressEvent,
   IndexingProgressCallback,
   IndexingPhase,
-} from './types.js';
-export { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.js';
-export { getPool, closeAllPools, getDatabaseType, detectFileType, isSupportedFileType } from './utils/index.js';
+} from './types.ts';
+export { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
+export { getPool, closeAllPools, getDatabaseType, detectFileType, isSupportedFileType } from './utils/index.ts';
 
 // Graph RAG exports
-export { GraphRagFactory } from './graph-rag/index.js';
+export { GraphRagFactory } from './graph-rag/index.ts';
 export type {
   GraphNode,
   GraphEdge,
@@ -50,4 +50,4 @@ export type {
   GraphStore,
   GraphConfig,
   GraphSearchConfig,
-} from './graph-rag/index.js';
+} from './graph-rag/index.ts';

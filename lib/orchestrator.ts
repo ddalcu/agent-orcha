@@ -1,43 +1,43 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { AgentLoader } from './agents/agent-loader.js';
-import { AgentExecutor } from './agents/agent-executor.js';
-import { WorkflowLoader } from './workflows/workflow-loader.js';
-import { WorkflowExecutor } from './workflows/workflow-executor.js';
-import { LangGraphExecutor } from './workflows/langgraph-executor.js';
-import { InterruptManager } from './workflows/interrupt-manager.js';
-import { KnowledgeStoreManager } from './knowledge/knowledge-store-manager.js';
-import { MCPClientManager } from './mcp/mcp-client.js';
-import { FunctionLoader, type LoadedFunction } from './functions/function-loader.js';
-import { SkillLoader, type Skill } from './skills/index.js';
-import { ToolRegistry } from './tools/tool-registry.js';
-import { ToolDiscovery } from './tools/tool-discovery.js';
-import { MCPConfigSchema } from './mcp/types.js';
-import { loadLLMConfig } from './llm/llm-config.js';
-import { ConversationStore } from './memory/conversation-store.js';
-import { MemoryManager } from './memory/memory-manager.js';
-import { TaskManager } from './tasks/task-manager.js';
-import { DockerManager } from './sandbox/docker-manager.js';
-import { createSandboxExecTool } from './sandbox/sandbox-tool.js';
-import { createSandboxReadTool, createSandboxWriteTool, createSandboxEditTool } from './sandbox/sandbox-file-tools.js';
-import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web-tools.js';
-import { createSandboxBrowserTool } from './sandbox/sandbox-browser-tool.js';
-import { SandboxConfigSchema } from './sandbox/types.js';
-import { buildProjectTools, type ProjectToolDeps, type ProjectResourceSummary } from './tools/project/project-tools.js';
-import { IntegrationManager } from './integrations/integration-manager.js';
-import { TriggerManager } from './triggers/trigger-manager.js';
-import type { SandboxConfig } from './sandbox/types.js';
-import type { AgentDefinition, AgentResult } from './agents/types.js';
+import { AgentLoader } from './agents/agent-loader.ts';
+import { AgentExecutor } from './agents/agent-executor.ts';
+import { WorkflowLoader } from './workflows/workflow-loader.ts';
+import { WorkflowExecutor } from './workflows/workflow-executor.ts';
+import { ReactWorkflowExecutor } from './workflows/react-workflow-executor.ts';
+import { InterruptManager } from './workflows/interrupt-manager.ts';
+import { KnowledgeStoreManager } from './knowledge/knowledge-store-manager.ts';
+import { MCPClientManager } from './mcp/mcp-client.ts';
+import { FunctionLoader, type LoadedFunction } from './functions/function-loader.ts';
+import { SkillLoader, type Skill } from './skills/index.ts';
+import { ToolRegistry } from './tools/tool-registry.ts';
+import { ToolDiscovery } from './tools/tool-discovery.ts';
+import { MCPConfigSchema } from './mcp/types.ts';
+import { loadLLMConfig } from './llm/llm-config.ts';
+import { ConversationStore } from './memory/conversation-store.ts';
+import { MemoryManager } from './memory/memory-manager.ts';
+import { TaskManager } from './tasks/task-manager.ts';
+import { DockerManager } from './sandbox/docker-manager.ts';
+import { createSandboxExecTool } from './sandbox/sandbox-tool.ts';
+import { createSandboxReadTool, createSandboxWriteTool, createSandboxEditTool } from './sandbox/sandbox-file-tools.ts';
+import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web-tools.ts';
+import { createSandboxBrowserTool } from './sandbox/sandbox-browser-tool.ts';
+import { SandboxConfigSchema } from './sandbox/types.ts';
+import { buildProjectTools, type ProjectToolDeps, type ProjectResourceSummary } from './tools/project/project-tools.ts';
+import { IntegrationManager } from './integrations/integration-manager.ts';
+import { TriggerManager } from './triggers/trigger-manager.ts';
+import type { SandboxConfig } from './sandbox/types.ts';
+import type { AgentDefinition, AgentResult } from './agents/types.ts';
 import type {
   WorkflowDefinition,
   WorkflowResult,
-  LangGraphWorkflowDefinition,
+  ReactWorkflowDefinition,
   InterruptState,
-} from './workflows/types.js';
-import type { KnowledgeStoreInstance, KnowledgeConfig, KnowledgeStoreMetadata, IndexingProgressCallback } from './knowledge/types.js';
-import type { KnowledgeMetadataManager } from './knowledge/knowledge-store-metadata.js';
-import type { StructuredTool } from '@langchain/core/tools';
-import { logger } from './logger.js';
+} from './workflows/types.ts';
+import type { KnowledgeStoreInstance, KnowledgeConfig, KnowledgeStoreMetadata, IndexingProgressCallback } from './knowledge/types.ts';
+import type { KnowledgeMetadataManager } from './knowledge/knowledge-store-metadata.ts';
+import type { StructuredTool } from './types/llm-types.ts';
+import { logger } from './logger.ts';
 
 export interface OrchestratorConfig {
   projectRoot: string;
@@ -58,7 +58,7 @@ export class Orchestrator {
   private agentExecutor!: AgentExecutor;
   private workflowLoader: WorkflowLoader;
   private workflowExecutor!: WorkflowExecutor;
-  private langGraphExecutor!: LangGraphExecutor;
+  private reactWorkflowExecutor!: ReactWorkflowExecutor;
   private knowledgeStoreManager: KnowledgeStoreManager;
   private functionLoader: FunctionLoader;
   private skillLoader: SkillLoader;
@@ -133,7 +133,7 @@ export class Orchestrator {
     this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader, this.memoryManager);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
 
-    // Initialize LangGraph components
+    // Initialize ReAct workflow components
     this.interruptManager = new InterruptManager();
     this.toolDiscovery = new ToolDiscovery(
       this.toolRegistry,
@@ -143,7 +143,7 @@ export class Orchestrator {
       this.agentLoader,
       this.agentExecutor
     );
-    this.langGraphExecutor = new LangGraphExecutor(this.toolDiscovery, this.interruptManager);
+    this.reactWorkflowExecutor = new ReactWorkflowExecutor(this.toolDiscovery, this.interruptManager);
 
     await this.agentLoader.loadAll();
     await this.workflowLoader.loadAll();
@@ -434,9 +434,9 @@ export class Orchestrator {
     }
 
     // Route based on workflow type
-    if (definition.type === 'langgraph') {
-      return this.langGraphExecutor.execute(
-        definition as LangGraphWorkflowDefinition,
+    if (definition.type === 'react') {
+      return this.reactWorkflowExecutor.execute(
+        definition as ReactWorkflowDefinition,
         input
       );
     }
@@ -457,9 +457,9 @@ export class Orchestrator {
     }
 
     // Route based on workflow type
-    if (definition.type === 'langgraph') {
-      yield* this.streamLangGraphWorkflow(
-        definition as LangGraphWorkflowDefinition,
+    if (definition.type === 'react') {
+      yield* this.streamReactWorkflow(
+        definition as ReactWorkflowDefinition,
         input
       );
       return;
@@ -470,7 +470,7 @@ export class Orchestrator {
     let resolveNext: ((value: void) => void) | null = null;
     let isComplete = false;
 
-    const onStatus = (status: import('./workflows/types.js').WorkflowStatus) => {
+    const onStatus = (status: import('./workflows/types.ts').WorkflowStatus) => {
       statusQueue.push({ type: 'status', data: status });
       if (resolveNext) {
         resolveNext();
@@ -519,15 +519,15 @@ export class Orchestrator {
     await executionPromise;
   }
 
-  private async *streamLangGraphWorkflow(
-    definition: LangGraphWorkflowDefinition,
+  private async *streamReactWorkflow(
+    definition: ReactWorkflowDefinition,
     input: Record<string, unknown>
   ): AsyncGenerator<{ type: 'status' | 'result'; data: unknown }, void, unknown> {
     const statusQueue: Array<{ type: 'status' | 'result'; data: unknown }> = [];
     let resolveNext: ((value: void) => void) | null = null;
     let isComplete = false;
 
-    const onStatus = (status: import('./workflows/types.js').WorkflowStatus) => {
+    const onStatus = (status: import('./workflows/types.ts').WorkflowStatus) => {
       statusQueue.push({ type: 'status', data: status });
       if (resolveNext) {
         resolveNext();
@@ -536,7 +536,7 @@ export class Orchestrator {
     };
 
     // Start execution in background
-    const executionPromise = this.langGraphExecutor
+    const executionPromise = this.reactWorkflowExecutor
       .execute(definition, input, undefined, onStatus)
       .then((result) => {
         isComplete = true;
@@ -589,12 +589,12 @@ export class Orchestrator {
     return store.search(query, k);
   }
 
-  // LangGraph workflow interrupt methods
+  // ReAct workflow interrupt methods
 
   /**
-   * Resumes a LangGraph workflow with the user's answer to an interrupt.
+   * Resumes a ReAct workflow with the user's answer to an interrupt.
    */
-  async resumeLangGraphWorkflow(
+  async resumeReactWorkflow(
     name: string,
     threadId: string,
     answer: string
@@ -606,12 +606,12 @@ export class Orchestrator {
       throw new Error(`Workflow not found: ${name}`);
     }
 
-    if (definition.type !== 'langgraph') {
-      throw new Error(`Workflow "${name}" is not a LangGraph workflow`);
+    if (definition.type !== 'react') {
+      throw new Error(`Workflow "${name}" is not a ReAct workflow`);
     }
 
-    return this.langGraphExecutor.resumeWithAnswer(
-      definition as LangGraphWorkflowDefinition,
+    return this.reactWorkflowExecutor.resumeWithAnswer(
+      definition as ReactWorkflowDefinition,
       threadId,
       answer
     );
@@ -620,7 +620,7 @@ export class Orchestrator {
   /**
    * Gets all active interrupts for a workflow.
    */
-  getLangGraphInterrupts(name: string): InterruptState[] {
+  getReactWorkflowInterrupts(name: string): InterruptState[] {
     this.ensureInitialized();
     return this.interruptManager.getInterruptsByWorkflow(name);
   }
@@ -628,7 +628,7 @@ export class Orchestrator {
   /**
    * Gets a specific interrupt by thread ID.
    */
-  getLangGraphInterrupt(threadId: string): InterruptState | undefined {
+  getReactWorkflowInterrupt(threadId: string): InterruptState | undefined {
     this.ensureInitialized();
     return this.interruptManager.getInterrupt(threadId);
   }

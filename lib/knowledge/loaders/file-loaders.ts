@@ -1,15 +1,18 @@
 import * as fs from 'fs/promises';
-import { Document } from '@langchain/core/documents';
+import type { Document } from '../../types/llm-types.ts';
 
 /**
  * Simple text file loader. Reads the entire file as a single document.
  */
 export class TextLoader {
-  constructor(private filePath: string) {}
+  private filePath: string;
+  constructor(filePath: string) {
+    this.filePath = filePath;
+  }
 
   async load(): Promise<Document[]> {
     const content = await fs.readFile(this.filePath, 'utf-8');
-    return [new Document({ pageContent: content, metadata: { source: this.filePath } })];
+    return [({ pageContent: content, metadata: { source: this.filePath } })];
   }
 }
 
@@ -18,14 +21,17 @@ export class TextLoader {
  * Handles arrays of objects by extracting all string values from each item.
  */
 export class JSONLoader {
-  constructor(private filePath: string) {}
+  private filePath: string;
+  constructor(filePath: string) {
+    this.filePath = filePath;
+  }
 
   async load(): Promise<Document[]> {
     const raw = await fs.readFile(this.filePath, 'utf-8');
     const data = JSON.parse(raw);
     const texts = this.extractStrings(data);
 
-    return texts.map((text) => new Document({
+    return texts.map((text) => ({
       pageContent: text,
       metadata: { source: this.filePath },
     }));
@@ -46,7 +52,10 @@ export class JSONLoader {
  * Each document's content is the row formatted as "column: value" pairs.
  */
 export class CSVLoader {
-  constructor(private filePath: string) {}
+  private filePath: string;
+  constructor(filePath: string) {
+    this.filePath = filePath;
+  }
 
   async load(): Promise<Document[]> {
     const content = await fs.readFile(this.filePath, 'utf-8');
@@ -60,7 +69,7 @@ export class CSVLoader {
     for (let i = 1; i < lines.length; i++) {
       const values = this.parseCsvLine(lines[i]!);
       const pairs = headers.map((h, idx) => `${h}: ${values[idx] ?? ''}`);
-      documents.push(new Document({
+      documents.push(({
         pageContent: pairs.join('\n'),
         metadata: { source: this.filePath, row: i },
       }));
@@ -100,7 +109,10 @@ export class CSVLoader {
  * pdf-parse must be installed separately: npm install pdf-parse
  */
 export class PDFLoader {
-  constructor(private filePath: string) {}
+  private filePath: string;
+  constructor(filePath: string) {
+    this.filePath = filePath;
+  }
 
   async load(): Promise<Document[]> {
     let pdfParse: any;
@@ -116,7 +128,7 @@ export class PDFLoader {
     const buffer = await fs.readFile(this.filePath);
     const data = await pdfParse(buffer);
 
-    return [new Document({
+    return [({
       pageContent: data.text,
       metadata: {
         source: this.filePath,

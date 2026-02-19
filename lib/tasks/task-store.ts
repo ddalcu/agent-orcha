@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
-import type { Task, TaskStatus, TaskKind, TaskStoreConfig } from './types.js';
-import { logger } from '../logger.js';
+import type { Task, TaskStatus, TaskKind, TaskStoreConfig } from './types.ts';
+import { logger } from '../logger.ts';
 
 const TERMINAL_STATUSES: TaskStatus[] = ['completed', 'failed', 'canceled'];
 

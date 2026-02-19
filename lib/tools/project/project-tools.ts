@@ -1,14 +1,14 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { tool } from '@langchain/core/tools';
+import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
-import type { StructuredTool } from '@langchain/core/tools';
+import type { StructuredTool } from '../../types/llm-types.ts';
 import { parse as parseYaml } from 'yaml';
-import { resolveSafePath, buildTree } from '../../utils/file-utils.js';
-import { AgentDefinitionSchema } from '../../agents/types.js';
-import { WorkflowDefinitionSchema } from '../../workflows/types.js';
-import { KnowledgeConfigSchema } from '../../knowledge/types.js';
-import { logger } from '../../logger.js';
+import { resolveSafePath, buildTree } from '../../utils/file-utils.ts';
+import { AgentDefinitionSchema } from '../../agents/types.ts';
+import { WorkflowDefinitionSchema } from '../../workflows/types.ts';
+import { KnowledgeConfigSchema } from '../../knowledge/types.ts';
+import { logger } from '../../logger.ts';
 
 export interface ProjectResourceSummary {
   agents: { name: string; description: string }[];

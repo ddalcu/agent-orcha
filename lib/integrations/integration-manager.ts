@@ -1,8 +1,8 @@
-import { CollabnookConnector, type ChannelMember } from './collabnook.js';
-import { createLogger } from '../logger.js';
-import type { Orchestrator } from '../orchestrator.js';
-import type { AgentDefinition } from '../agents/types.js';
-import type { CollabnookIntegration } from './types.js';
+import { CollabnookConnector, type ChannelMember } from './collabnook.ts';
+import { createLogger } from '../logger.ts';
+import type { Orchestrator } from '../orchestrator.ts';
+import type { AgentDefinition } from '../agents/types.ts';
+import type { CollabnookIntegration } from './types.ts';
 
 const log = createLogger('IntegrationManager');
 

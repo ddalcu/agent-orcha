@@ -1,7 +1,7 @@
-import { tool } from '@langchain/core/tools';
+import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
-import type { StructuredTool } from '@langchain/core/tools';
-import type { MemoryManager } from '../../memory/memory-manager.js';
+import type { StructuredTool } from '../../types/llm-types.ts';
+import type { MemoryManager } from '../../memory/memory-manager.ts';
 
 export function createMemorySaveTool(
   memoryManager: MemoryManager,

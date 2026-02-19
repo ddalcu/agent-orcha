@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { logger } from '../../lib/logger.js';
+import { logger } from '../../lib/logger.ts';
 
 interface FunctionParams {
   name: string;

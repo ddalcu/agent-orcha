@@ -1,9 +1,9 @@
-import { tool } from '@langchain/core/tools';
+import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
-import type { StructuredTool } from '@langchain/core/tools';
-import type { GraphStore, GraphNode } from '../../knowledge/graph-rag/types.js';
-import type { KnowledgeConfig, GraphRagKnowledgeConfig } from '../../knowledge/types.js';
-import { buildGraphSchemaDescription } from './knowledge-tools-factory.js';
+import type { StructuredTool } from '../../types/llm-types.ts';
+import type { GraphStore, GraphNode } from '../../knowledge/graph-rag/types.ts';
+import type { KnowledgeConfig, GraphRagKnowledgeConfig } from '../../knowledge/types.ts';
+import { buildGraphSchemaDescription } from './knowledge-tools-factory.ts';
 
 /**
  * Create an entity lookup tool for a graph-rag knowledge base.

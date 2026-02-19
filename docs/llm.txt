@@ -1434,7 +1434,7 @@ npx agent-orcha start
 # Environment variables:
 #   PORT - Server port (default: 3000)
 #   HOST - Server host (default: 0.0.0.0)
-#   ORCHA_BASE_DIR - Base directory for config files (default: current directory)
+#   WORKSPACE - Base directory for config files (default: current directory)
 ```
 
 **Help**
@@ -1520,7 +1520,7 @@ my-project/
 # Server Configuration
 PORT=3000                       # Server port (default: 3000)
 HOST=0.0.0.0                   # Server host (default: 0.0.0.0)
-ORCHA_BASE_DIR=./my-project    # Base directory for config files (default: current directory)
+WORKSPACE=./my-project    # Base directory for config files (default: current directory)
 CORS_ORIGIN=true               # CORS origin policy (default: true)
 
 # Note: LLM API keys are configured in llm.json, not via environment variables

@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { createLogger } from '../logger.js';
+import { createLogger } from '../logger.ts';
 
 const logger = createLogger('KnowledgeMetadata');
 

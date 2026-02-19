@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { GraphConfigSchema, GraphSearchConfigSchema } from './graph-rag/types.js';
-import type { KnowledgeStoreMetadata, IndexingProgressCallback } from './knowledge-store-metadata.js';
+import { GraphConfigSchema, GraphSearchConfigSchema } from './graph-rag/types.ts';
+import type { KnowledgeStoreMetadata, IndexingProgressCallback } from './knowledge-store-metadata.ts';
 
 // Directory source configuration
 export const DirectorySourceConfigSchema = z.object({
@@ -148,4 +148,4 @@ export interface KnowledgeStoreInstance {
   getMetadata: () => KnowledgeStoreMetadata;
 }
 
-export type { KnowledgeStoreMetadata, KnowledgeStoreStatus, IndexingProgressEvent, IndexingProgressCallback, IndexingPhase } from './knowledge-store-metadata.js';
+export type { KnowledgeStoreMetadata, KnowledgeStoreStatus, IndexingProgressEvent, IndexingProgressCallback, IndexingPhase } from './knowledge-store-metadata.ts';

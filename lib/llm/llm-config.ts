@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import { z } from 'zod';
-import { logger } from '../logger.js';
-import type { LLMProvider } from './provider-detector.js';
+import { logger } from '../logger.ts';
+import type { LLMProvider } from './provider-detector.ts';
 
 const PROVIDER_ENV_VARS: Record<LLMProvider, string> = {
   openai: 'OPENAI_API_KEY',

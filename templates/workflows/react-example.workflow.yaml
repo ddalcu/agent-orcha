@@ -1,7 +1,7 @@
-name: langgraph-research
-description: Autonomous research workflow using LangGraph with automatic tool discovery
+name: react-research
+description: Autonomous research workflow using ReAct pattern with automatic tool discovery
 version: "1.0.0"
-type: langgraph
+type: react
 
 input:
   schema:
@@ -40,7 +40,7 @@ prompt:
 
   goal: "Research and analyze: {{input.topic}}"
 
-# LangGraph-specific configuration
+# ReAct workflow configuration
 graph:
   model: default  # LLM config reference (from llm.json)
 
@@ -65,7 +65,7 @@ graph:
     # exclude: [admin]
 
   # Execution limits
-  maxIterations: 10  # Max tool-calling iterations 
+  maxIterations: 10  # Max tool-calling iterations
   timeout: 300000
 
 output:
@@ -77,7 +77,7 @@ config:
 metadata:
   category: research
   tags:
-    - langgraph
+    - react
     - autonomous
     - research
     - tool-discovery

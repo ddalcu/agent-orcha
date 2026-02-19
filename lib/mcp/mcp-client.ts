@@ -2,11 +2,11 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { tool } from '@langchain/core/tools';
+import { tool } from '../types/tool-factory.ts';
 import { z } from 'zod';
-import type { StructuredTool } from '@langchain/core/tools';
-import type { MCPConfig, MCPServerConfig } from './types.js';
-import { logger } from '../logger.js';
+import type { StructuredTool } from '../types/llm-types.ts';
+import type { MCPConfig, MCPServerConfig } from './types.ts';
+import { logger } from '../logger.ts';
 
 interface MCPConnection {
   client: Client;

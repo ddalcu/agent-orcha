@@ -1,8 +1,8 @@
 import { test, describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { WorkflowExecutor } from '../lib/workflows/workflow-executor.js';
-import type { AgentLoader } from '../lib/agents/agent-loader.js';
-import type { AgentExecutor } from '../lib/agents/agent-executor.js';
+import { WorkflowExecutor } from '../lib/workflows/workflow-executor.ts';
+import type { AgentLoader } from '../lib/agents/agent-loader.ts';
+import type { AgentExecutor } from '../lib/agents/agent-executor.ts';
 
 // Mocks
 const mockAgentLoader = {

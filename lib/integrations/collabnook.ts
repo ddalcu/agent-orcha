@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
-import { createLogger } from '../logger.js';
-import type { CollabnookIntegration } from './types.js';
+import { createLogger } from '../logger.ts';
+import type { CollabnookIntegration } from './types.ts';
 
 const RECONNECT_DELAY = 3000;
 const MAX_MESSAGE_LOG_CHARS = 4000;

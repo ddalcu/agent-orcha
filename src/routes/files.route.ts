@@ -1,9 +1,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { FastifyPluginAsync } from 'fastify';
-import { logger } from '../../lib/logger.js';
-import { generateResourceTemplate, getResourceTypes } from '../../lib/templates/resource-templates.js';
-import { resolveSafePath, buildTree } from '../../lib/utils/file-utils.js';
+import { logger } from '../../lib/logger.ts';
+import { generateResourceTemplate, getResourceTypes } from '../../lib/templates/resource-templates.ts';
+import { resolveSafePath, buildTree } from '../../lib/utils/file-utils.ts';
 
 interface ReadQuery {
   path: string;

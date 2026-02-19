@@ -1,8 +1,8 @@
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import type { GraphStore, GlobalSearchConfig } from './types.js';
-import type { SearchResult } from '../types.js';
-import { createLogger } from '../../logger.js';
+import type { ChatModel } from '../../types/llm-types.ts';
+import { humanMessage, systemMessage } from '../../types/llm-types.ts';
+import type { GraphStore, GlobalSearchConfig } from './types.ts';
+import type { SearchResult } from '../types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('GraphGlobalSearch');
 
@@ -14,10 +14,10 @@ const logger = createLogger('GraphGlobalSearch');
  */
 export class GlobalSearch {
   private store: GraphStore;
-  private llm: BaseChatModel;
+  private llm: ChatModel;
   private config: GlobalSearchConfig;
 
-  constructor(store: GraphStore, llm: BaseChatModel, config: GlobalSearchConfig) {
+  constructor(store: GraphStore, llm: ChatModel, config: GlobalSearchConfig) {
     this.store = store;
     this.llm = llm;
     this.config = config;
@@ -82,22 +82,16 @@ export class GlobalSearch {
 
   private async mapQuery(query: string, communityTitle: string, communitySummary: string): Promise<string> {
     const response = await this.llm.invoke([
-      new SystemMessage(
+      systemMessage(
         `You are a helpful analyst. Given a community summary from a knowledge graph, answer the user's question based on the information available. If the community summary is not relevant to the question, respond with an empty string "".
 Be concise and factual.`
       ),
-      new HumanMessage(
+      humanMessage(
         `Community: ${communityTitle}\n\nSummary:\n${communitySummary}\n\nQuestion: ${query}`
       ),
     ]);
 
-    const text = typeof response.content === 'string'
-      ? response.content
-      : Array.isArray(response.content)
-        ? response.content.map((c) => (typeof c === 'string' ? c : 'text' in c ? c.text : '')).join('')
-        : '';
-
-    return text.trim();
+    return response.content.trim();
   }
 
   private async reduceAnswers(
@@ -109,20 +103,14 @@ Be concise and factual.`
       .join('\n\n');
 
     const response = await this.llm.invoke([
-      new SystemMessage(
+      systemMessage(
         `You are a synthesis expert. Given multiple partial answers from different knowledge graph communities, synthesize them into a single comprehensive answer. Remove redundancies, reconcile any conflicts, and present a coherent response.`
       ),
-      new HumanMessage(
+      humanMessage(
         `Question: ${query}\n\nPartial answers from different communities:\n\n${answersText}\n\nProvide a synthesized comprehensive answer:`
       ),
     ]);
 
-    const text = typeof response.content === 'string'
-      ? response.content
-      : Array.isArray(response.content)
-        ? response.content.map((c) => (typeof c === 'string' ? c : 'text' in c ? c.text : '')).join('')
-        : '';
-
-    return text.trim();
+    return response.content.trim();
   }
 }

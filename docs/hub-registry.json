@@ -64,12 +64,12 @@
     "tags": ["demo", "multi-agent"]
   },
   {
-    "name": "langgraph-research",
+    "name": "react-research",
     "type": "workflow",
-    "description": "Autonomous research workflow using LangGraph with automatic tool and agent discovery. Supports ReAct loop execution.",
+    "description": "Autonomous research workflow using ReAct pattern with automatic tool and agent discovery.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/workflows/langgraph-example.workflow.yaml",
-    "tags": ["langgraph", "autonomous"]
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/workflows/react-example.workflow.yaml",
+    "tags": ["react", "autonomous"]
   },
   {
     "name": "calculator",

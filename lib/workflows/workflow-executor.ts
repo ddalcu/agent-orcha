@@ -1,5 +1,5 @@
-import type { AgentExecutor } from '../agents/agent-executor.js';
-import type { AgentLoader } from '../agents/agent-loader.js';
+import type { AgentExecutor } from '../agents/agent-executor.ts';
+import type { AgentLoader } from '../agents/agent-loader.ts';
 import type {
   WorkflowDefinition,
   WorkflowStep,
@@ -8,7 +8,7 @@ import type {
   StepResult,
   ParallelSteps,
   WorkflowStatus,
-} from './types.js';
+} from './types.ts';
 
 export class WorkflowExecutor {
   private agentLoader: AgentLoader;
@@ -27,8 +27,8 @@ export class WorkflowExecutor {
     const startTime = Date.now();
 
     // Only execute if this is a step-based workflow
-    if (definition.type === 'langgraph') {
-      throw new Error('LangGraph workflows should be executed using LangGraphExecutor');
+    if (definition.type === 'react') {
+      throw new Error('ReAct workflows should be executed using ReactWorkflowExecutor');
     }
 
     const context: WorkflowContext = {

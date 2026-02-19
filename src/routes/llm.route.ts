@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { LLMFactory, listModelConfigs, getModelConfig } from '../../lib/llm/index.js';
-import { HumanMessage } from '@langchain/core/messages';
-import { logger } from '../../lib/logger.js';
+import { LLMFactory, listModelConfigs, getModelConfig } from '../../lib/llm/index.ts';
+import { humanMessage } from '../../lib/types/llm-types.ts';
+import { logger } from '../../lib/logger.ts';
 
 interface LLMParams {
   name: string;
@@ -58,7 +58,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
       try {
         const llm = LLMFactory.create(name);
-        const response = await llm.invoke([new HumanMessage(message)]);
+        const response = await llm.invoke([humanMessage(message)]);
 
         const result = {
           output: response.content,
@@ -120,7 +120,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
       try {
         const llm = LLMFactory.create(name);
-        const stream = await llm.stream([new HumanMessage(message)], { signal: abortController.signal });
+        const stream = await llm.stream([humanMessage(message)], { signal: abortController.signal });
 
         let lastChunk: any = null;
         for await (const chunk of stream) {

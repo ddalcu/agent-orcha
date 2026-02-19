@@ -1,7 +1,7 @@
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import type { Community, GraphNode, GraphEdge, GraphStore } from './types.js';
-import { createLogger } from '../../logger.js';
+import type { ChatModel } from '../../types/llm-types.ts';
+import { humanMessage, systemMessage } from '../../types/llm-types.ts';
+import type { Community, GraphNode, GraphEdge, GraphStore } from './types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('CommunitySummarizer');
 
@@ -10,27 +10,28 @@ const logger = createLogger('CommunitySummarizer');
  * Each community summary describes the key entities and relationships within it.
  */
 export class CommunitySummarizer {
-  private llm: BaseChatModel;
+  private llm: ChatModel;
 
-  constructor(llm: BaseChatModel) {
+  constructor(llm: ChatModel) {
     this.llm = llm;
   }
 
   /**
    * Generate summaries for all communities.
    */
-  async summarize(communities: Community[], store: GraphStore): Promise<Community[]> {
+  async summarize(communities: Community[], store: GraphStore, knowledgeBase?: string): Promise<Community[]> {
     const summarized: Community[] = [];
+    const kbLabel = knowledgeBase ? ` [${knowledgeBase}]` : '';
 
     for (let i = 0; i < communities.length; i++) {
       const community = communities[i]!;
-      logger.info(`Summarizing community ${i + 1}/${communities.length} (${community.nodeIds.length} nodes)`);
+      logger.info(`${kbLabel} Summarizing community ${i + 1}/${communities.length} (${community.nodeIds.length} nodes)`);
 
       try {
         const { title, summary } = await this.summarizeSingle(community, store);
         summarized.push({ ...community, title, summary });
       } catch (error) {
-        logger.error(`Failed to summarize community ${community.id}: ${error instanceof Error ? error.message : String(error)}`);
+        logger.error(`${kbLabel} Failed to summarize community ${community.id}: ${error instanceof Error ? error.message : String(error)}`);
         summarized.push({
           ...community,
           title: `Community ${community.id}`,
@@ -59,7 +60,7 @@ export class CommunitySummarizer {
     const context = this.buildCommunityContext(nodes, internalEdges);
 
     const response = await this.llm.invoke([
-      new SystemMessage(
+      systemMessage(
         `You are a knowledge graph analyst. Given a set of entities and relationships from a community in a knowledge graph, provide:
 1. A short title (5-10 words) that captures the main theme
 2. A comprehensive summary (2-4 sentences) that describes the key entities, their relationships, and the overall theme
@@ -70,14 +71,10 @@ Respond ONLY with valid JSON:
   "summary": "Comprehensive summary of the community..."
 }`
       ),
-      new HumanMessage(`Analyze this community:\n\n${context}`),
+      humanMessage(`Analyze this community:\n\n${context}`),
     ]);
 
-    const responseText = typeof response.content === 'string'
-      ? response.content
-      : Array.isArray(response.content)
-        ? response.content.map((c) => (typeof c === 'string' ? c : 'text' in c ? c.text : '')).join('')
-        : '';
+    const responseText = response.content;
 
     try {
       const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/) ?? [null, responseText];

@@ -135,7 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Hot-Reload**: `reloadFile()` utility for live config updates when files are saved via the IDE
 
-- **`ORCHA_BASE_DIR` Environment Variable**: Configure the base directory for all config files
+- **`WORKSPACE` Environment Variable**: Configure the base directory for all config files
 
 - **New Vector Store Backend**: Added `chroma` type alongside existing `memory`
 

@@ -2,9 +2,9 @@ import { test, describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { FunctionLoader } from '../lib/functions/function-loader.js';
-import { AgentExecutor } from '../lib/agents/agent-executor.js';
-import { LLMFactory } from '../lib/llm/llm-factory.js';
+import { FunctionLoader } from '../lib/functions/function-loader.ts';
+import { AgentExecutor } from '../lib/agents/agent-executor.ts';
+import { LLMFactory } from '../lib/llm/llm-factory.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, 'fixtures', 'functions');

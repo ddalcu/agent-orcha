@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { initCommand } from './commands/init.js';
-import { startCommand } from './commands/start.js';
+import { initCommand } from './commands/init.ts';
+import { startCommand } from './commands/start.ts';
 
 const args = process.argv.slice(2);
 const command = args[0];

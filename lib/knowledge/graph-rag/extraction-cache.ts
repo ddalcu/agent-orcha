@@ -1,8 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import type { CachedGraphData, CacheMetadata, ExtractedEntity, ExtractedRelationship, Community, GraphNode } from './types.js';
-import { createLogger } from '../../logger.js';
+import type { CachedGraphData, CacheMetadata, ExtractedEntity, ExtractedRelationship, Community, GraphNode } from './types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('ExtractionCache');
 

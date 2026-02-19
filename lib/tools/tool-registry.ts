@@ -1,10 +1,10 @@
-import type { StructuredTool } from '@langchain/core/tools';
-import type { MCPClientManager } from '../mcp/mcp-client.js';
-import type { KnowledgeStoreManager } from '../knowledge/knowledge-store-manager.js';
-import type { FunctionLoader } from '../functions/function-loader.js';
-import type { ToolReference } from '../agents/types.js';
-import { createKnowledgeTools } from './built-in/knowledge-tools-factory.js';
-import { logger } from '../logger.js';
+import type { StructuredTool } from '../types/llm-types.ts';
+import type { MCPClientManager } from '../mcp/mcp-client.ts';
+import type { KnowledgeStoreManager } from '../knowledge/knowledge-store-manager.ts';
+import type { FunctionLoader } from '../functions/function-loader.ts';
+import type { ToolReference } from '../agents/types.ts';
+import { createKnowledgeTools } from './built-in/knowledge-tools-factory.ts';
+import { logger } from '../logger.ts';
 
 export class ToolRegistry {
   private mcpClient: MCPClientManager;
@@ -124,7 +124,7 @@ export class ToolRegistry {
     return Array.from(this.builtInTools.keys());
   }
 
-  // Methods for bulk tool discovery (used by LangGraph workflows)
+  // Methods for bulk tool discovery (used by ReAct workflows)
 
   /**
    * Gets all MCP tools from all servers.

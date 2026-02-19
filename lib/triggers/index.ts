@@ -1,5 +1,5 @@
-export { TriggerSchema } from './types.js';
-export type { Trigger, CronTrigger, WebhookTrigger } from './types.js';
-export { CronTriggerHandler } from './cron-trigger.js';
-export { WebhookTriggerHandler } from './webhook-trigger.js';
-export { TriggerManager } from './trigger-manager.js';
+export { TriggerSchema } from './types.ts';
+export type { Trigger, CronTrigger, WebhookTrigger } from './types.ts';
+export { CronTriggerHandler } from './cron-trigger.ts';
+export { WebhookTriggerHandler } from './webhook-trigger.ts';
+export { TriggerManager } from './trigger-manager.ts';

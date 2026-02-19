@@ -1,7 +1,7 @@
-import type { Embeddings } from '@langchain/core/embeddings';
-import type { GraphStore, GraphNode, GraphEdge, LocalSearchConfig } from './types.js';
-import type { SearchResult } from '../types.js';
-import { createLogger } from '../../logger.js';
+import type { Embeddings } from '../../types/llm-types.ts';
+import type { GraphStore, GraphNode, GraphEdge, LocalSearchConfig } from './types.ts';
+import type { SearchResult } from '../types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('GraphLocalSearch');
 

@@ -11,9 +11,9 @@ if (fsSync.existsSync(cliEnvPath)) {
   dotenv.config();
 }
 
-import { Orchestrator } from '../../../lib/index.js';
-import { createServer } from '../../server.js';
-import { logger } from '../../../lib/logger.js';
+import { Orchestrator } from '../../../lib/index.ts';
+import { createServer } from '../../server.ts';
+import { logger } from '../../../lib/logger.ts';
 
 async function directoryExists(dirPath: string): Promise<boolean> {
   try {

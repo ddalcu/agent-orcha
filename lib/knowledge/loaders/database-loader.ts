@@ -1,22 +1,20 @@
-import { BaseDocumentLoader } from '@langchain/core/document_loaders/base';
-import { Document } from '@langchain/core/documents';
+import type { Document } from '../../types/llm-types.ts';
 import type { Pool as PgPool } from 'pg';
 import type mysql from 'mysql2/promise';
-import { getPool, getDatabaseType } from '../utils/connection-pool.js';
-import type { DatabaseSourceConfig } from '../types.js';
-import { createLogger } from '../../logger.js';
+import { getPool, getDatabaseType } from '../utils/connection-pool.ts';
+import type { DatabaseSourceConfig } from '../types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('DatabaseLoader');
 
 /**
  * Database document loader for PostgreSQL and MySQL.
- * Executes SQL queries and transforms rows into LangChain documents.
+ * Executes SQL queries and transforms rows into documents.
  */
-export class DatabaseLoader extends BaseDocumentLoader {
+export class DatabaseLoader {
   private config: DatabaseSourceConfig;
 
   constructor(config: DatabaseSourceConfig) {
-    super();
     this.config = config;
   }
 
@@ -167,9 +165,9 @@ export class DatabaseLoader extends BaseDocumentLoader {
     // This allows GraphRAG direct mode to access all SQL columns
     metadata._rawRow = row;
 
-    return new Document({
+    return {
       pageContent,
       metadata,
-    });
+    };
   }
 }

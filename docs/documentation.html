@@ -362,7 +362,7 @@ output:
             <tr>
               <td><code>npx agent-orcha start</code></td>
               <td>Start the agent orchestrator server</td>
-              <td>Environment variables: <code>PORT</code>, <code>HOST</code>, <code>ORCHA_BASE_DIR</code></td>
+              <td>Environment variables: <code>PORT</code>, <code>HOST</code>, <code>WORKSPACE</code></td>
             </tr>
             <tr>
               <td><code>npx agent-orcha help</code></td>
@@ -416,7 +416,7 @@ services:
     volumes:
       - ./my-agent-orcha-project:/data
     environment:
-      - ORCHA_BASE_DIR=/data</code></pre>
+      - WORKSPACE=/data</code></pre>
           </div>
         </div>
 
@@ -431,7 +431,7 @@ services:
           </thead>
           <tbody>
             <tr>
-              <td><code>ORCHA_BASE_DIR</code></td>
+              <td><code>WORKSPACE</code></td>
               <td>Base directory for the project inside the container</td>
               <td><code>/data</code></td>
             </tr>

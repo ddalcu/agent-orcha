@@ -1,7 +1,7 @@
-import { tool } from '@langchain/core/tools';
+import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
-import { NodeInterrupt } from '@langchain/langgraph';
-import type { StructuredTool } from '@langchain/core/tools';
+import { NodeInterrupt } from '../../types/llm-types.ts';
+import type { StructuredTool } from '../../types/llm-types.ts';
 
 /**
  * Creates a tool that allows agents to ask the user for input during workflow execution.

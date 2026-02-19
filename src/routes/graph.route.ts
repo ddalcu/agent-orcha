@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { GraphRagFactory } from '../../lib/knowledge/graph-rag/graph-rag-factory.js';
-import type { GraphNode, GraphEdge, GraphStore } from '../../lib/knowledge/graph-rag/types.js';
+import { GraphRagFactory } from '../../lib/knowledge/graph-rag/graph-rag-factory.ts';
+import type { GraphNode, GraphEdge, GraphStore } from '../../lib/knowledge/graph-rag/types.ts';
 
 /**
  * Get all registered graph stores.

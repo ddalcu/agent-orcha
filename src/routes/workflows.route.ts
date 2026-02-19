@@ -16,7 +16,7 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
       description: workflow.description,
       version: workflow.version,
       type: workflow.type || 'steps',
-      steps: workflow.type === 'langgraph' ? 0 : workflow.steps.length,
+      steps: workflow.type === 'react' ? 0 : workflow.steps.length,
       inputSchema: workflow.input.schema,
     }));
   });

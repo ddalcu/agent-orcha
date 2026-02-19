@@ -1,3 +1,3 @@
-export * from './types.js';
-export { TaskStore } from './task-store.js';
-export { TaskManager } from './task-manager.js';
+export * from './types.ts';
+export { TaskStore } from './task-store.ts';
+export { TaskManager } from './task-manager.ts';

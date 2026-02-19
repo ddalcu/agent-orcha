@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { TaskStatus, TaskKind } from '../../lib/tasks/types.js';
+import type { TaskStatus, TaskKind } from '../../lib/tasks/types.ts';
 
 interface TaskIdParams {
   id: string;

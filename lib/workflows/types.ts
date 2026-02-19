@@ -44,7 +44,7 @@ export const WorkflowConfigSchema = z.object({
   onError: z.enum(['stop', 'continue', 'retry']).default('stop'),
 });
 
-// LangGraph-specific schemas
+// ReAct workflow schemas
 export const GraphToolConfigSchema = z.object({
   mode: z.enum(['all', 'include', 'exclude', 'none']).default('all'),
   sources: z
@@ -74,11 +74,11 @@ export const GraphConfigSchema = z.object({
   timeout: z.number().default(300000),
 });
 
-export const LangGraphWorkflowSchema = z.object({
+export const ReactWorkflowSchema = z.object({
   name: z.string().describe('Unique workflow identifier'),
   description: z.string().describe('Human-readable description'),
   version: z.string().default('1.0.0'),
-  type: z.literal('langgraph'),
+  type: z.literal('react'),
   input: z.object({
     schema: z.record(InputFieldSchema),
   }),
@@ -110,7 +110,7 @@ export const StepBasedWorkflowSchema = z.object({
 // Discriminated union of workflow types
 export const WorkflowDefinitionSchema = z.discriminatedUnion('type', [
   StepBasedWorkflowSchema,
-  LangGraphWorkflowSchema,
+  ReactWorkflowSchema,
 ]);
 
 export type InputMapping = z.infer<typeof InputMappingSchema>;
@@ -123,7 +123,7 @@ export type WorkflowConfig = z.infer<typeof WorkflowConfigSchema>;
 export type GraphToolConfig = z.infer<typeof GraphToolConfigSchema>;
 export type GraphAgentConfig = z.infer<typeof GraphAgentConfigSchema>;
 export type GraphConfig = z.infer<typeof GraphConfigSchema>;
-export type LangGraphWorkflowDefinition = z.infer<typeof LangGraphWorkflowSchema>;
+export type ReactWorkflowDefinition = z.infer<typeof ReactWorkflowSchema>;
 export type StepBasedWorkflowDefinition = z.infer<typeof StepBasedWorkflowSchema>;
 export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 
@@ -161,7 +161,11 @@ export interface WorkflowStatus {
     | 'workflow_start'
     | 'workflow_complete'
     | 'workflow_error'
-    | 'workflow_interrupt';
+    | 'workflow_interrupt'
+    | 'tool_discovery'
+    | 'react_iteration'
+    | 'tool_call'
+    | 'tool_result';
   stepId?: string;
   agent?: string;
   message: string;

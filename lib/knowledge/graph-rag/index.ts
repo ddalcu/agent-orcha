@@ -1,13 +1,13 @@
-export { GraphRagFactory } from './graph-rag-factory.js';
-export { MemoryGraphStore } from './memory-graph-store.js';
-export { EntityExtractor } from './entity-extractor.js';
-export { ExtractionCache } from './extraction-cache.js';
-export { CommunityDetector } from './community-detector.js';
-export { CommunitySummarizer } from './community-summarizer.js';
-export { LocalSearch } from './local-search.js';
-export { GlobalSearch } from './global-search.js';
-export { detectSearchMode } from './search-mode-detector.js';
-export type { SearchMode } from './search-mode-detector.js';
+export { GraphRagFactory } from './graph-rag-factory.ts';
+export { MemoryGraphStore } from './memory-graph-store.ts';
+export { EntityExtractor } from './entity-extractor.ts';
+export { ExtractionCache } from './extraction-cache.ts';
+export { CommunityDetector } from './community-detector.ts';
+export { CommunitySummarizer } from './community-summarizer.ts';
+export { LocalSearch } from './local-search.ts';
+export { GlobalSearch } from './global-search.ts';
+export { detectSearchMode } from './search-mode-detector.ts';
+export type { SearchMode } from './search-mode-detector.ts';
 
 export {
   GraphConfigSchema,
@@ -20,7 +20,7 @@ export {
   RelationshipTypeSchema,
   LocalSearchConfigSchema,
   GlobalSearchConfigSchema,
-} from './types.js';
+} from './types.ts';
 
 export type {
   GraphNode,
@@ -42,4 +42,4 @@ export type {
   ExtractionResult,
   CacheMetadata,
   CachedGraphData,
-} from './types.js';
+} from './types.ts';

@@ -1,6 +1,4 @@
-import { VectorStore } from '@langchain/core/vectorstores';
-import { Document } from '@langchain/core/documents';
-import type { EmbeddingsInterface } from '@langchain/core/embeddings';
+import type { Document, Embeddings } from '../types/llm-types.ts';
 
 interface MemoryVector {
   content: string;
@@ -24,17 +22,13 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
 /**
  * Lightweight in-memory vector store using cosine similarity.
- * Replaces @langchain/classic MemoryVectorStore to avoid heavy transitive deps.
  */
-export class MemoryVectorStore extends VectorStore {
+export class MemoryVectorStore {
   memoryVectors: MemoryVector[] = [];
+  private embeddings: Embeddings;
 
-  _vectorstoreType(): string {
-    return 'memory';
-  }
-
-  constructor(embeddings: EmbeddingsInterface) {
-    super(embeddings, {});
+  constructor(embeddings: Embeddings) {
+    this.embeddings = embeddings;
   }
 
   async addVectors(vectors: number[][], documents: Document[]): Promise<void> {
@@ -55,12 +49,11 @@ export class MemoryVectorStore extends VectorStore {
 
   async similaritySearchVectorWithScore(
     query: number[],
-    k: number,
-    _filter?: this['FilterType']
+    k: number
   ): Promise<[Document, number][]> {
     const scored = this.memoryVectors.map((vec) => ({
       score: cosineSimilarity(query, vec.embedding),
-      doc: new Document({ pageContent: vec.content, metadata: vec.metadata }),
+      doc: { pageContent: vec.content, metadata: vec.metadata } as Document,
     }));
 
     scored.sort((a, b) => b.score - a.score);
@@ -68,9 +61,17 @@ export class MemoryVectorStore extends VectorStore {
     return scored.slice(0, k).map(({ doc, score }) => [doc, score]);
   }
 
+  async similaritySearchWithScore(
+    query: string,
+    k: number
+  ): Promise<[Document, number][]> {
+    const queryVector = await this.embeddings.embedQuery(query);
+    return this.similaritySearchVectorWithScore(queryVector, k);
+  }
+
   static async fromDocuments(
     docs: Document[],
-    embeddings: EmbeddingsInterface
+    embeddings: Embeddings
   ): Promise<MemoryVectorStore> {
     const store = new MemoryVectorStore(embeddings);
     await store.addDocuments(docs);
@@ -78,7 +79,7 @@ export class MemoryVectorStore extends VectorStore {
   }
 
   static async fromExistingIndex(
-    embeddings: EmbeddingsInterface
+    embeddings: Embeddings
   ): Promise<MemoryVectorStore> {
     return new MemoryVectorStore(embeddings);
   }

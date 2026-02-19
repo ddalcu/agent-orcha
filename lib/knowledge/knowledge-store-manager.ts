@@ -2,11 +2,11 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
-import { KnowledgeConfigSchema, type KnowledgeConfig, type VectorKnowledgeConfig, type GraphRagKnowledgeConfig, type KnowledgeStoreInstance } from './types.js';
-import { KnowledgeStoreFactory } from './knowledge-store-factory.js';
-import { GraphRagFactory } from './graph-rag/graph-rag-factory.js';
-import { KnowledgeMetadataManager, createDefaultMetadata, type KnowledgeStoreMetadata, type IndexingProgressCallback } from './knowledge-store-metadata.js';
-import { createLogger } from '../logger.js';
+import { KnowledgeConfigSchema, type KnowledgeConfig, type VectorKnowledgeConfig, type GraphRagKnowledgeConfig, type KnowledgeStoreInstance } from './types.ts';
+import { KnowledgeStoreFactory } from './knowledge-store-factory.ts';
+import { GraphRagFactory } from './graph-rag/graph-rag-factory.ts';
+import { KnowledgeMetadataManager, createDefaultMetadata, type KnowledgeStoreMetadata, type IndexingProgressCallback } from './knowledge-store-metadata.ts';
+import { createLogger } from '../logger.ts';
 
 const logger = createLogger('KnowledgeStore');
 

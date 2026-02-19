@@ -1,4 +1,4 @@
-import type { Embeddings } from '@langchain/core/embeddings';
+import type { Embeddings } from '../../types/llm-types.ts';
 import type {
   GraphConfig,
   GraphNode,
@@ -7,22 +7,22 @@ import type {
   ExtractedEntity,
   ExtractedRelationship,
   Community,
-} from './types.js';
-import type { KnowledgeStoreInstance, SearchResult } from '../types.js';
-import type { GraphRagKnowledgeConfig } from '../types.js';
-import { MemoryGraphStore } from './memory-graph-store.js';
-import { EntityExtractor } from './entity-extractor.js';
-import { DirectMapper } from './direct-mapper.js';
-import { ExtractionCache } from './extraction-cache.js';
-import { CommunityDetector } from './community-detector.js';
-import { CommunitySummarizer } from './community-summarizer.js';
-import { LocalSearch } from './local-search.js';
-import { GlobalSearch } from './global-search.js';
-import { detectSearchMode } from './search-mode-detector.js';
-import { LLMFactory } from '../../llm/llm-factory.js';
-import { KnowledgeStoreFactory } from '../knowledge-store-factory.js';
-import { createDefaultMetadata, type IndexingProgressCallback } from '../knowledge-store-metadata.js';
-import { createLogger } from '../../logger.js';
+} from './types.ts';
+import type { KnowledgeStoreInstance, SearchResult } from '../types.ts';
+import type { GraphRagKnowledgeConfig } from '../types.ts';
+import { MemoryGraphStore } from './memory-graph-store.ts';
+import { EntityExtractor } from './entity-extractor.ts';
+import { DirectMapper } from './direct-mapper.ts';
+import { ExtractionCache } from './extraction-cache.ts';
+import { CommunityDetector } from './community-detector.ts';
+import { CommunitySummarizer } from './community-summarizer.ts';
+import { LocalSearch } from './local-search.ts';
+import { GlobalSearch } from './global-search.ts';
+import { detectSearchMode } from './search-mode-detector.ts';
+import { LLMFactory } from '../../llm/llm-factory.ts';
+import { KnowledgeStoreFactory } from '../knowledge-store-factory.ts';
+import { createDefaultMetadata, type IndexingProgressCallback } from '../knowledge-store-metadata.ts';
+import { createLogger } from '../../logger.ts';
 import * as path from 'path';
 
 const logger = createLogger('GraphRAGFactory');
@@ -227,7 +227,7 @@ export class GraphRagFactory {
             onProgress?.({ name: config.name, phase: 'building', progress: 80, message: `Summarizing ${communities.length} communities...` });
             const summaryLlm = LLMFactory.create(graphConfig.communities.summaryLlm);
             const summarizer = new CommunitySummarizer(summaryLlm);
-            communities = await summarizer.summarize(communities, store);
+            communities = await summarizer.summarize(communities, store, config.name);
           }
         } else {
           communities = [];

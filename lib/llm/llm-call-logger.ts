@@ -1,10 +1,10 @@
-import type { StructuredTool } from '@langchain/core/tools';
-import { createLogger } from '../logger.js';
+import type { StructuredTool } from '../types/llm-types.ts';
+import { createLogger } from '../logger.ts';
 
 const logger = createLogger('LLMCall');
 
 export interface LLMCallContext {
-  /** Caller identifier, e.g. "Agent: my-agent" or "LangGraph: my-workflow" */
+  /** Caller identifier, e.g. "Agent: my-agent" or "ReactWorkflow: my-workflow" */
   caller: string;
   systemPrompt?: string;
   messages?: Array<{ role?: string; content?: string; _getType?: () => string } | any>;

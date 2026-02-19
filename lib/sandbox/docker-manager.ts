@@ -1,15 +1,18 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import type { SandboxConfig, ContainerInfo, ExecResult } from './types.js';
-import { createLogger } from '../logger.js';
+import type { SandboxConfig, ContainerInfo, ExecResult } from './types.ts';
+import { createLogger } from '../logger.ts';
 
 const logger = createLogger('DockerManager');
 
 export class DockerManager {
+  private config: SandboxConfig;
   private containers = new Map<string, ContainerInfo>();
   private pruneTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private config: SandboxConfig) {}
+  constructor(config: SandboxConfig) {
+    this.config = config;
+  }
 
   /**
    * Pull the Docker image if it's not already present locally.

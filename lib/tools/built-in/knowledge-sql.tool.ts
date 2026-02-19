@@ -1,9 +1,9 @@
-import { tool } from '@langchain/core/tools';
+import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
-import type { StructuredTool } from '@langchain/core/tools';
-import type { KnowledgeConfig, DatabaseSourceConfig } from '../../knowledge/types.js';
-import { getPool, getDatabaseType } from '../../knowledge/utils/connection-pool.js';
-import { validateReadonlySql } from './query-validators.js';
+import type { StructuredTool } from '../../types/llm-types.ts';
+import type { KnowledgeConfig, DatabaseSourceConfig } from '../../knowledge/types.ts';
+import { getPool, getDatabaseType } from '../../knowledge/utils/connection-pool.ts';
+import { validateReadonlySql } from './query-validators.ts';
 
 /**
  * Create a SQL query tool for a knowledge base backed by a database source.

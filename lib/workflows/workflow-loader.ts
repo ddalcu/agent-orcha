@@ -2,8 +2,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
-import { WorkflowDefinitionSchema, type WorkflowDefinition } from './types.js';
-import { logger } from '../logger.js';
+import { WorkflowDefinitionSchema, type WorkflowDefinition } from './types.ts';
+import { logger } from '../logger.ts';
 
 export class WorkflowLoader {
   private workflowsDir: string;

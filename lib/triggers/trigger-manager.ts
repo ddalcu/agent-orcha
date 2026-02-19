@@ -1,8 +1,8 @@
-import { CronTriggerHandler } from './cron-trigger.js';
-import { WebhookTriggerHandler } from './webhook-trigger.js';
-import { createLogger } from '../logger.js';
+import { CronTriggerHandler } from './cron-trigger.ts';
+import { WebhookTriggerHandler } from './webhook-trigger.ts';
+import { createLogger } from '../logger.ts';
 import type { FastifyInstance } from 'fastify';
-import type { Orchestrator } from '../orchestrator.js';
+import type { Orchestrator } from '../orchestrator.ts';
 
 const log = createLogger('TriggerManager');
 

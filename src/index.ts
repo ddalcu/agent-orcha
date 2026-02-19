@@ -6,8 +6,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Resolve base directory first, then load .env from it
-const baseDir = process.env.ORCHA_BASE_DIR
-  ? path.resolve(process.env.ORCHA_BASE_DIR)
+const baseDir = process.env.WORKSPACE
+  ? path.resolve(process.env.WORKSPACE)
   : path.resolve(__dirname, '..');
 
 const envPath = path.join(baseDir, '.env');
@@ -17,9 +17,9 @@ if (fs.existsSync(envPath)) {
   dotenv.config();
 }
 
-import { Orchestrator } from '../lib/index.js';
-import { createServer } from './server.js';
-import { logger } from '../lib/logger.js';
+import { Orchestrator } from '../lib/index.ts';
+import { createServer } from './server.ts';
+import { logger } from '../lib/logger.ts';
 
 function resolveResource(name: string): string {
   const resourcePath = path.join(baseDir, name);
@@ -61,7 +61,7 @@ function validateConfiguration(): void {
     const errorMsg = `Configuration validation failed. Missing ${missingFiles.length} required resource(s):\n` +
       missingFiles.map(f => `  - ${f}`).join('\n') +
       `\n\nBase directory: ${baseDir}\n` +
-      `Set ORCHA_BASE_DIR environment variable to specify a different configuration directory.`;
+      `Set WORKSPACE environment variable to specify a different configuration directory.`;
 
     logger.error(errorMsg);
     throw new Error(errorMsg);

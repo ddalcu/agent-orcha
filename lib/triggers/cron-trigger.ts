@@ -1,18 +1,21 @@
 import cron from 'node-cron';
-import { createLogger } from '../logger.js';
-import type { Orchestrator } from '../orchestrator.js';
-import type { CronTrigger } from './types.js';
+import { createLogger } from '../logger.ts';
+import type { Orchestrator } from '../orchestrator.ts';
+import type { CronTrigger } from './types.ts';
 
 const log = createLogger('CronTrigger');
 
 export class CronTriggerHandler {
+  private agentName: string;
+  private trigger: CronTrigger;
+  private orchestrator: Orchestrator;
   private task: cron.ScheduledTask | null = null;
 
-  constructor(
-    private agentName: string,
-    private trigger: CronTrigger,
-    private orchestrator: Orchestrator,
-  ) {}
+  constructor(agentName: string, trigger: CronTrigger, orchestrator: Orchestrator) {
+    this.agentName = agentName;
+    this.trigger = trigger;
+    this.orchestrator = orchestrator;
+  }
 
   start(): void {
     const sessionId = `trigger-${this.agentName}-cron`;

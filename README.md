@@ -126,7 +126,7 @@ services:
     volumes:
       - ./my-agent-orcha-project:/data
     environment:
-      - ORCHA_BASE_DIR=/data
+      - WORKSPACE=/data
 ```
 
 Then run:
@@ -356,7 +356,7 @@ PORT=3000
 HOST=0.0.0.0
 
 # Base directory for config files (optional)
-ORCHA_BASE_DIR=/path/to/project
+WORKSPACE=/path/to/project
 ```
 
 ## Agents

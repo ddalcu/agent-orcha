@@ -1,18 +1,20 @@
-import { createLogger } from '../logger.js';
+import { createLogger } from '../logger.ts';
 import type { FastifyInstance } from 'fastify';
-import type { Orchestrator } from '../orchestrator.js';
-import type { WebhookTrigger } from './types.js';
+import type { Orchestrator } from '../orchestrator.ts';
+import type { WebhookTrigger } from './types.ts';
 
 const log = createLogger('WebhookTrigger');
 
 export class WebhookTriggerHandler {
+  private agentName: string;
+  private trigger: WebhookTrigger;
+  private orchestrator: Orchestrator;
   readonly path: string;
 
-  constructor(
-    private agentName: string,
-    private trigger: WebhookTrigger,
-    private orchestrator: Orchestrator,
-  ) {
+  constructor(agentName: string, trigger: WebhookTrigger, orchestrator: Orchestrator) {
+    this.agentName = agentName;
+    this.trigger = trigger;
+    this.orchestrator = orchestrator;
     this.path = trigger.path ?? `/api/triggers/webhooks/${agentName}`;
   }
 

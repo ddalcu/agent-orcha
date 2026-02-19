@@ -1,7 +1,7 @@
 import type { AbstractGraph, Attributes } from 'graphology-types';
-import type { MemoryGraphStore } from './memory-graph-store.js';
-import type { Community, GraphCommunitiesConfig } from './types.js';
-import { createLogger } from '../../logger.js';
+import type { MemoryGraphStore } from './memory-graph-store.ts';
+import type { Community, GraphCommunitiesConfig } from './types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('CommunityDetector');
 

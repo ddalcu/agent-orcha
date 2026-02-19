@@ -1,8 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { MemoryVectorStore } from './memory-vector-store.js';
-import type { Embeddings } from '@langchain/core/embeddings';
-import { createLogger } from '../logger.js';
+import { MemoryVectorStore } from './memory-vector-store.ts';
+import type { Embeddings } from '../types/llm-types.ts';
+import { createLogger } from '../logger.ts';
 
 const logger = createLogger('VectorStoreCache');
 

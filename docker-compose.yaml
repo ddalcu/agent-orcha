@@ -6,7 +6,7 @@ services:
     volumes:
       - ./orcha-data:/data
     environment:
-      - ORCHA_BASE_DIR=/data
+      - WORKSPACE=/data
     working_dir: /app
     # Command to run (optional, since it's the ENTRYPOINT in Dockerfile)
     # command: --help

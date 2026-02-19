@@ -1,8 +1,8 @@
-import { tool } from '@langchain/core/tools';
+import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
-import type { StructuredTool } from '@langchain/core/tools';
-import type { GraphStore } from '../../knowledge/graph-rag/types.js';
-import type { KnowledgeConfig, GraphRagKnowledgeConfig } from '../../knowledge/types.js';
+import type { StructuredTool } from '../../types/llm-types.ts';
+import type { GraphStore } from '../../knowledge/graph-rag/types.ts';
+import type { KnowledgeConfig, GraphRagKnowledgeConfig } from '../../knowledge/types.ts';
 
 /**
  * Create a graph schema discovery tool for a graph-rag knowledge base.

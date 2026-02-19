@@ -1,5 +1,5 @@
-import type { AgentResult } from '../agents/types.js';
-import type { WorkflowResult } from '../workflows/types.js';
+import type { AgentResult } from '../agents/types.ts';
+import type { WorkflowResult } from '../workflows/types.ts';
 
 export type TaskStatus =
   | 'submitted'

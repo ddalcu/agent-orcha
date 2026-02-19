@@ -1,6 +1,6 @@
 import { Pool as PgPool } from 'pg';
 import mysql from 'mysql2/promise';
-import { createLogger } from '../../logger.js';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('ConnectionPool');
 

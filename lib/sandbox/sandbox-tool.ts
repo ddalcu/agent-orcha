@@ -1,11 +1,11 @@
-import { tool } from '@langchain/core/tools';
+import { tool } from '../types/tool-factory.ts';
 import { z } from 'zod';
-import type { StructuredTool } from '@langchain/core/tools';
-import type { DockerManager } from './docker-manager.js';
-import type { SandboxConfig } from './types.js';
+import type { StructuredTool } from '../types/llm-types.ts';
+import type { DockerManager } from './docker-manager.ts';
+import type { SandboxConfig } from './types.ts';
 
 /**
- * Creates a LangChain StructuredTool that executes shell commands inside a
+ * Creates a StructuredTool that executes shell commands inside a
  * Docker sandbox container. The container is lazily created on first use.
  */
 export function createSandboxExecTool(

@@ -1,7 +1,7 @@
-name: langgraph-multi-turn
-description: Multi-turn LangGraph workflow that can iteratively refine results using ReAct pattern
+name: react-multi-turn
+description: Multi-turn ReAct workflow that can iteratively refine results
 version: "1.0.0"
-type: langgraph
+type: react
 
 input:
   schema:
@@ -33,7 +33,7 @@ prompt:
 
   goal: "Provide a thorough analysis of: {{input.topic}}"
 
-# LangGraph configuration for multi-turn execution
+# ReAct workflow configuration for multi-turn execution
 graph:
   model: default
 
@@ -62,7 +62,6 @@ config:
 metadata:
   category: research
   tags:
-    - langgraph
     - react
     - multi-turn
     - iterative

@@ -6,6 +6,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -17,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -32,5 +35,11 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:coverage
 
-      - name: Check coverage threshold
-        run: npx c8 check-coverage --lines 70 --functions 70 --branches 70
+      - name: Report coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: zgosalvez/github-actions-report-lcov@v4
+        with:
+          coverage-files: lcov.info
+          minimum-coverage: 70
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          update-comment: true

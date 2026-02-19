@@ -1,21 +1,19 @@
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
-import { MemoryVectorStore } from './memory-vector-store.js';
-import { OpenAIEmbeddings } from '@langchain/openai';
-import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
-import { CharacterTextSplitter, RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
+import { MemoryVectorStore } from './memory-vector-store.ts';
+import { OpenAIEmbeddingsProvider } from '../llm/providers/openai-embeddings.ts';
+import { GeminiEmbeddingsProvider } from '../llm/providers/gemini-embeddings.ts';
+import { CharacterTextSplitter, RecursiveCharacterTextSplitter } from '../types/text-splitters.ts';
 import { glob } from 'glob';
 import * as path from 'path';
-import type { Document } from '@langchain/core/documents';
-import type { Embeddings } from '@langchain/core/embeddings';
-import type { VectorStore } from '@langchain/core/vectorstores';
-import type { KnowledgeConfig, VectorKnowledgeConfig, KnowledgeStoreInstance, SearchResult, DocumentInput } from './types.js';
-import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.js';
-import { detectProvider } from '../llm/provider-detector.js';
-import { createLogger } from '../logger.js';
-import { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.js';
-import { VectorStoreCache } from './vector-store-cache.js';
-import { createDefaultMetadata, type KnowledgeStoreMetadata, type IndexingProgressCallback } from './knowledge-store-metadata.js';
+import type { Document, Embeddings } from '../types/llm-types.ts';
+import type { KnowledgeConfig, VectorKnowledgeConfig, KnowledgeStoreInstance, SearchResult, DocumentInput } from './types.ts';
+import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.ts';
+import { detectProvider } from '../llm/provider-detector.ts';
+import { createLogger } from '../logger.ts';
+import { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
+import { VectorStoreCache } from './vector-store-cache.ts';
+import { createDefaultMetadata, type KnowledgeStoreMetadata, type IndexingProgressCallback } from './knowledge-store-metadata.ts';
 
 const logger = createLogger('KnowledgeFactory');
 const searchLogger = createLogger('KnowledgeSearch');
@@ -107,7 +105,7 @@ export class KnowledgeStoreFactory {
 
   private static wrapAsInstance(
     config: VectorKnowledgeConfig,
-    store: VectorStore,
+    store: MemoryVectorStore,
     embeddings: Embeddings,
     metadata: KnowledgeStoreMetadata,
     projectRoot: string,
@@ -206,11 +204,11 @@ export class KnowledgeStoreFactory {
         }
       },
       addDocuments: async (docs: DocumentInput[]): Promise<void> => {
-        const langchainDocs = docs.map((d) => ({
+        const storeDocs = docs.map((d) => ({
           pageContent: d.content,
           metadata: d.metadata ?? {},
         }));
-        await store.addDocuments(langchainDocs);
+        await store.addDocuments(storeDocs);
       },
       refresh: async (refreshOnProgress?: IndexingProgressCallback): Promise<void> => {
         refreshOnProgress?.({ name: config.name, phase: 'loading', progress: 10, message: 'Loading documents...' });
@@ -218,7 +216,7 @@ export class KnowledgeStoreFactory {
         const splitNewDocs = await this.splitDocuments(config, newDocs);
         refreshOnProgress?.({ name: config.name, phase: 'splitting', progress: 30, message: `Split into ${splitNewDocs.length} chunks...` });
 
-        if (store instanceof MemoryVectorStore && cacheDir) {
+        if (cacheDir) {
           const newSourceHashes = await this.computeFileHashes(config, projectRoot);
           const changedSources = new Set<string>();
           const removedSources = new Set<string>();
@@ -243,12 +241,12 @@ export class KnowledgeStoreFactory {
           refreshOnProgress?.({ name: config.name, phase: 'embedding', progress: 50, message: `Updating ${changedSources.size} changed sources...` });
 
           const sourcesToRemove = new Set([...changedSources, ...removedSources]);
-          (store as any).memoryVectors = (store as any).memoryVectors.filter(
-            (v: any) => !sourcesToRemove.has(v.metadata?.source ?? '')
+          store.memoryVectors = store.memoryVectors.filter(
+            (v) => !sourcesToRemove.has(v.metadata?.source as string ?? '')
           );
 
           const docsToAdd = splitNewDocs.filter(
-            (doc) => changedSources.has(doc.metadata?.source ?? '')
+            (doc) => changedSources.has(doc.metadata?.source as string ?? '')
           );
 
           if (docsToAdd.length > 0) {
@@ -257,7 +255,7 @@ export class KnowledgeStoreFactory {
 
           metadata.sourceHashes = newSourceHashes;
           metadata.documentCount = newDocs.length;
-          metadata.chunkCount = (store as any).memoryVectors.length;
+          metadata.chunkCount = store.memoryVectors.length;
 
           refreshOnProgress?.({ name: config.name, phase: 'caching', progress: 90, message: 'Saving to cache...' });
           const cache = new VectorStoreCache(cacheDir, config.name);
@@ -386,7 +384,7 @@ export class KnowledgeStoreFactory {
     switch (provider) {
       case 'gemini':
         logger.info('Creating Gemini embeddings');
-        baseEmbeddings = new GoogleGenerativeAIEmbeddings({
+        baseEmbeddings = new GeminiEmbeddingsProvider({
           modelName: embeddingConfig.model,
           apiKey: resolveApiKey('gemini', embeddingConfig.apiKey),
         });
@@ -395,19 +393,15 @@ export class KnowledgeStoreFactory {
       case 'local':
       case 'anthropic':
       default: {
-        const openAIConfig: any = {
-          modelName: embeddingConfig.model,
-          openAIApiKey: resolveApiKey(provider, embeddingConfig.apiKey),
-          configuration: embeddingConfig.baseUrl ? { baseURL: embeddingConfig.baseUrl } : undefined,
-          encodingFormat: 'float',
-        };
-
-        if (embeddingConfig.dimensions) {
-          openAIConfig.dimensions = embeddingConfig.dimensions;
-        }
+        const apiKey = resolveApiKey(provider, embeddingConfig.apiKey);
 
         logger.info(`Creating OpenAI-compatible embeddings (encoding: float)${embeddingConfig.dimensions ? ` (dimensions: ${embeddingConfig.dimensions})` : ''}`);
-        baseEmbeddings = new OpenAIEmbeddings(openAIConfig);
+        baseEmbeddings = new OpenAIEmbeddingsProvider({
+          modelName: embeddingConfig.model,
+          apiKey,
+          baseURL: embeddingConfig.baseUrl,
+          dimensions: embeddingConfig.dimensions,
+        });
         break;
       }
     }
@@ -451,32 +445,31 @@ export class KnowledgeStoreFactory {
     const originalEmbedQuery = embeddings.embedQuery.bind(embeddings);
     const originalEmbedDocuments = embeddings.embedDocuments.bind(embeddings);
 
-    embeddings.embedQuery = async (text: string): Promise<number[]> => {
-      try {
-        const processedText = appendToken(text);
-        const result = await originalEmbedQuery(processedText);
-        return validateEmbedding(result, 'embedQuery');
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.error(`Embedding query failed for text: "${text.substring(0, 50)}..."`);
-        logger.error(`Error: ${errorMessage}`);
-        throw new Error(`Embedding query failed: ${errorMessage}`);
-      }
+    return {
+      embedQuery: async (text: string): Promise<number[]> => {
+        try {
+          const processedText = appendToken(text);
+          const result = await originalEmbedQuery(processedText);
+          return validateEmbedding(result, 'embedQuery');
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.error(`Embedding query failed for text: "${text.substring(0, 50)}..."`);
+          logger.error(`Error: ${errorMessage}`);
+          throw new Error(`Embedding query failed: ${errorMessage}`);
+        }
+      },
+      embedDocuments: async (texts: string[]): Promise<number[][]> => {
+        try {
+          const processedTexts = texts.map(appendToken);
+          const result = await originalEmbedDocuments(processedTexts);
+          return validateEmbeddings(result, 'embedDocuments');
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.error(`Embedding documents failed for ${texts.length} text(s)`);
+          logger.error(`Error: ${errorMessage}`);
+          throw new Error(`Embedding documents failed: ${errorMessage}`);
+        }
+      },
     };
-
-    embeddings.embedDocuments = async (texts: string[]): Promise<number[][]> => {
-      try {
-        const processedTexts = texts.map(appendToken);
-        const result = await originalEmbedDocuments(processedTexts);
-        return validateEmbeddings(result, 'embedDocuments');
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.error(`Embedding documents failed for ${texts.length} text(s)`);
-        logger.error(`Error: ${errorMessage}`);
-        throw new Error(`Embedding documents failed: ${errorMessage}`);
-      }
-    };
-
-    return embeddings;
   }
 }

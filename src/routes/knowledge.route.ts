@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { GraphRagFactory } from '../../lib/knowledge/graph-rag/graph-rag-factory.js';
-import type { IndexingProgressCallback } from '../../lib/knowledge/knowledge-store-metadata.js';
+import { GraphRagFactory } from '../../lib/knowledge/graph-rag/graph-rag-factory.ts';
+import type { IndexingProgressCallback } from '../../lib/knowledge/knowledge-store-metadata.ts';
 
 interface KnowledgeParams {
   name: string;

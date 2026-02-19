@@ -286,7 +286,7 @@
                                             "name": { "type": "string" },
                                             "description": { "type": "string" },
                                             "version": { "type": "string" },
-                                            "type": { "type": "string", "enum": ["steps", "langgraph"] },
+                                            "type": { "type": "string", "enum": ["steps", "react"] },
                                             "inputSchema": { "type": "object" }
                                         }
                                     }
