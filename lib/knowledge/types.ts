@@ -94,6 +94,7 @@ export interface RelationshipMapping {
   target: string;
   sourceIdColumn: string;
   targetIdColumn: string;
+  groupNode?: string;
 }
 
 export interface DirectMappingConfig {

@@ -109,7 +109,7 @@ export class KnowledgeView extends Component {
                     ${this.statusDot(store)}
                 </div>
                 <div class="flex items-center gap-2 mb-2 flex-wrap">
-                    ${this.kindBadge(store.kind)}
+                    ${this.kindBadge(store)}
                     ${this.sourceTypeBadge(store.source?.type)}
                     ${this.storeBadge(store.store)}
                     ${store.extractionMode ? this.extractionModeBadge(store.extractionMode) : ''}
@@ -160,7 +160,7 @@ export class KnowledgeView extends Component {
                     <h2 class="text-lg font-bold text-gray-100 mb-1">${this.escapeHtml(store.name)}</h2>
                     <p class="text-sm text-gray-400">${this.escapeHtml(store.description || 'No description')}</p>
                     <div class="flex items-center gap-2 mt-2">
-                        ${this.kindBadge(store.kind)}
+                        ${this.kindBadge(store)}
                         ${this.statusBadge(store)}
                     </div>
                 </div>
@@ -196,9 +196,9 @@ export class KnowledgeView extends Component {
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                 ${this.statCard('Documents', store.documentCount, 'fa-file-alt')}
                 ${this.statCard('Chunks', store.chunkCount, 'fa-puzzle-piece')}
-                ${store.kind === 'graph-rag' ? this.statCard('Entities', store.entityCount, 'fa-project-diagram') : ''}
-                ${store.kind === 'graph-rag' ? this.statCard('Edges', store.edgeCount, 'fa-bezier-curve') : ''}
-                ${store.kind === 'graph-rag' ? this.statCard('Communities', store.communityCount, 'fa-layer-group') : ''}
+                ${store.hasGraph ? this.statCard('Entities', store.entityCount, 'fa-project-diagram') : ''}
+                ${store.hasGraph ? this.statCard('Edges', store.edgeCount, 'fa-bezier-curve') : ''}
+                ${store.hasGraph ? this.statCard('Communities', store.communityCount, 'fa-layer-group') : ''}
             </div>
 
             <!-- Info Grid -->
@@ -393,9 +393,9 @@ export class KnowledgeView extends Component {
         return `<span class="inline-block w-2.5 h-2.5 rounded-full ${colors[store.status] || colors.not_indexed} flex-shrink-0"></span>`;
     }
 
-    kindBadge(kind) {
-        if (kind === 'graph-rag') {
-            return '<span class="text-xs font-medium px-2 py-0.5 rounded bg-purple-900/50 text-purple-300 border border-purple-700/50">graph-rag</span>';
+    kindBadge(store) {
+        if (store.hasGraph) {
+            return '<span class="text-xs font-medium px-2 py-0.5 rounded bg-purple-900/50 text-purple-300 border border-purple-700/50">graph</span>';
         }
         return '<span class="text-xs font-medium px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 border border-blue-700/50">vector</span>';
     }
@@ -446,7 +446,7 @@ export class KnowledgeView extends Component {
     }
 
     formatCounts(store) {
-        if (store.kind === 'graph-rag') {
+        if (store.hasGraph) {
             return `${store.entityCount || 0} entities, ${store.edgeCount || 0} edges`;
         }
         return `${store.chunkCount || 0} chunks`;

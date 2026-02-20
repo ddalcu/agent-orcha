@@ -26,22 +26,27 @@ function formatResponse(entities: EntityRow[], relationships: RelationshipRow[])
  */
 function buildKbNodes(orchestrator: any) {
   const configs = orchestrator.knowledge.listConfigs();
-  return configs.map((config: any) => {
-    const sqliteStore = orchestrator.knowledge.getSqliteStore(config.name);
-    return {
-      id: `kb::${config.name}`,
-      type: 'KnowledgeBase',
-      name: config.name,
-      description: config.description || config.name,
-      properties: {
-        sourceType: config.source?.type ?? 'unknown',
-        hasGraph: !!config.graph,
-        chunkCount: sqliteStore?.getChunkCount() ?? 0,
-        entityCount: sqliteStore?.getEntityCount() ?? 0,
-        edgeCount: sqliteStore?.getRelationshipCount() ?? 0,
-      },
-    };
-  });
+  return configs
+    .filter((config: any) => {
+      const store = orchestrator.knowledge.getSqliteStore(config.name);
+      return store && store.getEntityCount() > 0;
+    })
+    .map((config: any) => {
+      const sqliteStore = orchestrator.knowledge.getSqliteStore(config.name);
+      return {
+        id: `kb::${config.name}`,
+        type: 'KnowledgeBase',
+        name: config.name,
+        description: config.description || config.name,
+        properties: {
+          sourceType: config.source?.type ?? 'unknown',
+          hasGraph: !!config.graph,
+          chunkCount: sqliteStore?.getChunkCount() ?? 0,
+          entityCount: sqliteStore?.getEntityCount() ?? 0,
+          edgeCount: sqliteStore?.getRelationshipCount() ?? 0,
+        },
+      };
+    });
 }
 
 /**
@@ -81,17 +86,21 @@ export const graphRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(404).send({ error: 'No graph stores available.' });
       }
 
-      const limit = Math.min(parseInt(request.query.limit ?? '300', 10), 1000);
-      const allEntities: EntityRow[] = [];
-      const allRelationships: RelationshipRow[] = [];
+      const rootEntities: EntityRow[] = [];
       const containsEdges: { id: string; type: string; source: string; target: string; description: string; weight: number }[] = [];
 
       for (const [name, store] of stores) {
         const entities = store.getAllEntities();
-        allEntities.push(...entities);
-        allRelationships.push(...store.getAllRelationships());
+        const relationships = store.getAllRelationships();
 
-        for (const entity of entities) {
+        // Root entities = those not a source of any relationship (tree graphs)
+        // Fallback to all entities for mesh/web graphs where every node is a source
+        const childIds = new Set(relationships.map((r) => r.source_id));
+        const roots = entities.filter((e) => !childIds.has(e.id));
+        const topLevel = roots.length > 0 ? roots : entities;
+
+        for (const entity of topLevel) {
+          rootEntities.push(entity);
           containsEdges.push({
             id: `kb-contains::${name}::${entity.id}`,
             type: 'CONTAINS',
@@ -103,17 +112,10 @@ export const graphRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
 
-      const limitedEntities = allEntities.slice(0, limit);
-      const entityIds = new Set(limitedEntities.map((e) => e.id));
-      const limitedRelationships = allRelationships.filter(
-        (r) => entityIds.has(r.source_id) && entityIds.has(r.target_id)
-      );
-      const limitedContainsEdges = containsEdges.filter((e) => entityIds.has(e.target));
-
-      const formatted = formatResponse(limitedEntities, limitedRelationships);
+      const formatted = formatResponse(rootEntities, []);
       return {
         nodes: [...kbNodes, ...formatted.nodes],
-        edges: [...limitedContainsEdges, ...formatted.edges],
+        edges: containsEdges,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -129,15 +131,22 @@ export const graphRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         const nodeId = decodeURIComponent(request.params.nodeId);
 
-        // Expanding a KnowledgeBase node → return its entities + CONTAINS edges
+        // Expanding a KnowledgeBase node → return only root entities (depth=1)
         if (nodeId.startsWith('kb::')) {
           const storeName = nodeId.slice(4);
           const store = fastify.orchestrator.knowledge.getSqliteStore(storeName);
           if (!store) return { nodes: [], edges: [] };
 
-          const entities = store.getAllEntities();
-          const formatted = formatResponse(entities, store.getAllRelationships());
-          const containsEdges = entities.map((e: EntityRow) => ({
+          const allEntities = store.getAllEntities();
+          const allRelationships = store.getAllRelationships();
+
+          // Root entities = those not a source of any relationship (tree graphs)
+          // Fallback to all entities for mesh/web graphs where every node is a source
+          const childIds = new Set(allRelationships.map((r) => r.source_id));
+          const roots = allEntities.filter((e: EntityRow) => !childIds.has(e.id));
+          const rootEntities = roots.length > 0 ? roots : allEntities;
+
+          const containsEdges = rootEntities.map((e: EntityRow) => ({
             id: `kb-contains::${storeName}::${e.id}`,
             type: 'CONTAINS',
             source: nodeId,
@@ -147,8 +156,8 @@ export const graphRoutes: FastifyPluginAsync = async (fastify) => {
           }));
 
           return {
-            nodes: formatted.nodes,
-            edges: [...containsEdges, ...formatted.edges],
+            nodes: formatResponse(rootEntities, []).nodes,
+            edges: containsEdges,
           };
         }
 

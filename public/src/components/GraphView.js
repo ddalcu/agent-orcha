@@ -17,6 +17,8 @@ export class GraphView extends Component {
         this.selectedNodeId = null;
         this.typeColorMap = new Map();
         this.colorIndex = 0;
+        this.expandedNodes = new Set();
+        this.leafNodes = new Set();
     }
 
     async connectedCallback() {
@@ -32,11 +34,16 @@ export class GraphView extends Component {
         return color;
     }
 
+    getIconForNode(nodeId) {
+        if (this.leafNodes.has(nodeId)) return '\uf111';  // fa-circle
+        if (this.expandedNodes.has(nodeId)) return '\uf056';  // fa-circle-minus
+        return '\uf055';  // fa-circle-plus
+    }
+
     async checkGraphConnection() {
         try {
             await api.getGraphConfig();
-            this.bindEvents();
-            await this.loadKnowledgeBases();
+            await this.loadFullGraph();
         } catch (e) {
             console.error('Failed to check graph config:', e);
             this.renderError('Failed to connect to server');
@@ -44,7 +51,7 @@ export class GraphView extends Component {
     }
 
     renderError(message) {
-        const main = this.querySelector('#graphMain');
+        const main = this.querySelector('#graphContainer');
         main.innerHTML = `
             <div class="flex items-center justify-center h-full">
                 <div class="text-center p-8">
@@ -53,20 +60,6 @@ export class GraphView extends Component {
                 </div>
             </div>
         `;
-    }
-
-    async loadKnowledgeBases() {
-        try {
-            const data = await api.getGraphKnowledgeBases();
-            if (this.network) {
-                this.mergeData(data);
-            } else {
-                this.initGraph(data);
-            }
-        } catch (e) {
-            console.error('Failed to load knowledge bases:', e);
-            this.renderError('Failed to load graph data: ' + e.message);
-        }
     }
 
     async loadFullGraph() {
@@ -79,19 +72,38 @@ export class GraphView extends Component {
             }
         } catch (e) {
             console.error('Failed to load full graph:', e);
+            this.renderError('Failed to load graph data: ' + e.message);
         }
     }
 
     async expandNode(nodeId) {
         if (!nodeId) return;
         try {
+            const beforeCount = this.nodes.length;
             const data = await api.getGraphNeighbors(nodeId);
             if (this.network) {
                 this.mergeData(data);
             }
+
+            if (this.nodes.length > beforeCount) {
+                this.expandedNodes.add(nodeId);
+            } else {
+                this.leafNodes.add(nodeId);
+            }
+            this.updateNodeIndicator(nodeId);
         } catch (e) {
             console.error('Failed to expand node:', e);
         }
+    }
+
+    updateNodeIndicator(nodeId) {
+        const nodeData = this.nodes.get(nodeId);
+        if (!nodeData || !nodeData.icon) return;
+
+        this.nodes.update({
+            id: nodeId,
+            icon: { ...nodeData.icon, code: this.getIconForNode(nodeId) },
+        });
     }
 
     /**
@@ -126,15 +138,15 @@ export class GraphView extends Component {
                 id: n.id,
                 label: this.truncate(n.name || n.id, 20),
                 title: n.description || n.name,
-                color: {
-                    background: color,
-                    border: color,
-                    highlight: { background: color, border: '#60a5fa' },
-                    hover: { background: color, border: '#94a3b8' },
+                shape: 'icon',
+                icon: {
+                    face: '"Font Awesome 6 Free"',
+                    weight: '900',
+                    code: this.getIconForNode(n.id),
+                    size: 30,
+                    color: color,
                 },
                 font: { color: '#e2e8f0', size: 12 },
-                shape: 'dot',
-                size: 18,
                 _type: n.type,
                 _name: n.name,
                 _description: n.description,
@@ -168,8 +180,10 @@ export class GraphView extends Component {
         const container = this.querySelector('#graphContainer');
         if (!container) return;
 
-        this.nodes = new vis.DataSet(this.toVisNodes(data.nodes));
-        this.edges = new vis.DataSet(this.toVisEdges(data.edges));
+        const visNodes = this.toVisNodes(data.nodes);
+        const visEdges = this.toVisEdges(data.edges);
+        this.nodes = new vis.DataSet([...new Map(visNodes.map(n => [n.id, n])).values()]);
+        this.edges = new vis.DataSet([...new Map(visEdges.map(e => [e.id, e])).values()]);
 
         this.network = new vis.Network(container, { nodes: this.nodes, edges: this.edges }, {
             physics: {
@@ -196,7 +210,8 @@ export class GraphView extends Component {
             if (params.nodes.length > 0) {
                 this.onNodeClicked(params.nodes[0]);
             } else {
-                this.hideSidebar();
+                this.querySelector('#sidebar')?.classList.add('hidden');
+                this.selectedNodeId = null;
             }
         });
 
@@ -206,7 +221,6 @@ export class GraphView extends Component {
             }
         });
 
-        this.updateCounts();
     }
 
     /**
@@ -220,7 +234,6 @@ export class GraphView extends Component {
         if (newNodes.length > 0) this.nodes.add(newNodes);
         if (newEdges.length > 0) this.edges.add(newEdges);
 
-        this.updateCounts();
     }
 
     onNodeClicked(nodeId) {
@@ -239,7 +252,6 @@ export class GraphView extends Component {
         const type = nodeData._type || 'Unknown';
         const props = nodeData._properties || {};
         const propKeys = Object.keys(props);
-        const isLocked = nodeData.fixed === true;
 
         const coreProps = [
             { key: 'name', val: nodeData._name },
@@ -247,105 +259,34 @@ export class GraphView extends Component {
         ].filter((p) => p.val);
 
         sidebarContent.innerHTML = `
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-bold text-white">${this.escapeHtml(type)}</h3>
-                <button id="closeSidebar" class="text-gray-400 hover:text-white">
-                    <i class="fas fa-times text-lg"></i>
-                </button>
+            <div class="mb-2">
+                <h3 class="text-sm font-bold text-white">${this.escapeHtml(type)}</h3>
+                <span class="text-xs text-gray-500 font-mono">${this.escapeHtml(nodeId)}</span>
             </div>
-
-            <div class="mb-4 pb-4 border-b border-dark-border">
-                <span class="text-xs text-gray-500 font-mono">ID: ${this.escapeHtml(nodeId)}</span>
-            </div>
-
-            <div class="mb-4 pb-4 border-b border-dark-border flex gap-2">
-                <button id="lockNode" class="flex-1 px-3 py-2 rounded text-sm font-medium transition-colors ${
-                    isLocked
-                        ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
-                        : 'bg-dark-bg border border-dark-border hover:bg-dark-hover text-gray-300'
-                }">
-                    <i class="fas ${isLocked ? 'fa-lock' : 'fa-lock-open'} mr-2"></i>
-                    ${isLocked ? 'Unlock' : 'Lock'}
-                </button>
-                <button id="expandNode" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition-colors">
-                    <i class="fas fa-expand-arrows-alt mr-2"></i>
-                    Expand
-                </button>
-            </div>
-
-            <div>
-                <label class="block text-xs text-gray-400 mb-2 uppercase tracking-wider">Properties</label>
-                <div class="space-y-2">
-                    ${[...coreProps.map((p) => this.renderProperty(p.key, p.val)),
-                       ...propKeys.map((key) => this.renderProperty(key, props[key]))
-                    ].join('')}
-                    ${coreProps.length === 0 && propKeys.length === 0
-                        ? '<p class="text-sm text-gray-500 italic">No properties</p>'
-                        : ''
-                    }
-                </div>
+            <div class="space-y-1">
+                ${[...coreProps.map((p) => this.renderProperty(p.key, p.val)),
+                   ...propKeys.map((key) => this.renderProperty(key, props[key]))
+                ].join('')}
+                ${coreProps.length === 0 && propKeys.length === 0
+                    ? '<p class="text-xs text-gray-500 italic">No properties</p>'
+                    : ''
+                }
             </div>
         `;
-
-        this.querySelector('#closeSidebar').addEventListener('click', () => this.hideSidebar());
-
-        this.querySelector('#lockNode').addEventListener('click', () => {
-            this.toggleLock(nodeId);
-            this.showSidebar(nodeId);
-        });
-
-        this.querySelector('#expandNode').addEventListener('click', () => {
-            this.expandNode(nodeId);
-        });
     }
 
     renderProperty(key, val) {
         const displayVal = typeof val === 'string'
-            ? (val.length > 200 ? val.substring(0, 200) + '...' : val)
+            ? (val.length > 120 ? val.substring(0, 120) + '...' : val)
             : JSON.stringify(val);
         return `
-            <div class="bg-dark-bg rounded p-3 border border-dark-border">
-                <div class="text-xs text-gray-500 mb-1">${this.escapeHtml(key)}</div>
-                <div class="text-sm text-gray-200 break-words">${this.escapeHtml(displayVal)}</div>
+            <div class="bg-dark-bg rounded px-2 py-1 border border-dark-border">
+                <span class="text-xs text-gray-500">${this.escapeHtml(key)}: </span>
+                <span class="text-xs text-gray-200 break-words">${this.escapeHtml(displayVal)}</span>
             </div>
         `;
     }
 
-    hideSidebar() {
-        const sidebar = this.querySelector('#sidebar');
-        sidebar.classList.add('hidden');
-        this.selectedNodeId = null;
-        if (this.network) {
-            this.network.unselectAll();
-        }
-    }
-
-    toggleLock(nodeId) {
-        const nodeData = this.nodes.get(nodeId);
-        if (!nodeData) return;
-
-        if (nodeData.fixed) {
-            this.nodes.update({ id: nodeId, fixed: false });
-        } else {
-            const positions = this.network.getPositions([nodeId]);
-            const pos = positions[nodeId];
-            this.nodes.update({ id: nodeId, fixed: true, x: pos.x, y: pos.y });
-        }
-    }
-
-    updateCounts() {
-        const nodeCountEl = this.querySelector('#nodeCount');
-        const relCountEl = this.querySelector('#relationshipCount');
-        if (!nodeCountEl || !relCountEl) return;
-
-        if (this.nodes && this.edges) {
-            nodeCountEl.textContent = `${this.nodes.length} nodes`;
-            relCountEl.textContent = `${this.edges.length} relationships`;
-        } else {
-            nodeCountEl.textContent = '0 nodes';
-            relCountEl.textContent = '0 relationships';
-        }
-    }
 
     truncate(text, max) {
         if (!text) return '';
@@ -357,53 +298,17 @@ export class GraphView extends Component {
         return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    bindEvents() {
-        this.querySelector('#loadKnowledgeBases')?.addEventListener('click', () => this.loadKnowledgeBases());
-        this.querySelector('#loadFullGraph')?.addEventListener('click', () => this.loadFullGraph());
-        this.querySelector('#clearGraph')?.addEventListener('click', () => {
-            if (this.network) {
-                this.network.destroy();
-                this.network = null;
-                this.nodes = null;
-                this.edges = null;
-            }
-            this.hideSidebar();
-            this.updateCounts();
-        });
-    }
-
     postRender() {
-        // Events bound in checkGraphConnection -> bindEvents after template is ready
+        // Graph initialized in checkGraphConnection on connectedCallback
     }
 
     template() {
         return `
             <div class="h-full flex flex-col">
-                <div class="flex-shrink-0 mb-3 flex gap-3 items-center">
-                    <button id="loadKnowledgeBases" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm">
-                        <i class="fas fa-brain mr-1.5"></i>Knowledge Bases
-                    </button>
-                    <button id="loadFullGraph" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-sm">
-                        <i class="fas fa-project-diagram mr-1.5"></i>Full Graph
-                    </button>
-                    <button id="clearGraph" class="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm">
-                        <i class="fas fa-eraser mr-1.5"></i>Clear
-                    </button>
-                    <div class="flex-1"></div>
-                    <div class="text-xs text-gray-500 flex items-center gap-2">
-                        <span id="nodeCount">0 nodes</span>
-                        <span>|</span>
-                        <span id="relationshipCount">0 relationships</span>
-                    </div>
-                </div>
-
-                <div class="flex-1 min-h-0 flex">
-                    <div id="graphMain" class="flex-1 min-w-0 h-full">
-                        <div id="graphContainer" class="h-full w-full rounded-lg graph-canvas"></div>
-                    </div>
-
-                    <div id="sidebar" class="hidden w-80 flex-shrink-0 ml-3 bg-dark-surface rounded-lg border border-dark-border overflow-y-auto">
-                        <div id="sidebarContent" class="p-4"></div>
+                <div class="flex-1 min-h-0 relative">
+                    <div id="graphContainer" class="h-full w-full rounded-lg graph-canvas"></div>
+                    <div id="sidebar" class="hidden absolute top-2 right-2 w-64 max-h-72 overflow-y-auto bg-dark-surface rounded-lg border border-dark-border shadow-lg opacity-90">
+                        <div id="sidebarContent" class="p-3"></div>
                     </div>
                 </div>
             </div>

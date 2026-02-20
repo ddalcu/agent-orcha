@@ -43,10 +43,11 @@ export class DirectMapper {
         const cacheKey = `${entityMapping.type}::${entityId}`;
         if (entityCache.has(cacheKey)) continue; // Deduplicate
 
-        // Build entity name
+        // Build entity name — skip if null
         const name = entityMapping.nameColumn
           ? row[entityMapping.nameColumn]
           : `${entityMapping.type}-${entityId}`;
+        if (!name) continue;
 
         // Extract properties
         const properties: Record<string, any> = {};
@@ -94,15 +95,51 @@ export class DirectMapper {
             continue;
           }
 
-          relationships.push({
-            sourceName: sourceEntity.name,
-            sourceType: sourceEntity.type,
-            targetName: targetEntity.name,
-            targetType: targetEntity.type,
-            type: relMapping.type,
-            description: `${relMapping.source} ${relMapping.type} ${relMapping.target}`,
-            weight: 1.0,
-          });
+          if (relMapping.groupNode) {
+            const groupKey = `GroupNode::${targetId}::${relMapping.groupNode}`;
+
+            if (!entityCache.has(groupKey)) {
+              const groupEntity: ExtractedEntity = {
+                name: `${relMapping.groupNode} (${targetEntity.name})`,
+                type: 'GroupNode',
+                description: `${relMapping.groupNode} group under ${targetEntity.name}`,
+                properties: { label: relMapping.groupNode, parentName: targetEntity.name, sourceChunkIds: [] },
+              };
+              entities.push(groupEntity);
+              entityCache.set(groupKey, groupEntity);
+
+              relationships.push({
+                sourceName: groupEntity.name,
+                sourceType: 'GroupNode',
+                targetName: targetEntity.name,
+                targetType: targetEntity.type,
+                type: 'CHILD_OF',
+                description: `${relMapping.groupNode} CHILD_OF ${targetEntity.name}`,
+                weight: 1.0,
+              });
+            }
+
+            const groupEntity = entityCache.get(groupKey)!;
+            relationships.push({
+              sourceName: sourceEntity.name,
+              sourceType: sourceEntity.type,
+              targetName: groupEntity.name,
+              targetType: 'GroupNode',
+              type: relMapping.type,
+              description: `${relMapping.source} ${relMapping.type} ${relMapping.groupNode}`,
+              weight: 1.0,
+            });
+          } else {
+            relationships.push({
+              sourceName: sourceEntity.name,
+              sourceType: sourceEntity.type,
+              targetName: targetEntity.name,
+              targetType: targetEntity.type,
+              type: relMapping.type,
+              description: `${relMapping.source} ${relMapping.type} ${relMapping.target}`,
+              weight: 1.0,
+            });
+          }
         }
       }
     }
