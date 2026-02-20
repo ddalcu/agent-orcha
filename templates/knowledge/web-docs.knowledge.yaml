@@ -1,10 +1,10 @@
 name: web-docs
-description: Knowledge base sourced from a web page
+description: Solar System knowledge base scraped from Wikipedia
 
 source:
   type: web
-  url: https://example.com/docs
-  selector: ".main-content"
+  url: https://en.wikipedia.org/wiki/Solar_System
+  selector: ".mw-parser-output"
 
 loader:
   type: text

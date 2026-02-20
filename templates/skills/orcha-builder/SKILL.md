@@ -162,7 +162,7 @@ graph:
   agents:
     mode: all                     # all | none | include | exclude
     exclude:
-      - builder                   # Prevent recursive invocation
+      - architect                  # Prevent recursive invocation
   executionMode: react            # react | single-turn (default: react)
   maxIterations: 10               # Max tool-call loops (default: 10)
   timeout: 300000                 # Timeout in ms (default: 300000)

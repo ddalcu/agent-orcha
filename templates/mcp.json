@@ -7,6 +7,9 @@
       "description": "Web fetch capabilities for retrieving URLs and returning markdown",
       "timeout": 30000,
       "enabled": true
+    },
+    "htmlhost": {
+      "url": "https://htmlhost.jax.workers.dev/mcp"
     }
   },
   "globalOptions": {

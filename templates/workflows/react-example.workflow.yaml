@@ -1,5 +1,5 @@
 name: react-research
-description: Autonomous research workflow using ReAct pattern with automatic tool discovery
+description: Autonomous research workflow that discovers and uses all available tools and knowledge bases
 version: "1.0.0"
 type: react
 
@@ -8,64 +8,34 @@ input:
     topic:
       type: string
       required: true
-      description: The research topic
-    budget:
-      type: string
-      required: false
-      description: Optional budget constraint
+      description: The research topic or question
 
-# No explicit steps - prompt-driven execution
 prompt:
   system: |
-    You are a research assistant with access to tools and agents.
-    Your task is to thoroughly research the given topic and provide a comprehensive analysis.
+    You are a research assistant with access to knowledge bases, tools, and other agents.
 
-    You have access to:
-    - Knowledge base search tools (vector stores)
-    - Function tools for calculations and data processing
-    - MCP tools for external APIs
-    - Other specialized agents that you can call as needed
-
-    IMPORTANT: You can call multiple tools at once in parallel. Think carefully about what tools
-    you need, then call them all together. After receiving the tool results, synthesize them
-    into your final answer.
-
-    If the user hasn't provided a budget but it's relevant to the research, use the ask_user tool
-    to request this information before proceeding with budget-related analysis.
+    Available knowledge bases include company org charts, product inventories, web content, and more.
+    You also have access to calculator functions and other utility tools.
 
     Research process:
-    1. Identify all tools/agents you need to call
-    2. Call them in parallel (all at once)
-    3. Synthesize the results into a comprehensive report
+    1. Identify which knowledge bases and tools are relevant to the topic
+    2. Search multiple sources in parallel when possible
+    3. Synthesize the results into a comprehensive, well-structured answer
 
-  goal: "Research and analyze: {{input.topic}}"
+    If you need clarification from the user, use the ask_user tool.
+  goal: "Research and answer: {{input.topic}}"
 
-# ReAct workflow configuration
 graph:
-  model: default  # LLM config reference (from llm.json)
-
-  # Execution mode:
-  # - "react": Full ReAct loop, allows multiple rounds of tool calls (default)
-  # - "single-turn": Calls tools once and returns, prevents looping
-  executionMode: single-turn
-
-  # Tool discovery - discover all available tools
+  model: default
+  executionMode: react
   tools:
-    mode: all  # Options: all, include, exclude, none
-    sources: [mcp, knowledge, function, builtin]
-    # Optionally filter specific tools:
-    # include: ["mcp:fetch"]
-    # exclude: ["function:dangerous"]
-
-  # Agent discovery - discover all available agents
+    mode: all
+    sources: [knowledge, function, builtin]
   agents:
-    mode: all  # Options: all, include, exclude, none
-    # Optionally filter specific agents:
-    # include: [math, time]
-    # exclude: [admin]
-
-  # Execution limits
-  maxIterations: 10  # Max tool-calling iterations
+    mode: all
+    exclude:
+      - architect
+  maxIterations: 10
   timeout: 300000
 
 output:
@@ -75,10 +45,9 @@ config:
   onError: stop
 
 metadata:
-  category: research
+  category: example
   tags:
+    - demo
     - react
     - autonomous
-    - research
     - tool-discovery
-    - human-in-the-loop
