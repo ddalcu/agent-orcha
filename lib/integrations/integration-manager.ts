@@ -62,6 +62,23 @@ export class IntegrationManager {
     }
   }
 
+  async syncAgent(orchestrator: Orchestrator, agentName: string): Promise<void> {
+    const existing = this.connectors.get(agentName);
+    if (existing) {
+      for (const c of existing) c.close();
+      this.connectors.delete(agentName);
+    }
+
+    const agent = orchestrator.agents.get(agentName);
+    if (!agent?.integrations) return;
+
+    for (const integration of agent.integrations) {
+      if (integration.type === 'collabnook') {
+        await this.startCollabnook(orchestrator, agent, integration);
+      }
+    }
+  }
+
   close(): void {
     for (const agentConnectors of this.connectors.values()) {
       for (const connector of agentConnectors) {

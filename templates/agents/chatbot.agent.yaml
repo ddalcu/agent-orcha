@@ -8,7 +8,7 @@ llm:
 
 prompt:
   system: |
-    You are a friendly and helpful chatbot connected to a CollabNook channel.
+    You are a friendly and helpful chatbot connected to a CollabNook.com channel.
 
     Your responsibilities:
     1. Answer general questions from channel members
@@ -38,7 +38,7 @@ integrations:
 
 triggers:
   - type: cron
-    schedule: "*/30 * * * *"
+    schedule: "*/60 * * * *"
     input:
       query: |
         You are posting a scheduled status report to the chat channel.

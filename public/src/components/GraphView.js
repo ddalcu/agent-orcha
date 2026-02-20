@@ -96,6 +96,51 @@ export class GraphView extends Component {
         }
     }
 
+    collapseNode(nodeId) {
+        // Remove from expanded FIRST to prevent infinite recursion
+        // (child neighbors that are also expanded won't recurse back here)
+        this.expandedNodes.delete(nodeId);
+        this.leafNodes.delete(nodeId);
+
+        const neighborIds = this.edges.get()
+            .filter((e) => e.from === nodeId || e.to === nodeId)
+            .map((e) => (e.from === nodeId ? e.to : e.from));
+
+        // Recursively collapse expanded children first
+        for (const nid of neighborIds) {
+            if (this.expandedNodes.has(nid)) {
+                this.collapseNode(nid);
+            }
+        }
+
+        // Re-query neighbors after recursive collapses may have changed the graph
+        const currentNeighborIds = this.edges.get()
+            .filter((e) => e.from === nodeId || e.to === nodeId)
+            .map((e) => (e.from === nodeId ? e.to : e.from));
+
+        const removableNodes = currentNeighborIds.filter((nid) => {
+            if (this.expandedNodes.has(nid)) return false;
+            const allEdges = this.edges.get().filter(
+                (e) => e.from === nid || e.to === nid
+            );
+            return allEdges.every(
+                (e) => e.from === nodeId || e.to === nodeId
+            );
+        });
+
+        if (removableNodes.length > 0) {
+            const removeSet = new Set(removableNodes);
+            const edgesToRemove = this.edges.get().filter(
+                (e) => removeSet.has(e.from) || removeSet.has(e.to)
+            );
+            this.edges.remove(edgesToRemove.map((e) => e.id));
+            this.nodes.remove(removableNodes);
+            removableNodes.forEach((nid) => this.leafNodes.delete(nid));
+        }
+
+        this.updateNodeIndicator(nodeId);
+    }
+
     updateNodeIndicator(nodeId) {
         const nodeData = this.nodes.get(nodeId);
         if (!nodeData || !nodeData.icon) return;
@@ -189,10 +234,11 @@ export class GraphView extends Component {
             physics: {
                 stabilization: false,
                 barnesHut: {
-                    gravitationalConstant: -3000,
-                    springLength: 200,
+                    gravitationalConstant: -4000,
+                    springLength: 250,
                     springConstant: 0.02,
                     damping: 0.3,
+                    avoidOverlap: 0.8,
                 },
             },
             interaction: {
@@ -217,7 +263,12 @@ export class GraphView extends Component {
 
         this.network.on('doubleClick', (params) => {
             if (params.nodes.length > 0) {
-                this.expandNode(params.nodes[0]);
+                const nodeId = params.nodes[0];
+                if (this.expandedNodes.has(nodeId)) {
+                    this.collapseNode(nodeId);
+                } else {
+                    this.expandNode(nodeId);
+                }
             }
         });
 

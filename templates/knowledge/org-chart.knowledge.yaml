@@ -1,0 +1,49 @@
+name: org-chart
+description: Company org chart with personnel directory and performance reviews
+
+source:
+  type: file
+  path: knowledge/org-chart/personnel.csv
+
+loader:
+  type: csv
+
+splitter:
+  type: character
+  chunkSize: 800
+  chunkOverlap: 0
+
+embedding: default
+
+search:
+  defaultK: 5
+
+graph:
+  directMapping:
+    entities:
+      - type: Department
+        idColumn: department_id
+        nameColumn: department_name
+        properties: []
+      - type: Employee
+        idColumn: employee_id
+        nameColumn: employee_name
+        properties:
+          - title
+          - location
+          - hire_date
+          - status
+          - rating
+          - strengths
+          - areas_for_growth
+    relationships:
+      - type: WORKS_IN
+        source: Employee
+        target: Department
+        sourceIdColumn: employee_id
+        targetIdColumn: department_id
+      - type: REPORTS_TO
+        source: Employee
+        target: Employee
+        sourceIdColumn: employee_id
+        targetIdColumn: manager_id

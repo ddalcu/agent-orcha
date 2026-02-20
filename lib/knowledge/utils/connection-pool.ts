@@ -1,10 +1,12 @@
+import { DatabaseSync } from 'node:sqlite';
+import * as path from 'path';
 import { Pool as PgPool } from 'pg';
 import mysql from 'mysql2/promise';
 import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('ConnectionPool');
 
-type ConnectionPool = PgPool | mysql.Pool;
+type ConnectionPool = PgPool | mysql.Pool | DatabaseSync;
 
 // Singleton map of connection pools keyed by connection string
 const poolCache = new Map<string, ConnectionPool>();
@@ -23,20 +25,20 @@ export function getPool(connectionString: string): ConnectionPool {
   logger.info(`Creating new connection pool`);
 
   // Detect database type from connection string
-  const isPostgres = connectionString.startsWith('postgres://') || connectionString.startsWith('postgresql://');
-  const isMysql = connectionString.startsWith('mysql://');
-
-  if (!isPostgres && !isMysql) {
-    throw new Error(`Unsupported database type. Connection string must start with postgresql:// or mysql://`);
-  }
+  const dbType = getDatabaseType(connectionString);
 
   let pool: ConnectionPool;
 
-  if (isPostgres) {
+  if (dbType === 'sqlite') {
+    const filePath = connectionString.replace(/^sqlite:\/\//, '');
+    const resolved = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+    logger.info(`Opening SQLite database: ${resolved}`);
+    pool = new DatabaseSync(resolved);
+  } else if (dbType === 'postgresql') {
     logger.info(`Creating PostgreSQL connection pool`);
     pool = new PgPool({
       connectionString,
-      max: 10, // Maximum pool size
+      max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
     });
@@ -65,7 +67,9 @@ export async function closeAllPools(): Promise<void> {
 
   for (const [connString, pool] of poolCache.entries()) {
     try {
-      if ('end' in pool) {
+      if (pool instanceof DatabaseSync) {
+        pool.close();
+      } else if ('end' in pool) {
         await pool.end();
       }
       poolCache.delete(connString);
@@ -78,12 +82,15 @@ export async function closeAllPools(): Promise<void> {
 /**
  * Detect database type from connection string
  */
-export function getDatabaseType(connectionString: string): 'postgresql' | 'mysql' {
+export function getDatabaseType(connectionString: string): 'postgresql' | 'mysql' | 'sqlite' {
   if (connectionString.startsWith('postgres://') || connectionString.startsWith('postgresql://')) {
     return 'postgresql';
   }
   if (connectionString.startsWith('mysql://')) {
     return 'mysql';
   }
-  throw new Error(`Unsupported database type in connection string: ${connectionString}`);
+  if (connectionString.startsWith('sqlite://')) {
+    return 'sqlite';
+  }
+  throw new Error(`Unsupported database type. Connection string must start with postgresql://, mysql://, or sqlite://`);
 }

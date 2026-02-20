@@ -69,9 +69,13 @@ export class CSVLoader {
     for (let i = 1; i < lines.length; i++) {
       const values = this.parseCsvLine(lines[i]!);
       const pairs = headers.map((h, idx) => `${h}: ${values[idx] ?? ''}`);
+      const rawRow: Record<string, string> = {};
+      for (let j = 0; j < headers.length; j++) {
+        rawRow[headers[j]!] = values[j] ?? '';
+      }
       documents.push(({
         pageContent: pairs.join('\n'),
-        metadata: { source: this.filePath, row: i },
+        metadata: { source: this.filePath, row: i, _rawRow: rawRow },
       }));
     }
 

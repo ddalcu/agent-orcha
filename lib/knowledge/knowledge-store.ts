@@ -73,6 +73,15 @@ export class KnowledgeStore {
     const content = await fs.readFile(filePath, 'utf-8');
     const parsed = parseYaml(content);
     const config = KnowledgeConfigSchema.parse(parsed);
+
+    // Resolve sqlite:// paths relative to projectRoot so they work regardless of cwd
+    if (config.source.type === 'database' && config.source.connectionString.startsWith('sqlite://')) {
+      const filePart = config.source.connectionString.replace(/^sqlite:\/\//, '');
+      if (!path.isAbsolute(filePart)) {
+        config.source.connectionString = `sqlite://${path.resolve(this.projectRoot, filePart)}`;
+      }
+    }
+
     this.configs.set(config.name, config);
     return config;
   }

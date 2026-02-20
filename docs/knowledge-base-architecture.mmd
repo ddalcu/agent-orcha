@@ -15,7 +15,6 @@ flowchart TB
             DIR["Directory<br/>(glob patterns)"]
             DB["Database<br/>(SQL query)"]
             WEB["Web<br/>(HTTP scrape)"]
-            S3["S3/MinIO<br/>(object storage)"]
         end
     end
 
@@ -34,9 +33,9 @@ flowchart TB
     %% ============================================
     subgraph SHARED["Shared Pipeline Steps"]
         direction TB
-        LOAD_DOCS["1. Load Documents<br/>TextLoader | PDFLoader | CSVLoader<br/>JSONLoader | MarkdownLoader<br/>DatabaseLoader | WebLoader | S3Loader"]
+        LOAD_DOCS["1. Load Documents<br/>TextLoader | PDFLoader | CSVLoader<br/>JSONLoader | MarkdownLoader<br/>DatabaseLoader | WebLoader"]
         SPLIT["2. Split into Chunks<br/>CharacterTextSplitter |<br/>RecursiveCharacterTextSplitter<br/>chunkSize (default 1000)<br/>chunkOverlap (default 200)"]
-        HASH["3. Compute Source Hash<br/>SHA-256 of concatenated content"]
+        HASH["3. Compute Source Hash<br/>SHA-256 of source content"]
     end
 
     %% ============================================
@@ -57,26 +56,14 @@ flowchart TB
     end
 
     %% ============================================
-    %% ENTITY EXTRACTION (optional - when graph: present)
+    %% ENTITY EXTRACTION (optional - when graph.directMapping present)
     %% ============================================
-    HAS_GRAPH{"config.graph<br/>present?"}
+    HAS_GRAPH{"config.graph<br/>with directMapping?"}
 
-    subgraph EXTRACT["Entity Extraction (optional)"]
+    subgraph EXTRACT["Direct Mapping (graph.directMapping)"]
         direction TB
-        EXTRACT_ROUTE{"extractionMode?"}
-
-        subgraph LLM_MODE["extractionMode: 'llm'"]
-            direction TB
-            LLM_DESC["EntityExtractor.extractFromChunks()<br/>Sequential chunk processing"]
-            LLM_PROMPT["Per-chunk LLM Prompt:<br/>Entity types to extract<br/>Relationship types to extract<br/>JSON output schema"]
-            LLM_DEDUP["Deduplication:<br/>Entities: key = name::type (lowercase)<br/>keeps longer description, merges chunks<br/>Relationships: key = src>type>tgt<br/>averages weights, keeps longer desc"]
-        end
-
-        subgraph DIRECT_MODE["extractionMode: 'direct'"]
-            direction TB
-            DIRECT_DESC["DirectMapper.mapQueryResults()<br/>Maps SQL rows directly to graph"]
-            DIRECT_CONF["Configuration:<br/>entities: type, idColumn,<br/>nameColumn, properties<br/>relationships: type, source,<br/>target, sourceIdColumn"]
-        end
+        DIRECT_DESC["DirectMapper.mapQueryResults()<br/>Maps SQL rows directly to graph<br/>100% data preservation"]
+        DIRECT_CONF["Configuration:<br/>entities: type, idColumn,<br/>nameColumn, properties<br/>relationships: type, source,<br/>target, sourceIdColumn"]
     end
 
     subgraph ENTITY_STORE["Entity Storage"]
@@ -160,14 +147,10 @@ flowchart TB
     %% Entity extraction check
     INSERT_CHUNKS --> HAS_GRAPH
     HAS_GRAPH -->|"no"| SQLITE
-    HAS_GRAPH -->|"yes"| EXTRACT_ROUTE
+    HAS_GRAPH -->|"yes"| DIRECT_DESC
 
-    %% Extraction routing
-    EXTRACT_ROUTE -->|"'llm'"| LLM_DESC
-    EXTRACT_ROUTE -->|"'direct'"| DIRECT_DESC
-    LLM_DESC --> LLM_PROMPT --> LLM_DEDUP
+    %% Direct mapping
     DIRECT_DESC --> DIRECT_CONF
-    LLM_DEDUP --> EMBED_ENTITIES
     DIRECT_CONF --> EMBED_ENTITIES
 
     %% Entity storage
@@ -210,13 +193,12 @@ flowchart TB
     classDef embedStyle fill:#FFF8E1,stroke:#F9A825,stroke-width:2px,color:#F57F17
     classDef skipStyle fill:#C8E6C9,stroke:#388E3C,stroke-width:2px,color:#1B5E20
 
-    class YAML,FILES,DIR,DB,WEB,S3 inputStyle
+    class YAML,FILES,DIR,DB,WEB inputStyle
     class LOAD_CONFIGS,INIT,METADATA managerStyle
     class LOAD_DOCS,SPLIT,HASH sharedStyle
-    class CHECK_DB,HAS_GRAPH,EXTRACT_ROUTE,S3_ROUTE routeStyle
+    class CHECK_DB,HAS_GRAPH routeStyle
     class SKIP skipStyle
     class TEST_EMBED,OPEN_DB,EMBED_CHUNKS,INSERT_CHUNKS embedStyle
-    class LLM_DESC,LLM_PROMPT,LLM_DEDUP extractStyle
     class DIRECT_DESC,DIRECT_CONF extractStyle
     class EMBED_ENTITIES,INSERT_ENTITIES,INSERT_RELS embedStyle
     class T_CHUNKS,T_CHUNK_VEC,T_ENTITIES,T_ENTITY_VEC,T_RELS,T_META sqliteStyle

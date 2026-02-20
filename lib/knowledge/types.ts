@@ -17,7 +17,7 @@ export const FileSourceConfigSchema = z.object({
 
 export const DatabaseSourceConfigSchema = z.object({
   type: z.literal('database'),
-  connectionString: z.string().describe('Database connection string (postgresql:// or mysql://)'),
+  connectionString: z.string().describe('Database connection string (postgresql://, mysql://, or sqlite://)'),
   query: z.string().describe('SQL query to fetch documents'),
   contentColumn: z.string().default('content').describe('Column containing document content'),
   metadataColumns: z.array(z.string()).optional().describe('Columns to include as metadata'),

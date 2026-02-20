@@ -345,7 +345,8 @@ export class Orchestrator {
     const absolutePath = path.resolve(this.config.projectRoot, relativePath);
 
     if (relativePath.endsWith('.agent.yaml')) {
-      await this.agentLoader.loadOne(absolutePath);
+      const agent = await this.agentLoader.loadOne(absolutePath);
+      await this.integrationManager?.syncAgent(this, agent.name);
       return 'agent';
     }
 

@@ -1,0 +1,78 @@
+name: pet-store
+description: Pet store inventory with species, breeds, pets, and supplies
+
+source:
+  type: database
+  connectionString: sqlite://knowledge/pet-store/pet-store.db
+  query: |
+    SELECT
+      p.id       AS pet_id,
+      p.name     AS pet_name,
+      p.age,
+      p.price,
+      p.status,
+      p.description AS content,
+      b.id       AS breed_id,
+      b.name     AS breed_name,
+      b.size,
+      b.temperament,
+      b.avg_lifespan,
+      s.id       AS species_id,
+      s.name     AS species_name
+    FROM pets p
+    JOIN breeds b ON p.breed_id = b.id
+    JOIN species s ON b.species_id = s.id
+  contentColumn: content
+  metadataColumns:
+    - pet_id
+    - pet_name
+    - breed_name
+    - species_name
+    - status
+    - price
+
+loader:
+  type: text
+
+splitter:
+  type: character
+  chunkSize: 500
+  chunkOverlap: 50
+
+embedding: default
+
+search:
+  defaultK: 5
+
+graph:
+  directMapping:
+    entities:
+      - type: Species
+        idColumn: species_id
+        nameColumn: species_name
+        properties: []
+      - type: Breed
+        idColumn: breed_id
+        nameColumn: breed_name
+        properties:
+          - size
+          - temperament
+          - avg_lifespan
+      - type: Pet
+        idColumn: pet_id
+        nameColumn: pet_name
+        properties:
+          - age
+          - price
+          - status
+    relationships:
+      - type: IS_BREED
+        source: Breed
+        target: Species
+        sourceIdColumn: breed_id
+        targetIdColumn: species_id
+      - type: BELONGS_TO
+        source: Pet
+        target: Breed
+        sourceIdColumn: pet_id
+        targetIdColumn: breed_id

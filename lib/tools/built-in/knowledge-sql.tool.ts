@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
 import type { StructuredTool } from '../../types/llm-types.ts';
@@ -14,7 +15,7 @@ export function createKnowledgeSqlTool(
 ): StructuredTool {
   const dbSource = config.source as DatabaseSourceConfig;
   const dbType = getDatabaseType(dbSource.connectionString);
-  const exampleQueries = buildSqlExamples(dbSource);
+  const exampleQueries = buildSqlExamples(dbSource, dbType);
 
   return tool(
     async ({ query, limit }) => {
@@ -32,7 +33,9 @@ export function createKnowledgeSqlTool(
       try {
         const pool = getPool(dbSource.connectionString);
 
-        if (dbType === 'postgresql') {
+        if (dbType === 'sqlite') {
+          return executeSqliteReadonly(pool as DatabaseSync, finalQuery);
+        } else if (dbType === 'postgresql') {
           return await executePostgresReadonly(pool, finalQuery);
         } else {
           return await executeMysqlReadonly(pool, finalQuery);
@@ -106,7 +109,17 @@ async function executeMysqlReadonly(pool: any, query: string): Promise<string> {
   }
 }
 
-function buildSqlExamples(dbSource: DatabaseSourceConfig): string {
+function executeSqliteReadonly(db: DatabaseSync, query: string): string {
+  const rows = db.prepare(query).all();
+
+  if (!rows || rows.length === 0) {
+    return 'Query returned no results.';
+  }
+
+  return JSON.stringify(rows, null, 2);
+}
+
+function buildSqlExamples(dbSource: DatabaseSourceConfig, dbType: string): string {
   // Parse table names from the original query
   const tableMatch = dbSource.query.match(/FROM\s+"?(\w+)"?/i);
   const tableName = tableMatch ? tableMatch[1] : 'table';
@@ -125,8 +138,9 @@ function buildSqlExamples(dbSource: DatabaseSourceConfig): string {
     examples.push(`- SELECT ${selectCols} FROM "${tableName}" LIMIT 10`);
   }
 
-  // Content search
-  examples.push(`- SELECT "${contentCol}" FROM "${tableName}" WHERE "${contentCol}" ILIKE '%keyword%' LIMIT 10`);
+  // Content search — SQLite and MySQL don't support ILIKE
+  const likeOp = dbType === 'postgresql' ? 'ILIKE' : 'LIKE';
+  examples.push(`- SELECT "${contentCol}" FROM "${tableName}" WHERE "${contentCol}" ${likeOp} '%keyword%' LIMIT 10`);
 
   // Aggregate if there's a useful column
   if (metaCols.length > 1) {

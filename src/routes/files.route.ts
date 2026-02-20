@@ -145,7 +145,19 @@ export const filesRoutes: FastifyPluginAsync = async (fastify) => {
     await fs.writeFile(fullPath, content, 'utf-8');
     logger.info(`[IDE] File created: ${relativePath}`);
 
-    return { success: true, path: relativePath };
+    let reloaded = 'none';
+    try {
+      reloaded = await fastify.orchestrator.reloadFile(relativePath);
+      if (reloaded !== 'none') {
+        logger.info(`[IDE] Reloaded ${reloaded} config from: ${relativePath}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(`[IDE] Failed to reload config from ${relativePath}: ${message}`);
+      return { success: true, path: relativePath, reloaded: 'error', reloadError: message };
+    }
+
+    return { success: true, path: relativePath, reloaded };
   });
 
   fastify.post<{ Body: RenameBody }>('/rename', async (request, reply) => {
