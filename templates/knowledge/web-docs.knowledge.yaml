@@ -1,0 +1,20 @@
+name: web-docs
+description: Knowledge base sourced from a web page
+
+source:
+  type: web
+  url: https://example.com/docs
+  selector: ".main-content"
+
+loader:
+  type: text
+
+splitter:
+  type: recursive
+  chunkSize: 1000
+  chunkOverlap: 200
+
+embedding: default
+
+search:
+  defaultK: 4

@@ -107,7 +107,7 @@ curl -X POST http://localhost:3000/api/agents/example/invoke \
 ```javascript
 import { Orchestrator } from 'agent-orcha';
 
-const orchestrator = new Orchestrator({ projectRoot: '.' });
+const orchestrator = new Orchestrator({ workspaceRoot: '.' });
 await orchestrator.initialize();
 
 // Invoke an agent

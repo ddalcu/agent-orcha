@@ -142,7 +142,7 @@ See the [Docker Hub page](https://hub.docker.com/r/ddalcu/agent-orcha) for more 
 import { Orchestrator } from 'agent-orcha';
 
 const orchestrator = new Orchestrator({
-  projectRoot: './my-agents-project'
+  workspaceRoot: './my-agents-project'
 });
 
 await orchestrator.initialize();

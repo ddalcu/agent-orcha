@@ -26,27 +26,22 @@ function formatResponse(entities: EntityRow[], relationships: RelationshipRow[])
  */
 function buildKbNodes(orchestrator: any) {
   const configs = orchestrator.knowledge.listConfigs();
-  return configs
-    .filter((config: any) => {
-      const store = orchestrator.knowledge.getSqliteStore(config.name);
-      return store && store.getEntityCount() > 0;
-    })
-    .map((config: any) => {
-      const sqliteStore = orchestrator.knowledge.getSqliteStore(config.name);
-      return {
-        id: `kb::${config.name}`,
-        type: 'KnowledgeBase',
-        name: config.name,
-        description: config.description || config.name,
-        properties: {
-          sourceType: config.source?.type ?? 'unknown',
-          hasGraph: !!config.graph,
-          chunkCount: sqliteStore?.getChunkCount() ?? 0,
-          entityCount: sqliteStore?.getEntityCount() ?? 0,
-          edgeCount: sqliteStore?.getRelationshipCount() ?? 0,
-        },
-      };
-    });
+  return configs.map((config: any) => {
+    const sqliteStore = orchestrator.knowledge.getSqliteStore(config.name);
+    return {
+      id: `kb::${config.name}`,
+      type: 'KnowledgeBase',
+      name: config.name,
+      description: config.description || config.name,
+      properties: {
+        sourceType: config.source?.type ?? 'unknown',
+        hasGraph: !!config.graph,
+        chunkCount: sqliteStore?.getChunkCount() ?? 0,
+        entityCount: sqliteStore?.getEntityCount() ?? 0,
+        edgeCount: sqliteStore?.getRelationshipCount() ?? 0,
+      },
+    };
+  });
 }
 
 /**
@@ -80,28 +75,28 @@ export const graphRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { limit?: string } }>('/full', async (request, reply) => {
     try {
       const kbNodes = buildKbNodes(fastify.orchestrator);
-      const stores = getEntityStores(fastify.orchestrator);
 
       if (kbNodes.length === 0) {
         return reply.status(404).send({ error: 'No graph stores available.' });
       }
 
-      const rootEntities: EntityRow[] = [];
-      const containsEdges: { id: string; type: string; source: string; target: string; description: string; weight: number }[] = [];
+      const limit = request.query.limit ? parseInt(request.query.limit, 10) : undefined;
+      const stores = getEntityStores(fastify.orchestrator);
+
+      const allEntityNodes: EntityRow[] = [];
+      const allEdges: { id: string; type: string; source: string; target: string; description: string; weight: number }[] = [];
 
       for (const [name, store] of stores) {
-        const entities = store.getAllEntities();
+        let entities = store.getAllEntities();
         const relationships = store.getAllRelationships();
 
-        // Root entities = those not a source of any relationship (tree graphs)
-        // Fallback to all entities for mesh/web graphs where every node is a source
-        const childIds = new Set(relationships.map((r) => r.source_id));
-        const roots = entities.filter((e) => !childIds.has(e.id));
-        const topLevel = roots.length > 0 ? roots : entities;
+        if (limit !== undefined) {
+          entities = entities.slice(0, limit);
+        }
 
-        for (const entity of topLevel) {
-          rootEntities.push(entity);
-          containsEdges.push({
+        for (const entity of entities) {
+          allEntityNodes.push(entity);
+          allEdges.push({
             id: `kb-contains::${name}::${entity.id}`,
             type: 'CONTAINS',
             source: `kb::${name}`,
@@ -110,12 +105,26 @@ export const graphRoutes: FastifyPluginAsync = async (fastify) => {
             weight: 1,
           });
         }
+
+        const entityIds = new Set(entities.map((e) => e.id));
+        for (const rel of relationships) {
+          if (entityIds.has(rel.source_id) && entityIds.has(rel.target_id)) {
+            allEdges.push({
+              id: rel.id,
+              type: rel.type,
+              source: rel.source_id,
+              target: rel.target_id,
+              description: rel.description,
+              weight: rel.weight,
+            });
+          }
+        }
       }
 
-      const formatted = formatResponse(rootEntities, []);
+      const formatted = formatResponse(allEntityNodes, []);
       return {
         nodes: [...kbNodes, ...formatted.nodes],
-        edges: containsEdges,
+        edges: allEdges,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -131,22 +140,16 @@ export const graphRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         const nodeId = decodeURIComponent(request.params.nodeId);
 
-        // Expanding a KnowledgeBase node → return only root entities (depth=1)
+        // Expanding a KnowledgeBase node → return all entities with CONTAINS + relationship edges
         if (nodeId.startsWith('kb::')) {
           const storeName = nodeId.slice(4);
           const store = fastify.orchestrator.knowledge.getSqliteStore(storeName);
           if (!store) return { nodes: [], edges: [] };
 
-          const allEntities = store.getAllEntities();
-          const allRelationships = store.getAllRelationships();
+          const entities = store.getAllEntities();
+          const relationships = store.getAllRelationships();
 
-          // Root entities = those not a source of any relationship (tree graphs)
-          // Fallback to all entities for mesh/web graphs where every node is a source
-          const childIds = new Set(allRelationships.map((r) => r.source_id));
-          const roots = allEntities.filter((e: EntityRow) => !childIds.has(e.id));
-          const rootEntities = roots.length > 0 ? roots : allEntities;
-
-          const containsEdges = rootEntities.map((e: EntityRow) => ({
+          const containsEdges = entities.map((e: EntityRow) => ({
             id: `kb-contains::${storeName}::${e.id}`,
             type: 'CONTAINS',
             source: nodeId,
@@ -155,9 +158,18 @@ export const graphRoutes: FastifyPluginAsync = async (fastify) => {
             weight: 1,
           }));
 
+          const relEdges = relationships.map((r) => ({
+            id: r.id,
+            type: r.type,
+            source: r.source_id,
+            target: r.target_id,
+            description: r.description,
+            weight: r.weight,
+          }));
+
           return {
-            nodes: formatResponse(rootEntities, []).nodes,
-            edges: containsEdges,
+            nodes: formatResponse(entities, []).nodes,
+            edges: [...containsEdges, ...relEdges],
           };
         }
 

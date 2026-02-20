@@ -23,7 +23,7 @@ import { createSandboxReadTool, createSandboxWriteTool, createSandboxEditTool } 
 import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web-tools.ts';
 import { createSandboxBrowserTool } from './sandbox/sandbox-browser-tool.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
-import { buildProjectTools, type ProjectToolDeps, type ProjectResourceSummary } from './tools/project/project-tools.ts';
+import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
 import { TriggerManager } from './triggers/trigger-manager.ts';
 import type { SandboxConfig } from './sandbox/types.ts';
@@ -41,7 +41,7 @@ import type { StructuredTool } from './types/llm-types.ts';
 import { logger } from './logger.ts';
 
 export interface OrchestratorConfig {
-  projectRoot: string;
+  workspaceRoot: string;
   agentsDir?: string;
   workflowsDir?: string;
   knowledgeDir?: string;
@@ -79,22 +79,22 @@ export class Orchestrator {
 
   constructor(config: OrchestratorConfig) {
     this.config = {
-      projectRoot: config.projectRoot,
-      agentsDir: config.agentsDir ?? path.join(config.projectRoot, 'agents'),
-      workflowsDir: config.workflowsDir ?? path.join(config.projectRoot, 'workflows'),
-      knowledgeDir: config.knowledgeDir ?? path.join(config.projectRoot, 'knowledge'),
-      functionsDir: config.functionsDir ?? path.join(config.projectRoot, 'functions'),
-      skillsDir: config.skillsDir ?? path.join(config.projectRoot, 'skills'),
-      mcpConfigPath: config.mcpConfigPath ?? path.join(config.projectRoot, 'mcp.json'),
-      llmConfigPath: config.llmConfigPath ?? path.join(config.projectRoot, 'llm.json'),
-      sandboxConfigPath: config.sandboxConfigPath ?? path.join(config.projectRoot, 'sandbox.json'),
+      workspaceRoot: config.workspaceRoot,
+      agentsDir: config.agentsDir ?? path.join(config.workspaceRoot, 'agents'),
+      workflowsDir: config.workflowsDir ?? path.join(config.workspaceRoot, 'workflows'),
+      knowledgeDir: config.knowledgeDir ?? path.join(config.workspaceRoot, 'knowledge'),
+      functionsDir: config.functionsDir ?? path.join(config.workspaceRoot, 'functions'),
+      skillsDir: config.skillsDir ?? path.join(config.workspaceRoot, 'skills'),
+      mcpConfigPath: config.mcpConfigPath ?? path.join(config.workspaceRoot, 'mcp.json'),
+      llmConfigPath: config.llmConfigPath ?? path.join(config.workspaceRoot, 'llm.json'),
+      sandboxConfigPath: config.sandboxConfigPath ?? path.join(config.workspaceRoot, 'sandbox.json'),
     };
 
     this.agentLoader = new AgentLoader(this.config.agentsDir);
     this.workflowLoader = new WorkflowLoader(this.config.workflowsDir);
     this.knowledgeStoreManager = new KnowledgeStore(
       this.config.knowledgeDir,
-      this.config.projectRoot
+      this.config.workspaceRoot
     );
     this.functionLoader = new FunctionLoader(this.config.functionsDir);
     this.skillLoader = new SkillLoader(this.config.skillsDir);
@@ -102,7 +102,7 @@ export class Orchestrator {
       maxMessagesPerSession: 50,
       sessionTTL: 3600000, // 1 hour
     });
-    this.memoryManager = new MemoryManager(config.projectRoot);
+    this.memoryManager = new MemoryManager(config.workspaceRoot);
   }
 
   async initialize(): Promise<void> {
@@ -122,14 +122,14 @@ export class Orchestrator {
     // Load sandbox config
     await this.loadSandboxConfig();
     const sandboxTools = this.buildSandboxTools();
-    const projectTools = this.buildProjectToolsMap();
+    const workspaceTools = this.buildWorkspaceToolsMap();
 
     this.toolRegistry = new ToolRegistry(
       this.mcpClient,
       this.knowledgeStoreManager,
       this.functionLoader,
       sandboxTools,
-      projectTools,
+      workspaceTools,
     );
     this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader, this.memoryManager);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
@@ -211,11 +211,11 @@ export class Orchestrator {
     return tools;
   }
 
-  private buildProjectToolsMap(): Map<string, StructuredTool> {
-    const deps: ProjectToolDeps = {
-      projectRoot: this.config.projectRoot,
+  private buildWorkspaceToolsMap(): Map<string, StructuredTool> {
+    const deps: WorkspaceToolDeps = {
+      workspaceRoot: this.config.workspaceRoot,
       reloadFile: (relativePath: string) => this.reloadFile(relativePath),
-      listResources: (): ProjectResourceSummary => ({
+      listResources: (): WorkspaceResourceSummary => ({
         agents: this.agentLoader.list().map(a => ({ name: a.name, description: a.description })),
         workflows: this.workflowLoader.list().map(w => ({ name: w.name, description: w.description })),
         skills: this.skillLoader.list().map(s => ({ name: s.name, description: s.description })),
@@ -223,7 +223,7 @@ export class Orchestrator {
         knowledge: this.knowledgeStoreManager.listConfigs().map(k => ({ name: k.name, description: k.description })),
       }),
     };
-    return buildProjectTools(deps);
+    return buildWorkspaceTools(deps);
   }
 
   get sandbox(): SandboxAccessor {
@@ -319,8 +319,8 @@ export class Orchestrator {
     };
   }
 
-  get projectRoot(): string {
-    return this.config.projectRoot;
+  get workspaceRoot(): string {
+    return this.config.workspaceRoot;
   }
 
   get memory(): MemoryAccessor {
@@ -342,7 +342,7 @@ export class Orchestrator {
   async reloadFile(relativePath: string): Promise<string> {
     this.ensureInitialized();
 
-    const absolutePath = path.resolve(this.config.projectRoot, relativePath);
+    const absolutePath = path.resolve(this.config.workspaceRoot, relativePath);
 
     if (relativePath.endsWith('.agent.yaml')) {
       const agent = await this.agentLoader.loadOne(absolutePath);
@@ -381,13 +381,13 @@ export class Orchestrator {
       }
       await this.loadSandboxConfig();
       const sandboxTools = this.buildSandboxTools();
-      const projectTools = this.buildProjectToolsMap();
+      const workspaceTools = this.buildWorkspaceToolsMap();
       this.toolRegistry = new ToolRegistry(
         this.mcpClient,
         this.knowledgeStoreManager,
         this.functionLoader,
         sandboxTools,
-        projectTools,
+        workspaceTools,
       );
       return 'sandbox';
     }

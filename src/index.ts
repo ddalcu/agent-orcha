@@ -81,7 +81,7 @@ async function main(): Promise<void> {
   validateConfiguration();
 
   const orchestrator = new Orchestrator({
-    projectRoot: baseDir,
+    workspaceRoot: baseDir,
     agentsDir: resolveResource('agents'),
     workflowsDir: resolveResource('workflows'),
     knowledgeDir: resolveResource('knowledge'),

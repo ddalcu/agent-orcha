@@ -29,7 +29,7 @@ interface DeleteBody {
 }
 
 export const filesRoutes: FastifyPluginAsync = async (fastify) => {
-  const baseDir = fastify.orchestrator.projectRoot;
+  const baseDir = fastify.orchestrator.workspaceRoot;
 
   fastify.get('/tree', async () => {
     const tree = await buildTree(baseDir, baseDir, 0);

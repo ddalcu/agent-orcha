@@ -5,7 +5,7 @@ description: Documentation for creating and modifying ORCHA resources (agents, w
 
 # ORCHA Resource Schemas
 
-Use this reference when creating or modifying ORCHA resources. All resource files live in the project root under their respective directories.
+Use this reference when creating or modifying ORCHA resources. All resource files live in the workspace root under their respective directories.
 
 ---
 
@@ -33,7 +33,7 @@ tools:                            # Optional tool references
   - function:my-function          # Custom function tool
   - builtin:tool-name             # Built-in tool
   - sandbox:exec                  # Sandbox tools (exec, read, write, edit, web_fetch, web_search, browser)
-  - project:read                  # Project tools (read, write, list, list_resources)
+  - workspace:read                  # Workspace tools (read, write, list, list_resources)
 
 skills:                           # Optional skills
   - skill-name                    # Skill name from skills directory
@@ -175,17 +175,14 @@ output:
 
 ## Knowledge Stores (`knowledge/<name>.knowledge.yaml`)
 
-### Vector Knowledge Store
-
 ```yaml
 name: my-knowledge
 description: What this knowledge store contains
-kind: vector                      # "vector" (default) or "graph-rag"
 
 source:
   # Directory source
   type: directory                 # directory | file | database | web | s3
-  path: ./docs                    # Relative to project root
+  path: ./docs                    # Relative to workspace root
   pattern: "**/*.md"              # Glob pattern for file matching (NOT "glob")
   recursive: true                 # Default: true
 
@@ -195,21 +192,18 @@ source:
 
   # --- OR database source ---
   # type: database
-  # connectionString: postgresql://user:pass@host:5432/db
+  # connectionString: postgresql://user:pass@host:5432/db  # postgresql://, mysql://, or sqlite://
   # query: "SELECT content FROM documents"
-  # contentColumn: content
-  # metadataColumns: [id, title]
+  # contentColumn: content        # Default: "content"
+  # metadataColumns: [id, title]  # Optional
+  # batchSize: 100                # Optional, default: 100
 
   # --- OR web source ---
   # type: web
   # url: https://example.com/docs
   # selector: ".main-content"     # Optional CSS selector
-
-  # --- OR s3 source ---
-  # type: s3
-  # bucket: my-bucket
-  # prefix: docs/
-  # region: us-east-1
+  # headers:                      # Optional custom headers
+  #   Authorization: "Bearer token"
 
 loader:                           # REQUIRED (has defaults)
   type: text                      # text | pdf | csv | json | markdown
@@ -221,64 +215,26 @@ splitter:
 
 embedding: default                # String reference to llm.json config (NOT an object)
 
-store:
-  type: memory                    # memory | chroma | pinecone | qdrant
-
 search:                           # Optional
   defaultK: 4
   scoreThreshold: 0.5             # Optional minimum score
-```
 
-### Graph RAG Knowledge Store
-
-```yaml
-name: my-graph-knowledge
-description: Graph-based knowledge with entity extraction
-kind: graph-rag
-
-source:
-  type: directory
-  path: ./docs
-  pattern: "**/*.md"
-
-loader:
-  type: text
-
-splitter:
-  type: recursive
-  chunkSize: 2000
-  chunkOverlap: 400
-
-embedding: default                # String reference to llm.json config
-
-graph:
-  extractionMode: llm             # llm | direct (default: llm)
-  extraction:                     # Optional (has defaults)
-    llm: default                  # LLM config for entity extraction
-    entityTypes:                  # Optional: constrain entity types
-      - name: Person
-        description: A human individual
-      - name: Organization
-    relationshipTypes:             # Optional: constrain relationship types
-      - name: WORKS_FOR
-  communities:                    # Optional (has defaults)
-    algorithm: louvain
-    resolution: 1.0
-    minSize: 2
-    summaryLlm: default
-  store:
-    type: memory                  # memory only for now
-  cache:
-    enabled: true
-    directory: .graph-cache/my-kb
-
-search:                           # Optional (has defaults)
-  defaultK: 10
-  localSearch:
-    maxDepth: 2
-  globalSearch:
-    topCommunities: 5
-    llm: default
+graph:                            # Optional: enable graph entities via direct mapping
+  directMapping:
+    entities:
+      - type: Person              # Entity type label
+        idColumn: id              # Column for entity ID
+        nameColumn: name          # Optional: column for display name
+        properties:               # Columns to include as properties
+          - email                 # String = same column name
+          - { role: job_title }   # Object = { propertyName: columnName }
+    relationships:                # Optional: define relationships
+      - type: WORKS_FOR
+        source: Person            # Source entity type
+        target: Organization      # Target entity type
+        sourceIdColumn: person_id
+        targetIdColumn: org_id
+        groupNode: department     # Optional: group by column
 ```
 
 ---
@@ -337,5 +293,5 @@ Skills with `sandbox: true` in frontmatter indicate they require sandbox tools.
 - **Tools**: Only include tools the agent actually needs — fewer tools = better focus
 - **Prompts**: Be specific and include examples in system prompts; use inputVariables for dynamic content
 - **Read before write**: Always read an existing resource before modifying it to preserve fields you're not changing
-- **Uniqueness**: Check `project_list_resources` before creating to avoid name collisions
+- **Uniqueness**: Check `workspace_list_resources` before creating to avoid name collisions
 - **Skills**: Use skills to share knowledge across multiple agents without duplicating prompt content

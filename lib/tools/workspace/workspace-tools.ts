@@ -10,7 +10,7 @@ import { WorkflowDefinitionSchema } from '../../workflows/types.ts';
 import { KnowledgeConfigSchema } from '../../knowledge/types.ts';
 import { logger } from '../../logger.ts';
 
-export interface ProjectResourceSummary {
+export interface WorkspaceResourceSummary {
   agents: { name: string; description: string }[];
   workflows: { name: string; description: string }[];
   skills: { name: string; description: string }[];
@@ -18,16 +18,16 @@ export interface ProjectResourceSummary {
   knowledge: { name: string; description: string }[];
 }
 
-export interface ProjectToolDeps {
-  projectRoot: string;
+export interface WorkspaceToolDeps {
+  workspaceRoot: string;
   reloadFile: (relativePath: string) => Promise<string>;
-  listResources: () => ProjectResourceSummary;
+  listResources: () => WorkspaceResourceSummary;
 }
 
-function createProjectReadTool(deps: ProjectToolDeps): StructuredTool {
+function createWorkspaceReadTool(deps: WorkspaceToolDeps): StructuredTool {
   return tool(
     async ({ filePath }) => {
-      const fullPath = await resolveSafePath(deps.projectRoot, filePath);
+      const fullPath = await resolveSafePath(deps.workspaceRoot, filePath);
       const stat = await fs.stat(fullPath);
       if (stat.isDirectory()) {
         return JSON.stringify({ error: 'Cannot read a directory' });
@@ -36,21 +36,21 @@ function createProjectReadTool(deps: ProjectToolDeps): StructuredTool {
       return JSON.stringify({ path: filePath, content });
     },
     {
-      name: 'project_read',
+      name: 'workspace_read',
       description:
-        'Read the contents of a file in the ORCHA project by relative path. ' +
+        'Read the contents of a file in the ORCHA workspace by relative path. ' +
         'Use this to inspect existing agents, workflows, skills, functions, or any config file.',
       schema: z.object({
-        filePath: z.string().describe('Relative path from project root (e.g. "agents/my-agent.agent.yaml")'),
+        filePath: z.string().describe('Relative path from workspace root (e.g. "agents/my-agent.agent.yaml")'),
       }),
     },
   );
 }
 
-function createProjectWriteTool(deps: ProjectToolDeps): StructuredTool {
+function createWorkspaceWriteTool(deps: WorkspaceToolDeps): StructuredTool {
   return tool(
     async ({ filePath, content }) => {
-      const fullPath = await resolveSafePath(deps.projectRoot, filePath);
+      const fullPath = await resolveSafePath(deps.workspaceRoot, filePath);
 
       // Validate resource YAML before writing
       const validationMap: Record<string, { schema: z.ZodTypeAny; label: string }> = {
@@ -74,67 +74,67 @@ function createProjectWriteTool(deps: ProjectToolDeps): StructuredTool {
       await fs.mkdir(parentDir, { recursive: true });
 
       await fs.writeFile(fullPath, content, 'utf-8');
-      logger.info(`[ProjectTool] File written: ${filePath}`);
+      logger.info(`[WorkspaceTool] File written: ${filePath}`);
 
       let reloaded = 'none';
       try {
         reloaded = await deps.reloadFile(filePath);
         if (reloaded !== 'none') {
-          logger.info(`[ProjectTool] Hot-reloaded ${reloaded} from: ${filePath}`);
+          logger.info(`[WorkspaceTool] Hot-reloaded ${reloaded} from: ${filePath}`);
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        logger.error(`[ProjectTool] Reload failed for ${filePath}: ${message}`);
+        logger.error(`[WorkspaceTool] Reload failed for ${filePath}: ${message}`);
         return JSON.stringify({ success: true, path: filePath, reloaded: 'error', reloadError: message });
       }
 
       return JSON.stringify({ success: true, path: filePath, reloaded });
     },
     {
-      name: 'project_write',
+      name: 'workspace_write',
       description:
-        'Create or overwrite a file in the ORCHA project. Automatically creates parent directories ' +
+        'Create or overwrite a file in the ORCHA workspace. Automatically creates parent directories ' +
         'and triggers hot-reload for recognized resource types (.agent.yaml, .workflow.yaml, etc.).',
       schema: z.object({
-        filePath: z.string().describe('Relative path from project root (e.g. "agents/weather-bot.agent.yaml")'),
+        filePath: z.string().describe('Relative path from workspace root (e.g. "agents/weather-bot.agent.yaml")'),
         content: z.string().describe('Full file content to write'),
       }),
     },
   );
 }
 
-function createProjectListTool(deps: ProjectToolDeps): StructuredTool {
+function createWorkspaceListTool(deps: WorkspaceToolDeps): StructuredTool {
   return tool(
     async ({ subdir }) => {
       const baseDir = subdir
-        ? await resolveSafePath(deps.projectRoot, subdir)
-        : deps.projectRoot;
+        ? await resolveSafePath(deps.workspaceRoot, subdir)
+        : deps.workspaceRoot;
 
-      const tree = await buildTree(baseDir, deps.projectRoot, 0);
+      const tree = await buildTree(baseDir, deps.workspaceRoot, 0);
       return JSON.stringify({ root: subdir || '.', tree });
     },
     {
-      name: 'project_list',
+      name: 'workspace_list',
       description:
-        'List the project directory tree. Optionally filter to a subdirectory ' +
+        'List the workspace directory tree. Optionally filter to a subdirectory ' +
         '(e.g. "agents", "workflows", "skills").',
       schema: z.object({
         subdir: z
           .string()
           .optional()
-          .describe('Optional subdirectory to list (e.g. "agents"). Omit for full project tree.'),
+          .describe('Optional subdirectory to list (e.g. "agents"). Omit for full workspace tree.'),
       }),
     },
   );
 }
 
-function createProjectListResourcesTool(deps: ProjectToolDeps): StructuredTool {
+function createWorkspaceListResourcesTool(deps: WorkspaceToolDeps): StructuredTool {
   return tool(
     async ({ type }) => {
       const resources = deps.listResources();
 
       if (type) {
-        const filtered = resources[type as keyof ProjectResourceSummary];
+        const filtered = resources[type as keyof WorkspaceResourceSummary];
         if (!filtered) {
           return JSON.stringify({ error: `Unknown resource type: ${type}. Valid types: agents, workflows, skills, functions, knowledge` });
         }
@@ -144,7 +144,7 @@ function createProjectListResourcesTool(deps: ProjectToolDeps): StructuredTool {
       return JSON.stringify(resources);
     },
     {
-      name: 'project_list_resources',
+      name: 'workspace_list_resources',
       description:
         'List all loaded ORCHA resources (agents, workflows, skills, functions, knowledge stores) ' +
         'with their names and descriptions. Optionally filter by resource type.',
@@ -158,14 +158,14 @@ function createProjectListResourcesTool(deps: ProjectToolDeps): StructuredTool {
   );
 }
 
-export function buildProjectTools(deps: ProjectToolDeps): Map<string, StructuredTool> {
+export function buildWorkspaceTools(deps: WorkspaceToolDeps): Map<string, StructuredTool> {
   const tools = new Map<string, StructuredTool>();
 
-  tools.set('read', createProjectReadTool(deps));
-  tools.set('write', createProjectWriteTool(deps));
-  tools.set('list', createProjectListTool(deps));
-  tools.set('list_resources', createProjectListResourcesTool(deps));
+  tools.set('read', createWorkspaceReadTool(deps));
+  tools.set('write', createWorkspaceWriteTool(deps));
+  tools.set('list', createWorkspaceListTool(deps));
+  tools.set('list_resources', createWorkspaceListResourcesTool(deps));
 
-  logger.info('[ProjectTools] Built project tools: ' + Array.from(tools.keys()).join(', '));
+  logger.info('[WorkspaceTools] Built workspace tools: ' + Array.from(tools.keys()).join(', '));
   return tools;
 }

@@ -11,7 +11,7 @@ import { Orchestrator } from '../lib/index.js';
 async function main() {
   // Initialize orchestrator
   const orchestrator = new Orchestrator({
-    projectRoot: process.cwd(),
+    workspaceRoot: process.cwd(),
   });
 
   await orchestrator.initialize();

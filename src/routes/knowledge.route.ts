@@ -67,6 +67,7 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
         description: config.description,
         source: config.source,
         defaultK: config.search?.defaultK ?? 4,
+
         status: status?.status ?? 'not_indexed',
         lastIndexedAt: status?.lastIndexedAt ?? null,
         lastIndexDurationMs: status?.lastIndexDurationMs ?? null,

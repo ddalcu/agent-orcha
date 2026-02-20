@@ -28,10 +28,10 @@ prompt:
     - query
 
 tools:
-  - project:read
-  - project:write
-  - project:list
-  - project:list_resources
+  - workspace:read
+  - workspace:write
+  - workspace:list
+  - workspace:list_resources
 
 skills:
   - orcha-builder

@@ -7,8 +7,8 @@ const DEFAULT_MAX_LINES = 100;
 export class MemoryManager {
   private memoryDir: string;
 
-  constructor(projectRoot: string) {
-    this.memoryDir = path.join(projectRoot, '.memory');
+  constructor(workspaceRoot: string) {
+    this.memoryDir = path.join(workspaceRoot, '.memory');
   }
 
   private getFilePath(agentName: string): string {

@@ -25,7 +25,7 @@ Examples:
 Library Usage:
   import { Orchestrator } from 'agent-orcha';
 
-  const orchestrator = new Orchestrator({ projectRoot: '.' });
+  const orchestrator = new Orchestrator({ workspaceRoot: '.' });
   await orchestrator.initialize();
 
 Documentation: https://github.com/ddalcu/agent-orcha

@@ -34,18 +34,18 @@ const searchLogger = createLogger('KnowledgeSearch');
  */
 export class KnowledgeStore {
   private knowledgeDir: string;
-  private projectRoot: string;
+  private workspaceRoot: string;
   private stores: Map<string, KnowledgeStoreInstance> = new Map();
   private configs: Map<string, KnowledgeConfig> = new Map();
   private sqliteStores: Map<string, SqliteStore> = new Map();
   private metadataManager: KnowledgeMetadataManager;
   private activeIndexing: Map<string, Promise<KnowledgeStoreInstance>> = new Map();
 
-  constructor(knowledgeDir: string, projectRoot: string) {
+  constructor(knowledgeDir: string, workspaceRoot: string) {
     this.knowledgeDir = knowledgeDir;
-    this.projectRoot = projectRoot;
+    this.workspaceRoot = workspaceRoot;
     this.metadataManager = new KnowledgeMetadataManager(
-      path.join(projectRoot, '.knowledge-cache')
+      path.join(workspaceRoot, '.knowledge-cache')
     );
   }
 
@@ -74,11 +74,11 @@ export class KnowledgeStore {
     const parsed = parseYaml(content);
     const config = KnowledgeConfigSchema.parse(parsed);
 
-    // Resolve sqlite:// paths relative to projectRoot so they work regardless of cwd
+    // Resolve sqlite:// paths relative to workspaceRoot so they work regardless of cwd
     if (config.source.type === 'database' && config.source.connectionString.startsWith('sqlite://')) {
       const filePart = config.source.connectionString.replace(/^sqlite:\/\//, '');
       if (!path.isAbsolute(filePart)) {
-        config.source.connectionString = `sqlite://${path.resolve(this.projectRoot, filePart)}`;
+        config.source.connectionString = `sqlite://${path.resolve(this.workspaceRoot, filePart)}`;
       }
     }
 
@@ -169,7 +169,7 @@ export class KnowledgeStore {
       logger.info(`Embedding dimensions: ${dimensions}`);
 
       // 2. Determine DB path and open SqliteStore
-      const dbPath = path.join(this.projectRoot, '.knowledge-data', `${name}.db`);
+      const dbPath = path.join(this.workspaceRoot, '.knowledge-data', `${name}.db`);
 
       // Check dimension mismatch
       if (!SqliteStore.validateDimensions(dbPath, dimensions)) {
@@ -182,7 +182,7 @@ export class KnowledgeStore {
 
       // 3. Check if DB already has valid data
       const storedHashes = sqliteStore.getMeta('sourceHashes');
-      const currentHashes = await KnowledgeStore.computeFileHashes(config, this.projectRoot);
+      const currentHashes = await KnowledgeStore.computeFileHashes(config, this.workspaceRoot);
       const currentHashStr = JSON.stringify(currentHashes);
       const isUpToDate = sqliteStore.hasData() && storedHashes === currentHashStr;
 
@@ -200,7 +200,7 @@ export class KnowledgeStore {
         sqliteStore.clear();
 
         onProgress?.({ name, phase: 'loading', progress: 10, message: 'Loading documents...' });
-        const documents = await KnowledgeStore.loadDocuments(config, this.projectRoot);
+        const documents = await KnowledgeStore.loadDocuments(config, this.workspaceRoot);
         logger.info(`Loaded ${documents.length} document(s)`);
         metadata.documentCount = documents.length;
 
@@ -380,7 +380,7 @@ export class KnowledgeStore {
       refresh: async (refreshOnProgress?: IndexingProgressCallback): Promise<void> => {
         refreshOnProgress?.({ name, phase: 'loading', progress: 10, message: 'Checking for changes...' });
 
-        const newSourceHashes = await KnowledgeStore.computeFileHashes(config, this.projectRoot);
+        const newSourceHashes = await KnowledgeStore.computeFileHashes(config, this.workspaceRoot);
         const currentHashStr = JSON.stringify(newSourceHashes);
         const storedHashes = sqliteStore.getMeta('sourceHashes');
 
@@ -571,7 +571,7 @@ export class KnowledgeStore {
     };
   }
 
-  static async loadDocuments(config: KnowledgeConfig, projectRoot: string): Promise<Document[]> {
+  static async loadDocuments(config: KnowledgeConfig, workspaceRoot: string): Promise<Document[]> {
     if (config.source.type === 'database') {
       const dbLoader = new DatabaseLoader(config.source);
       return dbLoader.load();
@@ -582,7 +582,7 @@ export class KnowledgeStore {
       return webLoader.load();
     }
 
-    const sourcePath = path.join(projectRoot, config.source.path);
+    const sourcePath = path.join(workspaceRoot, config.source.path);
 
     if (config.source.type === 'directory') {
       const pattern = config.source.pattern ?? '*';
@@ -633,12 +633,12 @@ export class KnowledgeStore {
 
   static async computeFileHashes(
     config: KnowledgeConfig,
-    projectRoot: string
+    workspaceRoot: string
   ): Promise<Record<string, string>> {
     const hashes: Record<string, string> = {};
 
     if (config.source.type === 'directory') {
-      const sourcePath = path.join(projectRoot, config.source.path);
+      const sourcePath = path.join(workspaceRoot, config.source.path);
       const pattern = config.source.pattern ?? '*';
       const files = await glob(pattern, { cwd: sourcePath, absolute: true });
       for (const file of files) {
@@ -646,7 +646,7 @@ export class KnowledgeStore {
         hashes[file] = crypto.createHash('sha256').update(content).digest('hex');
       }
     } else if (config.source.type === 'file') {
-      const sourcePath = path.join(projectRoot, config.source.path);
+      const sourcePath = path.join(workspaceRoot, config.source.path);
       const content = await fs.readFile(sourcePath);
       hashes[sourcePath] = crypto.createHash('sha256').update(content).digest('hex');
     } else if (config.source.type === 'database') {

@@ -18,7 +18,6 @@ export class GraphView extends Component {
         this.typeColorMap = new Map();
         this.colorIndex = 0;
         this.expandedNodes = new Set();
-        this.leafNodes = new Set();
     }
 
     async connectedCallback() {
@@ -32,12 +31,6 @@ export class GraphView extends Component {
         this.colorIndex++;
         this.typeColorMap.set(type, color);
         return color;
-    }
-
-    getIconForNode(nodeId) {
-        if (this.leafNodes.has(nodeId)) return '\uf111';  // fa-circle
-        if (this.expandedNodes.has(nodeId)) return '\uf056';  // fa-circle-minus
-        return '\uf055';  // fa-circle-plus
     }
 
     async checkGraphConnection() {
@@ -87,10 +80,7 @@ export class GraphView extends Component {
 
             if (this.nodes.length > beforeCount) {
                 this.expandedNodes.add(nodeId);
-            } else {
-                this.leafNodes.add(nodeId);
             }
-            this.updateNodeIndicator(nodeId);
         } catch (e) {
             console.error('Failed to expand node:', e);
         }
@@ -100,7 +90,6 @@ export class GraphView extends Component {
         // Remove from expanded FIRST to prevent infinite recursion
         // (child neighbors that are also expanded won't recurse back here)
         this.expandedNodes.delete(nodeId);
-        this.leafNodes.delete(nodeId);
 
         const neighborIds = this.edges.get()
             .filter((e) => e.from === nodeId || e.to === nodeId)
@@ -135,20 +124,7 @@ export class GraphView extends Component {
             );
             this.edges.remove(edgesToRemove.map((e) => e.id));
             this.nodes.remove(removableNodes);
-            removableNodes.forEach((nid) => this.leafNodes.delete(nid));
         }
-
-        this.updateNodeIndicator(nodeId);
-    }
-
-    updateNodeIndicator(nodeId) {
-        const nodeData = this.nodes.get(nodeId);
-        if (!nodeData || !nodeData.icon) return;
-
-        this.nodes.update({
-            id: nodeId,
-            icon: { ...nodeData.icon, code: this.getIconForNode(nodeId) },
-        });
     }
 
     /**
@@ -161,16 +137,11 @@ export class GraphView extends Component {
                     id: n.id,
                     label: n.name || n.id,
                     title: n.description || n.name,
-                    shape: 'icon',
-                    icon: {
-                        face: '"Font Awesome 6 Free"',
-                        weight: '900',
-                        code: '\uf1c0',
-                        size: 50,
-                        color: '#3b82f6',
-                    },
-                    font: { color: '#e2e8f0', size: 14 },
-                    size: 40,
+                    shape: 'dot',
+                    size: 30,
+                    color: { background: '#3b82f6', border: '#60a5fa', highlight: { background: '#60a5fa', border: '#93c5fd' }, hover: { background: '#60a5fa', border: '#93c5fd' } },
+                    borderWidth: 3,
+                    font: { color: '#e2e8f0', size: 16, bold: { color: '#e2e8f0' } },
                     _type: n.type,
                     _name: n.name,
                     _description: n.description,
@@ -183,14 +154,9 @@ export class GraphView extends Component {
                 id: n.id,
                 label: this.truncate(n.name || n.id, 20),
                 title: n.description || n.name,
-                shape: 'icon',
-                icon: {
-                    face: '"Font Awesome 6 Free"',
-                    weight: '900',
-                    code: this.getIconForNode(n.id),
-                    size: 30,
-                    color: color,
-                },
+                shape: 'dot',
+                size: 12,
+                color: { background: color, border: color, highlight: { background: color, border: '#e2e8f0' }, hover: { background: color, border: '#e2e8f0' } },
                 font: { color: '#e2e8f0', size: 12 },
                 _type: n.type,
                 _name: n.name,

@@ -12,20 +12,20 @@ export class ToolRegistry {
   private functionLoader: FunctionLoader;
   private builtInTools: Map<string, StructuredTool> = new Map();
   private sandboxTools: Map<string, StructuredTool>;
-  private projectTools: Map<string, StructuredTool>;
+  private workspaceTools: Map<string, StructuredTool>;
 
   constructor(
     mcpClient: MCPClientManager,
     knowledgeStores: KnowledgeStore,
     functionLoader: FunctionLoader,
     sandboxTools: Map<string, StructuredTool> = new Map(),
-    projectTools: Map<string, StructuredTool> = new Map(),
+    workspaceTools: Map<string, StructuredTool> = new Map(),
   ) {
     this.mcpClient = mcpClient;
     this.knowledgeStores = knowledgeStores;
     this.functionLoader = functionLoader;
     this.sandboxTools = sandboxTools;
-    this.projectTools = projectTools;
+    this.workspaceTools = workspaceTools;
   }
 
   async resolveTools(toolRefs: ToolReference[]): Promise<StructuredTool[]> {
@@ -95,13 +95,13 @@ export class ToolRegistry {
         return [sandboxTool];
       }
 
-      case 'project': {
-        const projectTool = this.projectTools.get(name);
-        if (!projectTool) {
-          logger.warn(`Project tool "${name}" not found (available: ${Array.from(this.projectTools.keys()).join(', ') || 'none'})`);
+      case 'workspace': {
+        const workspaceTool = this.workspaceTools.get(name);
+        if (!workspaceTool) {
+          logger.warn(`Workspace tool "${name}" not found (available: ${Array.from(this.workspaceTools.keys()).join(', ') || 'none'})`);
           return [];
         }
-        return [projectTool];
+        return [workspaceTool];
       }
 
       default:
@@ -176,7 +176,7 @@ export class ToolRegistry {
     return Array.from(this.sandboxTools.values());
   }
 
-  getAllProjectTools(): StructuredTool[] {
-    return Array.from(this.projectTools.values());
+  getAllWorkspaceTools(): StructuredTool[] {
+    return Array.from(this.workspaceTools.values());
   }
 }
