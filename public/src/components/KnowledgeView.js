@@ -112,7 +112,6 @@ export class KnowledgeView extends Component {
                     ${this.kindBadge(store)}
                     ${this.sourceTypeBadge(store.source?.type)}
                     ${this.storeBadge(store.store)}
-                    ${store.extractionMode ? this.extractionModeBadge(store.extractionMode) : ''}
                 </div>
                 <div class="text-xs text-gray-500">
                     ${store.status === 'indexed' ? this.formatCounts(store) : store.status === 'error' ? 'Error' : 'Not indexed'}
@@ -211,11 +210,6 @@ export class KnowledgeView extends Component {
                     <span class="text-gray-500">Store</span>
                     <div class="text-gray-200 mt-1">${this.storeBadge(store.store)}</div>
                 </div>
-                ${store.extractionMode ? `
-                <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3">
-                    <span class="text-gray-500">Extraction Mode</span>
-                    <div class="text-gray-200 mt-1">${this.extractionModeBadge(store.extractionMode)}</div>
-                </div>` : ''}
                 <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3">
                     <span class="text-gray-500">Default K</span>
                     <div class="text-gray-200 mt-1">${store.defaultK ?? 'N/A'}</div>
@@ -403,13 +397,6 @@ export class KnowledgeView extends Component {
     storeBadge(type) {
         const storeType = type || 'memory';
         return `<span class="text-xs font-medium px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700">${this.escapeHtml(storeType)}</span>`;
-    }
-
-    extractionModeBadge(mode) {
-        if (mode === 'direct') {
-            return '<span class="text-xs font-medium px-2 py-0.5 rounded bg-cyan-900/50 text-cyan-300 border border-cyan-700/50">direct</span>';
-        }
-        return '<span class="text-xs font-medium px-2 py-0.5 rounded bg-yellow-900/50 text-yellow-300 border border-yellow-700/50">llm</span>';
     }
 
     sourceTypeBadge(type) {

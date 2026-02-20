@@ -4,14 +4,12 @@ import * as path from 'path';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
 import { SqliteStore } from './sqlite-store.ts';
-import { EntityExtractor } from './entity-extractor.ts';
 import { DirectMapper } from './direct-mapper.ts';
 import { KnowledgeConfigSchema } from './types.ts';
 import { KnowledgeMetadataManager, createDefaultMetadata } from './knowledge-store-metadata.ts';
 import { CharacterTextSplitter, RecursiveCharacterTextSplitter } from '../types/text-splitters.ts';
 import { OpenAIEmbeddingsProvider } from '../llm/providers/openai-embeddings.ts';
 import { GeminiEmbeddingsProvider } from '../llm/providers/gemini-embeddings.ts';
-import { LLMFactory } from '../llm/llm-factory.ts';
 import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.ts';
 import { detectProvider } from '../llm/provider-detector.ts';
 import { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
@@ -22,7 +20,6 @@ import type {
   KnowledgeStoreInstance,
   SearchResult,
   DocumentInput,
-  ExtractedEntity,
   ExtractedRelationship,
 } from './types.ts';
 import type { KnowledgeStoreMetadata, IndexingProgressCallback } from './knowledge-store-metadata.ts';
@@ -222,28 +219,11 @@ export class KnowledgeStore {
         if (config.graph) {
           onProgress?.({ name, phase: 'extracting', progress: 60, message: 'Extracting entities...' });
 
-          let entities: ExtractedEntity[];
-          let relationships: ExtractedRelationship[];
-
-          if (config.graph.extractionMode === 'direct' && config.graph.directMapping) {
-            const result = DirectMapper.mapQueryResults(documents, config.graph.directMapping);
-            entities = result.entities;
-            relationships = result.relationships;
-          } else {
-            const extractionLlm = LLMFactory.create(config.graph.extraction.llm);
-            const extractor = new EntityExtractor({
-              llm: extractionLlm,
-              entityTypes: config.graph.extraction.entityTypes,
-              relationshipTypes: config.graph.extraction.relationshipTypes,
-            });
-            const chunks = splitDocs.map((doc, idx) => ({
-              id: `chunk-${idx}`,
-              content: doc.pageContent,
-            }));
-            const extracted = await extractor.extractFromChunks(chunks);
-            entities = extracted.entities;
-            relationships = extracted.relationships;
+          if (!config.graph.directMapping) {
+            throw new Error(`Graph config for "${name}" requires a directMapping configuration`);
           }
+
+          const { entities, relationships } = DirectMapper.mapQueryResults(documents, config.graph.directMapping);
 
           logger.info(`Extracted ${entities.length} entities, ${relationships.length} relationships`);
 

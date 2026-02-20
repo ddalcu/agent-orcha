@@ -66,7 +66,6 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
         hasGraph,
         description: config.description,
         source: config.source,
-        extractionMode: hasGraph ? (config.graph?.extractionMode ?? 'llm') : null,
         defaultK: config.search?.defaultK ?? 4,
         status: status?.status ?? 'not_indexed',
         lastIndexedAt: status?.lastIndexedAt ?? null,

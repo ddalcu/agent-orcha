@@ -54,33 +54,23 @@ export function buildGraphSchemaDescription(config: KnowledgeConfig): string {
 
   sections.push(`Knowledge base: "${config.name}" — ${config.description ?? ''}`);
 
-  if (!config.graph) return sections.join('\n');
+  if (!config.graph?.directMapping) return sections.join('\n');
 
-  if (config.graph.extractionMode === 'direct' && config.graph.directMapping) {
-    const mapping = config.graph.directMapping;
+  const mapping = config.graph.directMapping;
 
-    const entityLines = mapping.entities.map((e: any) => {
-      const props = (e.properties as any[]).map((p: any) =>
-        typeof p === 'string' ? p : Object.values(p)[0]
-      );
-      return `  ${e.type}: ${props.join(', ')}`;
-    });
-    sections.push(`ENTITY TYPES:\n${entityLines.join('\n')}`);
+  const entityLines = mapping.entities.map((e: any) => {
+    const props = (e.properties as any[]).map((p: any) =>
+      typeof p === 'string' ? p : Object.values(p)[0]
+    );
+    return `  ${e.type}: ${props.join(', ')}`;
+  });
+  sections.push(`ENTITY TYPES:\n${entityLines.join('\n')}`);
 
-    if (mapping.relationships && mapping.relationships.length > 0) {
-      const relLines = mapping.relationships.map(
-        (r: any) => `  (${r.source}) -[${r.type}]-> (${r.target})`
-      );
-      sections.push(`RELATIONSHIPS:\n${relLines.join('\n')}`);
-    }
-  } else if (config.graph.extraction?.entityTypes) {
-    const entityNames = config.graph.extraction.entityTypes.map((e) => e.name);
-    sections.push(`ENTITY TYPES: ${entityNames.join(', ')}`);
-
-    if (config.graph.extraction.relationshipTypes) {
-      const relNames = config.graph.extraction.relationshipTypes.map((r) => r.name);
-      sections.push(`RELATIONSHIP TYPES: ${relNames.join(', ')}`);
-    }
+  if (mapping.relationships && mapping.relationships.length > 0) {
+    const relLines = mapping.relationships.map(
+      (r: any) => `  (${r.source}) -[${r.type}]-> (${r.target})`
+    );
+    sections.push(`RELATIONSHIPS:\n${relLines.join('\n')}`);
   }
 
   return sections.join('\n');

@@ -1,6 +1,5 @@
 export { KnowledgeStore } from './knowledge-store.ts';
 export { SqliteStore } from './sqlite-store.ts';
-export { EntityExtractor } from './entity-extractor.ts';
 export { DirectMapper } from './direct-mapper.ts';
 export { KnowledgeMetadataManager, createDefaultMetadata } from './knowledge-store-metadata.ts';
 
@@ -19,9 +18,6 @@ export {
   EmbeddingRefSchema,
   SearchConfigSchema,
   GraphConfigSchema,
-  GraphExtractionConfigSchema,
-  EntityTypeSchema,
-  RelationshipTypeSchema,
 } from './types.ts';
 
 export type {
@@ -45,9 +41,6 @@ export type {
   IndexingProgressCallback,
   IndexingPhase,
   GraphConfig,
-  GraphExtractionConfig,
-  EntityTypeConfig,
-  RelationshipTypeConfig,
   ExtractedEntity,
   ExtractedRelationship,
   ExtractionResult,

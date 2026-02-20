@@ -102,27 +102,9 @@ export interface DirectMappingConfig {
   relationships?: RelationshipMapping[];
 }
 
-// --- Graph Config Schemas (simplified — no communities, no cache, no store) ---
-
-export const EntityTypeSchema = z.object({
-  name: z.string(),
-  description: z.string().optional().default(''),
-});
-
-export const RelationshipTypeSchema = z.object({
-  name: z.string(),
-  description: z.string().optional().default(''),
-});
-
-export const GraphExtractionConfigSchema = z.object({
-  llm: z.string().default('default'),
-  entityTypes: z.array(EntityTypeSchema).optional(),
-  relationshipTypes: z.array(RelationshipTypeSchema).optional(),
-});
+// --- Graph Config Schema (direct mapping only) ---
 
 export const GraphConfigSchema = z.object({
-  extractionMode: z.enum(['llm', 'direct']).optional().default('llm'),
-  extraction: GraphExtractionConfigSchema.optional().default({}),
   directMapping: z.any().optional(), // DirectMappingConfig
 });
 
@@ -144,6 +126,8 @@ export const KnowledgeConfigSchema = z.preprocess(
       delete g.communities;
       delete g.cache;
       delete g.store;
+      delete g.extractionMode;
+      delete g.extraction;
       cleaned.graph = g;
     }
 
@@ -180,9 +164,6 @@ export type SourceConfig = z.infer<typeof SourceConfigSchema>;
 export type LoaderConfig = z.infer<typeof LoaderConfigSchema>;
 export type SplitterConfig = z.infer<typeof SplitterConfigSchema>;
 export type SearchConfig = z.infer<typeof SearchConfigSchema>;
-export type EntityTypeConfig = z.infer<typeof EntityTypeSchema>;
-export type RelationshipTypeConfig = z.infer<typeof RelationshipTypeSchema>;
-export type GraphExtractionConfig = z.infer<typeof GraphExtractionConfigSchema>;
 export type GraphConfig = z.infer<typeof GraphConfigSchema>;
 export type KnowledgeConfig = z.infer<typeof KnowledgeConfigSchema>;
 

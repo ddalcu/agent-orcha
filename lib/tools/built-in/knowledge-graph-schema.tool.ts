@@ -83,26 +83,18 @@ export function createKnowledgeGraphSchemaTool(
         }
 
         // Configured types from YAML (for reference)
-        if (config.graph) {
-          if (config.graph.extractionMode === 'direct' && config.graph.directMapping) {
-            sections.push('\nCONFIGURED MAPPING (from YAML):');
-            for (const entity of config.graph.directMapping.entities) {
-              const props = (entity.properties as any[]).map((p: any) =>
-                typeof p === 'string' ? p : Object.values(p)[0]
-              );
-              sections.push(`  Entity: ${entity.type} (id: ${entity.idColumn}, name: ${entity.nameColumn ?? entity.idColumn})`);
-              sections.push(`    Mapped properties: ${props.join(', ')}`);
-            }
-            if (config.graph.directMapping.relationships) {
-              for (const rel of config.graph.directMapping.relationships) {
-                sections.push(`  Relationship: (${rel.source}) -[${rel.type}]-> (${rel.target})`);
-              }
-            }
-          } else if (config.graph.extraction?.entityTypes) {
-            sections.push('\nCONFIGURED TYPES (from YAML):');
-            sections.push(`  Entity types: ${config.graph.extraction.entityTypes.map((e) => e.name).join(', ')}`);
-            if (config.graph.extraction.relationshipTypes) {
-              sections.push(`  Relationship types: ${config.graph.extraction.relationshipTypes.map((r) => r.name).join(', ')}`);
+        if (config.graph?.directMapping) {
+          sections.push('\nCONFIGURED MAPPING (from YAML):');
+          for (const entity of config.graph.directMapping.entities) {
+            const props = (entity.properties as any[]).map((p: any) =>
+              typeof p === 'string' ? p : Object.values(p)[0]
+            );
+            sections.push(`  Entity: ${entity.type} (id: ${entity.idColumn}, name: ${entity.nameColumn ?? entity.idColumn})`);
+            sections.push(`    Mapped properties: ${props.join(', ')}`);
+          }
+          if (config.graph.directMapping.relationships) {
+            for (const rel of config.graph.directMapping.relationships) {
+              sections.push(`  Relationship: (${rel.source}) -[${rel.type}]-> (${rel.target})`);
             }
           }
         }
