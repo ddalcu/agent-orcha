@@ -1,7 +1,6 @@
-export { DockerManager } from './docker-manager.ts';
-export { createSandboxExecTool } from './sandbox-tool.ts';
-export { createSandboxReadTool, createSandboxWriteTool, createSandboxEditTool } from './sandbox-file-tools.ts';
-export { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox-web-tools.ts';
-export { createSandboxBrowserTool } from './sandbox-browser-tool.ts';
+export { VmExecutor } from './vm-executor.ts';
+export { createSandboxExecTool } from './sandbox-exec.ts';
+export { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox-web.ts';
+export { htmlToMarkdown } from './html-to-markdown.ts';
 export { SandboxConfigSchema } from './types.ts';
-export type { SandboxConfig, ContainerInfo, ExecResult } from './types.ts';
+export type { SandboxConfig, ExecResult } from './types.ts';

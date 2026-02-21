@@ -1,46 +1,63 @@
 ---
 name: sandbox
-description: Execute commands in an isolated Docker container
+description: Execute JavaScript code and fetch web content in an isolated sandbox
 sandbox: true
 ---
 
 # Sandbox Execution
 
-You have access to `sandbox_exec`, a tool that runs shell commands inside an isolated Docker container.
+You have access to sandbox tools for running JavaScript code and fetching web content.
 
 ## Tool: sandbox_exec
 
+Execute JavaScript code in an isolated VM sandbox.
+
 **Parameters:**
-- `command` (required): The shell command to execute
-- `workdir` (optional): Working directory inside the container
-- `timeout` (optional): Command timeout in milliseconds
+- `code` (required): JavaScript code to execute (runs in async context, so `await` works)
+- `timeout` (optional): Execution timeout in milliseconds
 
-**Returns:** JSON with `stdout`, `stderr`, and `exitCode`
+**Returns:** JSON with `stdout` (console output), `result` (return value), and `error` (if any)
 
-## Environment
+**Available globals:** JSON, Math, Date, Buffer, URL, URLSearchParams, TextEncoder, TextDecoder, setTimeout, and standard JS built-ins.
 
-The sandbox container includes:
-- Python 3.12 with pip
-- Node.js 22 with npm
-- Common CLI tools (curl, git, jq, etc.)
+**Not available:** `fetch`, `require`, file system access. Use `sandbox_web_fetch` for HTTP requests.
 
-Files persist within the container during the session. The container is isolated from the host system.
+## Tool: sandbox_web_fetch
+
+Fetch web page content or API responses.
+
+**Parameters:**
+- `url` (required): HTTP or HTTPS URL to fetch
+- `raw` (optional): Return raw content without HTML-to-markdown conversion
+- `runScripts` (optional): Run page JavaScript before extracting content (default: true)
+
+**Returns:** JSON with `content`, `url`, `status`, and `truncated`
+
+## Tool: sandbox_web_search
+
+Search the web using DuckDuckGo.
+
+**Parameters:**
+- `query` (required): Search query
+- `num_results` (optional): Max results to return (default 10)
+
+**Returns:** JSON with `results` (formatted list) and `query`
 
 ## Usage Examples
 
-Install a package and run a script:
+Run JavaScript code:
 ```
-sandbox_exec({ command: "pip install requests && python script.py" })
+sandbox_exec({ code: "const sum = [1,2,3].reduce((a,b) => a+b, 0); console.log(sum); return sum;" })
 ```
 
-Run multiple commands:
+Fetch a web page:
 ```
-sandbox_exec({ command: "cd /workspace && npm init -y && npm install lodash" })
+sandbox_web_fetch({ url: "https://example.com" })
 ```
 
 ## Best Practices
 
-1. Chain commands with `&&` when they depend on each other
-2. Use `/workspace` as the default working directory
-3. Check `exitCode` to verify command success
-4. Handle errors gracefully - read `stderr` for diagnostics
+1. Use `console.log()` for output and `return` for the final result
+2. Use `sandbox_web_fetch` for HTTP requests instead of trying to use `fetch` in sandbox_exec
+3. Check the `error` field in results to verify execution success
+4. Handle errors gracefully — read `error` for diagnostics

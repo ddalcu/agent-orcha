@@ -95,8 +95,8 @@ export type {
 } from './tasks/index.ts';
 
 // Sandbox
-export { DockerManager, createSandboxExecTool, SandboxConfigSchema } from './sandbox/index.ts';
-export type { SandboxConfig, ContainerInfo, ExecResult } from './sandbox/index.ts';
+export { VmExecutor, createSandboxExecTool, SandboxConfigSchema } from './sandbox/index.ts';
+export type { SandboxConfig, ExecResult } from './sandbox/index.ts';
 
 // Integrations
 export { IntegrationManager } from './integrations/integration-manager.ts';

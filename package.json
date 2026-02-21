@@ -54,6 +54,7 @@
     "dotenv": "^16.4.7",
     "fastify": "^5.2.0",
     "glob": "^11.0.0",
+    "jsdom": "^28.1.0",
     "mysql2": "^3.12.0",
     "node-cron": "^4.2.1",
     "openai": "^6.22.0",
@@ -67,6 +68,7 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^22.10.5",
     "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.11.10",

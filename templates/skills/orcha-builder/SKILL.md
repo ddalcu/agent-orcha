@@ -32,7 +32,7 @@ tools:                            # Optional tool references
   - knowledge:store-name          # Knowledge search tools
   - function:my-function          # Custom function tool
   - builtin:tool-name             # Built-in tool
-  - sandbox:exec                  # Sandbox tools (exec, read, write, edit, web_fetch, web_search, browser)
+  - sandbox:exec                  # Sandbox tools (exec, web_fetch, web_search)
   - workspace:read                  # Workspace tools (read, write, list, list_resources)
 
 skills:                           # Optional skills

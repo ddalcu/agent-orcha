@@ -17,11 +17,9 @@ import { loadLLMConfig } from './llm/llm-config.ts';
 import { ConversationStore } from './memory/conversation-store.ts';
 import { MemoryManager } from './memory/memory-manager.ts';
 import { TaskManager } from './tasks/task-manager.ts';
-import { DockerManager } from './sandbox/docker-manager.ts';
-import { createSandboxExecTool } from './sandbox/sandbox-tool.ts';
-import { createSandboxReadTool, createSandboxWriteTool, createSandboxEditTool } from './sandbox/sandbox-file-tools.ts';
-import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web-tools.ts';
-import { createSandboxBrowserTool } from './sandbox/sandbox-browser-tool.ts';
+import { VmExecutor } from './sandbox/vm-executor.ts';
+import { createSandboxExecTool } from './sandbox/sandbox-exec.ts';
+import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
@@ -69,7 +67,7 @@ export class Orchestrator {
   private interruptManager!: InterruptManager;
   private conversationStore: ConversationStore;
   private taskManager!: TaskManager;
-  private dockerManager: DockerManager | null = null;
+  private vmExecutor: VmExecutor | null = null;
   private sandboxConfig: SandboxConfig | null = null;
   private memoryManager: MemoryManager;
   private integrationManager: IntegrationManager | null = null;
@@ -180,32 +178,29 @@ export class Orchestrator {
       const content = await fs.readFile(this.config.sandboxConfigPath, 'utf-8');
       const parsed = JSON.parse(content);
       this.sandboxConfig = SandboxConfigSchema.parse(parsed);
-      if (this.sandboxConfig.enabled) {
-        this.dockerManager = new DockerManager(this.sandboxConfig);
-      }
     } catch {
-      logger.debug('[Orchestrator] No sandbox.json found or invalid config, sandbox disabled');
-      this.sandboxConfig = null;
-      this.dockerManager = null;
+      // No sandbox.json — use defaults (enabled by default)
+      this.sandboxConfig = SandboxConfigSchema.parse({});
+    }
+
+    if (this.sandboxConfig.enabled) {
+      this.vmExecutor = new VmExecutor();
+    } else {
+      this.vmExecutor = null;
     }
   }
 
   private buildSandboxTools(): Map<string, StructuredTool> {
     const tools = new Map<string, StructuredTool>();
 
-    if (!this.sandboxConfig?.enabled || !this.dockerManager) {
+    if (!this.sandboxConfig?.enabled || !this.vmExecutor) {
       return tools;
     }
 
-    tools.set('exec', createSandboxExecTool(this.dockerManager, this.sandboxConfig));
-    tools.set('read', createSandboxReadTool(this.dockerManager, this.sandboxConfig));
-    tools.set('write', createSandboxWriteTool(this.dockerManager, this.sandboxConfig));
-    tools.set('edit', createSandboxEditTool(this.dockerManager, this.sandboxConfig));
-    tools.set('web_fetch', createSandboxWebFetchTool(this.dockerManager, this.sandboxConfig));
-    tools.set('web_search', createSandboxWebSearchTool(this.dockerManager, this.sandboxConfig));
-    tools.set('browser', createSandboxBrowserTool(this.dockerManager, this.sandboxConfig));
+    tools.set('exec', createSandboxExecTool(this.vmExecutor, this.sandboxConfig));
+    tools.set('web_fetch', createSandboxWebFetchTool(this.sandboxConfig));
+    tools.set('web_search', createSandboxWebSearchTool());
 
-    this.dockerManager.startPruning();
     logger.info('[Orchestrator] Sandbox enabled with tools: ' + Array.from(tools.keys()).join(', '));
 
     return tools;
@@ -229,7 +224,7 @@ export class Orchestrator {
   get sandbox(): SandboxAccessor {
     return {
       getConfig: () => this.sandboxConfig,
-      getDockerManager: () => this.dockerManager,
+      getVmExecutor: () => this.vmExecutor,
       isEnabled: () => this.sandboxConfig?.enabled ?? false,
     };
   }
@@ -376,8 +371,8 @@ export class Orchestrator {
     }
 
     if (relativePath === 'sandbox.json') {
-      if (this.dockerManager) {
-        await this.dockerManager.close();
+      if (this.vmExecutor) {
+        this.vmExecutor.close();
       }
       await this.loadSandboxConfig();
       const sandboxTools = this.buildSandboxTools();
@@ -643,8 +638,8 @@ export class Orchestrator {
     if (this.integrationManager) {
       this.integrationManager.close();
     }
-    if (this.dockerManager) {
-      await this.dockerManager.close();
+    if (this.vmExecutor) {
+      this.vmExecutor.close();
     }
     if (this.mcpClient) {
       await this.mcpClient.close();
@@ -737,6 +732,6 @@ interface IntegrationAccessor {
 
 interface SandboxAccessor {
   getConfig: () => SandboxConfig | null;
-  getDockerManager: () => DockerManager | null;
+  getVmExecutor: () => VmExecutor | null;
   isEnabled: () => boolean;
 }
