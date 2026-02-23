@@ -3,13 +3,6 @@
   "models": {
     "default": {
       "provider": "openai",
-      "baseUrl": "http://192.168.2.61:1234/v1",
-      "apiKey": "not-needed",
-      "model": "your-model-name",
-      "temperature": 0.3
-    },
-    "default2": {
-      "provider": "openai",
       "baseUrl": "http://localhost:1234/v1",
       "apiKey": "not-needed",
       "model": "your-model-name",
@@ -45,7 +38,7 @@
     "gemini": {
       "provider": "gemini",
       "apiKey": "your-gemini-api-key-here",
-      "model": "text-embedding-004"
+      "model": "gemini-embedding-001"
     }
   }
 }

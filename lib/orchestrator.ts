@@ -365,6 +365,20 @@ export class Orchestrator {
       return 'skill';
     }
 
+    if (relativePath === 'mcp.json') {
+      await this.mcpClient.close();
+      await this.loadMCPConfig();
+      await this.mcpClient.initialize();
+      this.toolRegistry = new ToolRegistry(
+        this.mcpClient,
+        this.knowledgeStoreManager,
+        this.functionLoader,
+        this.buildSandboxTools(),
+        this.buildWorkspaceToolsMap(),
+      );
+      return 'mcp';
+    }
+
     if (relativePath === 'llm.json') {
       await loadLLMConfig(this.config.llmConfigPath);
       return 'llm';

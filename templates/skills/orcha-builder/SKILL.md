@@ -286,6 +286,48 @@ Skills with `sandbox: true` in frontmatter indicate they require sandbox tools.
 
 ---
 
+## MCP Server Configuration (`mcp.json`)
+
+The `mcp.json` file in the workspace root configures external MCP servers. Agents reference them via `mcp:<server-name>` in their tools list.
+
+```json
+{
+  "version": "1.0.0",
+  "servers": {
+    "server-name": {
+      "url": "https://example.com/mcp",
+      "description": "What this server provides",
+      "timeout": 30000,
+      "enabled": true
+    }
+  },
+  "globalOptions": {
+    "throwOnLoadError": false,
+    "prefixToolNameWithServerName": true,
+    "additionalToolNamePrefix": "",
+    "defaultToolTimeout": 30000
+  }
+}
+```
+
+**Server config fields:**
+- `url` — Required for remote servers (auto-detects `streamable-http` transport)
+- `command` + `args` — Required for local stdio servers (auto-detects `stdio` transport)
+- `transport` — Explicit: `stdio`, `sse`, `streamable-http`, or `sse-only` (auto-detected if omitted)
+- `headers` — Optional HTTP headers (e.g. for auth)
+- `env` — Optional environment variables (for stdio servers)
+- `description` — Optional human-readable description
+- `timeout` — Request timeout in ms (default: 30000)
+- `enabled` — Set to `false` to disable without removing (default: true)
+
+**Adding a new MCP server:**
+1. Read `mcp.json` first to preserve existing servers
+2. Add the new server entry to the `servers` object
+3. Write the updated `mcp.json` back
+4. Create an agent that references it with `tools: [mcp:server-name]`
+
+---
+
 ## Best Practices
 
 - **Naming**: Use kebab-case for all resource names (e.g. `weather-bot`, `data-pipeline`)

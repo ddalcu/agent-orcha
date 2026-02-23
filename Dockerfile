@@ -1,13 +1,26 @@
-FROM oven/bun:latest
+FROM node:24-slim
 
-# Set the working directory to the volume mount point
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev
+
+COPY lib/ ./lib/
+COPY src/ ./src/
+COPY public/ ./public/
+COPY templates/ ./templates/
+
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENV PORT=3000
+ENV HOST=0.0.0.0
+
+VOLUME ["/data"]
+
+EXPOSE 3000
+
 WORKDIR /data
 
-# Create a data directory for the volume mount (redundant but safe)
-RUN mkdir -p /data
-
-# Set WORKSPACE to the volume mount point
-ENV WORKSPACE=/data
-
-# Run agent-orcha using bunx
-ENTRYPOINT ["bunx", "-y", "agent-orcha"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["node", "/app/src/cli/index.ts", "start"]

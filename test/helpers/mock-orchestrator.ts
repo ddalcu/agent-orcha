@@ -1,0 +1,94 @@
+/**
+ * Mock Orchestrator with all accessor stubs for route testing.
+ */
+export function createMockOrchestrator(overrides: Record<string, any> = {}) {
+  return {
+    agents: {
+      get: () => undefined,
+      list: () => [],
+      names: () => [],
+      has: () => false,
+      ...overrides.agents,
+    },
+    workflows: {
+      get: () => undefined,
+      list: () => [],
+      names: () => [],
+      has: () => false,
+      ...overrides.workflows,
+    },
+    knowledge: {
+      get: () => undefined,
+      list: () => [],
+      names: () => [],
+      has: () => false,
+      search: async () => [],
+      initialize: async () => {},
+      refresh: async () => {},
+      getMetadata: () => ({}),
+      listConfigs: () => [],
+      getSqliteStore: () => undefined,
+      getStatus: () => undefined,
+      getAllStatuses: () => ({}),
+      isIndexing: () => false,
+      ...overrides.knowledge,
+    },
+    functions: {
+      get: () => undefined,
+      list: () => [],
+      names: () => [],
+      has: () => false,
+      ...overrides.functions,
+    },
+    skills: {
+      get: () => undefined,
+      list: () => [],
+      names: () => [],
+      has: () => false,
+      resolveForAgent: () => [],
+      ...overrides.skills,
+    },
+    llmConfig: overrides.llmConfig ?? null,
+    taskManager: {
+      submitAgent: async () => ({ id: 'task_1' }),
+      submitWorkflow: async () => ({ id: 'task_2' }),
+      cancelTask: () => true,
+      getTask: () => undefined,
+      listTasks: () => [],
+      respondToInput: () => true,
+      ...overrides.taskManager,
+    },
+    conversationStore: {
+      getMessages: () => [],
+      clearSession: () => {},
+      hasSession: () => false,
+      getSessionCount: () => 0,
+      ...overrides.conversationStore,
+    },
+    agentExecutor: {
+      createInstance: async () => ({
+        invoke: async () => ({ output: 'mock', metadata: { duration: 0 } }),
+        stream: async function* () { yield 'chunk'; },
+      }),
+      ...overrides.agentExecutor,
+    },
+    workflowExecutor: {
+      execute: async () => ({ output: {}, metadata: { duration: 0, stepsExecuted: 0, success: true }, stepResults: {} }),
+      stream: async function* () { yield { type: 'workflow_complete', message: 'done' }; },
+      ...overrides.workflowExecutor,
+    },
+    mcpClientManager: {
+      listServers: () => [],
+      listTools: async () => [],
+      ...overrides.mcpClientManager,
+    },
+    toolRegistry: {
+      resolveTools: async () => [],
+      ...overrides.toolRegistry,
+    },
+    runAgent: async () => ({ output: 'mock', metadata: { duration: 0 } }),
+    runWorkflow: async () => ({ output: {}, metadata: { duration: 0, stepsExecuted: 0, success: true }, stepResults: {} }),
+    workspaceRoot: '/tmp/test-project',
+    ...overrides,
+  } as any;
+}

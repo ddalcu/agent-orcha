@@ -1,6 +1,6 @@
 {
   "name": "agent-orcha",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "TypeScript Agentic Orchestration http server and framework for building multi-agent workflows with MCP tools and vector stores",
   "keywords": [
     "ai",

@@ -103,16 +103,45 @@ export class GeminiChatModel implements ChatModel {
     if (properties) {
       const geminiProps: Record<string, any> = {};
       for (const [key, prop] of Object.entries(properties)) {
-        geminiProps[key] = {
-          type: this.mapSchemaType(prop.type as string),
-          description: prop.description as string || '',
-        };
+        geminiProps[key] = this.convertPropertyToGemini(prop);
       }
       result.properties = geminiProps;
     }
 
     if (required) {
       result.required = required;
+    }
+
+    return result;
+  }
+
+  private convertPropertyToGemini(prop: Record<string, unknown>): Record<string, unknown> {
+    const type = prop.type as string;
+    const result: Record<string, unknown> = {
+      type: this.mapSchemaType(type),
+    };
+
+    if (prop.description) {
+      result.description = prop.description;
+    }
+
+    if (type === 'array') {
+      const items = prop.items as Record<string, unknown> | undefined;
+      result.items = items
+        ? this.convertPropertyToGemini(items)
+        : { type: SchemaType.STRING };
+    }
+
+    if (type === 'object' && prop.properties) {
+      const nested = prop.properties as Record<string, Record<string, unknown>>;
+      const geminiProps: Record<string, unknown> = {};
+      for (const [key, nestedProp] of Object.entries(nested)) {
+        geminiProps[key] = this.convertPropertyToGemini(nestedProp);
+      }
+      result.properties = geminiProps;
+      if (prop.required) {
+        result.required = prop.required;
+      }
     }
 
     return result;
