@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Direct SQL-to-Graph Mapping** — `DirectMapper` maps SQL query results directly to graph entities and relationships without LLM extraction (100% data preservation)
 - **Custom LLM Providers** — OpenAI, Anthropic, and Gemini provider implementations in `lib/llm/providers/`
 - **Workspace Tools** — Project-scoped file tools (`project:` source)
+- **Password Authentication** — Optional `AUTH_PASSWORD` environment variable gates all `/api/*` routes and Studio UI with cookie-based sessions; disabled when unset
 - **New UI Views** — `MonitorView` for LLM call monitoring, `SkillsView` for skill browsing
 - **CI/CD** — GitHub Actions workflows for testing and publishing
 - **Test Suite** — 100+ test files across all subsystems
@@ -59,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Dependencies
 
-- **Added:** `@anthropic-ai/sdk`, `@google/generative-ai`, `openai@^6`, `sqlite-vec`, `better-sqlite3`, `jsdom`, `node-cron`, `ws`, `cheerio`
+- **Added:** `@anthropic-ai/sdk`, `@google/generative-ai`, `openai@^6`, `sqlite-vec`, `better-sqlite3`, `jsdom`, `node-cron`, `ws`, `cheerio`, `fastify-plugin`
 - **Removed:** all `@langchain/*`, `chromadb`, `neo4j-driver`, `neo4jd3`, `@aws-sdk/*`, `graphology`, `graphology-communities-louvain`
 
 ## Release 0.0.3

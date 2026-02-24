@@ -101,6 +101,7 @@
             <li><a href="#api-reference">Overview</a></li>
             <li>
               <ul>
+                <li><a href="#auth-api">Authentication API</a></li>
                 <li><a href="#agents-api">Agents API</a></li>
                 <li><a href="#workflows-api">Workflows API</a></li>
                 <li><a href="#knowledge-api">Knowledge API</a></li>
@@ -309,7 +310,7 @@ output:
 
         <!-- Agent Orcha Studio -->
         <h3 id="studio" class="mt-xl">Agent Orcha Studio</h3>
-        <p>Agent Orcha includes a built-in web dashboard accessible at <code>http://localhost:3000</code> when the server is running. The Studio provides a visual interface for managing and testing your entire instance.</p>
+        <p>Agent Orcha includes a built-in web dashboard accessible at <code>http://localhost:3000</code> when the server is running. The Studio provides a visual interface for managing and testing your entire instance. When <code>AUTH_PASSWORD</code> is set, the Studio will prompt for the password before granting access.</p>
 
         <h4>Studio Tabs</h4>
         <table>
@@ -449,6 +450,11 @@ services:
               <td><code>PORT</code></td>
               <td>Port for the server to listen on</td>
               <td><code>3000</code></td>
+            </tr>
+            <tr>
+              <td><code>AUTH_PASSWORD</code></td>
+              <td>When set, all API routes and the Studio UI require this password to access. When unset, no authentication is required.</td>
+              <td><em>unset (no auth)</em></td>
             </tr>
           </tbody>
         </table>
@@ -1454,6 +1460,84 @@ Response:
 {
   "status": "ok",
   "timestamp": "2026-01-21T12:00:00.000Z"
+}</code></pre>
+          </div>
+        </div>
+
+        <h3 id="auth-api" class="mt-xl">Authentication API</h3>
+        <p>When the <code>AUTH_PASSWORD</code> environment variable is set, all <code>/api/*</code> routes require a valid session cookie. The <code>/health</code> endpoint is always public. When <code>AUTH_PASSWORD</code> is not set, authentication is disabled and all routes are open.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/auth/check</code></td>
+              <td>Check authentication status (never returns 401)</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/auth/login</code></td>
+              <td>Authenticate with password, returns session cookie</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/auth/logout</code></td>
+              <td>Invalidate session and clear cookie</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Login</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">HTTP</span>
+          </div>
+          <div class="code-content">
+            <pre><code>POST /api/auth/login
+Content-Type: application/json
+
+Request:
+{
+  "password": "your-secret-password"
+}
+
+Response (success — sets HttpOnly session cookie):
+{
+  "authenticated": true
+}
+
+Response (wrong password):
+HTTP 401
+{
+  "error": "Invalid password"
+}</code></pre>
+          </div>
+        </div>
+
+        <h4>Check Auth Status</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">HTTP</span>
+          </div>
+          <div class="code-content">
+            <pre><code>GET /api/auth/check
+
+Response (auth enabled, not logged in):
+{
+  "authenticated": false,
+  "required": true
+}
+
+Response (auth disabled):
+{
+  "authenticated": true,
+  "required": false
 }</code></pre>
           </div>
         </div>

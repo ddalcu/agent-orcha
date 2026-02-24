@@ -784,7 +784,7 @@ tools:
 
 ### Agent Orcha Studio
 
-Agent Orcha Studio is a built-in web dashboard available at `http://localhost:3000` when the server is running. It provides a visual interface for managing and testing your entire Agent Orcha setup.
+Agent Orcha Studio is a built-in web dashboard available at `http://localhost:3000` when the server is running. It provides a visual interface for managing and testing your entire Agent Orcha setup. When `AUTH_PASSWORD` is set, the Studio will prompt for the password before granting access.
 
 **Studio Tabs:**
 
@@ -809,6 +809,59 @@ Response:
 {
   "status": "ok",
   "timestamp": "2026-01-21T12:00:00.000Z"
+}
+```
+
+### Authentication
+
+When `AUTH_PASSWORD` is set, all `/api/*` routes require a valid session cookie. The `/health` endpoint is always public. When `AUTH_PASSWORD` is not set, authentication is disabled and all routes are open.
+
+**Check Auth Status** (never returns 401)
+```
+GET /api/auth/check
+
+Response (auth enabled, not logged in):
+{
+  "authenticated": false,
+  "required": true
+}
+
+Response (auth disabled):
+{
+  "authenticated": true,
+  "required": false
+}
+```
+
+**Login**
+```
+POST /api/auth/login
+Content-Type: application/json
+
+Request:
+{
+  "password": "your-secret-password"
+}
+
+Response (success — sets HttpOnly session cookie):
+{
+  "authenticated": true
+}
+
+Response (wrong password):
+HTTP 401
+{
+  "error": "Invalid password"
+}
+```
+
+**Logout**
+```
+POST /api/auth/logout
+
+Response:
+{
+  "authenticated": false
 }
 ```
 
@@ -1423,6 +1476,9 @@ PORT=3000                       # Server port (default: 3000)
 HOST=0.0.0.0                   # Server host (default: 0.0.0.0)
 WORKSPACE=./my-project    # Base directory for config files (default: current directory)
 CORS_ORIGIN=true               # CORS origin policy (default: true)
+
+# Authentication (optional — when set, all API routes and Studio UI require this password)
+AUTH_PASSWORD=your-secret-password
 
 # Note: LLM API keys are configured in llm.json, not via environment variables
 

@@ -43,6 +43,11 @@ npx agent-orcha start
 
 The server and Studio dashboard will be available at `http://localhost:3000`.
 
+To enable password authentication, set `AUTH_PASSWORD` in your `.env` file:
+```bash
+AUTH_PASSWORD=your-secret-password
+```
+
 ### 3. Test Your Agent
 
 ```bash

@@ -38,7 +38,9 @@ Agent Orcha enables you to:
 
 ### Alpha Status and Security Notice
 
-**This project is currently in ALPHA state.** No security precautions have been implemented yet. This software should **ALWAYS** be deployed behind a firewall without open access to its APIs. It is designed for **internal use only** and should never be exposed directly to the public internet.
+**This project is currently in ALPHA state.** This software should **ALWAYS** be deployed behind a firewall without open access to its APIs. It is designed for **internal use only** and should never be exposed directly to the public internet.
+
+Agent Orcha includes a simple password-based authentication gate. Set the `AUTH_PASSWORD` environment variable to require a password for all API access and the Studio UI. When unset, no authentication is required (suitable for local development).
 
 
 ## Usage
@@ -127,6 +129,7 @@ services:
       - ./my-agent-orcha-project:/data
     environment:
       - WORKSPACE=/data
+      - AUTH_PASSWORD=your-secret-password  # Optional
 ```
 
 Then run:
@@ -237,8 +240,8 @@ eventSource.onmessage = (event) => {
 **CORS Configuration:**
 For production deployments, configure CORS in your server startup or use a reverse proxy (nginx, Caddy, etc.) to handle CORS headers.
 
-**Security Note:**
-Agent Orcha is currently in ALPHA with no built-in authentication. Always deploy behind a firewall or add your own authentication layer (JWT, API keys, etc.) before exposing to clients.
+**Authentication:**
+Set the `AUTH_PASSWORD` environment variable to enable password authentication for all API routes. The Studio UI will prompt for the password on access. When unset, all routes are open (suitable for local development behind a firewall).
 
 ## CLI Commands
 
@@ -357,6 +360,9 @@ HOST=0.0.0.0
 
 # Base directory for config files (optional)
 WORKSPACE=/path/to/project
+
+# Authentication (optional — when set, all API routes and Studio require this password)
+AUTH_PASSWORD=your-secret-password
 ```
 
 ## Agents
@@ -1207,6 +1213,31 @@ Agent Orcha includes a built-in web dashboard accessible at `http://localhost:30
 ```
 GET /health
 Response: { "status": "ok", "timestamp": "..." }
+```
+
+### Authentication
+
+When `AUTH_PASSWORD` is set, all `/api/*` routes require a valid session cookie. The `/health` endpoint is always public.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/check` | Check authentication status (never returns 401) |
+| POST | `/api/auth/login` | Authenticate with password, returns session cookie |
+| POST | `/api/auth/logout` | Invalidate session and clear cookie |
+
+**Login Request:**
+```json
+{
+  "password": "your-secret-password"
+}
+```
+
+**Check Response:**
+```json
+{
+  "authenticated": true,
+  "required": true
+}
 ```
 
 ### Agents

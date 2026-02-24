@@ -16,6 +16,7 @@ import { filesRoutes } from './routes/files.route.ts';
 import { graphRoutes } from './routes/graph.route.ts';
 import { tasksRoutes } from './routes/tasks.route.ts';
 import { getPinoConfig } from '../lib/logger.ts';
+import { authPlugin } from './middleware/auth.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -34,6 +35,8 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   await fastify.register(cors, {
     origin: process.env['CORS_ORIGIN'] ?? true,
   });
+
+  await fastify.register(authPlugin);
 
   await fastify.register(fastifyStatic, {
     root: path.join(__dirname, '..', 'public'),
