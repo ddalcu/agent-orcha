@@ -1,10 +1,11 @@
-import { describe, it, before, afterEach } from 'node:test';
+import { describe, it, before, afterEach, mock } from 'node:test';
 import { strict as assert } from 'node:assert';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { createTestApp } from '../helpers/mock-fastify.ts';
 import { llmRoutes } from '../../src/routes/llm.route.ts';
 import { loadLLMConfig } from '../../lib/llm/llm-config.ts';
+import { LLMFactory } from '../../lib/llm/llm-factory.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(__dirname, '..', 'fixtures', 'llm.json');
@@ -151,5 +152,159 @@ describe('llm.route', () => {
     // Default should have null baseUrl
     const defaultModel = body.find((m: any) => m.name === 'default');
     assert.equal(defaultModel.baseUrl, null);
+  });
+
+  it('POST /:name/chat should return 200 on success', async () => {
+    const mockCreate = mock.method(LLMFactory, 'create', () => ({
+      invoke: async () => ({ content: 'Hello from LLM' }),
+    }));
+
+    const result = await createTestApp(llmRoutes, '/api/llm', {
+      tasks: {
+        getManager: () => ({
+          track: () => ({ id: 'task-1' }),
+          resolve: () => {},
+          reject: () => {},
+        }),
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/llm/default/chat',
+      payload: { message: 'Hi' },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.output, 'Hello from LLM');
+    assert.equal(body.model, 'default');
+    mockCreate.mock.restore();
+  });
+
+  it('POST /:name/chat should return 429 on rate limit error', async () => {
+    const rateLimitError = Object.assign(new Error('rate limit exceeded'), { status: 429 });
+    const mockCreate = mock.method(LLMFactory, 'create', () => ({
+      invoke: async () => { throw rateLimitError; },
+    }));
+
+    const result = await createTestApp(llmRoutes, '/api/llm', {
+      tasks: {
+        getManager: () => ({
+          track: () => ({ id: 'task-1' }),
+          resolve: () => {},
+          reject: () => {},
+        }),
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/llm/default/chat',
+      payload: { message: 'Hi' },
+    });
+    assert.equal(res.statusCode, 429);
+    mockCreate.mock.restore();
+  });
+
+  it('POST /:name/chat should return 500 on generic error', async () => {
+    const mockCreate = mock.method(LLMFactory, 'create', () => ({
+      invoke: async () => { throw new Error('Something broke'); },
+    }));
+
+    const result = await createTestApp(llmRoutes, '/api/llm', {
+      tasks: {
+        getManager: () => ({
+          track: () => ({ id: 'task-1' }),
+          resolve: () => {},
+          reject: () => {},
+        }),
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/llm/default/chat',
+      payload: { message: 'Hi' },
+    });
+    assert.equal(res.statusCode, 500);
+    const body = JSON.parse(res.payload);
+    assert.ok(body.error.includes('Something broke'));
+    mockCreate.mock.restore();
+  });
+
+  it('POST /:name/stream should stream SSE events on success', async () => {
+    const chunks = [
+      { content: 'Hello' },
+      { content: ' World', usage_metadata: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } },
+    ];
+    const mockCreate = mock.method(LLMFactory, 'create', () => ({
+      stream: async function* () {
+        for (const chunk of chunks) yield chunk;
+      },
+    }));
+
+    const result = await createTestApp(llmRoutes, '/api/llm', {
+      tasks: {
+        getManager: () => ({
+          track: () => ({ id: 'task-1' }),
+          registerAbort: () => {},
+          unregisterAbort: () => {},
+          resolve: () => {},
+          reject: () => {},
+        }),
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/llm/default/stream',
+      payload: { message: 'Hi' },
+    });
+    assert.equal(res.statusCode, 200);
+    const payload = res.payload;
+    // Should contain SSE data events
+    assert.ok(payload.includes('data: {"content":"Hello"}'));
+    assert.ok(payload.includes('data: {"content":" World"}'));
+    // Should contain usage event
+    assert.ok(payload.includes('"type":"usage"'));
+    assert.ok(payload.includes('"input_tokens":10'));
+    // Should end with [DONE]
+    assert.ok(payload.includes('[DONE]'));
+    mockCreate.mock.restore();
+  });
+
+  it('POST /:name/stream should handle errors during streaming', async () => {
+    const mockCreate = mock.method(LLMFactory, 'create', () => ({
+      stream: async function* () {
+        yield { content: 'partial' };
+        throw new Error('Stream failed');
+      },
+    }));
+
+    const result = await createTestApp(llmRoutes, '/api/llm', {
+      tasks: {
+        getManager: () => ({
+          track: () => ({ id: 'task-1' }),
+          registerAbort: () => {},
+          unregisterAbort: () => {},
+          resolve: () => {},
+          reject: () => {},
+        }),
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/llm/default/stream',
+      payload: { message: 'Hi' },
+    });
+    const payload = res.payload;
+    assert.ok(payload.includes('"error":"Stream failed"'));
+    mockCreate.mock.restore();
   });
 });
