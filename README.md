@@ -6,6 +6,10 @@ Agent Orcha is a declarative framework designed to build, manage, and scale mult
 
 **[Documentation](https://ddalcu.github.io/agent-orcha)** | **[NPM Package](https://www.npmjs.com/package/agent-orcha)** | **[Docker Hub](https://hub.docker.com/r/ddalcu/agent-orcha)**
 
+```bash
+docker run -p 3000:3000 -v ./my-workspace:/data -e AUTH_PASSWORD=your-secret-password ddalcu/agent-orcha start
+```
+
 ## Why Agent Orcha?
 
 - **Declarative AI**: Define agents, workflows, and infrastructure in clear, version-controlled YAML files. No more spaghetti code.
