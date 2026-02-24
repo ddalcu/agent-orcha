@@ -35,6 +35,10 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:coverage
 
+      - name: Install lcov
+        if: github.event_name == 'pull_request'
+        run: sudo apt-get install -y lcov
+
       - name: Report coverage on PR
         if: github.event_name == 'pull_request'
         uses: zgosalvez/github-actions-report-lcov@v4
