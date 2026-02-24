@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { BaseMessage } from '@langchain/core/messages';
+import type { BaseMessage } from '../types/llm-types.ts';
 
 export const ConversationStoreConfigSchema = z.object({
   maxMessagesPerSession: z.number().int().positive().default(50),

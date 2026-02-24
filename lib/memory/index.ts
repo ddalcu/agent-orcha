@@ -1,2 +1,3 @@
-export * from './types.js';
-export { ConversationStore } from './conversation-store.js';
+export * from './types.ts';
+export { ConversationStore } from './conversation-store.ts';
+export { MemoryManager } from './memory-manager.ts';

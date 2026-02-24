@@ -8,11 +8,109 @@ export class AgentsView extends Component {
     constructor() {
         super();
         this.isLoading = false;
+        this.currentAbortController = null;
+        this.streamStartTime = null;
+        this.streamTimerInterval = null;
+        this.streamUsageData = null;
     }
 
     async connectedCallback() {
         super.connectedCallback();
         await Promise.all([this.loadAgents(), this.loadLLMs()]);
+    }
+
+    disconnectedCallback() {
+        this.stopStreamTimer();
+        if (this.currentAbortController) {
+            this.currentAbortController.abort();
+            this.currentAbortController = null;
+        }
+    }
+
+    formatElapsedTime(ms) {
+        if (ms < 1000) return `${ms}ms`;
+        const seconds = ms / 1000;
+        if (seconds < 60) return `${seconds.toFixed(1)}s`;
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = (seconds % 60).toFixed(0);
+        return `${minutes}m ${remainingSeconds}s`;
+    }
+
+    estimateTokens(text) {
+        return Math.round((text || '').length / 4);
+    }
+
+    cancelCurrentStream() {
+        if (this.currentAbortController) {
+            this.currentAbortController.abort();
+        }
+    }
+
+    startStreamTimer(responseId) {
+        this.streamStartTime = Date.now();
+        this.streamTimerInterval = setInterval(() => {
+            const elapsed = Date.now() - this.streamStartTime;
+            const bubble = this.querySelector(`#${responseId}`);
+            if (!bubble) return;
+            const timerEl = bubble.parentElement.querySelector('.stream-elapsed');
+            if (timerEl) {
+                timerEl.textContent = this.formatElapsedTime(elapsed);
+            }
+        }, 100);
+    }
+
+    stopStreamTimer(responseId, inputMessage, finalContent, wasCancelled) {
+        if (this.streamTimerInterval) {
+            clearInterval(this.streamTimerInterval);
+            this.streamTimerInterval = null;
+        }
+
+        const elapsed = this.streamStartTime ? Date.now() - this.streamStartTime : 0;
+        this.streamStartTime = null;
+
+        const bubble = this.querySelector(`#${responseId}`);
+        if (!bubble) return;
+
+        const wrapper = bubble.parentElement;
+        const statusBar = wrapper.querySelector('.stream-status-bar');
+        const statsBar = wrapper.querySelector('.stream-stats-bar');
+
+        if (statusBar) statusBar.classList.add('hidden');
+
+        if (statsBar) {
+            const elapsedEl = statsBar.querySelector('.stats-elapsed');
+            const inputTokensEl = statsBar.querySelector('.stats-input-tokens');
+            const outputTokensEl = statsBar.querySelector('.stats-output-tokens');
+            const tpsEl = statsBar.querySelector('.stats-tps');
+
+            const usage = this.streamUsageData;
+            const hasRealUsage = usage && (usage.input_tokens > 0 || usage.output_tokens > 0);
+
+            const inputTokens = hasRealUsage ? usage.input_tokens : this.estimateTokens(inputMessage);
+            const outputTokens = hasRealUsage ? usage.output_tokens : this.estimateTokens(finalContent);
+            const prefix = hasRealUsage ? '' : '~';
+
+            if (elapsedEl) elapsedEl.textContent = this.formatElapsedTime(elapsed);
+            if (inputTokensEl) inputTokensEl.textContent = `${prefix}${inputTokens} input`;
+            if (outputTokensEl) outputTokensEl.textContent = `${prefix}${outputTokens} output`;
+
+            if (tpsEl) {
+                const seconds = elapsed / 1000;
+                const tps = seconds > 0 ? (outputTokens / seconds).toFixed(1) : 0;
+                tpsEl.textContent = `${prefix}${tps} tok/s`;
+            }
+
+            this.streamUsageData = null;
+
+            if (wasCancelled) {
+                const cancelBadge = document.createElement('span');
+                cancelBadge.className = 'text-xs text-amber-400 font-medium ml-2';
+                cancelBadge.textContent = 'Cancelled';
+                statsBar.appendChild(cancelBadge);
+            }
+
+            statsBar.classList.remove('hidden');
+        }
     }
 
     async loadAgents() {
@@ -189,15 +287,28 @@ export class AgentsView extends Component {
         const responseId = 'response-' + Date.now();
         this.createResponseBubble(responseId);
 
+        this.currentAbortController = new AbortController();
+        this.streamUsageData = null;
+        this.startStreamTimer(responseId);
+
+        let finalContent = '';
+        let wasCancelled = false;
+
         try {
             if (selectionType === 'agent') {
-                await this.sendAgentMessage(agent, message, responseId);
+                finalContent = await this.sendAgentMessage(agent, message, responseId);
             } else if (selectionType === 'llm') {
-                await this.sendLlmMessage(llm, message, responseId);
+                finalContent = await this.sendLlmMessage(llm, message, responseId);
             }
         } catch (e) {
-            this.updateResponseError(responseId, `Error: ${e.message}`);
+            if (e.name === 'AbortError') {
+                wasCancelled = true;
+            } else {
+                this.updateResponseError(responseId, `Error: ${e.message}`);
+            }
         } finally {
+            this.stopStreamTimer(responseId, message, finalContent, wasCancelled);
+            this.currentAbortController = null;
             this.isLoading = false;
             this.updateUiState();
             input.focus();
@@ -209,7 +320,7 @@ export class AgentsView extends Component {
         const inputObj = {};
         inputObj[inputVars[0] || 'message'] = message;
 
-        const res = await api.streamAgent(agent.name, inputObj, store.get('sessionId'));
+        const res = await api.streamAgent(agent.name, inputObj, store.get('sessionId'), { signal: this.currentAbortController?.signal });
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
 
@@ -224,6 +335,7 @@ export class AgentsView extends Component {
 
         let currentContent = '';
         let buffer = '';
+        let hasToolCalls = false;
 
         while (true) {
             const { done, value } = await reader.read();
@@ -233,7 +345,6 @@ export class AgentsView extends Component {
             buffer += chunk;
 
             const lines = buffer.split('\n');
-            // Keep the last partial line in the buffer
             buffer = lines.pop() || '';
 
             for (const line of lines) {
@@ -245,8 +356,18 @@ export class AgentsView extends Component {
 
                     try {
                         const event = JSON.parse(data);
+
+                        // Handle server-side errors
+                        if (event.error) {
+                            this.updateResponseError(responseId, `Error: ${event.error}`);
+                            return currentContent;
+                        }
+
                         if (event.type === 'content') {
                             currentContent += event.content;
+                        }
+                        if (event.type === 'tool_start' || event.type === 'tool_end') {
+                            hasToolCalls = true;
                         }
                         this.handleStreamEvent(event, responseId, currentContent, thinkingState);
                     } catch (e) {
@@ -255,10 +376,24 @@ export class AgentsView extends Component {
                 }
             }
         }
+
+        // If tools were called but no text content was produced, clear loading state
+        if (hasToolCalls && !currentContent.trim()) {
+            const loadingDots = contentDiv.querySelector('.loading-dots');
+            if (loadingDots) {
+                loadingDots.remove();
+                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
+                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
+                contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+                contentDiv.innerHTML = '';
+            }
+        }
+
+        return currentContent;
     }
 
     async sendLlmMessage(llm, message, responseId) {
-        const res = await api.streamLLM(llm.name, message);
+        const res = await api.streamLLM(llm.name, message, { signal: this.currentAbortController?.signal });
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
 
@@ -269,8 +404,8 @@ export class AgentsView extends Component {
 
         if (loadingDots) {
             loadingDots.remove();
-            bubble.querySelector('.max-w-4xl').classList.remove('py-4');
-            bubble.querySelector('.max-w-4xl').classList.add('py-3');
+            bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
+            bubble.querySelector('.response-bubble-inner').classList.add('py-3');
             contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
             contentDiv.innerHTML = '';
         }
@@ -305,7 +440,17 @@ export class AgentsView extends Component {
                         const parsed = JSON.parse(data);
 
                         if (parsed.error) {
-                            throw new Error(parsed.error);
+                            this.updateResponseError(responseId, `Error: ${parsed.error}`);
+                            return fullContent;
+                        }
+
+                        if (parsed.type === 'usage') {
+                            this.streamUsageData = {
+                                input_tokens: parsed.input_tokens || 0,
+                                output_tokens: parsed.output_tokens || 0,
+                                total_tokens: parsed.total_tokens || 0,
+                            };
+                            continue;
                         }
 
                         const text = parsed.content || '';
@@ -321,6 +466,8 @@ export class AgentsView extends Component {
                 }
             }
         }
+
+        return fullContent;
     }
 
     renderLlmContentStreaming(contentDiv, fullContent, responseId, state) {
@@ -475,22 +622,70 @@ export class AgentsView extends Component {
 
     createResponseBubble(id) {
         const container = this.querySelector('#chatMessages');
+        const wrapper = document.createElement('div');
+        wrapper.className = 'response-wrapper';
+
         const div = document.createElement('div');
         div.id = id;
         div.className = 'flex justify-start';
         div.innerHTML = `
-            <div class="max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-4 text-gray-100 text-[15px] leading-relaxed relative group">
+            <div class="response-bubble-inner max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-4 text-gray-100 text-[15px] leading-relaxed relative group">
                 <div class="response-content whitespace-pre-wrap flex items-center">
                     <div class="loading-dots flex gap-1">
                         <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-200"></div>
+                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-400"></div>
                     </div>
                 </div>
-                <div class="tool-invocations space-y-2 mt-2"></div>
+                <div class="tool-invocations flex flex-wrap gap-1.5 mt-2"></div>
             </div>
         `;
-        container.appendChild(div);
+
+        wrapper.appendChild(div);
+
+        // Stream status bar (visible during streaming)
+        const statusBar = document.createElement('div');
+        statusBar.className = 'stream-status-bar flex items-center gap-2 mt-1.5 ml-1 text-xs text-gray-400';
+        statusBar.innerHTML = `
+            <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse-dot"></div>
+            <span class="stream-status-text">Generating...</span>
+            <span class="stream-elapsed text-gray-500">0.0s</span>
+            <button class="stream-cancel-btn ml-auto text-gray-500 hover:text-gray-300 text-xs px-2 py-0.5 rounded border border-dark-border hover:border-gray-500 transition-colors">
+                Stop
+            </button>
+        `;
+        wrapper.appendChild(statusBar);
+
+        // Wire up cancel button
+        statusBar.querySelector('.stream-cancel-btn').addEventListener('click', () => this.cancelCurrentStream());
+
+        // Stats bar (visible after completion)
+        const statsBar = document.createElement('div');
+        statsBar.className = 'stream-stats-bar hidden flex items-center gap-3 mt-1.5 ml-1 text-xs text-gray-500';
+        statsBar.innerHTML = `
+            <span class="flex items-center gap-1">
+                <i class="far fa-clock"></i>
+                <span class="stats-elapsed"></span>
+            </span>
+            <span class="text-dark-border">|</span>
+            <span class="flex items-center gap-1">
+                <i class="fas fa-arrow-up text-[9px]"></i>
+                <span class="stats-input-tokens"></span>
+            </span>
+            <span class="text-dark-border">|</span>
+            <span class="flex items-center gap-1">
+                <i class="fas fa-arrow-down text-[9px]"></i>
+                <span class="stats-output-tokens"></span>
+            </span>
+            <span class="text-dark-border">|</span>
+            <span class="flex items-center gap-1">
+                <i class="fas fa-bolt text-[9px]"></i>
+                <span class="stats-tps"></span>
+            </span>
+        `;
+        wrapper.appendChild(statsBar);
+
+        container.appendChild(wrapper);
         container.scrollTop = container.scrollHeight;
     }
 
@@ -506,57 +701,98 @@ export class AgentsView extends Component {
         if (event.type === 'content') {
             if (loadingDots) {
                 loadingDots.remove();
-                // Reset padding and remove flex classes
-                bubble.querySelector('.max-w-4xl').classList.remove('py-4');
-                bubble.querySelector('.max-w-4xl').classList.add('py-3');
+                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
+                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
                 contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
-                // Clear any whitespace
                 contentDiv.innerHTML = '';
             }
-            // Use the same rendering method as LLMs to handle [THINK] tags
             this.renderLlmContentStreaming(contentDiv, currentContent, responseId, thinkingState);
-            // Scroll to bottom as content streams in
             container.scrollTop = container.scrollHeight;
         } else if (event.type === 'tool_start') {
             const toolId = `tool-${event.runId}`;
             const toolEl = document.createElement('div');
             toolEl.id = toolId;
-            toolEl.className = 'bg-dark-bg/50 border border-dark-border rounded-lg p-2 text-sm text-gray-400 font-mono flex items-center gap-2';
+            toolEl.className = 'tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-gray-400 font-mono';
+            toolEl.dataset.toolInput = typeof event.input === 'string' ? event.input : JSON.stringify(event.input, null, 2);
             toolEl.innerHTML = `
-                <i class="fas fa-cog animate-spin text-blue-400"></i>
-                <span>Using ${event.tool}...</span>
+                <i class="fas fa-circle-notch animate-spin text-blue-400 text-[10px]"></i>
+                <span>${this.escapeHtml(event.tool)}</span>
              `;
             toolsDiv.appendChild(toolEl);
-            // Scroll to bottom when tool starts
             container.scrollTop = container.scrollHeight;
 
-            // If we have loading dots, keep them until text arrives
         } else if (event.type === 'tool_end') {
             const toolId = `tool-${event.runId}`;
             const toolEl = toolsDiv.querySelector(`#${toolId}`);
             if (toolEl) {
-                toolEl.className = 'bg-dark-bg/30 border border-dark-border/50 rounded-lg p-2 text-sm text-gray-500 font-mono flex flex-col gap-1';
-                // Success state
-                toolEl.innerHTML = `
-                    <div class="flex items-center gap-2">
-                        <i class="fas fa-check text-green-500"></i>
-                        <span>Used ${event.tool}</span>
-                    </div>
-                `;
+                const toolInput = toolEl.dataset.toolInput || '';
+                const toolOutput = typeof event.output === 'string' ? event.output : JSON.stringify(event.output, null, 2);
 
-                // Add output preview
-                const preview = document.createElement('div');
-                preview.className = 'text-xs text-gray-600 pl-6 truncate';
-                preview.textContent = typeof event.output === 'string' ? event.output : JSON.stringify(event.output);
-                toolEl.appendChild(preview);
-                // Scroll to bottom when tool ends (output preview added)
+                toolEl.className = 'tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
+                toolEl.innerHTML = '';
+
+                // Pill content (icon + name)
+                const pillContent = document.createElement('span');
+                pillContent.className = 'inline-flex items-center gap-1.5';
+                pillContent.innerHTML = `
+                    <i class="fas fa-check text-green-500 text-[10px]"></i>
+                    <span>${this.escapeHtml(event.tool)}</span>
+                `;
+                toolEl.appendChild(pillContent);
+
+                // Popover details panel (positioned below the pill)
+                const details = document.createElement('div');
+                details.className = 'tool-invocation-details hidden absolute left-0 top-full mt-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
+
+                // Input section
+                if (toolInput) {
+                    const inputSection = document.createElement('div');
+                    inputSection.className = 'p-3 border-b border-dark-border/50';
+                    inputSection.innerHTML = `<div class="text-xs font-semibold text-gray-400 mb-1">Input</div>`;
+                    const inputPre = document.createElement('pre');
+                    inputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar';
+                    inputPre.textContent = toolInput;
+                    inputSection.appendChild(inputPre);
+                    details.appendChild(inputSection);
+                }
+
+                // Output section
+                const outputSection = document.createElement('div');
+                outputSection.className = 'p-3';
+                outputSection.innerHTML = `<div class="text-xs font-semibold text-gray-400 mb-1">Output</div>`;
+                const outputPre = document.createElement('pre');
+                outputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar';
+                outputPre.textContent = toolOutput;
+                outputSection.appendChild(outputPre);
+                details.appendChild(outputSection);
+
+                toolEl.appendChild(details);
+
+                // Toggle popover on click
+                toolEl.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Close any other open popovers
+                    toolsDiv.querySelectorAll('.tool-invocation-details:not(.hidden)').forEach(d => {
+                        if (d !== details) d.classList.add('hidden');
+                    });
+                    details.classList.toggle('hidden');
+                });
+
+                // Close popover when clicking outside
+                const closeHandler = (e) => {
+                    if (!toolEl.contains(e.target)) {
+                        details.classList.add('hidden');
+                    }
+                };
+                document.addEventListener('click', closeHandler, { capture: true });
                 container.scrollTop = container.scrollHeight;
             }
         } else if (event.type === 'result') {
             if (loadingDots) {
                 loadingDots.remove();
-                bubble.querySelector('.max-w-4xl').classList.remove('py-4');
-                bubble.querySelector('.max-w-4xl').classList.add('py-3');
+                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
+                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
                 contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
                 contentDiv.innerHTML = '';
             }
@@ -574,6 +810,24 @@ export class AgentsView extends Component {
 
             // Scroll to bottom
             container.scrollTop = container.scrollHeight;
+        } else if (event.type === 'error') {
+            if (loadingDots) {
+                loadingDots.remove();
+                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
+                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
+                contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+            }
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'text-red-400 text-sm mt-2';
+            errorDiv.textContent = `Error: ${event.error}`;
+            contentDiv.appendChild(errorDiv);
+            container.scrollTop = container.scrollHeight;
+        } else if (event.type === 'usage') {
+            this.streamUsageData = {
+                input_tokens: event.input_tokens || 0,
+                output_tokens: event.output_tokens || 0,
+                total_tokens: event.total_tokens || 0,
+            };
         }
     }
 
@@ -637,8 +891,8 @@ export class AgentsView extends Component {
             <div class="max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-4">
                 <div class="flex gap-1">
                     <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-200"></div>
+                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-400"></div>
                 </div>
             </div>
         `;
@@ -675,8 +929,8 @@ export class AgentsView extends Component {
         `;
         container.appendChild(div);
 
-        // Clear session ID to start fresh
-        store.set('sessionId', null);
+        // Generate a new session ID for fresh conversation
+        store.set('sessionId', 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
     }
 
     postRender() {

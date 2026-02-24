@@ -1,0 +1,9 @@
+name: test-agent
+description: A test agent for unit testing
+version: "1.0.0"
+llm: default
+prompt:
+  system: You are a helpful test agent
+  inputVariables:
+    - query
+tools: []

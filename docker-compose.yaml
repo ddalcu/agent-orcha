@@ -1,12 +1,9 @@
-version: '3.8'
-
 services:
   agent-orcha:
     build: .
+    ports:
+      - "3000:3000"
     volumes:
-      - ./orcha-data:/data
+      - .local/workspace:/data
     environment:
-      - ORCHA_BASE_DIR=/data
-    working_dir: /app
-    # Command to run (optional, since it's the ENTRYPOINT in Dockerfile)
-    # command: --help
+      PORT: 3000

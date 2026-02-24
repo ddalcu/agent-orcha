@@ -47,6 +47,9 @@
   <!-- Ace Editor -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.js"></script>
 
+  <!-- vis.js Network (graph visualization) -->
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -160,6 +163,35 @@
 
     .markdown-content a:hover {
       color: #93c5fd;
+    }
+
+    /* Graph view */
+    .graph-canvas {
+      background: radial-gradient(ellipse at center, #1a2332 0%, #0d1520 100%);
+    }
+
+    #graphContainer {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Animation delay utilities (avoid inline styles) */
+    .animation-delay-200 {
+      animation-delay: 0.2s;
+    }
+
+    .animation-delay-400 {
+      animation-delay: 0.4s;
+    }
+
+    /* Stream status bar pulse */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .animate-pulse-dot {
+      animation: pulse-dot 1.5s ease-in-out infinite;
     }
 
     .markdown-content blockquote {

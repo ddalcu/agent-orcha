@@ -1,25 +1,31 @@
-import type { StructuredTool } from '@langchain/core/tools';
-import type { MCPClientManager } from '../mcp/mcp-client.js';
-import type { KnowledgeStoreManager } from '../knowledge/knowledge-store-manager.js';
-import type { FunctionLoader } from '../functions/function-loader.js';
-import type { ToolReference } from '../agents/types.js';
-import { createKnowledgeSearchTool } from './built-in/knowledge-search.tool.js';
-import { logger } from '../logger.js';
+import type { StructuredTool } from '../types/llm-types.ts';
+import type { MCPClientManager } from '../mcp/mcp-client.ts';
+import type { KnowledgeStore } from '../knowledge/knowledge-store.ts';
+import type { FunctionLoader } from '../functions/function-loader.ts';
+import type { ToolReference } from '../agents/types.ts';
+import { createKnowledgeTools } from './built-in/knowledge-tools-factory.ts';
+import { logger } from '../logger.ts';
 
 export class ToolRegistry {
   private mcpClient: MCPClientManager;
-  private knowledgeStores: KnowledgeStoreManager;
+  private knowledgeStores: KnowledgeStore;
   private functionLoader: FunctionLoader;
   private builtInTools: Map<string, StructuredTool> = new Map();
+  private sandboxTools: Map<string, StructuredTool>;
+  private workspaceTools: Map<string, StructuredTool>;
 
   constructor(
     mcpClient: MCPClientManager,
-    knowledgeStores: KnowledgeStoreManager,
-    functionLoader: FunctionLoader
+    knowledgeStores: KnowledgeStore,
+    functionLoader: FunctionLoader,
+    sandboxTools: Map<string, StructuredTool> = new Map(),
+    workspaceTools: Map<string, StructuredTool> = new Map(),
   ) {
     this.mcpClient = mcpClient;
     this.knowledgeStores = knowledgeStores;
     this.functionLoader = functionLoader;
+    this.sandboxTools = sandboxTools;
+    this.workspaceTools = workspaceTools;
   }
 
   async resolveTools(toolRefs: ToolReference[]): Promise<StructuredTool[]> {
@@ -61,11 +67,13 @@ export class ToolRegistry {
           await this.knowledgeStores.initialize(name);
           const initializedStore = this.knowledgeStores.get(name);
           if (initializedStore) {
-            return [createKnowledgeSearchTool(name, initializedStore)];
+            const sqliteStore = this.knowledgeStores.getSqliteStore(name);
+            return createKnowledgeTools(name, initializedStore, sqliteStore);
           }
           return [];
         }
-        return [createKnowledgeSearchTool(name, store)];
+        const sqliteStore = this.knowledgeStores.getSqliteStore(name);
+        return createKnowledgeTools(name, store, sqliteStore);
       }
 
       case 'function': {
@@ -76,6 +84,24 @@ export class ToolRegistry {
       case 'builtin': {
         const builtin = this.builtInTools.get(name);
         return builtin ? [builtin] : [];
+      }
+
+      case 'sandbox': {
+        const sandboxTool = this.sandboxTools.get(name);
+        if (!sandboxTool) {
+          logger.warn(`Sandbox tool "${name}" not found (available: ${Array.from(this.sandboxTools.keys()).join(', ') || 'none'})`);
+          return [];
+        }
+        return [sandboxTool];
+      }
+
+      case 'workspace': {
+        const workspaceTool = this.workspaceTools.get(name);
+        if (!workspaceTool) {
+          logger.warn(`Workspace tool "${name}" not found (available: ${Array.from(this.workspaceTools.keys()).join(', ') || 'none'})`);
+          return [];
+        }
+        return [workspaceTool];
       }
 
       default:
@@ -100,11 +126,6 @@ export class ToolRegistry {
     return Array.from(this.builtInTools.keys());
   }
 
-  // Methods for bulk tool discovery (used by LangGraph workflows)
-
-  /**
-   * Gets all MCP tools from all servers.
-   */
   async getAllMCPTools(): Promise<StructuredTool[]> {
     const serverNames = this.mcpClient.getServerNames();
     const allTools: StructuredTool[] = [];
@@ -121,43 +142,41 @@ export class ToolRegistry {
     return allTools;
   }
 
-  /**
-   * Gets all knowledge search tools for all configured knowledge stores.
-   */
   async getAllKnowledgeTools(): Promise<StructuredTool[]> {
     const configs = this.knowledgeStores.listConfigs();
     const tools: StructuredTool[] = [];
 
     for (const config of configs) {
       try {
-        // Initialize store if needed
         let store = this.knowledgeStores.get(config.name);
         if (!store) {
           store = await this.knowledgeStores.initialize(config.name);
         }
 
-        // Create knowledge search tool
-        const tool = createKnowledgeSearchTool(config.name, store);
-        tools.push(tool);
+        const sqliteStore = this.knowledgeStores.getSqliteStore(config.name);
+        const knowledgeTools = createKnowledgeTools(config.name, store, sqliteStore);
+        tools.push(...knowledgeTools);
       } catch (error) {
-        logger.warn(`Failed to create knowledge search tool for "${config.name}":`, error);
+        logger.warn(`Failed to create knowledge tools for "${config.name}":`, error);
       }
     }
 
     return tools;
   }
 
-  /**
-   * Gets all custom function tools.
-   */
   getAllFunctionTools(): StructuredTool[] {
     return this.functionLoader.list().map((f) => f.tool);
   }
 
-  /**
-   * Gets all built-in tools.
-   */
   getAllBuiltInTools(): StructuredTool[] {
     return Array.from(this.builtInTools.values());
+  }
+
+  getAllSandboxTools(): StructuredTool[] {
+    return Array.from(this.sandboxTools.values());
+  }
+
+  getAllWorkspaceTools(): StructuredTool[] {
+    return Array.from(this.workspaceTools.values());
   }
 }

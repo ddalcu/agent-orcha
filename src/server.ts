@@ -3,15 +3,20 @@ import { fileURLToPath } from 'url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
-import type { Orchestrator } from '../lib/index.js';
-import { agentsRoutes } from './routes/agents.route.js';
-import { workflowsRoutes } from './routes/workflows.route.js';
-import { knowledgeRoutes } from './routes/knowledge.route.js';
-import { llmRoutes } from './routes/llm.route.js';
-import { mcpRoutes } from './routes/mcp.route.js';
-import { functionsRoutes } from './routes/functions.route.js';
-import { filesRoutes } from './routes/files.route.js';
-import { getPinoConfig } from '../lib/logger.js';
+import type { Orchestrator } from '../lib/index.ts';
+import { TriggerManager } from '../lib/triggers/trigger-manager.ts';
+import { agentsRoutes } from './routes/agents.route.ts';
+import { workflowsRoutes } from './routes/workflows.route.ts';
+import { knowledgeRoutes } from './routes/knowledge.route.ts';
+import { llmRoutes } from './routes/llm.route.ts';
+import { mcpRoutes } from './routes/mcp.route.ts';
+import { functionsRoutes } from './routes/functions.route.ts';
+import { skillsRoutes } from './routes/skills.route.ts';
+import { filesRoutes } from './routes/files.route.ts';
+import { graphRoutes } from './routes/graph.route.ts';
+import { tasksRoutes } from './routes/tasks.route.ts';
+import { getPinoConfig } from '../lib/logger.ts';
+import { authPlugin } from './middleware/auth.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,6 +36,8 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
     origin: process.env['CORS_ORIGIN'] ?? true,
   });
 
+  await fastify.register(authPlugin);
+
   await fastify.register(fastifyStatic, {
     root: path.join(__dirname, '..', 'public'),
     prefix: '/',
@@ -48,7 +55,15 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   await fastify.register(llmRoutes, { prefix: '/api/llm' });
   await fastify.register(mcpRoutes, { prefix: '/api/mcp' });
   await fastify.register(functionsRoutes, { prefix: '/api/functions' });
+  await fastify.register(skillsRoutes, { prefix: '/api/skills' });
   await fastify.register(filesRoutes, { prefix: '/api/files' });
+  await fastify.register(graphRoutes, { prefix: '/api/graph' });
+  await fastify.register(tasksRoutes, { prefix: '/api/tasks' });
+
+  // Start triggers (cron + webhooks) after all routes are registered
+  const triggerManager = new TriggerManager();
+  await triggerManager.start(orchestrator, fastify);
+  orchestrator.triggers.setManager(triggerManager);
 
   return fastify;
 }

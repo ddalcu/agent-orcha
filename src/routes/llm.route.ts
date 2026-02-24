@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { LLMFactory, listModelConfigs, getModelConfig } from '../../lib/llm/index.js';
-import { HumanMessage } from '@langchain/core/messages';
-import { logger } from '../../lib/logger.js';
+import { LLMFactory, listModelConfigs, getModelConfig } from '../../lib/llm/index.ts';
+import { humanMessage } from '../../lib/types/llm-types.ts';
+import { logger } from '../../lib/logger.ts';
 
 interface LLMParams {
   name: string;
@@ -53,22 +53,29 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ error: 'message is required' });
       }
 
+      const taskManager = fastify.orchestrator.tasks.getManager();
+      const task = taskManager.track('llm', name, { message });
+
       try {
         const llm = LLMFactory.create(name);
-        const response = await llm.invoke([new HumanMessage(message)]);
+        const response = await llm.invoke([humanMessage(message)]);
 
-        return {
+        const result = {
           output: response.content,
           model: name,
           metadata: {
             temperature: getModelConfig(name).temperature,
           },
         };
+
+        taskManager.resolve(task.id, result);
+        return result;
       } catch (error: any) {
         logger.error('[LLM Route] Error invoking LLM:', error);
         const message = error instanceof Error ? error.message : String(error);
         const stack = error instanceof Error ? error.stack : undefined;
         fastify.log.error({ error, stack }, 'LLM invocation error');
+        taskManager.reject(task.id, error);
 
         // Handle rate limiting errors with better messages
         if (error.status === 429 || message.includes('quota') || message.includes('rate limit')) {
@@ -93,29 +100,67 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ error: 'message is required' });
       }
 
+      const taskManager = fastify.orchestrator.tasks.getManager();
+      const task = taskManager.track('llm', name, { message });
+
+      // Create an AbortController that cancels the LLM stream on client disconnect or task cancel
+      const abortController = new AbortController();
+      taskManager.registerAbort(task.id, abortController);
+
       reply.raw.setHeader('Content-Type', 'text/event-stream');
       reply.raw.setHeader('Cache-Control', 'no-cache');
       reply.raw.setHeader('Connection', 'keep-alive');
 
+      // Abort the LLM stream when the client disconnects (socket close, not request body close)
+      reply.raw.on('close', () => {
+        if (!abortController.signal.aborted) {
+          abortController.abort();
+        }
+      });
+
       try {
         const llm = LLMFactory.create(name);
-        const stream = await llm.stream([new HumanMessage(message)]);
+        const stream = await llm.stream([humanMessage(message)], { signal: abortController.signal });
 
+        let lastChunk: any = null;
         for await (const chunk of stream) {
+          if (abortController.signal.aborted) break;
+          lastChunk = chunk;
           const content = chunk.content;
           if (content) {
             reply.raw.write(`data: ${JSON.stringify({ content })}\n\n`);
           }
         }
 
-        reply.raw.write('data: [DONE]\n\n');
+        if (!abortController.signal.aborted) {
+          // Send usage stats from the final chunk if available
+          if (lastChunk?.usage_metadata) {
+            const um = lastChunk.usage_metadata;
+            reply.raw.write(`data: ${JSON.stringify({
+              type: 'usage',
+              input_tokens: um.input_tokens ?? 0,
+              output_tokens: um.output_tokens ?? 0,
+              total_tokens: um.total_tokens ?? 0,
+            })}\n\n`);
+          }
+
+          taskManager.resolve(task.id, { output: 'stream completed', model: name });
+          reply.raw.write('data: [DONE]\n\n');
+        }
         reply.raw.end();
       } catch (error) {
+        if (abortController.signal.aborted) {
+          reply.raw.end();
+          return;
+        }
         logger.error('[LLM Route] Error streaming LLM:', error);
         const message = error instanceof Error ? error.message : String(error);
         fastify.log.error({ error }, 'LLM streaming error');
+        taskManager.reject(task.id, error);
         reply.raw.write(`data: ${JSON.stringify({ error: message })}\n\n`);
         reply.raw.end();
+      } finally {
+        taskManager.unregisterAbort(task.id);
       }
     }
   );

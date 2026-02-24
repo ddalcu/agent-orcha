@@ -1,5 +1,5 @@
-name: example-workflow
-description: A workflow demonstrating multi-agent orchestration with MCP, function, and vector tools
+name: research-pipeline
+description: Multi-step research pipeline that searches knowledge bases and produces a friendly summary
 version: "1.0.0"
 type: steps
 
@@ -8,51 +8,50 @@ input:
     topic:
       type: string
       required: true
-      description: The topic or question to process
+      description: The research topic or question
 
 steps:
 
-  # Step 1: Search the knowledge base for relevant information
-  - id: search-knowledge
-    agent: call-center-analyst
+  # Step 1: Search web knowledge for background information
+  - id: web-research
+    agent: knowledge-broker
     input:
-      query: "{{input.topic}}"
+      query: "Find information about {{input.topic}}"
     output:
-      key: knowledge_result
+      key: web_findings
 
-  # Step 2: Calculate the 10th Fibonacci number
-  - id: perform-calculation
-    agent: math
+  # Step 2: Search org chart to find relevant people in the company
+  - id: find-experts
+    agent: knowledge-broker
     input:
-      query: "Calculate 2*2"
+      query: "Who in the company has expertise related to {{input.topic}}?"
     output:
-      key: calculation_result
+      key: expert_findings
 
-  # Step 3: Summarize results with the example agent
+  # Step 3: Summarize everything into a friendly report
   - id: summarize
-    agent: sentiment-structured
+    agent: chatbot
     input:
       query: |
-        Summarize the following information:
+        Write a brief research summary on: {{input.topic}}
 
-        Topic: {{input.topic}}
+        Background Research:
+        {{steps.web-research.output}}
 
-        Knowledge Base Results:
-        {{steps.search-knowledge.output}}
+        Internal Experts:
+        {{steps.find-experts.output}}
 
-        Calculation Results:
-        {{steps.perform-calculation.output}}
+        Combine these into a clear, concise report with sections for background context and recommended contacts.
     output:
-      key: final_summary
+      key: final_report
 
 config:
   timeout: 300000
   onError: stop
 
 output:
-  timestamp: "{{steps.get-time.output}}"
-  knowledge: "{{steps.search-knowledge.output}}"
-  calculation: "{{steps.perform-calculation.output}}"
+  research: "{{steps.web-research.output}}"
+  experts: "{{steps.find-experts.output}}"
   summary: "{{steps.summarize.output}}"
 
 metadata:
@@ -61,8 +60,4 @@ metadata:
     - demo
     - workflow
     - multi-agent
-    - function-tools
-    - vector-search
-    - mcp-tools
-    - time-api
-    - fibonacci
+    - knowledge-search

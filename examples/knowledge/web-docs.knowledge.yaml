@@ -19,9 +19,6 @@ splitter:
 
 embedding: default
 
-store:
-  type: memory
-
 search:
   defaultK: 5
   scoreThreshold: 0.3

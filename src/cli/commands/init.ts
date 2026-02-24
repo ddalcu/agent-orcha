@@ -34,7 +34,7 @@ async function copyTemplates(targetDir: string): Promise<void> {
   }
 
   // Copy all template directories
-  const templateDirs = ['agents', 'functions', 'knowledge', 'workflows'];
+  const templateDirs = ['agents', 'functions', 'knowledge', 'skills', 'workflows'];
 
   for (const dir of templateDirs) {
     const sourcePath = path.join(templatesDir, dir);
@@ -89,7 +89,7 @@ export async function initCommand(args: string[]): Promise<void> {
   }
 
   // Check if directories already exist
-  const dirs = ['agents', 'functions', 'knowledge', 'workflows'];
+  const dirs = ['agents', 'functions', 'knowledge', 'skills', 'workflows'];
   const existingDirs = [];
 
   for (const dir of dirs) {

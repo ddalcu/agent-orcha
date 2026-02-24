@@ -1,9 +1,19 @@
+import dotenv from 'dotenv';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
-import 'dotenv/config';
-import { Orchestrator } from '../../../lib/index.js';
-import { createServer } from '../../server.js';
-import { logger } from '../../../lib/logger.js';
+
+// Load .env from the project root (cwd), which is the CLI convention
+const cliEnvPath = path.join(process.cwd(), '.env');
+if (fsSync.existsSync(cliEnvPath)) {
+  dotenv.config({ path: cliEnvPath });
+} else {
+  dotenv.config();
+}
+
+import { Orchestrator } from '../../../lib/index.ts';
+import { createServer } from '../../server.ts';
+import { logger } from '../../../lib/logger.ts';
 
 async function directoryExists(dirPath: string): Promise<boolean> {
   try {
@@ -14,12 +24,12 @@ async function directoryExists(dirPath: string): Promise<boolean> {
   }
 }
 
-async function validateProjectStructure(projectRoot: string): Promise<void> {
+async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> {
   const requiredDirs = ['agents', 'functions', 'knowledge', 'workflows'];
   const missingDirs = [];
 
   for (const dir of requiredDirs) {
-    const dirPath = path.join(projectRoot, dir);
+    const dirPath = path.join(workspaceRoot, dir);
     if (!(await directoryExists(dirPath))) {
       missingDirs.push(dir);
     }
@@ -28,9 +38,9 @@ async function validateProjectStructure(projectRoot: string): Promise<void> {
   if (missingDirs.length > 0) {
     console.error('\nError: Required directories not found in current directory:');
     missingDirs.forEach(dir => console.error(`  - ${dir}/`));
-    console.error('\nThis does not appear to be an Agent Orcha project.');
-    console.error('Run "npx agent-orcha init" to create a new project.\n');
-    throw new Error('Invalid project structure');
+    console.error('\nThis does not appear to be an Agent Orcha workspace.');
+    console.error('Run "npx agent-orcha init" to create a new workspace.\n');
+    throw new Error('Invalid workspace structure');
   }
 
   // Check for config files
@@ -38,7 +48,7 @@ async function validateProjectStructure(projectRoot: string): Promise<void> {
   const missingConfigs = [];
 
   for (const file of configFiles) {
-    const filePath = path.join(projectRoot, file);
+    const filePath = path.join(workspaceRoot, file);
     try {
       await fs.access(filePath);
     } catch {
@@ -58,7 +68,7 @@ async function validateProjectStructure(projectRoot: string): Promise<void> {
 }
 
 export async function startCommand(_args: string[]): Promise<void> {
-  const projectRoot = process.cwd();
+  const workspaceRoot = process.cwd();
 
   console.log(`
                 ⠀⠀⠀⠀⠀⠀⢀⣀⣀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -83,11 +93,11 @@ export async function startCommand(_args: string[]): Promise<void> {
   ║               Knowledge, Agent, Action                    ║
   ╚═══════════════════════════════════════════════════════════╝
 `);
-  console.log(`Project root: ${projectRoot}\n`);
+  console.log(`Workspace root: ${workspaceRoot}\n`);
 
   // Validate project structure
   try {
-    await validateProjectStructure(projectRoot);
+    await validateWorkspaceStructure(workspaceRoot);
   } catch (error) {
     process.exit(1);
   }
@@ -98,7 +108,7 @@ export async function startCommand(_args: string[]): Promise<void> {
   logger.info('Initializing Agent Orcha...');
 
   const orchestrator = new Orchestrator({
-    projectRoot,
+    workspaceRoot,
   });
 
   await orchestrator.initialize();

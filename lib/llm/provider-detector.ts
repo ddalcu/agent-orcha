@@ -1,4 +1,4 @@
-import type { ModelConfig } from './llm-config.js';
+import type { ModelConfig } from './llm-config.ts';
 
 export type LLMProvider = 'openai' | 'gemini' | 'anthropic' | 'local';
 

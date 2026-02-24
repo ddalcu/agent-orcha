@@ -1,7 +1,7 @@
-import { tool } from '@langchain/core/tools';
+import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
-import type { StructuredTool } from '@langchain/core/tools';
-import type { KnowledgeStoreInstance } from '../../knowledge/types.js';
+import type { StructuredTool } from '../../types/llm-types.ts';
+import type { KnowledgeStoreInstance } from '../../knowledge/types.ts';
 
 export function createKnowledgeSearchTool(name: string, store: KnowledgeStoreInstance): StructuredTool {
   return tool(

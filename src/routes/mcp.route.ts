@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { logger } from '../../lib/logger.js';
+import { logger } from '../../lib/logger.ts';
 
 interface MCPParams {
   name: string;

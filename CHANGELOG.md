@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Release 0.0.5
+
+### Breaking Changes
+
+- **LangChain removed** — All `@langchain/*` dependencies replaced with custom implementations and direct LLM provider SDKs
+- **Node.js 24+ required** — Leverages built-in TypeScript support; Docker image updated to `node:24-slim`
+- **Unified SQLite + sqlite-vec knowledge stores** — Chroma, Pinecone, Qdrant, Neo4j, and S3 backends removed; all stores now use a single SQLite persistence layer
+- **Workflow type renamed** — `type: langgraph` → `type: react` in workflow YAML configs; executor renamed to `ReactWorkflowExecutor`
+- **Config field renamed** — `projectRoot` → `workspaceRoot` in `Orchestrator` constructor
+- **Environment variable renamed** — `ORCHA_BASE_DIR` → `WORKSPACE`
+- **Knowledge config fields stripped by migration** — The following fields are automatically removed on load: `kind`, `store` (top-level), `graph.extractionMode`, `graph.extraction`, `graph.communities`, `graph.cache`, `graph.store`, `search.localSearch`, `search.globalSearch`
+
+### Added
+
+- **Skills System** — Prompt augmentation via Markdown files (`skills/*/SKILL.md`) with YAML frontmatter; attach to agents via `skills:` config; loaded by `lib/skills/skill-loader.ts`
+- **Task Management** — Submit, track, and cancel async tasks via `TaskManager` and `TaskStore` (`lib/tasks/`)
+- **Sandbox Execution** — `VmExecutor` (`lib/sandbox/vm-executor.ts`) with three built-in tools: `sandbox_exec`, `sandbox_web_fetch`, `sandbox_web_search`
+- **Integrations System** — `IntegrationManager` (`lib/integrations/`) with Collabnook connector
+- **Trigger System** — Cron (node-cron) and webhook triggers via `TriggerManager` (`lib/triggers/`)
+- **Memory Manager** — Persistent agent memory to disk (`.memory/` directory) alongside session-based `ConversationStore`
+- **ReAct Loop** — New `react-loop.ts` implementing the ReAct reasoning pattern, replacing LangGraph dependency
+- **LLM Observability** — `LLMCallLogger` integrated into `AgentExecutor` and `ReactWorkflowExecutor` for context size breakdown, token estimates, and call duration metrics
+- **Knowledge Graph Tools** — `KnowledgeToolsFactory` creates `entity_lookup`, `traverse`, `graph_schema`, `sql`, and `search` tools for stores with entities
+- **Direct SQL-to-Graph Mapping** — `DirectMapper` maps SQL query results directly to graph entities and relationships without LLM extraction (100% data preservation)
+- **Custom LLM Providers** — OpenAI, Anthropic, and Gemini provider implementations in `lib/llm/providers/`
+- **Workspace Tools** — Project-scoped file tools (`project:` source)
+- **Password Authentication** — Optional `AUTH_PASSWORD` environment variable gates all `/api/*` routes and Studio UI with cookie-based sessions; disabled when unset
+- **New UI Views** — `MonitorView` for LLM call monitoring, `SkillsView` for skill browsing
+- **CI/CD** — GitHub Actions workflows for testing and publishing
+- **Test Suite** — 100+ test files across all subsystems
+- **New Template Agents** — architect, chatbot, sandbox, knowledge-broker
+- **New Template Knowledge Stores** — org-chart, pet-store, web-docs
+
+### Changed
+
+- Conversation store uses custom message types (no longer LangChain `HumanMessage`/`AIMessage`)
+- Tool registry expanded with `sandbox:` and `project:` tool sources
+- Workflow executors refactored — step-based executor unchanged, autonomous executor rewritten as `ReactWorkflowExecutor`
+- Knowledge list API returns full status metadata including indexing state and counts
+- `.env` loading improved — both CLI and programmatic entry load `.env` before any imports
+
+### Removed
+
+- All `@langchain/*` dependencies
+- Vector store backends: Chroma (`chromadb`), Pinecone, Qdrant, in-memory `VectorStoreCache`
+- S3 document loader (`@aws-sdk/*`)
+- Neo4j graph store (`neo4j-driver`)
+- LLM-based entity extraction (`EntityExtractor`)
+- Community detection (Louvain algorithm, community summaries)
+- GraphRAG local/global search modes
+- `neo4jd3` visualization library
+- `LangGraphExecutor` class
+
+### Dependencies
+
+- **Added:** `@anthropic-ai/sdk`, `@google/generative-ai`, `openai@^6`, `sqlite-vec`, `better-sqlite3`, `jsdom`, `node-cron`, `ws`, `cheerio`, `fastify-plugin`
+- **Removed:** all `@langchain/*`, `chromadb`, `neo4j-driver`, `neo4jd3`, `@aws-sdk/*`, `graphology`, `graphology-communities-louvain`
+
 ## Release 0.0.3
 
 ### Breaking Changes
@@ -85,7 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Hot-Reload**: `reloadFile()` utility for live config updates when files are saved via the IDE
 
-- **`ORCHA_BASE_DIR` Environment Variable**: Configure the base directory for all config files
+- **`WORKSPACE` Environment Variable**: Configure the base directory for all config files
 
 - **New Vector Store Backend**: Added `chroma` type alongside existing `memory`
 

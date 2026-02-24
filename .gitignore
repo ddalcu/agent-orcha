@@ -2,9 +2,13 @@
 node_modules
 .env
 dist
+lcov.info
+coverage
 tmp
 .chroma
 .graph-cache
+.knowledge-data
+.knowledge-cache
 /agents
 /workflows
 /vectors
@@ -12,3 +16,4 @@ tmp
 /llm.json
 /mcp.json
 .local
+Dockerfile.deploy

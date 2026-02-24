@@ -1,3 +1,3 @@
-export { DatabaseLoader } from './database-loader.js';
-export { WebLoader } from './web-loader.js';
-export { S3Loader } from './s3-loader.js';
+export { DatabaseLoader } from './database-loader.ts';
+export { WebLoader } from './web-loader.ts';
+export { TextLoader, JSONLoader, CSVLoader, PDFLoader } from './file-loaders.ts';

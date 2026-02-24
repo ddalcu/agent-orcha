@@ -39,12 +39,16 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { name } = request.params;
       const { input, sessionId } = request.body;
+      const taskManager = fastify.orchestrator.tasks.getManager();
+      const task = taskManager.track('agent', name, input, sessionId);
 
       try {
         const result = await fastify.orchestrator.runAgent(name, input, sessionId);
+        taskManager.resolve(task.id, result);
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        taskManager.reject(task.id, error);
 
         if (message.includes('not found')) {
           return reply.status(404).send({ error: message });
@@ -60,15 +64,29 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { name } = request.params;
       const { input, sessionId } = request.body;
+      const taskManager = fastify.orchestrator.tasks.getManager();
+      const task = taskManager.track('agent', name, input, sessionId);
+
+      // Create an AbortController that cancels the LLM stream on client disconnect or task cancel
+      const abortController = new AbortController();
+      taskManager.registerAbort(task.id, abortController);
 
       reply.raw.setHeader('Content-Type', 'text/event-stream');
       reply.raw.setHeader('Cache-Control', 'no-cache');
       reply.raw.setHeader('Connection', 'keep-alive');
 
+      // Abort the LLM stream when the client disconnects (socket close, not request body close)
+      reply.raw.on('close', () => {
+        if (!abortController.signal.aborted) {
+          abortController.abort();
+        }
+      });
+
       try {
-        const stream = fastify.orchestrator.streamAgent(name, input, sessionId);
+        const stream = fastify.orchestrator.streamAgent(name, input, sessionId, abortController.signal);
 
         for await (const chunk of stream) {
+          if (abortController.signal.aborted) break;
           if (typeof chunk === 'string') {
             reply.raw.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           } else {
@@ -77,12 +95,23 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
           }
         }
 
-        reply.raw.write('data: [DONE]\n\n');
+        if (!abortController.signal.aborted) {
+          taskManager.resolve(task.id, { output: 'stream completed' });
+          reply.raw.write('data: [DONE]\n\n');
+        }
         reply.raw.end();
       } catch (error) {
+        if (abortController.signal.aborted) {
+          // Cancellation — not an error
+          reply.raw.end();
+          return;
+        }
         const message = error instanceof Error ? error.message : String(error);
+        taskManager.reject(task.id, error);
         reply.raw.write(`data: ${JSON.stringify({ error: message })}\n\n`);
         reply.raw.end();
+      } finally {
+        taskManager.unregisterAbort(task.id);
       }
     }
   );

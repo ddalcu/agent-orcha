@@ -1,6 +1,6 @@
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import type { OutputConfig } from './types.js';
-import { logger } from '../logger.js';
+import type { ChatModel } from '../types/llm-types.ts';
+import type { OutputConfig } from './types.ts';
+import { logger } from '../logger.ts';
 
 export interface ValidationResult {
   valid: boolean;
@@ -12,7 +12,7 @@ export class StructuredOutputWrapper {
    * Wrap LLM with structured output if configured
    * Returns wrapped LLM or original LLM if not structured
    */
-  static wrapLLM(llm: BaseChatModel, outputConfig?: OutputConfig): BaseChatModel {
+  static wrapLLM(llm: ChatModel, outputConfig?: OutputConfig): ChatModel {
     // If no output config or format is not 'structured', return original LLM
     if (!outputConfig || outputConfig.format !== 'structured') {
       return llm;
@@ -25,10 +25,10 @@ export class StructuredOutputWrapper {
     }
 
     try {
-      // Use LangChain's withStructuredOutput to enforce JSON schema
+      // Use withStructuredOutput to enforce JSON schema
       logger.info('[StructuredOutputWrapper] Wrapping LLM with structured output');
       const wrappedLLM = llm.withStructuredOutput(outputConfig.schema);
-      return wrappedLLM as BaseChatModel;
+      return wrappedLLM as ChatModel;
     } catch (error) {
       logger.error('[StructuredOutputWrapper] Failed to wrap LLM with structured output:', error);
       return llm;

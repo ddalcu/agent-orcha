@@ -1,5 +1,5 @@
-import type { InterruptState } from './types.js';
-import { logger } from '../logger.js';
+import type { InterruptState } from './types.ts';
+import { logger } from '../logger.ts';
 
 /**
  * Manages workflow interrupts for human-in-the-loop interactions.

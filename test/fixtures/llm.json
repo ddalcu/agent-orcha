@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "models": {
+    "default": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "temperature": 0.3
+    },
+    "fast": {
+      "provider": "openai",
+      "model": "gpt-3.5-turbo",
+      "temperature": 0.1
+    },
+    "gemini": {
+      "provider": "gemini",
+      "model": "gemini-2.0-flash",
+      "temperature": 0.5,
+      "apiKey": "test-gemini-key-not-real"
+    },
+    "claude": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "maxTokens": 4096,
+      "temperature": 0.3,
+      "apiKey": "test-anthropic-key-not-real"
+    },
+    "local": {
+      "provider": "local",
+      "model": "llama3",
+      "baseUrl": "http://localhost:11434/v1"
+    },
+    "openai-custom": {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "baseUrl": "http://localhost:8080/v1",
+      "maxTokens": 2048
+    }
+  },
+  "embeddings": {
+    "default": {
+      "provider": "openai",
+      "model": "text-embedding-3-small"
+    }
+  }
+}

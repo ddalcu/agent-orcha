@@ -1,21 +1,25 @@
-export { KnowledgeStoreFactory } from './knowledge-store-factory.js';
-export { KnowledgeStoreManager } from './knowledge-store-manager.js';
+export { KnowledgeStore } from './knowledge-store.ts';
+export { SqliteStore } from './sqlite-store.ts';
+export { DirectMapper } from './direct-mapper.ts';
+export { KnowledgeMetadataManager, createDefaultMetadata } from './knowledge-store-metadata.ts';
+
+// Backward compatibility alias
+export { KnowledgeStore as KnowledgeStoreManager } from './knowledge-store.ts';
+
 export {
   KnowledgeConfigSchema,
-  VectorKnowledgeConfigSchema,
-  GraphRagKnowledgeConfigSchema,
   SourceConfigSchema,
   DirectorySourceConfigSchema,
   FileSourceConfigSchema,
   DatabaseSourceConfigSchema,
   WebSourceConfigSchema,
-  S3SourceConfigSchema,
   LoaderConfigSchema,
   SplitterConfigSchema,
   EmbeddingRefSchema,
-  StoreConfigSchema,
   SearchConfigSchema,
-} from './types.js';
+  GraphConfigSchema,
+} from './types.ts';
+
 export type {
   KnowledgeConfig,
   VectorKnowledgeConfig,
@@ -25,25 +29,25 @@ export type {
   FileSourceConfig,
   DatabaseSourceConfig,
   WebSourceConfig,
-  S3SourceConfig,
   LoaderConfig,
   SplitterConfig,
-  StoreConfig,
   SearchConfig,
   SearchResult,
   DocumentInput,
   KnowledgeStoreInstance,
-} from './types.js';
-export { DatabaseLoader, WebLoader, S3Loader } from './loaders/index.js';
-export { getPool, closeAllPools, getDatabaseType, detectFileType, isSupportedFileType } from './utils/index.js';
-
-// Graph RAG exports
-export { GraphRagFactory } from './graph-rag/index.js';
-export type {
-  GraphNode,
-  GraphEdge,
-  Community,
-  GraphStore,
+  KnowledgeStoreMetadata,
+  KnowledgeStoreStatus,
+  IndexingProgressEvent,
+  IndexingProgressCallback,
+  IndexingPhase,
   GraphConfig,
-  GraphSearchConfig,
-} from './graph-rag/index.js';
+  ExtractedEntity,
+  ExtractedRelationship,
+  ExtractionResult,
+  EntityMapping,
+  RelationshipMapping,
+  DirectMappingConfig,
+} from './types.ts';
+
+export { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
+export { getPool, closeAllPools, getDatabaseType, detectFileType, isSupportedFileType } from './utils/index.ts';

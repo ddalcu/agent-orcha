@@ -1,22 +1,21 @@
-import { BaseDocumentLoader } from '@langchain/core/document_loaders/base';
-import { Document } from '@langchain/core/documents';
+import { DatabaseSync } from 'node:sqlite';
+import type { Document } from '../../types/llm-types.ts';
 import type { Pool as PgPool } from 'pg';
 import type mysql from 'mysql2/promise';
-import { getPool, getDatabaseType } from '../utils/connection-pool.js';
-import type { DatabaseSourceConfig } from '../types.js';
-import { createLogger } from '../../logger.js';
+import { getPool, getDatabaseType } from '../utils/connection-pool.ts';
+import type { DatabaseSourceConfig } from '../types.ts';
+import { createLogger } from '../../logger.ts';
 
 const logger = createLogger('DatabaseLoader');
 
 /**
  * Database document loader for PostgreSQL and MySQL.
- * Executes SQL queries and transforms rows into LangChain documents.
+ * Executes SQL queries and transforms rows into documents.
  */
-export class DatabaseLoader extends BaseDocumentLoader {
+export class DatabaseLoader {
   private config: DatabaseSourceConfig;
 
   constructor(config: DatabaseSourceConfig) {
-    super();
     this.config = config;
   }
 
@@ -32,7 +31,9 @@ export class DatabaseLoader extends BaseDocumentLoader {
     const documents: Document[] = [];
 
     try {
-      if (dbType === 'postgresql') {
+      if (dbType === 'sqlite') {
+        this.loadFromSqlite(pool as DatabaseSync, query, contentColumn, metadataColumns, documents);
+      } else if (dbType === 'postgresql') {
         await this.loadFromPostgres(pool as PgPool, query, contentColumn, metadataColumns, batchSize, documents);
       } else {
         await this.loadFromMysql(pool as mysql.Pool, query, contentColumn, metadataColumns, batchSize, documents);
@@ -44,6 +45,22 @@ export class DatabaseLoader extends BaseDocumentLoader {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Database query failed: ${errorMessage}`);
       throw new Error(`Failed to load documents from database: ${errorMessage}`);
+    }
+  }
+
+  private loadFromSqlite(
+    db: DatabaseSync,
+    query: string,
+    contentColumn: string,
+    metadataColumns: string[] | undefined,
+    documents: Document[]
+  ): void {
+    logger.info(`Executing SQLite query`);
+    const rows = db.prepare(query).all() as Record<string, unknown>[];
+    logger.info(`Fetched ${rows.length} row(s)`);
+
+    for (const row of rows) {
+      documents.push(this.rowToDocument(row as Record<string, any>, contentColumn, metadataColumns));
     }
   }
 
@@ -163,9 +180,13 @@ export class DatabaseLoader extends BaseDocumentLoader {
       }
     }
 
-    return new Document({
+    // Store the full row data in metadata for direct mapping
+    // This allows GraphRAG direct mode to access all SQL columns
+    metadata._rawRow = row;
+
+    return {
       pageContent,
       metadata,
-    });
+    };
   }
 }

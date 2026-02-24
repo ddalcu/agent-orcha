@@ -1,37 +1,45 @@
-import type { StructuredTool } from '@langchain/core/tools';
-import type { ToolRegistry } from './tool-registry.js';
-import type { MCPClientManager } from '../mcp/mcp-client.js';
-import type { KnowledgeStoreManager } from '../knowledge/knowledge-store-manager.js';
-import type { FunctionLoader } from '../functions/function-loader.js';
-import type { GraphToolConfig, GraphAgentConfig } from '../workflows/types.js';
-import type { AgentLoader } from '../agents/agent-loader.js';
-import type { AgentExecutor } from '../agents/agent-executor.js';
-import { AgentToolWrapper } from './agent-tool-wrapper.js';
-import { createKnowledgeSearchTool } from './built-in/knowledge-search.tool.js';
-import { createAskUserTool } from './built-in/ask-user.tool.js';
-import { logger } from '../logger.js';
+import type { StructuredTool } from '../types/llm-types.ts';
+import type { ToolRegistry } from './tool-registry.ts';
+import type { MCPClientManager } from '../mcp/mcp-client.ts';
+import type { KnowledgeStore } from '../knowledge/knowledge-store.ts';
+import type { FunctionLoader } from '../functions/function-loader.ts';
+import type { GraphToolConfig, GraphAgentConfig } from '../workflows/types.ts';
+import type { AgentLoader } from '../agents/agent-loader.ts';
+import type { AgentExecutor } from '../agents/agent-executor.ts';
+import { AgentToolWrapper } from './agent-tool-wrapper.ts';
+import { createKnowledgeTools } from './built-in/knowledge-tools-factory.ts';
+import { createAskUserTool } from './built-in/ask-user.tool.ts';
+import { logger } from '../logger.ts';
 
 /**
- * Centralized tool discovery for LangGraph workflows.
+ * Centralized tool discovery for ReAct workflows.
  * Discovers tools from all configured sources and applies filtering.
  */
 export class ToolDiscovery {
-  constructor(
-    _toolRegistry: ToolRegistry, // Unused but kept for future use
-    private mcpClient: MCPClientManager,
-    private knowledgeStoreManager: KnowledgeStoreManager,
-    private functionLoader: FunctionLoader,
-    private agentLoader: AgentLoader,
-    private agentExecutor: AgentExecutor
-  ) {}
+  private mcpClient: MCPClientManager;
+  private knowledgeStores: KnowledgeStore;
+  private functionLoader: FunctionLoader;
+  private agentLoader: AgentLoader;
+  private agentExecutor: AgentExecutor;
 
-  /**
-   * Discovers all tools based on configuration.
-   */
+  constructor(
+    _toolRegistry: ToolRegistry,
+    mcpClient: MCPClientManager,
+    knowledgeStores: KnowledgeStore,
+    functionLoader: FunctionLoader,
+    agentLoader: AgentLoader,
+    agentExecutor: AgentExecutor
+  ) {
+    this.mcpClient = mcpClient;
+    this.knowledgeStores = knowledgeStores;
+    this.functionLoader = functionLoader;
+    this.agentLoader = agentLoader;
+    this.agentExecutor = agentExecutor;
+  }
+
   async discoverAll(config: GraphToolConfig): Promise<StructuredTool[]> {
     const tools: StructuredTool[] = [];
 
-    // Discover from each source
     for (const source of config.sources) {
       switch (source) {
         case 'mcp':
@@ -52,9 +60,6 @@ export class ToolDiscovery {
     return this.filterTools(tools, config);
   }
 
-  /**
-   * Discovers agent tools based on configuration.
-   */
   async discoverAgents(config: GraphAgentConfig): Promise<StructuredTool[]> {
     if (config.mode === 'none') {
       return [];
@@ -65,7 +70,6 @@ export class ToolDiscovery {
 
     if (config.mode === 'all') {
       agentNames = allAgentNames;
-      // Apply exclusions
       if (config.exclude) {
         agentNames = agentNames.filter((name) => !config.exclude!.includes(name));
       }
@@ -82,16 +86,12 @@ export class ToolDiscovery {
     return AgentToolWrapper.createTools(agentNames, this.agentLoader, this.agentExecutor);
   }
 
-  /**
-   * Filters tools based on mode and include/exclude lists.
-   */
   private filterTools(tools: StructuredTool[], config: GraphToolConfig): StructuredTool[] {
     if (config.mode === 'none') {
       return [];
     }
 
     if (config.mode === 'all') {
-      // Apply exclusions
       if (config.exclude) {
         return tools.filter((t) => !config.exclude!.includes(t.name));
       }
@@ -112,9 +112,6 @@ export class ToolDiscovery {
     return tools;
   }
 
-  /**
-   * Discovers MCP tools from all servers.
-   */
   private async discoverMCP(): Promise<StructuredTool[]> {
     const allTools: StructuredTool[] = [];
 
@@ -137,29 +134,25 @@ export class ToolDiscovery {
     return allTools;
   }
 
-  /**
-   * Discovers knowledge search tools for all knowledge stores.
-   */
   private async discoverKnowledge(): Promise<StructuredTool[]> {
     const tools: StructuredTool[] = [];
 
     try {
-      const configs = this.knowledgeStoreManager.listConfigs();
+      const configs = this.knowledgeStores.listConfigs();
 
       for (const config of configs) {
         try {
-          // Initialize store if needed
-          let store = this.knowledgeStoreManager.get(config.name);
+          let store = this.knowledgeStores.get(config.name);
           if (!store) {
-            store = await this.knowledgeStoreManager.initialize(config.name);
+            store = await this.knowledgeStores.initialize(config.name);
           }
 
-          // Create knowledge search tool
-          const tool = createKnowledgeSearchTool(config.name, store);
-          tools.push(tool);
-          logger.info(`Discovered knowledge search tool for "${config.name}"`);
+          const sqliteStore = this.knowledgeStores.getSqliteStore(config.name);
+          const knowledgeTools = createKnowledgeTools(config.name, store, sqliteStore);
+          tools.push(...knowledgeTools);
+          logger.info(`Discovered ${knowledgeTools.length} knowledge tool(s) for "${config.name}"`);
         } catch (error) {
-          logger.warn(`Failed to create knowledge search tool for "${config.name}":`, error);
+          logger.warn(`Failed to create knowledge tools for "${config.name}":`, error);
         }
       }
     } catch (error) {
@@ -169,9 +162,6 @@ export class ToolDiscovery {
     return tools;
   }
 
-  /**
-   * Discovers custom function tools.
-   */
   private discoverFunction(): StructuredTool[] {
     try {
       const functions = this.functionLoader.list();
@@ -184,15 +174,9 @@ export class ToolDiscovery {
     }
   }
 
-  /**
-   * Discovers built-in tools (ask_user is always included).
-   */
   private discoverBuiltin(): StructuredTool[] {
     const tools: StructuredTool[] = [];
-
-    // ask_user tool is always included for HITL
     tools.push(createAskUserTool());
-
     logger.info(`Discovered ${tools.length} built-in tools`);
     return tools;
   }

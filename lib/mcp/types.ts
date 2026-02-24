@@ -1,16 +1,26 @@
 import { z } from 'zod';
 
-export const MCPServerConfigSchema = z.object({
-  transport: z.enum(['stdio', 'sse', 'streamable-http', 'sse-only']),
-  url: z.string().optional(),
-  headers: z.record(z.string()).optional(),
-  command: z.string().optional(),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
-  description: z.string().optional(),
-  timeout: z.number().default(30000),
-  enabled: z.boolean().default(true),
-});
+export const MCPServerConfigSchema = z.preprocess(
+  (data) => {
+    if (typeof data === 'object' && data !== null && !('transport' in data)) {
+      const d = data as Record<string, unknown>;
+      if (d.command) return { ...d, transport: 'stdio' };
+      if (d.url) return { ...d, transport: 'streamable-http' };
+    }
+    return data;
+  },
+  z.object({
+    transport: z.enum(['stdio', 'sse', 'streamable-http', 'sse-only']),
+    url: z.string().optional(),
+    headers: z.record(z.string()).optional(),
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    env: z.record(z.string()).optional(),
+    description: z.string().optional(),
+    timeout: z.number().default(30000),
+    enabled: z.boolean().default(true),
+  })
+);
 
 export const MCPGlobalOptionsSchema = z.object({
   throwOnLoadError: z.boolean().default(false),

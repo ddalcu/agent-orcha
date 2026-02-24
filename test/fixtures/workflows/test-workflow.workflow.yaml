@@ -1,0 +1,16 @@
+name: test-workflow
+description: A test workflow
+version: "1.0.0"
+type: steps
+input:
+  schema:
+    query:
+      type: string
+      required: true
+steps:
+  - id: step1
+    agent: test-agent
+    input:
+      query: "{{input.query}}"
+output:
+  result: "{{steps.step1.output}}"

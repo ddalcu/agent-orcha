@@ -1,0 +1,206 @@
+---
+title: Knowledge Base Architecture - Unified SQLite Store
+---
+flowchart TB
+    %% ============================================
+    %% INPUT LAYER - Data Sources
+    %% ============================================
+    subgraph INPUT["INPUT: Data Sources"]
+        direction TB
+        YAML[".knowledge.yaml<br/>Configuration File"]
+
+        subgraph SOURCES["Source Types"]
+            direction LR
+            FILES["Files<br/>(text, pdf, csv,<br/>json, markdown)"]
+            DIR["Directory<br/>(glob patterns)"]
+            DB["Database<br/>(SQL query)"]
+            WEB["Web<br/>(HTTP scrape)"]
+        end
+    end
+
+    %% ============================================
+    %% ORCHESTRATION LAYER
+    %% ============================================
+    subgraph MANAGER["KnowledgeStore (Orchestrator)"]
+        direction TB
+        LOAD_CONFIGS["loadAll()<br/>Discover .knowledge.yaml files"]
+        INIT["initialize(name)<br/>Prevent duplicate indexing"]
+        METADATA["KnowledgeStoreMetadata<br/>status: not_indexed > indexing > indexed | error<br/>tracks: docCount, chunkCount,<br/>entityCount, edgeCount"]
+    end
+
+    %% ============================================
+    %% SHARED PIPELINE
+    %% ============================================
+    subgraph SHARED["Shared Pipeline Steps"]
+        direction TB
+        LOAD_DOCS["1. Load Documents<br/>TextLoader | PDFLoader | CSVLoader<br/>JSONLoader | MarkdownLoader<br/>DatabaseLoader | WebLoader"]
+        SPLIT["2. Split into Chunks<br/>CharacterTextSplitter |<br/>RecursiveCharacterTextSplitter<br/>chunkSize (default 1000)<br/>chunkOverlap (default 200)"]
+        HASH["3. Compute Source Hash<br/>SHA-256 of source content"]
+    end
+
+    %% ============================================
+    %% SQLITE PERSISTENCE CHECK
+    %% ============================================
+    CHECK_DB{"SQLite DB<br/>has data AND<br/>hash matches?"}
+    SKIP["Skip indexing<br/>SQLite IS persistence"]
+
+    %% ============================================
+    %% EMBEDDING PHASE
+    %% ============================================
+    subgraph EMBED_PHASE["Embedding Phase"]
+        direction TB
+        TEST_EMBED["Test-embed to detect<br/>vector dimensions"]
+        OPEN_DB["Open SqliteStore<br/>.knowledge-data/{name}.db"]
+        EMBED_CHUNKS["Compute Chunk Embeddings<br/>OpenAI-compatible | Gemini | Local<br/>Batch processing"]
+        INSERT_CHUNKS["Insert chunks + vectors<br/>into SQLite + vec0"]
+    end
+
+    %% ============================================
+    %% ENTITY EXTRACTION (optional - when graph.directMapping present)
+    %% ============================================
+    HAS_GRAPH{"config.graph<br/>with directMapping?"}
+
+    subgraph EXTRACT["Direct Mapping (graph.directMapping)"]
+        direction TB
+        DIRECT_DESC["DirectMapper.mapQueryResults()<br/>Maps SQL rows directly to graph<br/>100% data preservation"]
+        DIRECT_CONF["Configuration:<br/>entities: type, idColumn,<br/>nameColumn, properties<br/>relationships: type, source,<br/>target, sourceIdColumn"]
+    end
+
+    subgraph ENTITY_STORE["Entity Storage"]
+        direction TB
+        EMBED_ENTITIES["Embed Entity Descriptions"]
+        INSERT_ENTITIES["Insert entities + vectors<br/>into entity tables + vec0"]
+        INSERT_RELS["Insert relationships<br/>into relationships table"]
+    end
+
+    %% ============================================
+    %% SQLITE STORE
+    %% ============================================
+    subgraph SQLITE["SqliteStore (node:sqlite + sqlite-vec)"]
+        direction TB
+        subgraph TABLES["Schema"]
+            direction LR
+            T_CHUNKS["chunks<br/>(id, content,<br/>metadata, source)"]
+            T_CHUNK_VEC["chunk_vectors<br/>vec0 (cosine KNN)"]
+            T_ENTITIES["entities<br/>(id, type, name,<br/>desc, properties)"]
+            T_ENTITY_VEC["entity_vectors<br/>vec0 (cosine KNN)"]
+            T_RELS["relationships<br/>(id, type, source_id,<br/>target_id, weight)"]
+            T_META["metadata<br/>(key, value)"]
+        end
+    end
+
+    %% ============================================
+    %% OUTPUT LAYER - Unified Search
+    %% ============================================
+    subgraph OUTPUT["Knowledge Retrieval"]
+        direction TB
+
+        subgraph SEARCH["Unified search(query, k)"]
+            direction TB
+            S1["1. Embed query"]
+            S2["2. Chunk KNN search<br/>sqlite-vec cosine similarity<br/>score = 1.0 - distance"]
+            S3{"Entity count > 0?"}
+            S4["3. Entity KNN search<br/>Find top-K similar entities"]
+            S5["4. Expand neighborhoods<br/>BFS via SQL JOINs<br/>(configurable depth)"]
+            S6["5. Merge all results<br/>by score, return top-K"]
+        end
+
+        subgraph TOOLS["Knowledge Tools (Agent Interface)"]
+            direction LR
+            T_SEARCH["search<br/>(all stores)"]
+            T_TRAVERSE["traverse<br/>(stores with entities)"]
+            T_ENTITY["entity_lookup<br/>(stores with entities)"]
+            T_SCHEMA["graph_schema<br/>(stores with entities)"]
+            T_SQL["sql query<br/>(database source)"]
+        end
+
+        AGENT["AI Agent<br/>Uses tools to query<br/>knowledge stores"]
+    end
+
+    %% ============================================
+    %% CONNECTIONS
+    %% ============================================
+
+    %% Input to Manager
+    YAML --> LOAD_CONFIGS
+    SOURCES --> LOAD_DOCS
+    LOAD_CONFIGS --> INIT
+    INIT --> METADATA
+
+    %% Manager to Shared Pipeline
+    INIT --> LOAD_DOCS
+    LOAD_DOCS --> SPLIT
+    SPLIT --> HASH
+
+    %% Persistence check
+    HASH --> CHECK_DB
+    CHECK_DB -->|"yes"| SKIP
+    CHECK_DB -->|"no"| TEST_EMBED
+    SKIP --> SQLITE
+
+    %% Embedding phase
+    TEST_EMBED --> OPEN_DB
+    OPEN_DB --> EMBED_CHUNKS
+    EMBED_CHUNKS --> INSERT_CHUNKS
+    INSERT_CHUNKS --> SQLITE
+
+    %% Entity extraction check
+    INSERT_CHUNKS --> HAS_GRAPH
+    HAS_GRAPH -->|"no"| SQLITE
+    HAS_GRAPH -->|"yes"| DIRECT_DESC
+
+    %% Direct mapping
+    DIRECT_DESC --> DIRECT_CONF
+    DIRECT_CONF --> EMBED_ENTITIES
+
+    %% Entity storage
+    EMBED_ENTITIES --> INSERT_ENTITIES
+    INSERT_ENTITIES --> INSERT_RELS
+    INSERT_RELS --> SQLITE
+
+    %% Search
+    SQLITE --> S1
+    S1 --> S2
+    S2 --> S3
+    S3 -->|"no"| S6
+    S3 -->|"yes"| S4
+    S4 --> S5
+    S5 --> S6
+
+    %% Tools
+    S6 --> T_SEARCH
+    SQLITE --> T_TRAVERSE
+    SQLITE --> T_ENTITY
+    SQLITE --> T_SCHEMA
+    DB --> T_SQL
+    T_SEARCH --> AGENT
+    T_TRAVERSE --> AGENT
+    T_ENTITY --> AGENT
+    T_SCHEMA --> AGENT
+    T_SQL --> AGENT
+
+    %% ============================================
+    %% STYLING
+    %% ============================================
+    classDef inputStyle fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    classDef managerStyle fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#BF360C
+    classDef sharedStyle fill:#F3E5F5,stroke:#6A1B9A,stroke-width:2px,color:#4A148C
+    classDef sqliteStyle fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20
+    classDef extractStyle fill:#FCE4EC,stroke:#C62828,stroke-width:2px,color:#B71C1C
+    classDef searchStyle fill:#EDE7F6,stroke:#4527A0,stroke-width:2px,color:#311B92
+    classDef toolStyle fill:#EFEBE9,stroke:#4E342E,stroke-width:2px,color:#3E2723
+    classDef routeStyle fill:#FFECB3,stroke:#FF6F00,stroke-width:3px,color:#E65100
+    classDef embedStyle fill:#FFF8E1,stroke:#F9A825,stroke-width:2px,color:#F57F17
+    classDef skipStyle fill:#C8E6C9,stroke:#388E3C,stroke-width:2px,color:#1B5E20
+
+    class YAML,FILES,DIR,DB,WEB inputStyle
+    class LOAD_CONFIGS,INIT,METADATA managerStyle
+    class LOAD_DOCS,SPLIT,HASH sharedStyle
+    class CHECK_DB,HAS_GRAPH routeStyle
+    class SKIP skipStyle
+    class TEST_EMBED,OPEN_DB,EMBED_CHUNKS,INSERT_CHUNKS embedStyle
+    class DIRECT_DESC,DIRECT_CONF extractStyle
+    class EMBED_ENTITIES,INSERT_ENTITIES,INSERT_RELS embedStyle
+    class T_CHUNKS,T_CHUNK_VEC,T_ENTITIES,T_ENTITY_VEC,T_RELS,T_META sqliteStyle
+    class S1,S2,S3,S4,S5,S6 searchStyle
+    class T_SEARCH,T_TRAVERSE,T_ENTITY,T_SCHEMA,T_SQL,AGENT toolStyle

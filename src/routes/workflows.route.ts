@@ -16,7 +16,7 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
       description: workflow.description,
       version: workflow.version,
       type: workflow.type || 'steps',
-      steps: workflow.type === 'langgraph' ? 0 : workflow.steps.length,
+      steps: workflow.type === 'react' ? 0 : workflow.steps.length,
       inputSchema: workflow.input.schema,
     }));
   });
@@ -39,12 +39,16 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { name } = request.params;
       const { input } = request.body;
+      const taskManager = fastify.orchestrator.tasks.getManager();
+      const task = taskManager.track('workflow', name, input);
 
       try {
         const result = await fastify.orchestrator.runWorkflow(name, input);
+        taskManager.resolve(task.id, result);
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        taskManager.reject(task.id, error);
 
         if (message.includes('not found')) {
           return reply.status(404).send({ error: message });
@@ -60,6 +64,8 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { name } = request.params;
       const { input } = request.body;
+      const taskManager = fastify.orchestrator.tasks.getManager();
+      const task = taskManager.track('workflow', name, input);
 
       reply.raw.setHeader('Content-Type', 'text/event-stream');
       reply.raw.setHeader('Cache-Control', 'no-cache');
@@ -72,10 +78,12 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
           reply.raw.write(`data: ${JSON.stringify(update)}\n\n`);
         }
 
+        taskManager.resolve(task.id, { output: 'stream completed' });
         reply.raw.write('data: [DONE]\n\n');
         reply.raw.end();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        taskManager.reject(task.id, error);
         reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: message })}\n\n`);
         reply.raw.end();
       }

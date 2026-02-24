@@ -1,4 +1,4 @@
-export { LLMFactory } from './llm-factory.js';
+export { LLMFactory } from './llm-factory.ts';
 export {
   loadLLMConfig,
   getModelConfig,
@@ -6,7 +6,8 @@ export {
   listModelConfigs,
   listEmbeddingConfigs,
   isLLMConfigLoaded,
-} from './llm-config.js';
-export type { ModelConfig, EmbeddingModelConfig, LLMJsonConfig } from './llm-config.js';
-export { AgentLLMRefSchema, resolveAgentLLMRef } from './types.js';
-export type { AgentLLMRef } from './types.js';
+  resolveApiKey,
+} from './llm-config.ts';
+export type { ModelConfig, EmbeddingModelConfig, LLMJsonConfig } from './llm-config.ts';
+export { AgentLLMRefSchema, resolveAgentLLMRef } from './types.ts';
+export type { AgentLLMRef } from './types.ts';

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { initCommand } from './commands/init.js';
-import { startCommand } from './commands/start.js';
+import { initCommand } from './commands/init.ts';
+import { startCommand } from './commands/start.ts';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -25,7 +25,7 @@ Examples:
 Library Usage:
   import { Orchestrator } from 'agent-orcha';
 
-  const orchestrator = new Orchestrator({ projectRoot: '.' });
+  const orchestrator = new Orchestrator({ workspaceRoot: '.' });
   await orchestrator.initialize();
 
 Documentation: https://github.com/ddalcu/agent-orcha

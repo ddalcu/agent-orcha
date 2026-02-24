@@ -1,12 +1,30 @@
 import * as fs from 'fs/promises';
 import { z } from 'zod';
-import { logger } from '../logger.js';
+import { logger } from '../logger.ts';
+import type { LLMProvider } from './provider-detector.ts';
+
+const PROVIDER_ENV_VARS: Record<LLMProvider, string> = {
+  openai: 'OPENAI_API_KEY',
+  gemini: 'GOOGLE_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  local: 'OPENAI_API_KEY',
+};
+
+/**
+ * Resolves the API key for a given provider.
+ * Priority: explicit apiKey in config > provider-specific env var.
+ */
+export function resolveApiKey(provider: LLMProvider, apiKey?: string): string | undefined {
+  if (apiKey) return apiKey;
+  const envVar = PROVIDER_ENV_VARS[provider];
+  return process.env[envVar];
+}
 
 // Schema for individual model configuration
 export const ModelConfigSchema = z.object({
   provider: z.enum(['openai', 'gemini', 'anthropic', 'local']).optional(),
   baseUrl: z.string().optional(),
-  apiKey: z.string(),
+  apiKey: z.string().optional(),
   model: z.string(),
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().optional(),
@@ -16,7 +34,7 @@ export const ModelConfigSchema = z.object({
 export const EmbeddingModelConfigSchema = z.object({
   provider: z.enum(['openai', 'gemini', 'anthropic', 'local']).optional(),
   baseUrl: z.string().optional(),
-  apiKey: z.string(),
+  apiKey: z.string().optional(),
   model: z.string(),
   dimensions: z.number().optional(), // Embedding dimensions (optional, e.g., for OpenAI)
   eosToken: z.string().optional(), // EOS token to append to text (e.g., for Nomic models)

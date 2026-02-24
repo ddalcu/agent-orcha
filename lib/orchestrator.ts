@@ -1,38 +1,54 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { AgentLoader } from './agents/agent-loader.js';
-import { AgentExecutor } from './agents/agent-executor.js';
-import { WorkflowLoader } from './workflows/workflow-loader.js';
-import { WorkflowExecutor } from './workflows/workflow-executor.js';
-import { LangGraphExecutor } from './workflows/langgraph-executor.js';
-import { InterruptManager } from './workflows/interrupt-manager.js';
-import { KnowledgeStoreManager } from './knowledge/knowledge-store-manager.js';
-import { MCPClientManager } from './mcp/mcp-client.js';
-import { FunctionLoader, type LoadedFunction } from './functions/function-loader.js';
-import { ToolRegistry } from './tools/tool-registry.js';
-import { ToolDiscovery } from './tools/tool-discovery.js';
-import { MCPConfigSchema } from './mcp/types.js';
-import { loadLLMConfig } from './llm/llm-config.js';
-import { ConversationStore } from './memory/conversation-store.js';
-import type { AgentDefinition, AgentResult } from './agents/types.js';
+import { AgentLoader } from './agents/agent-loader.ts';
+import { AgentExecutor } from './agents/agent-executor.ts';
+import { WorkflowLoader } from './workflows/workflow-loader.ts';
+import { WorkflowExecutor } from './workflows/workflow-executor.ts';
+import { ReactWorkflowExecutor } from './workflows/react-workflow-executor.ts';
+import { InterruptManager } from './workflows/interrupt-manager.ts';
+import { KnowledgeStore } from './knowledge/knowledge-store.ts';
+import { MCPClientManager } from './mcp/mcp-client.ts';
+import { FunctionLoader, type LoadedFunction } from './functions/function-loader.ts';
+import { SkillLoader, type Skill } from './skills/index.ts';
+import { ToolRegistry } from './tools/tool-registry.ts';
+import { ToolDiscovery } from './tools/tool-discovery.ts';
+import { MCPConfigSchema } from './mcp/types.ts';
+import { loadLLMConfig, listModelConfigs } from './llm/llm-config.ts';
+import { resolveAgentLLMRef } from './llm/types.ts';
+import { ConversationStore } from './memory/conversation-store.ts';
+import { MemoryManager } from './memory/memory-manager.ts';
+import { TaskManager } from './tasks/task-manager.ts';
+import { VmExecutor } from './sandbox/vm-executor.ts';
+import { createSandboxExecTool } from './sandbox/sandbox-exec.ts';
+import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web.ts';
+import { SandboxConfigSchema } from './sandbox/types.ts';
+import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
+import { IntegrationManager } from './integrations/integration-manager.ts';
+import { TriggerManager } from './triggers/trigger-manager.ts';
+import type { SandboxConfig } from './sandbox/types.ts';
+import type { AgentDefinition, AgentResult } from './agents/types.ts';
 import type {
   WorkflowDefinition,
   WorkflowResult,
-  LangGraphWorkflowDefinition,
+  ReactWorkflowDefinition,
   InterruptState,
-} from './workflows/types.js';
-import type { KnowledgeStoreInstance, KnowledgeConfig } from './knowledge/types.js';
-import type { StructuredTool } from '@langchain/core/tools';
-import { logger } from './logger.js';
+} from './workflows/types.ts';
+import type { KnowledgeStoreInstance, KnowledgeConfig, KnowledgeStoreMetadata, IndexingProgressCallback } from './knowledge/types.ts';
+import type { KnowledgeMetadataManager } from './knowledge/knowledge-store-metadata.ts';
+import type { SqliteStore } from './knowledge/sqlite-store.ts';
+import type { StructuredTool } from './types/llm-types.ts';
+import { logger, getRecentLogs } from './logger.ts';
 
 export interface OrchestratorConfig {
-  projectRoot: string;
+  workspaceRoot: string;
   agentsDir?: string;
   workflowsDir?: string;
   knowledgeDir?: string;
   functionsDir?: string;
+  skillsDir?: string;
   mcpConfigPath?: string;
   llmConfigPath?: string;
+  sandboxConfigPath?: string;
 }
 
 export class Orchestrator {
@@ -42,39 +58,50 @@ export class Orchestrator {
   private agentExecutor!: AgentExecutor;
   private workflowLoader: WorkflowLoader;
   private workflowExecutor!: WorkflowExecutor;
-  private langGraphExecutor!: LangGraphExecutor;
-  private knowledgeStoreManager: KnowledgeStoreManager;
+  private reactWorkflowExecutor!: ReactWorkflowExecutor;
+  private knowledgeStoreManager: KnowledgeStore;
   private functionLoader: FunctionLoader;
+  private skillLoader: SkillLoader;
   private mcpClient!: MCPClientManager;
   private toolRegistry!: ToolRegistry;
   private toolDiscovery!: ToolDiscovery;
   private interruptManager!: InterruptManager;
   private conversationStore: ConversationStore;
+  private taskManager!: TaskManager;
+  private vmExecutor: VmExecutor | null = null;
+  private sandboxConfig: SandboxConfig | null = null;
+  private memoryManager: MemoryManager;
+  private integrationManager: IntegrationManager | null = null;
+  private triggerManager: TriggerManager | null = null;
 
   private initialized = false;
 
   constructor(config: OrchestratorConfig) {
     this.config = {
-      projectRoot: config.projectRoot,
-      agentsDir: config.agentsDir ?? path.join(config.projectRoot, 'agents'),
-      workflowsDir: config.workflowsDir ?? path.join(config.projectRoot, 'workflows'),
-      knowledgeDir: config.knowledgeDir ?? path.join(config.projectRoot, 'knowledge'),
-      functionsDir: config.functionsDir ?? path.join(config.projectRoot, 'functions'),
-      mcpConfigPath: config.mcpConfigPath ?? path.join(config.projectRoot, 'mcp.json'),
-      llmConfigPath: config.llmConfigPath ?? path.join(config.projectRoot, 'llm.json'),
+      workspaceRoot: config.workspaceRoot,
+      agentsDir: config.agentsDir ?? path.join(config.workspaceRoot, 'agents'),
+      workflowsDir: config.workflowsDir ?? path.join(config.workspaceRoot, 'workflows'),
+      knowledgeDir: config.knowledgeDir ?? path.join(config.workspaceRoot, 'knowledge'),
+      functionsDir: config.functionsDir ?? path.join(config.workspaceRoot, 'functions'),
+      skillsDir: config.skillsDir ?? path.join(config.workspaceRoot, 'skills'),
+      mcpConfigPath: config.mcpConfigPath ?? path.join(config.workspaceRoot, 'mcp.json'),
+      llmConfigPath: config.llmConfigPath ?? path.join(config.workspaceRoot, 'llm.json'),
+      sandboxConfigPath: config.sandboxConfigPath ?? path.join(config.workspaceRoot, 'sandbox.json'),
     };
 
     this.agentLoader = new AgentLoader(this.config.agentsDir);
     this.workflowLoader = new WorkflowLoader(this.config.workflowsDir);
-    this.knowledgeStoreManager = new KnowledgeStoreManager(
+    this.knowledgeStoreManager = new KnowledgeStore(
       this.config.knowledgeDir,
-      this.config.projectRoot
+      this.config.workspaceRoot
     );
     this.functionLoader = new FunctionLoader(this.config.functionsDir);
+    this.skillLoader = new SkillLoader(this.config.skillsDir);
     this.conversationStore = new ConversationStore({
       maxMessagesPerSession: 50,
       sessionTTL: 3600000, // 1 hour
     });
+    this.memoryManager = new MemoryManager(config.workspaceRoot);
   }
 
   async initialize(): Promise<void> {
@@ -87,18 +114,26 @@ export class Orchestrator {
     await this.loadMCPConfig();
     await this.mcpClient.initialize();
 
-    // Load function tools
+    // Load function tools and skills
     await this.functionLoader.loadAll();
+    await this.skillLoader.loadAll();
+
+    // Load sandbox config
+    await this.loadSandboxConfig();
+    const sandboxTools = this.buildSandboxTools();
+    const workspaceTools = this.buildWorkspaceToolsMap();
 
     this.toolRegistry = new ToolRegistry(
       this.mcpClient,
       this.knowledgeStoreManager,
-      this.functionLoader
+      this.functionLoader,
+      sandboxTools,
+      workspaceTools,
     );
-    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore);
+    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader, this.memoryManager);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
 
-    // Initialize LangGraph components
+    // Initialize ReAct workflow components
     this.interruptManager = new InterruptManager();
     this.toolDiscovery = new ToolDiscovery(
       this.toolRegistry,
@@ -108,18 +143,20 @@ export class Orchestrator {
       this.agentLoader,
       this.agentExecutor
     );
-    this.langGraphExecutor = new LangGraphExecutor(this.toolDiscovery, this.interruptManager);
+    this.reactWorkflowExecutor = new ReactWorkflowExecutor(this.toolDiscovery, this.interruptManager);
 
     await this.agentLoader.loadAll();
     await this.workflowLoader.loadAll();
     await this.knowledgeStoreManager.loadAll();
+    logger.info('[Orchestrator] Knowledge configs loaded (stores will initialize on demand)');
 
-    // Initialize all knowledge stores on startup (load documents and create embeddings)
-    logger.info('[Orchestrator] Initializing knowledge stores...');
-    await this.knowledgeStoreManager.initializeAll();
-    logger.info('[Orchestrator] Knowledge stores ready');
+    this.taskManager = new TaskManager(this);
 
     this.initialized = true;
+
+    // Start integrations after initialization (non-blocking)
+    this.integrationManager = new IntegrationManager();
+    await this.integrationManager.start(this);
   }
 
   private async loadMCPConfig(): Promise<void> {
@@ -135,6 +172,116 @@ export class Orchestrator {
         servers: {},
       });
     }
+  }
+
+  private async loadSandboxConfig(): Promise<void> {
+    try {
+      const content = await fs.readFile(this.config.sandboxConfigPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      this.sandboxConfig = SandboxConfigSchema.parse(parsed);
+    } catch {
+      // No sandbox.json — use defaults (enabled by default)
+      this.sandboxConfig = SandboxConfigSchema.parse({});
+    }
+
+    if (this.sandboxConfig.enabled) {
+      this.vmExecutor = new VmExecutor();
+    } else {
+      this.vmExecutor = null;
+    }
+  }
+
+  private buildSandboxTools(): Map<string, StructuredTool> {
+    const tools = new Map<string, StructuredTool>();
+
+    if (!this.sandboxConfig?.enabled || !this.vmExecutor) {
+      return tools;
+    }
+
+    tools.set('exec', createSandboxExecTool(this.vmExecutor, this.sandboxConfig));
+    tools.set('web_fetch', createSandboxWebFetchTool(this.sandboxConfig));
+    tools.set('web_search', createSandboxWebSearchTool());
+
+    logger.info('[Orchestrator] Sandbox enabled with tools: ' + Array.from(tools.keys()).join(', '));
+
+    return tools;
+  }
+
+  private buildWorkspaceToolsMap(): Map<string, StructuredTool> {
+    const deps: WorkspaceToolDeps = {
+      workspaceRoot: this.config.workspaceRoot,
+      reloadFile: (relativePath: string) => this.reloadFile(relativePath),
+      listResources: (): WorkspaceResourceSummary => ({
+        agents: this.agentLoader.list().map(a => ({ name: a.name, description: a.description })),
+        workflows: this.workflowLoader.list().map(w => ({ name: w.name, description: w.description })),
+        skills: this.skillLoader.list().map(s => ({ name: s.name, description: s.description })),
+        functions: this.functionLoader.list().map(f => ({ name: f.name, description: f.metadata.description })),
+        knowledge: this.knowledgeStoreManager.listConfigs().map(k => ({ name: k.name, description: k.description })),
+      }),
+      getDiagnostics: () => this.buildDiagnosticsReport(),
+    };
+    return buildWorkspaceTools(deps);
+  }
+
+  private async buildDiagnosticsReport(): Promise<DiagnosticsReport> {
+    const modelNames = listModelConfigs();
+
+    // Agent diagnostics
+    const agents = await Promise.all(
+      this.agentLoader.list().map(async (agent) => {
+        const { name: llmName } = resolveAgentLLMRef(agent.llm);
+
+        const tools = await Promise.all(
+          agent.tools.map(async (toolRef) => {
+            const refStr = typeof toolRef === 'string' ? toolRef : `${toolRef.source}:${toolRef.name}`;
+            const resolved = await this.toolRegistry.resolveTools([toolRef]);
+            return { ref: refStr, resolved: resolved.length > 0 };
+          }),
+        );
+
+        const skills: { name: string; exists: boolean }[] = [];
+        if (agent.skills) {
+          const skillNames = Array.isArray(agent.skills) ? agent.skills : this.skillLoader.names();
+          for (const name of skillNames) {
+            skills.push({ name, exists: this.skillLoader.has(name) });
+          }
+        }
+
+        return { name: agent.name, llm: { name: llmName, exists: modelNames.includes(llmName) }, tools, skills };
+      }),
+    );
+
+    // Knowledge diagnostics
+    const knowledgeStatuses = await this.knowledgeStoreManager.getAllStatuses();
+    const knowledge = this.knowledgeStoreManager.listConfigs().map((config) => ({
+      name: config.name,
+      status: knowledgeStatuses.get(config.name)?.status ?? 'not_indexed',
+      errorMessage: knowledgeStatuses.get(config.name)?.errorMessage ?? null,
+    }));
+
+    // MCP diagnostics
+    const connectedServers = new Set(this.mcpClient.getServerNames());
+    const mcp = await Promise.all(
+      this.mcpClient.getConfiguredServerNames().map(async (name) => {
+        const connected = connectedServers.has(name);
+        let toolCount = 0;
+        if (connected) {
+          const serverTools = await this.mcpClient.getToolsByServer(name);
+          toolCount = serverTools.length;
+        }
+        return { name, connected, toolCount };
+      }),
+    );
+
+    return { agents, knowledge, mcp, logs: getRecentLogs(50) };
+  }
+
+  get sandbox(): SandboxAccessor {
+    return {
+      getConfig: () => this.sandboxConfig,
+      getVmExecutor: () => this.vmExecutor,
+      isEnabled: () => this.sandboxConfig?.enabled ?? false,
+    };
   }
 
   get agents(): AgentAccessor {
@@ -159,8 +306,15 @@ export class Orchestrator {
       listConfigs: () => this.knowledgeStoreManager.listConfigs(),
       get: (name: string) => this.knowledgeStoreManager.get(name),
       getConfig: (name: string) => this.knowledgeStoreManager.getConfig(name),
-      initialize: (name: string) => this.knowledgeStoreManager.initialize(name),
-      refresh: (name: string) => this.knowledgeStoreManager.refresh(name),
+      getSqliteStore: (name: string) => this.knowledgeStoreManager.getSqliteStore(name),
+      initialize: (name: string, onProgress?: IndexingProgressCallback) =>
+        this.knowledgeStoreManager.initialize(name, onProgress),
+      refresh: (name: string, onProgress?: IndexingProgressCallback) =>
+        this.knowledgeStoreManager.refresh(name, onProgress),
+      getStatus: (name: string) => this.knowledgeStoreManager.getStatus(name),
+      getAllStatuses: () => this.knowledgeStoreManager.getAllStatuses(),
+      getMetadataManager: () => this.knowledgeStoreManager.getMetadataManager(),
+      isIndexing: (name: string) => this.knowledgeStoreManager.isIndexing(name),
     };
   }
 
@@ -179,8 +333,44 @@ export class Orchestrator {
     };
   }
 
-  get projectRoot(): string {
-    return this.config.projectRoot;
+  get skills(): SkillAccessor {
+    return {
+      list: () => this.skillLoader.list(),
+      get: (name: string) => this.skillLoader.get(name),
+      names: () => this.skillLoader.names(),
+      has: (name: string) => this.skillLoader.has(name),
+    };
+  }
+
+  get tasks(): TaskAccessor {
+    return {
+      getManager: () => this.taskManager,
+    };
+  }
+
+  get integrations(): IntegrationAccessor {
+    return {
+      getChannelContext: (agentName: string) => {
+        return this.integrationManager?.getChannelContext(agentName) ?? '';
+      },
+      getChannelMembers: (agentName: string) => {
+        return this.integrationManager?.getChannelMembers(agentName) ?? [];
+      },
+      postMessage: (agentName: string, message: string) => {
+        this.integrationManager?.postMessage(agentName, message);
+      },
+    };
+  }
+
+  get triggers(): TriggerAccessor {
+    return {
+      getManager: () => this.triggerManager,
+      setManager: (manager: TriggerManager) => { this.triggerManager = manager; },
+    };
+  }
+
+  get workspaceRoot(): string {
+    return this.config.workspaceRoot;
   }
 
   get memory(): MemoryAccessor {
@@ -193,13 +383,20 @@ export class Orchestrator {
     };
   }
 
+  get longTermMemory(): LongTermMemoryAccessor {
+    return {
+      load: (agentName: string) => this.memoryManager.load(agentName),
+    };
+  }
+
   async reloadFile(relativePath: string): Promise<string> {
     this.ensureInitialized();
 
-    const absolutePath = path.resolve(this.config.projectRoot, relativePath);
+    const absolutePath = path.resolve(this.config.workspaceRoot, relativePath);
 
     if (relativePath.endsWith('.agent.yaml')) {
-      await this.agentLoader.loadOne(absolutePath);
+      const agent = await this.agentLoader.loadOne(absolutePath);
+      await this.integrationManager?.syncAgent(this, agent.name);
       return 'agent';
     }
 
@@ -218,9 +415,45 @@ export class Orchestrator {
       return 'function';
     }
 
+    if (relativePath.endsWith('SKILL.md')) {
+      await this.skillLoader.loadOne(absolutePath);
+      return 'skill';
+    }
+
+    if (relativePath === 'mcp.json') {
+      await this.mcpClient.close();
+      await this.loadMCPConfig();
+      await this.mcpClient.initialize();
+      this.toolRegistry = new ToolRegistry(
+        this.mcpClient,
+        this.knowledgeStoreManager,
+        this.functionLoader,
+        this.buildSandboxTools(),
+        this.buildWorkspaceToolsMap(),
+      );
+      return 'mcp';
+    }
+
     if (relativePath === 'llm.json') {
       await loadLLMConfig(this.config.llmConfigPath);
       return 'llm';
+    }
+
+    if (relativePath === 'sandbox.json') {
+      if (this.vmExecutor) {
+        this.vmExecutor.close();
+      }
+      await this.loadSandboxConfig();
+      const sandboxTools = this.buildSandboxTools();
+      const workspaceTools = this.buildWorkspaceToolsMap();
+      this.toolRegistry = new ToolRegistry(
+        this.mcpClient,
+        this.knowledgeStoreManager,
+        this.functionLoader,
+        sandboxTools,
+        workspaceTools,
+      );
+      return 'sandbox';
     }
 
     return 'none';
@@ -245,7 +478,8 @@ export class Orchestrator {
   async *streamAgent(
     name: string,
     input: Record<string, unknown>,
-    sessionId?: string
+    sessionId?: string,
+    signal?: AbortSignal,
   ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
     this.ensureInitialized();
 
@@ -255,7 +489,7 @@ export class Orchestrator {
     }
 
     const instance = await this.agentExecutor.createInstance(definition);
-    yield* instance.stream({ input, sessionId });
+    yield* instance.stream({ input, sessionId, signal });
   }
 
   async runWorkflow(name: string, input: Record<string, unknown>): Promise<WorkflowResult> {
@@ -267,9 +501,9 @@ export class Orchestrator {
     }
 
     // Route based on workflow type
-    if (definition.type === 'langgraph') {
-      return this.langGraphExecutor.execute(
-        definition as LangGraphWorkflowDefinition,
+    if (definition.type === 'react') {
+      return this.reactWorkflowExecutor.execute(
+        definition as ReactWorkflowDefinition,
         input
       );
     }
@@ -290,9 +524,9 @@ export class Orchestrator {
     }
 
     // Route based on workflow type
-    if (definition.type === 'langgraph') {
-      yield* this.streamLangGraphWorkflow(
-        definition as LangGraphWorkflowDefinition,
+    if (definition.type === 'react') {
+      yield* this.streamReactWorkflow(
+        definition as ReactWorkflowDefinition,
         input
       );
       return;
@@ -303,7 +537,7 @@ export class Orchestrator {
     let resolveNext: ((value: void) => void) | null = null;
     let isComplete = false;
 
-    const onStatus = (status: import('./workflows/types.js').WorkflowStatus) => {
+    const onStatus = (status: import('./workflows/types.ts').WorkflowStatus) => {
       statusQueue.push({ type: 'status', data: status });
       if (resolveNext) {
         resolveNext();
@@ -352,15 +586,15 @@ export class Orchestrator {
     await executionPromise;
   }
 
-  private async *streamLangGraphWorkflow(
-    definition: LangGraphWorkflowDefinition,
+  private async *streamReactWorkflow(
+    definition: ReactWorkflowDefinition,
     input: Record<string, unknown>
   ): AsyncGenerator<{ type: 'status' | 'result'; data: unknown }, void, unknown> {
     const statusQueue: Array<{ type: 'status' | 'result'; data: unknown }> = [];
     let resolveNext: ((value: void) => void) | null = null;
     let isComplete = false;
 
-    const onStatus = (status: import('./workflows/types.js').WorkflowStatus) => {
+    const onStatus = (status: import('./workflows/types.ts').WorkflowStatus) => {
       statusQueue.push({ type: 'status', data: status });
       if (resolveNext) {
         resolveNext();
@@ -369,7 +603,7 @@ export class Orchestrator {
     };
 
     // Start execution in background
-    const executionPromise = this.langGraphExecutor
+    const executionPromise = this.reactWorkflowExecutor
       .execute(definition, input, undefined, onStatus)
       .then((result) => {
         isComplete = true;
@@ -422,12 +656,12 @@ export class Orchestrator {
     return store.search(query, k);
   }
 
-  // LangGraph workflow interrupt methods
+  // ReAct workflow interrupt methods
 
   /**
-   * Resumes a LangGraph workflow with the user's answer to an interrupt.
+   * Resumes a ReAct workflow with the user's answer to an interrupt.
    */
-  async resumeLangGraphWorkflow(
+  async resumeReactWorkflow(
     name: string,
     threadId: string,
     answer: string
@@ -439,12 +673,12 @@ export class Orchestrator {
       throw new Error(`Workflow not found: ${name}`);
     }
 
-    if (definition.type !== 'langgraph') {
-      throw new Error(`Workflow "${name}" is not a LangGraph workflow`);
+    if (definition.type !== 'react') {
+      throw new Error(`Workflow "${name}" is not a ReAct workflow`);
     }
 
-    return this.langGraphExecutor.resumeWithAnswer(
-      definition as LangGraphWorkflowDefinition,
+    return this.reactWorkflowExecutor.resumeWithAnswer(
+      definition as ReactWorkflowDefinition,
       threadId,
       answer
     );
@@ -453,7 +687,7 @@ export class Orchestrator {
   /**
    * Gets all active interrupts for a workflow.
    */
-  getLangGraphInterrupts(name: string): InterruptState[] {
+  getReactWorkflowInterrupts(name: string): InterruptState[] {
     this.ensureInitialized();
     return this.interruptManager.getInterruptsByWorkflow(name);
   }
@@ -461,17 +695,29 @@ export class Orchestrator {
   /**
    * Gets a specific interrupt by thread ID.
    */
-  getLangGraphInterrupt(threadId: string): InterruptState | undefined {
+  getReactWorkflowInterrupt(threadId: string): InterruptState | undefined {
     this.ensureInitialized();
     return this.interruptManager.getInterrupt(threadId);
   }
 
   async close(): Promise<void> {
+    if (this.triggerManager) {
+      this.triggerManager.close();
+    }
+    if (this.integrationManager) {
+      this.integrationManager.close();
+    }
+    if (this.vmExecutor) {
+      this.vmExecutor.close();
+    }
     if (this.mcpClient) {
       await this.mcpClient.close();
     }
     if (this.conversationStore) {
       this.conversationStore.destroy();
+    }
+    if (this.taskManager) {
+      this.taskManager.destroy();
     }
   }
 
@@ -499,8 +745,13 @@ interface KnowledgeAccessor {
   listConfigs: () => KnowledgeConfig[];
   get: (name: string) => KnowledgeStoreInstance | undefined;
   getConfig: (name: string) => KnowledgeConfig | undefined;
-  initialize: (name: string) => Promise<KnowledgeStoreInstance>;
-  refresh: (name: string) => Promise<void>;
+  getSqliteStore: (name: string) => SqliteStore | undefined;
+  initialize: (name: string, onProgress?: IndexingProgressCallback) => Promise<KnowledgeStoreInstance>;
+  refresh: (name: string, onProgress?: IndexingProgressCallback) => Promise<void>;
+  getStatus: (name: string) => Promise<KnowledgeStoreMetadata | null>;
+  getAllStatuses: () => Promise<Map<string, KnowledgeStoreMetadata>>;
+  getMetadataManager: () => KnowledgeMetadataManager;
+  isIndexing: (name: string) => boolean;
 }
 
 interface MCPAccessor {
@@ -514,10 +765,42 @@ interface FunctionAccessor {
   names: () => string[];
 }
 
+interface SkillAccessor {
+  list: () => Skill[];
+  get: (name: string) => Skill | undefined;
+  names: () => string[];
+  has: (name: string) => boolean;
+}
+
 interface MemoryAccessor {
   getStore: () => ConversationStore;
   clearSession: (sessionId: string) => void;
   getSessionCount: () => number;
   getMessageCount: (sessionId: string) => number;
   hasSession: (sessionId: string) => boolean;
+}
+
+interface LongTermMemoryAccessor {
+  load: (agentName: string) => Promise<string>;
+}
+
+interface TaskAccessor {
+  getManager: () => TaskManager;
+}
+
+interface TriggerAccessor {
+  getManager: () => TriggerManager | null;
+  setManager: (manager: TriggerManager) => void;
+}
+
+interface IntegrationAccessor {
+  getChannelContext: (agentName: string) => string;
+  getChannelMembers: (agentName: string) => Array<{ userId: string; name: string }>;
+  postMessage: (agentName: string, message: string) => void;
+}
+
+interface SandboxAccessor {
+  getConfig: () => SandboxConfig | null;
+  getVmExecutor: () => VmExecutor | null;
+  isEnabled: () => boolean;
 }

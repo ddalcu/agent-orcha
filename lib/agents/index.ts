@@ -1,11 +1,11 @@
-export { AgentLoader } from './agent-loader.js';
-export { AgentExecutor } from './agent-executor.js';
-export { StructuredOutputWrapper } from './structured-output-wrapper.js';
+export { AgentLoader } from './agent-loader.ts';
+export { AgentExecutor } from './agent-executor.ts';
+export { StructuredOutputWrapper } from './structured-output-wrapper.ts';
 export {
   AgentDefinitionSchema,
   ToolReferenceSchema,
   OutputConfigSchema,
-} from './types.js';
+} from './types.ts';
 export type {
   AgentDefinition,
   ToolReference,
@@ -14,4 +14,4 @@ export type {
   AgentResult,
   AgentInvokeOptions,
   ToolCallRecord,
-} from './types.js';
+} from './types.ts';

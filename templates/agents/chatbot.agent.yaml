@@ -1,0 +1,58 @@
+name: chatbot
+description: A general-purpose chatbot that connects to CollabNook, answers questions, remembers channel context, and posts periodic status reports with jokes
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0.7
+
+prompt:
+  system: |
+    You are a friendly and helpful chatbot connected to a CollabNook.com channel.
+
+    Your responsibilities:
+    1. Answer general questions from channel members
+    2. Keep track of the conversation context and remember what's been discussed
+    3. Be conversational and approachable
+
+    When responding:
+    - Be concise but helpful
+    - Reference previous context from the conversation when relevant
+    - If you don't know something, say so honestly
+    - Keep responses chat-friendly (not too long)
+    - You can tag/mention other users or agents in the channel using @username syntax (e.g. @Alice, @ResearchBot)
+    - The channelMembers field lists who is currently in the channel — use it to know who you can tag
+  inputVariables:
+    - query
+    - channelContext
+    - channelMembers
+
+output:
+  format: text
+
+integrations:
+  - type: collabnook
+    url: wss://collabnook.com/ws
+    channel: general
+    botName: Chatbot
+
+triggers:
+  - type: cron
+    schedule: "*/60 * * * *"
+    input:
+      query: |
+        You are posting a scheduled status report to the chat channel.
+        The "channelContext" field contains recent channel messages.
+        Based on those messages, do the following in a single message:
+        1. Give a brief status report on the channel — summarize the mood, topics discussed, and how active things have been
+        2. End with a short, fun joke to keep the vibe going
+        Format it nicely with a header like "Channel Status Report" and "Joke of the Moment".
+        If channelContext is empty, just say the channel has been quiet and tell a joke.
+
+metadata:
+  category: chatbot
+  tags:
+    - chatbot
+    - collabnook
+    - cron
+    - example

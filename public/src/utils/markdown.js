@@ -13,6 +13,7 @@ export class MarkdownRenderer {
         sanitize: false,        // We'll use DOMPurify instead
       });
     }
+
   }
 
   /**

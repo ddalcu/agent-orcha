@@ -1,17 +1,25 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { Orchestrator } from '../lib/index.js';
-import { createServer } from './server.js';
-import { logger } from '../lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Add environment variable configuration
-const baseDir = process.env.ORCHA_BASE_DIR
-  ? path.resolve(process.env.ORCHA_BASE_DIR)
+// Resolve base directory first, then load .env from it
+const baseDir = process.env.WORKSPACE
+  ? path.resolve(process.env.WORKSPACE)
   : path.resolve(__dirname, '..');
+
+const envPath = path.join(baseDir, '.env');
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+} else {
+  dotenv.config();
+}
+
+import { Orchestrator } from '../lib/index.ts';
+import { createServer } from './server.ts';
+import { logger } from '../lib/logger.ts';
 
 function resolveResource(name: string): string {
   const resourcePath = path.join(baseDir, name);
@@ -53,7 +61,7 @@ function validateConfiguration(): void {
     const errorMsg = `Configuration validation failed. Missing ${missingFiles.length} required resource(s):\n` +
       missingFiles.map(f => `  - ${f}`).join('\n') +
       `\n\nBase directory: ${baseDir}\n` +
-      `Set ORCHA_BASE_DIR environment variable to specify a different configuration directory.`;
+      `Set WORKSPACE environment variable to specify a different configuration directory.`;
 
     logger.error(errorMsg);
     throw new Error(errorMsg);
@@ -73,7 +81,7 @@ async function main(): Promise<void> {
   validateConfiguration();
 
   const orchestrator = new Orchestrator({
-    projectRoot: baseDir,
+    workspaceRoot: baseDir,
     agentsDir: resolveResource('agents'),
     workflowsDir: resolveResource('workflows'),
     knowledgeDir: resolveResource('knowledge'),
@@ -89,6 +97,14 @@ async function main(): Promise<void> {
   logger.info(`Loaded ${orchestrator.knowledge.listConfigs().length} knowledge configs`);
 
   const server = await createServer(orchestrator);
+
+  const triggerManager = orchestrator.triggers.getManager();
+  if (triggerManager) {
+    const total = triggerManager.cronCount + triggerManager.webhookCount;
+    if (total > 0) {
+      logger.info(`Loaded ${triggerManager.cronCount} cron trigger(s), ${triggerManager.webhookCount} webhook trigger(s)`);
+    }
+  }
 
   const shutdown = async (): Promise<void> => {
     logger.info('\nShutting down...');

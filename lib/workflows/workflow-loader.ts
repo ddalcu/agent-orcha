@@ -2,7 +2,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
-import { WorkflowDefinitionSchema, type WorkflowDefinition } from './types.js';
+import { WorkflowDefinitionSchema, type WorkflowDefinition } from './types.ts';
+import { logger } from '../logger.ts';
 
 export class WorkflowLoader {
   private workflowsDir: string;
@@ -17,8 +18,13 @@ export class WorkflowLoader {
 
     for (const file of files) {
       const filePath = path.join(this.workflowsDir, file);
-      const workflow = await this.loadOne(filePath);
-      this.workflows.set(workflow.name, workflow);
+      try {
+        const workflow = await this.loadOne(filePath);
+        this.workflows.set(workflow.name, workflow);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn(`[WorkflowLoader] Skipping invalid workflow file "${file}": ${message}`);
+      }
     }
 
     return this.workflows;

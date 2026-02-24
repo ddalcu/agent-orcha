@@ -2,7 +2,7 @@
 class Store extends EventTarget {
     constructor() {
         super();
-        const validTabs = ['agents', 'workflows', 'knowledge', 'mcp', 'ide'];
+        const validTabs = ['agents', 'workflows', 'knowledge', 'mcp', 'skills', 'monitor', 'ide'];
         const hashTab = window.location.hash.replace('#', '');
         const initialTab = validTabs.includes(hashTab) ? hashTab : 'agents';
 
@@ -16,7 +16,8 @@ class Store extends EventTarget {
             knowledgeStores: [],
             llms: [],
             mcpServers: [],
-            functions: []
+            functions: [],
+            skills: []
         };
     }
 

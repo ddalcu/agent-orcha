@@ -1,41 +1,104 @@
-import { createAgent } from "langchain";
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import type { StructuredTool } from '@langchain/core/tools';
-import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions } from './types.js';
-import { LLMFactory } from '../llm/llm-factory.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
-import type { ConversationStore } from '../memory/conversation-store.js';
-import { StructuredOutputWrapper } from './structured-output-wrapper.js';
-import { logger } from '../logger.js';
+import { createReActAgent } from './react-loop.ts';
+import { humanMessage, aiMessage } from '../types/llm-types.ts';
+import type { ChatModel, BaseMessage } from '../types/llm-types.ts';
+import type { StructuredTool } from '../types/llm-types.ts';
+import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions, AgentMemoryConfig } from './types.ts';
+import { LLMFactory } from '../llm/llm-factory.ts';
+import type { ToolRegistry } from '../tools/tool-registry.ts';
+import type { ConversationStore } from '../memory/conversation-store.ts';
+import type { SkillLoader } from '../skills/skill-loader.ts';
+import type { MemoryManager } from '../memory/memory-manager.ts';
+import { createMemorySaveTool } from '../tools/built-in/memory-save.tool.ts';
+import { StructuredOutputWrapper } from './structured-output-wrapper.ts';
+import { logLLMCallStart, logLLMCallEnd } from '../llm/llm-call-logger.ts';
+import { logger } from '../logger.ts';
+
+function isAbortError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  if (err instanceof Error && err.name === 'AbortError') return true;
+  return false;
+}
 
 export class AgentExecutor {
   private toolRegistry: ToolRegistry;
   private conversationStore: ConversationStore;
+  private skillLoader?: SkillLoader;
+  private memoryManager?: MemoryManager;
 
-  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore) {
+  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, skillLoader?: SkillLoader, memoryManager?: MemoryManager) {
     this.toolRegistry = toolRegistry;
     this.conversationStore = conversationStore;
+    this.skillLoader = skillLoader;
+    this.memoryManager = memoryManager;
   }
 
   async createInstance(definition: AgentDefinition): Promise<AgentInstance> {
-    let llm = LLMFactory.create(definition.llm);
+    // Resolve skills and augment system prompt if configured
+    let augmentedDefinition = definition;
+    let skillsNeedSandbox = false;
+
+    if (definition.skills && this.skillLoader) {
+      const { content, needsSandbox } = this.skillLoader.resolveForAgentWithMeta(definition.skills);
+      skillsNeedSandbox = needsSandbox;
+      if (content) {
+        augmentedDefinition = {
+          ...definition,
+          prompt: {
+            ...definition.prompt,
+            system: `${definition.prompt.system}\n\n${content}`,
+          },
+        };
+      }
+    }
+
+    // Resolve memory and augment system prompt if configured
+    const memoryConfig = this.normalizeMemoryConfig(definition.memory);
+    if (memoryConfig && this.memoryManager) {
+      const memoryContent = await this.memoryManager.load(definition.name);
+      const memoryPrompt = this.buildMemoryPrompt(memoryContent, memoryConfig.maxLines);
+      augmentedDefinition = {
+        ...augmentedDefinition,
+        prompt: {
+          ...augmentedDefinition.prompt,
+          system: `${augmentedDefinition.prompt.system}\n\n${memoryPrompt}`,
+        },
+      };
+    }
+
+    let llm = LLMFactory.create(augmentedDefinition.llm);
 
     // Wrap LLM with structured output if configured
-    llm = StructuredOutputWrapper.wrapLLM(llm, definition.output);
+    llm = StructuredOutputWrapper.wrapLLM(llm, augmentedDefinition.output);
 
-    const tools = await this.toolRegistry.resolveTools(definition.tools);
+    const tools = await this.toolRegistry.resolveTools(augmentedDefinition.tools);
+
+    // Auto-inject memory tool if configured
+    if (memoryConfig && this.memoryManager) {
+      tools.push(createMemorySaveTool(this.memoryManager, definition.name, memoryConfig.maxLines));
+      logger.info(`[AgentExecutor] Auto-injected save_memory tool for agent: ${definition.name}`);
+    }
+
+    // Auto-inject sandbox tool if any skill requires it
+    if (skillsNeedSandbox) {
+      const sandboxTools = this.toolRegistry.getAllSandboxTools();
+      if (sandboxTools.length > 0) {
+        tools.push(...sandboxTools);
+        logger.info(`[AgentExecutor] Auto-injected sandbox tool for agent: ${definition.name}`);
+      } else {
+        logger.warn(`[AgentExecutor] Skill requires sandbox but sandbox is not configured`);
+      }
+    }
 
     return {
-      definition,
-      invoke: async (input) => this.invoke(definition, llm, tools, input),
-      stream: (input) => this.stream(definition, llm, tools, input),
+      definition: augmentedDefinition,
+      invoke: async (input) => this.invoke(augmentedDefinition, llm, tools, input),
+      stream: (input) => this.stream(augmentedDefinition, llm, tools, input),
     };
   }
 
   private async invoke(
     definition: AgentDefinition,
-    llm: BaseChatModel,
+    llm: ChatModel,
     tools: StructuredTool[],
     input: Record<string, unknown> | AgentInvokeOptions
   ): Promise<AgentResult> {
@@ -52,6 +115,7 @@ export class AgentExecutor {
   private parseInvokeOptions(input: Record<string, unknown> | AgentInvokeOptions): {
     input: Record<string, unknown>;
     sessionId?: string;
+    signal?: AbortSignal;
   } {
     // Check if this is AgentInvokeOptions by checking for both 'input' property and if sessionId is present
     if ('input' in input && typeof input.input === 'object' && input.input !== null) {
@@ -59,6 +123,7 @@ export class AgentExecutor {
       return {
         input: options.input,
         sessionId: options.sessionId,
+        signal: options.signal,
       };
     }
     // Otherwise treat as direct input
@@ -67,14 +132,14 @@ export class AgentExecutor {
 
   private async invokeWithTools(
     definition: AgentDefinition,
-    llm: BaseChatModel,
+    llm: ChatModel,
     tools: StructuredTool[],
     input: Record<string, unknown>,
     startTime: number,
     sessionId?: string
   ): Promise<AgentResult> {
     try {
-      const agent = createAgent({
+      const agent = createReActAgent({
         model: llm,
         tools,
         systemPrompt: definition.prompt.system,
@@ -83,24 +148,37 @@ export class AgentExecutor {
       const userMessage = this.formatUserMessage(definition, input);
       const messages = this.buildMessagesWithHistory(userMessage, sessionId);
 
-      logger.info(`[Agent: ${definition.name}] Invoking with ${tools.length} tools...`);
-      logger.info(`[Agent: ${definition.name}] User message: ${userMessage.substring(0, 100)}...`);
+      const caller = `Agent: ${definition.name}`;
+
       if (sessionId) {
-        logger.info(`[Agent: ${definition.name}] Using session: ${sessionId} with ${messages.length} messages`);
+        logger.info(`[${caller}] Using session: ${sessionId}`);
       }
 
-      // Increase recursion limit to prevent premature termination
-      // Default is 25, increase to 50 for complex workflows
+      const { startTime: llmStart, stats } = logLLMCallStart({
+        caller,
+        systemPrompt: definition.prompt.system,
+        messages,
+        tools,
+      });
+
+      logger.info(`[${caller}] Reaching LLM provider...`);
+
       const result = await agent.invoke(
         {
           messages,
         },
         {
-          recursionLimit: 50,
+          recursionLimit: 200,
+          signal: undefined,
         }
       );
 
-      logger.info(`[Agent: ${definition.name}] Got ${result.messages?.length ?? 0} messages`);
+      const lastMsg = result.messages?.[result.messages.length - 1];
+      const responseContent = lastMsg && 'content' in lastMsg ? String(lastMsg.content) : '';
+      logLLMCallEnd(caller, llmStart, stats, {
+        contentLength: responseContent.length,
+        messageCount: result.messages?.length ?? 0,
+      });
 
       if (!result.messages || result.messages.length === 0) {
         logger.warn(`[Agent: ${definition.name}] No messages returned`);
@@ -131,9 +209,11 @@ export class AgentExecutor {
         output = String(lastMessage);
       }
 
-      // Store AI response in session
+      // Extract tool call summaries from the message chain and store with response
       if (sessionId && typeof output === 'string') {
-        this.conversationStore.addMessage(sessionId, new AIMessage(output));
+        const toolSummaries = this.extractToolSummariesFromMessages(result.messages);
+        const storedMessage = this.buildStoredMessage(output, toolSummaries);
+        this.conversationStore.addMessage(sessionId, aiMessage(storedMessage));
       }
 
       if (typeof output === 'string' && (!output || output === 'null' || output === 'undefined')) {
@@ -164,9 +244,12 @@ export class AgentExecutor {
         },
       };
     } catch (error) {
-      logger.error(`[Agent: ${definition.name}] Error:`, error);
+      const errorMsg = isAbortError(error)
+        ? 'Request was aborted'
+        : (error instanceof Error ? error.message : String(error));
+      logger.error(`[Agent: ${definition.name}] Error: ${errorMsg}`);
       return {
-        output: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
+        output: `Agent error: ${errorMsg}`,
         metadata: {
           duration: Date.now() - startTime,
           toolCalls: [],
@@ -179,7 +262,7 @@ export class AgentExecutor {
 
   private async invokeWithoutTools(
     definition: AgentDefinition,
-    llm: BaseChatModel,
+    llm: ChatModel,
     input: Record<string, unknown>,
     startTime: number,
     sessionId?: string
@@ -188,18 +271,31 @@ export class AgentExecutor {
 
     // Build messages with history for session-based conversations
     const messageHistory = sessionId ? this.conversationStore.getMessages(sessionId) : [];
-    const allMessages = [
-      new HumanMessage(definition.prompt.system),
+    const allMessages: BaseMessage[] = [
+      humanMessage(definition.prompt.system),
       ...messageHistory,
-      new HumanMessage(userMessage),
+      humanMessage(userMessage),
     ];
 
     // Store user message in session before invoking
     if (sessionId) {
-      this.conversationStore.addMessage(sessionId, new HumanMessage(userMessage));
+      this.conversationStore.addMessage(sessionId, humanMessage(userMessage));
     }
 
+    const caller = `Agent: ${definition.name}`;
+    const { startTime: llmStart, stats } = logLLMCallStart({
+      caller,
+      systemPrompt: definition.prompt.system,
+      messages: allMessages,
+    });
+
+    logger.info(`[${caller}] Reaching LLM provider...`);
+
     const result = await llm.invoke(allMessages);
+
+    logLLMCallEnd(caller, llmStart, stats, {
+      contentLength: typeof result.content === 'string' ? result.content.length : JSON.stringify(result.content).length,
+    });
 
     let output: string | Record<string, unknown>;
 
@@ -212,7 +308,7 @@ export class AgentExecutor {
 
     // Store AI response in session
     if (sessionId && typeof output === 'string') {
-      this.conversationStore.addMessage(sessionId, new AIMessage(output));
+      this.conversationStore.addMessage(sessionId, aiMessage(output));
     }
 
     // Validate structured output if applicable
@@ -257,14 +353,14 @@ export class AgentExecutor {
 
   private async *stream(
     definition: AgentDefinition,
-    llm: BaseChatModel,
+    llm: ChatModel,
     tools: StructuredTool[],
     input: Record<string, unknown> | AgentInvokeOptions
   ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
-    const { input: actualInput, sessionId } = this.parseInvokeOptions(input);
+    const { input: actualInput, sessionId, signal } = this.parseInvokeOptions(input);
 
     if (tools.length > 0) {
-      const agent = createAgent({
+      const agent = createReActAgent({
         model: llm,
         tools,
         systemPrompt: definition.prompt.system,
@@ -273,73 +369,144 @@ export class AgentExecutor {
       const userMessage = this.formatUserMessage(definition, actualInput);
       const messages = this.buildMessagesWithHistory(userMessage, sessionId);
 
-      const eventStream = await agent.streamEvents(
+      const caller = `Agent: ${definition.name}`;
+      const { startTime: llmStart, stats } = logLLMCallStart({
+        caller,
+        systemPrompt: definition.prompt.system,
+        messages,
+        tools,
+      });
+
+      logger.info(`[${caller}] Reaching LLM provider...`);
+
+      const eventStream = agent.streamEvents(
         { messages },
         {
           version: 'v2',
+          recursionLimit: 200,
+          signal,
         }
       );
 
       let accumulatedOutput = '';
       let finalMessage: unknown = null;
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      const toolCallSummaries: Array<{ tool: string; input: unknown; output: unknown }> = [];
+      const pendingToolCalls = new Map<string, { tool: string; input: unknown }>();
 
-      for await (const event of eventStream) {
-        if (event.event === 'on_chat_model_stream') {
-          const chunk = event.data.chunk;
-          if (chunk.content) {
-            accumulatedOutput += chunk.content;
-            yield { type: 'content', content: chunk.content };
+      try {
+        for await (const event of eventStream) {
+          if (event.event === 'on_chat_model_stream') {
+            const chunk = event.data.chunk as any;
+            const text = this.extractTextContent(chunk.content);
+            if (text) {
+              accumulatedOutput += text;
+              yield { type: 'content', content: text };
+            }
+          } else if (event.event === 'on_chat_model_end') {
+            finalMessage = event.data.output;
+            const um = (event.data.output as any)?.usage_metadata;
+            if (um) {
+              totalInputTokens += um.input_tokens || 0;
+              totalOutputTokens += um.output_tokens || 0;
+            }
+          } else if (event.event === 'on_tool_start') {
+            pendingToolCalls.set(event.run_id!, { tool: event.name!, input: event.data.input });
+            yield {
+              type: 'tool_start',
+              tool: event.name,
+              input: event.data.input,
+              runId: event.run_id,
+            };
+          } else if (event.event === 'on_tool_end') {
+            const pending = pendingToolCalls.get(event.run_id!);
+            toolCallSummaries.push({
+              tool: event.name!,
+              input: pending?.input ?? null,
+              output: event.data.output,
+            });
+            pendingToolCalls.delete(event.run_id!);
+            yield {
+              type: 'tool_end',
+              tool: event.name,
+              output: event.data.output,
+              runId: event.run_id,
+            };
           }
-        } else if (event.event === 'on_chat_model_end') {
-          // Capture the final message for structured output extraction
-          finalMessage = event.data.output;
-        } else if (event.event === 'on_tool_start') {
-          yield {
-            type: 'tool_start',
-            tool: event.name,
-            input: event.data.input,
-            runId: event.run_id,
-          };
-        } else if (event.event === 'on_tool_end') {
-          yield {
-            type: 'tool_end',
-            tool: event.name,
-            output: event.data.output,
-            runId: event.run_id,
-          };
         }
+      } catch (streamError) {
+        const errorMsg = isAbortError(streamError)
+          ? 'Request was aborted'
+          : (streamError instanceof Error ? streamError.message : String(streamError));
+        logger.error(`[Agent: ${definition.name}] Stream error: ${errorMsg}`);
+        yield { type: 'error', error: errorMsg };
+
+        // Still store what we have so far
+        if (sessionId && (accumulatedOutput || toolCallSummaries.length > 0)) {
+          const partialMessage = this.buildStoredMessage(
+            accumulatedOutput || '(agent encountered an error)',
+            toolCallSummaries
+          );
+          this.conversationStore.addMessage(sessionId, aiMessage(partialMessage));
+        }
+        return;
       }
+
+      logLLMCallEnd(caller, llmStart, stats, {
+        contentLength: accumulatedOutput.length,
+      });
+
+      // Build the message to store: text response + tool call summaries
+      const storedMessage = this.buildStoredMessage(accumulatedOutput, toolCallSummaries);
 
       // Handle structured output
       if (definition.output?.format === 'structured' && finalMessage) {
         const structuredOutput = this.extractStructuredOutput(finalMessage);
         yield { type: 'result', output: structuredOutput };
 
-        // Store structured output as JSON string in session
         if (sessionId) {
-          this.conversationStore.addMessage(sessionId, new AIMessage(JSON.stringify(structuredOutput)));
+          this.conversationStore.addMessage(sessionId, aiMessage(JSON.stringify(structuredOutput)));
         }
-      } else if (sessionId && accumulatedOutput) {
-        // Store AI response in session after streaming completes
-        this.conversationStore.addMessage(sessionId, new AIMessage(accumulatedOutput));
+      } else if (sessionId && storedMessage) {
+        this.conversationStore.addMessage(sessionId, aiMessage(storedMessage));
+      }
+
+      // Yield usage stats if available
+      if (totalInputTokens > 0 || totalOutputTokens > 0) {
+        yield {
+          type: 'usage',
+          input_tokens: totalInputTokens,
+          output_tokens: totalOutputTokens,
+          total_tokens: totalInputTokens + totalOutputTokens,
+        };
       }
     } else {
       const userMessage = this.formatUserMessage(definition, actualInput);
 
       // Build messages with history for session-based conversations
       const messageHistory = sessionId ? this.conversationStore.getMessages(sessionId) : [];
-      const allMessages = [
-        new HumanMessage(definition.prompt.system),
+      const allMessages: BaseMessage[] = [
+        humanMessage(definition.prompt.system),
         ...messageHistory,
-        new HumanMessage(userMessage),
+        humanMessage(userMessage),
       ];
 
       // Store user message in session before streaming
       if (sessionId) {
-        this.conversationStore.addMessage(sessionId, new HumanMessage(userMessage));
+        this.conversationStore.addMessage(sessionId, humanMessage(userMessage));
       }
 
-      const stream = await llm.stream(allMessages);
+      const caller = `Agent: ${definition.name}`;
+      const { startTime: llmStart, stats } = logLLMCallStart({
+        caller,
+        systemPrompt: definition.prompt.system,
+        messages: allMessages,
+      });
+
+      logger.info(`[${caller}] Reaching LLM provider...`);
+
+      const stream = llm.stream(allMessages, { signal });
 
       let accumulatedOutput = '';
       let finalChunk: unknown = null;
@@ -352,6 +519,10 @@ export class AgentExecutor {
         }
       }
 
+      logLLMCallEnd(caller, llmStart, stats, {
+        contentLength: accumulatedOutput.length,
+      });
+
       // Handle structured output
       if (definition.output?.format === 'structured' && finalChunk) {
         const structuredOutput = this.extractStructuredOutput(finalChunk);
@@ -359,11 +530,22 @@ export class AgentExecutor {
 
         // Store structured output as JSON string in session
         if (sessionId) {
-          this.conversationStore.addMessage(sessionId, new AIMessage(JSON.stringify(structuredOutput)));
+          this.conversationStore.addMessage(sessionId, aiMessage(JSON.stringify(structuredOutput)));
         }
       } else if (sessionId && accumulatedOutput) {
         // Store AI response in session after streaming completes
-        this.conversationStore.addMessage(sessionId, new AIMessage(accumulatedOutput));
+        this.conversationStore.addMessage(sessionId, aiMessage(accumulatedOutput));
+      }
+
+      // Yield usage stats from the final chunk if available
+      const um = (finalChunk as any)?.usage_metadata;
+      if (um) {
+        yield {
+          type: 'usage',
+          input_tokens: um.input_tokens ?? 0,
+          output_tokens: um.output_tokens ?? 0,
+          total_tokens: um.total_tokens ?? 0,
+        };
       }
     }
   }
@@ -371,29 +553,117 @@ export class AgentExecutor {
   private buildMessagesWithHistory(
     userMessage: string,
     sessionId?: string
-  ): Array<{ role: string; content: string }> {
-    const messages: Array<{ role: string; content: string }> = [];
+  ): BaseMessage[] {
+    const messages: BaseMessage[] = [];
 
     // Add history from store
     if (sessionId && this.conversationStore.hasSession(sessionId)) {
       const history = this.conversationStore.getMessages(sessionId);
       for (const msg of history) {
-        messages.push({
-          role: msg._getType() === 'human' ? 'user' : 'assistant',
-          content: String(msg.content),
-        });
+        messages.push(msg);
       }
     }
 
     // Add current user message
-    messages.push({ role: 'user', content: userMessage });
+    messages.push(humanMessage(userMessage));
 
     // Store user message
     if (sessionId) {
-      this.conversationStore.addMessage(sessionId, new HumanMessage(userMessage));
+      this.conversationStore.addMessage(sessionId, humanMessage(userMessage));
     }
 
     return messages;
+  }
+
+  private extractTextContent(content: unknown): string {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((block: any) => block.type === 'text' && block.text)
+        .map((block: any) => block.text)
+        .join('');
+    }
+    return '';
+  }
+
+  private buildStoredMessage(
+    textResponse: string,
+    toolSummaries: Array<{ tool: string; input: unknown; output: unknown }>
+  ): string {
+    if (toolSummaries.length === 0) return textResponse;
+
+    const summaryLines = toolSummaries.map((tc) => {
+      const inputStr = typeof tc.input === 'string' ? tc.input : JSON.stringify(tc.input);
+      const outputStr = typeof tc.output === 'string' ? tc.output : JSON.stringify(tc.output);
+      // Truncate to keep token usage reasonable
+      const truncated = (s: string, max: number) => s.length > max ? s.slice(0, max) + '...' : s;
+      return `[Tool: ${tc.tool}] Input: ${truncated(inputStr, 200)} → Output: ${truncated(outputStr, 500)}`;
+    });
+
+    return `${textResponse}\n\n<tool_history>\n${summaryLines.join('\n')}\n</tool_history>`;
+  }
+
+  private extractToolSummariesFromMessages(
+    messages: BaseMessage[]
+  ): Array<{ tool: string; input: unknown; output: unknown }> {
+    const summaries: Array<{ tool: string; input: unknown; output: unknown }> = [];
+    if (!messages) return summaries;
+
+    // Collect tool call inputs from AI messages (tool_calls array)
+    const toolCallInputs = new Map<string, { name: string; args: unknown }>();
+    for (const msg of messages) {
+      if (msg.role === 'ai' && Array.isArray(msg.tool_calls)) {
+        for (const tc of msg.tool_calls) {
+          toolCallInputs.set(tc.id, { name: tc.name, args: tc.args });
+        }
+      }
+    }
+
+    // Match tool messages to their inputs
+    for (const msg of messages) {
+      if (msg.role === 'tool') {
+        const callInfo = toolCallInputs.get(msg.tool_call_id!);
+        summaries.push({
+          tool: msg.name ?? callInfo?.name ?? 'unknown',
+          input: callInfo?.args ?? null,
+          output: msg.content ?? null,
+        });
+      }
+    }
+    return summaries;
+  }
+
+  private normalizeMemoryConfig(
+    raw?: AgentMemoryConfig
+  ): { enabled: boolean; maxLines: number } | null {
+    if (!raw) return null;
+    if (typeof raw === 'boolean') return raw ? { enabled: true, maxLines: 100 } : null;
+    if (!raw.enabled) return null;
+    return { enabled: true, maxLines: raw.maxLines ?? 100 };
+  }
+
+  private buildMemoryPrompt(content: string, maxLines: number): string {
+    const memoryBlock = content
+      ? `<long_term_memory>\n${content}\n</long_term_memory>`
+      : '<long_term_memory>\n(empty - no memories saved yet)\n</long_term_memory>';
+
+    const instructions = `<memory_instructions>
+You have long-term memory that persists across conversations.
+
+The content inside <long_term_memory> above is your current saved memory.
+
+You have a "save_memory" tool to update your memory. When you call it, provide the COMPLETE updated memory content (it replaces the entire file, it does not append).
+
+Guidelines for using your memory:
+- Save important facts, user preferences, decisions, and key context worth remembering
+- Keep entries concise: use short bullet points, not full paragraphs
+- Remove outdated or irrelevant entries when saving to keep memory focused
+- Do not save trivial or easily re-derivable information
+- Organize entries by topic or category when it helps clarity
+- Your memory is limited to approximately ${maxLines} lines, so prioritize what matters most
+</memory_instructions>`;
+
+    return `${memoryBlock}\n\n${instructions}`;
   }
 
   private extractStructuredOutput(message: unknown): Record<string, unknown> {

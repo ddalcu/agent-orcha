@@ -1,13 +1,13 @@
-import { tool } from '@langchain/core/tools';
+import { tool } from '../types/tool-factory.ts';
 import { z } from 'zod';
-import type { StructuredTool } from '@langchain/core/tools';
-import type { AgentDefinition } from '../agents/types.js';
-import type { AgentExecutor } from '../agents/agent-executor.js';
-import type { AgentLoader } from '../agents/agent-loader.js';
-import { logger } from '../logger.js';
+import type { StructuredTool } from '../types/llm-types.ts';
+import type { AgentDefinition } from '../agents/types.ts';
+import type { AgentExecutor } from '../agents/agent-executor.ts';
+import type { AgentLoader } from '../agents/agent-loader.ts';
+import { logger } from '../logger.ts';
 
 /**
- * Wraps agents as LangChain tools so they can be called by other agents in LangGraph workflows.
+ * Wraps agents as tools so they can be called by other agents in ReAct workflows.
  */
 export class AgentToolWrapper {
   /**

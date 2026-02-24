@@ -5,13 +5,13 @@ export type {
   ModelConfig,
   EmbeddingModelConfig,
   LLMJsonConfig,
-} from './llm-config.js';
+} from './llm-config.ts';
 
 export {
   ModelConfigSchema,
   EmbeddingModelConfigSchema,
   LLMJsonConfigSchema,
-} from './llm-config.js';
+} from './llm-config.ts';
 
 // Schema for agent LLM reference (can be string or object with overrides)
 export const AgentLLMRefSchema = z.union([

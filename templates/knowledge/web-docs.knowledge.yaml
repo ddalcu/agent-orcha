@@ -1,0 +1,20 @@
+name: web-docs
+description: Solar System knowledge base scraped from Wikipedia
+
+source:
+  type: web
+  url: https://en.wikipedia.org/wiki/Solar_System
+  selector: ".mw-parser-output"
+
+loader:
+  type: text
+
+splitter:
+  type: recursive
+  chunkSize: 1000
+  chunkOverlap: 200
+
+embedding: default
+
+search:
+  defaultK: 4

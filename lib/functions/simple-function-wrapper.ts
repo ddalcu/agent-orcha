@@ -1,4 +1,4 @@
-import { tool } from '@langchain/core/tools';
+import { tool } from '../types/tool-factory.ts';
 import { z } from 'zod';
 
 /**
@@ -69,7 +69,7 @@ function parameterToZodSchema(param: SimpleFunctionParameter): z.ZodTypeAny {
 }
 
 /**
- * Wraps a simple function definition into a LangChain StructuredTool
+ * Wraps a simple function definition into a StructuredTool
  */
 export function wrapSimpleFunction(definition: SimpleFunctionDefinition) {
   // Build Zod schema from parameters
@@ -83,7 +83,7 @@ export function wrapSimpleFunction(definition: SimpleFunctionDefinition) {
 
   const schema = z.object(schemaShape);
 
-  // Create the LangChain tool
+  // Create the tool
   return tool(
     async (args) => {
       const result = await definition.execute(args);
