@@ -33,6 +33,7 @@ tools:
   - workspace:write
   - workspace:list
   - workspace:list_resources
+  - workspace:diagnostics
 
 skills:
   - orcha-builder

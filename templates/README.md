@@ -2,8 +2,6 @@
 
 This project was initialized with Agent Orcha - a TypeScript framework for building and orchestrating multi-agent AI systems.
 
-> **For AI assistants:** See `llm.md` in this directory for the detailed YAML configuration reference with all schemas and examples.
-
 ## Quick Start
 
 ### 1. Configure LLM Settings
@@ -61,8 +59,10 @@ curl -X POST http://localhost:3000/api/agents/example/invoke \
 ├── workflows/           # Workflow definitions (YAML)
 ├── knowledge/           # Knowledge store configs and data
 ├── functions/           # Custom function tools (JavaScript)
+├── skills/              # Skill definitions (Markdown)
 ├── llm.json             # LLM and embedding configurations
 ├── mcp.json             # MCP server configurations (optional)
+├── sandbox.json         # Sandbox configuration (optional)
 └── .env                 # Environment variables (optional)
 ```
 
@@ -71,20 +71,24 @@ curl -X POST http://localhost:3000/api/agents/example/invoke \
 | File | Location | Description |
 |------|----------|-------------|
 | `*.agent.yaml` | `agents/` | Agent definitions with LLM, prompt, tools, and output format |
-| `*.workflow.yaml` | `workflows/` | Workflows - step-based (sequential/parallel) or LangGraph (autonomous) |
-| `*.knowledge.yaml` | `knowledge/` | Knowledge stores - vector search or GraphRAG knowledge graphs |
+| `*.workflow.yaml` | `workflows/` | Workflows - step-based (sequential/parallel) or ReAct (autonomous) |
+| `*.knowledge.yaml` | `knowledge/` | Knowledge stores - SQLite-based vector search with optional direct graph mapping |
 | `*.function.js` | `functions/` | Custom JavaScript tools for agents |
 | `llm.json` | Root | LLM model and embedding configurations |
 | `mcp.json` | Root | MCP server connections for external tools |
 
 ## Key Features
 
-- **Agents**: YAML-defined AI units with tools, structured output, and conversation memory
-- **Workflows**: Step-based orchestration or LangGraph autonomous workflows with tool/agent discovery
-- **Knowledge Stores**: Vector search (Chroma, Pinecone, Qdrant, Memory) and GraphRAG (entity extraction, community detection)
+- **Agents**: YAML-defined AI units with tools, structured output, conversation memory, skills, and triggers
+- **Workflows**: Step-based orchestration or ReAct autonomous workflows with tool/agent discovery
+- **Knowledge Stores**: SQLite-based vector search with optional direct graph mapping
+- **Skills**: Prompt augmentation via Markdown files attached to agents
+- **Tasks**: Submit, track, and cancel async agent tasks
+- **Sandbox**: Sandboxed code execution with `sandbox_exec`, `sandbox_web_fetch`, `sandbox_web_search`
+- **Triggers**: Cron and webhook triggers for automated agent invocation
 - **Functions**: Custom JavaScript tools with typed parameters
 - **MCP Servers**: Connect to external tools via Model Context Protocol
-- **Studio**: Web dashboard with agent testing, knowledge browsing, and in-browser IDE
+- **Studio**: Web dashboard with agent testing, knowledge browsing, skills, monitoring, and in-browser IDE
 
 ## API Endpoints
 
@@ -121,5 +125,4 @@ console.log(result.output);
 ## Documentation
 
 - Full documentation: https://ddalcu.github.io/agent-orcha
-- YAML configuration reference: See `llm.md` in this directory
 - GitHub: https://github.com/ddalcu/agent-orcha

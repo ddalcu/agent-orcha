@@ -1,5 +1,43 @@
 import pino from 'pino';
 
+export interface LogEntry {
+  level: string;
+  message: string;
+  timestamp: string;
+  component?: string;
+}
+
+class LogBuffer {
+  private buffer: LogEntry[];
+  private maxSize: number;
+  private index = 0;
+  private full = false;
+
+  constructor(maxSize = 200) {
+    this.maxSize = maxSize;
+    this.buffer = new Array(maxSize);
+  }
+
+  push(entry: LogEntry): void {
+    this.buffer[this.index] = entry;
+    this.index = (this.index + 1) % this.maxSize;
+    if (this.index === 0) this.full = true;
+  }
+
+  getEntries(limit?: number): LogEntry[] {
+    const entries: LogEntry[] = this.full
+      ? [...this.buffer.slice(this.index), ...this.buffer.slice(0, this.index)]
+      : this.buffer.slice(0, this.index);
+    return limit ? entries.slice(-limit) : entries;
+  }
+}
+
+const logBuffer = new LogBuffer(200);
+
+export function getRecentLogs(limit?: number): LogEntry[] {
+  return logBuffer.getEntries(limit);
+}
+
 /**
  * Shared Pino configuration that can be used by both the standalone logger and Fastify
  */
@@ -34,9 +72,19 @@ function createPinoLogger() {
 export const pinoLogger = createPinoLogger();
 
 /**
- * Create a wrapper that accepts console-like API and converts to pino API
+ * Create a wrapper that accepts console-like API and converts to pino API.
+ * Warn/error/fatal levels are also captured in the in-memory ring buffer.
  */
-function createLoggerWrapper(pinoInstance: pino.Logger) {
+function createLoggerWrapper(pinoInstance: pino.Logger, component?: string) {
+  const capture = (level: string, message: string) => {
+    logBuffer.push({
+      level,
+      message,
+      timestamp: new Date().toISOString(),
+      ...(component ? { component } : {}),
+    });
+  };
+
   return {
     info: (message: string, ...args: unknown[]) => {
       if (args.length > 0) {
@@ -46,6 +94,7 @@ function createLoggerWrapper(pinoInstance: pino.Logger) {
       }
     },
     warn: (message: string, ...args: unknown[]) => {
+      capture('warn', message);
       if (args.length > 0) {
         pinoInstance.warn({ data: args }, message);
       } else {
@@ -53,6 +102,7 @@ function createLoggerWrapper(pinoInstance: pino.Logger) {
       }
     },
     error: (message: string, ...args: unknown[]) => {
+      capture('error', message);
       if (args.length > 0) {
         const firstArg = args[0];
         if (firstArg instanceof Error) {
@@ -79,6 +129,7 @@ function createLoggerWrapper(pinoInstance: pino.Logger) {
       }
     },
     fatal: (message: string, ...args: unknown[]) => {
+      capture('fatal', message);
       if (args.length > 0) {
         const firstArg = args[0];
         if (firstArg instanceof Error) {
@@ -107,5 +158,5 @@ export const logger = createLoggerWrapper(pinoLogger);
  */
 export function createLogger(component: string) {
   const childLogger = pinoLogger.child({ component: `[${component}]` });
-  return createLoggerWrapper(childLogger);
+  return createLoggerWrapper(childLogger, component);
 }

@@ -23,6 +23,12 @@ describe('buildWorkspaceTools', () => {
         functions: [],
         knowledge: [],
       }),
+      getDiagnostics: async () => ({
+        agents: [{ name: 'a1', llm: { name: 'default', exists: true }, tools: [], skills: [] }],
+        knowledge: [],
+        mcp: [],
+        logs: [],
+      }),
     };
   });
 
@@ -30,13 +36,14 @@ describe('buildWorkspaceTools', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it('should build 4 workspace tools', () => {
+  it('should build 5 workspace tools', () => {
     const tools = buildWorkspaceTools(deps);
-    assert.equal(tools.size, 4);
+    assert.equal(tools.size, 5);
     assert.ok(tools.has('read'));
     assert.ok(tools.has('write'));
     assert.ok(tools.has('list'));
     assert.ok(tools.has('list_resources'));
+    assert.ok(tools.has('diagnostics'));
   });
 
   it('read tool should read a file', async () => {
@@ -153,6 +160,20 @@ describe('buildWorkspaceTools', () => {
     const parsed = JSON.parse(result as string);
     assert.equal(parsed.reloaded, 'error');
     assert.ok(parsed.reloadError.includes('Reload failed'));
+  });
+
+  it('diagnostics tool should return a report', async () => {
+    const tools = buildWorkspaceTools(deps);
+    const diagnosticsTool = tools.get('diagnostics')!;
+
+    const result = await diagnosticsTool.invoke({});
+    const parsed = JSON.parse(result as string);
+    assert.ok(Array.isArray(parsed.agents));
+    assert.ok(Array.isArray(parsed.knowledge));
+    assert.ok(Array.isArray(parsed.mcp));
+    assert.ok(Array.isArray(parsed.logs));
+    assert.equal(parsed.agents[0].name, 'a1');
+    assert.equal(parsed.agents[0].llm.exists, true);
   });
 
   it('list tool should list subdirectory', async () => {

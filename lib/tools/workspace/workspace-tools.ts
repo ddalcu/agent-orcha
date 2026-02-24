@@ -9,6 +9,7 @@ import { AgentDefinitionSchema } from '../../agents/types.ts';
 import { WorkflowDefinitionSchema } from '../../workflows/types.ts';
 import { KnowledgeConfigSchema } from '../../knowledge/types.ts';
 import { logger } from '../../logger.ts';
+import type { LogEntry } from '../../logger.ts';
 
 export interface WorkspaceResourceSummary {
   agents: { name: string; description: string }[];
@@ -18,10 +19,31 @@ export interface WorkspaceResourceSummary {
   knowledge: { name: string; description: string }[];
 }
 
+export interface DiagnosticsReport {
+  agents: {
+    name: string;
+    llm: { name: string; exists: boolean };
+    tools: { ref: string; resolved: boolean }[];
+    skills: { name: string; exists: boolean }[];
+  }[];
+  knowledge: {
+    name: string;
+    status: string;
+    errorMessage: string | null;
+  }[];
+  mcp: {
+    name: string;
+    connected: boolean;
+    toolCount: number;
+  }[];
+  logs: LogEntry[];
+}
+
 export interface WorkspaceToolDeps {
   workspaceRoot: string;
   reloadFile: (relativePath: string) => Promise<string>;
   listResources: () => WorkspaceResourceSummary;
+  getDiagnostics: () => Promise<DiagnosticsReport>;
 }
 
 function createWorkspaceReadTool(deps: WorkspaceToolDeps): StructuredTool {
@@ -158,6 +180,23 @@ function createWorkspaceListResourcesTool(deps: WorkspaceToolDeps): StructuredTo
   );
 }
 
+function createWorkspaceDiagnosticsTool(deps: WorkspaceToolDeps): StructuredTool {
+  return tool(
+    async () => {
+      const report = await deps.getDiagnostics();
+      return JSON.stringify(report, null, 2);
+    },
+    {
+      name: 'workspace_diagnostics',
+      description:
+        'Run diagnostics on the ORCHA workspace. Validates that all agent tool references resolve, ' +
+        'skill references exist, LLM configs are valid, knowledge stores are healthy, and MCP servers are connected. ' +
+        'Also includes recent warning and error logs.',
+      schema: z.object({}),
+    },
+  );
+}
+
 export function buildWorkspaceTools(deps: WorkspaceToolDeps): Map<string, StructuredTool> {
   const tools = new Map<string, StructuredTool>();
 
@@ -165,6 +204,7 @@ export function buildWorkspaceTools(deps: WorkspaceToolDeps): Map<string, Struct
   tools.set('write', createWorkspaceWriteTool(deps));
   tools.set('list', createWorkspaceListTool(deps));
   tools.set('list_resources', createWorkspaceListResourcesTool(deps));
+  tools.set('diagnostics', createWorkspaceDiagnosticsTool(deps));
 
   logger.info('[WorkspaceTools] Built workspace tools: ' + Array.from(tools.keys()).join(', '));
   return tools;

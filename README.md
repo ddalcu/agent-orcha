@@ -12,7 +12,7 @@ Agent Orcha is a declarative framework designed to build, manage, and scale mult
 - **Model Agnostic**: Seamlessly swap between OpenAI, Gemini, Anthropic, or local LLMs (Ollama, LM Studio) without rewriting logic.
 - **Universal Tooling**: Leverage the **Model Context Protocol (MCP)** to connect agents to any external service, API, or database instantly.
 - **Knowledge Stores**: Built-in SQLite-based vector store with optional **direct mapping** for knowledge graphs — semantic search and graph analysis as a first-class citizen.
-- **Robust Workflow Engine**: Orchestrate complex multi-agent sequences with parallel execution, conditional logic, and state management - or use **LangGraph** for autonomous prompt-driven workflows.
+- **Robust Workflow Engine**: Orchestrate complex multi-agent sequences with parallel execution, conditional logic, and state management - or use **ReAct** for autonomous prompt-driven workflows.
 - **Conversation Memory**: Built-in session-based memory for multi-turn dialogues with automatic message management and TTL cleanup.
 - **Structured Output**: Enforce JSON schemas on agent responses with automatic validation and type safety.
 - **Agent Orcha Studio**: Built-in web dashboard with agent testing, knowledge browsing, workflow execution, and an **in-browser IDE** for editing configs.
@@ -24,7 +24,7 @@ Agent Orcha is a declarative framework designed to build, manage, and scale mult
 Agent Orcha enables you to:
 
 - **Define agents** using YAML configuration files with customizable LLM providers, prompts, and tools
-- **Create workflows** that coordinate multiple agents in sequential, parallel, or autonomous (LangGraph) execution
+- **Create workflows** that coordinate multiple agents in sequential, parallel, or autonomous (ReAct) execution
 - **Integrate knowledge stores** for RAG (Retrieval Augmented Generation) with vector search and optional knowledge graphs
 - **Connect MCP servers** to extend agent capabilities with external tools
 - **Create local functions** to give your agents the ability to call your own custom code
@@ -51,7 +51,7 @@ Agent Orcha can be used in multiple ways depending on your needs:
 4. **Library** - Import and use Agent Orcha programmatically in your TypeScript/JavaScript projects
 5. **Source** - Clone and run directly from source for development or customization
 
-**Requirements:** Node.js >= 20.0.0 (or Docker for containerized deployment)
+**Requirements:** Node.js >= 24.0.0 (or Docker for containerized deployment)
 
 
 ## Quick Start
@@ -393,6 +393,20 @@ output:                         # Output formatting (optional)
     properties: { ... }
     required: [string]
 
+skills:                         # Skills to attach (optional)
+  - skill-name                  # Specific skills by name
+  # Or: { mode: all }           # Attach all available skills
+
+memory: boolean                 # Enable persistent memory (optional)
+
+integrations:                   # External integrations (optional)
+  - integration-name
+
+triggers:                       # Cron or webhook triggers (optional)
+  - type: cron
+    schedule: "0 * * * *"
+  - type: webhook
+
 metadata:                       # Custom metadata (optional)
   category: string
   tags: [string]
@@ -440,7 +454,7 @@ metadata:
 Agent Orcha supports session-based conversation memory, allowing agents to maintain context across multiple interactions. This is useful for building chatbots, multi-turn dialogues, and stateful applications.
 
 **Features:**
-- In-memory session storage using LangChain messages
+- In-memory session storage with custom message types
 - Automatic FIFO message limit (default: 50 messages per session)
 - Optional TTL-based session cleanup (default: 1 hour)
 - Backward compatible (sessionId is optional)
@@ -516,7 +530,7 @@ const totalSessions = memory.getSessionCount();
 
 ### Structured Output
 
-Agents can return validated, structured JSON output by specifying an `output.schema` configuration. This leverages LangChain's `withStructuredOutput()` to ensure responses match your desired format.
+Agents can return validated, structured JSON output by specifying an `output.schema` configuration. This ensures responses match your desired format with automatic validation.
 
 **Features:**
 - JSON Schema-based output validation
@@ -605,7 +619,7 @@ console.log(result.metadata.structuredOutputValid); // true
 
 ## Workflows
 
-Workflows orchestrate multiple agents in a defined sequence. Define workflows in YAML files within the `workflows/` directory. Agent Orcha supports two workflow types: **step-based** and **LangGraph**.
+Workflows orchestrate multiple agents in a defined sequence. Define workflows in YAML files within the `workflows/` directory. Agent Orcha supports two workflow types: **step-based** and **ReAct**.
 
 ### Step-Based Workflows
 
@@ -730,11 +744,11 @@ output:
   researchFindings: "{{steps.research.output}}"
 ```
 
-### LangGraph Workflows
+### ReAct Workflows
 
-Autonomous, prompt-driven workflows using LangGraph. The agent decides which tools and agents to call based on the system prompt, without explicit step definitions.
+Autonomous, prompt-driven workflows using the ReAct pattern. The agent decides which tools and agents to call based on the system prompt, without explicit step definitions.
 
-#### LangGraph Schema
+#### ReAct Schema
 
 ```yaml
 # workflows/<name>.workflow.yaml
@@ -742,7 +756,7 @@ Autonomous, prompt-driven workflows using LangGraph. The agent decides which too
 name: string                    # Unique identifier (required)
 description: string             # Human-readable description (required)
 version: string                 # Semantic version (default: "1.0.0")
-type: langgraph                 # Required for LangGraph workflows
+type: react                     # Required for ReAct workflows
 
 input:                          # Input schema (required)
   schema:
@@ -755,7 +769,7 @@ prompt:                         # Prompt configuration (required)
   system: string                # System message with instructions
   goal: string                  # Goal template (supports {{input.*}} interpolation)
 
-graph:                          # LangGraph configuration (required)
+graph:                          # ReAct configuration (required)
   model: string                 # LLM config name from llm.json
   executionMode: react | single-turn  # Default: react
   tools:                        # Tool discovery
@@ -784,13 +798,13 @@ config:                         # Optional
 | `single-turn` | Calls tools once, then returns | Research, data gathering, straightforward tasks |
 | `react` | Multiple rounds of tool calls with analysis | Complex problems, iterative refinement |
 
-#### Example LangGraph Workflow
+#### Example ReAct Workflow
 
 ```yaml
-name: langgraph-research
+name: react-research
 description: Autonomous research using tool discovery
 version: "1.0.0"
-type: langgraph
+type: react
 
 input:
   schema:
@@ -1181,7 +1195,9 @@ Agent Orcha includes a built-in web dashboard accessible at `http://localhost:30
 - **Agents**: Browse all configured agents, invoke them with custom input, stream responses in real-time, and manage conversation sessions
 - **Knowledge**: Browse and search knowledge stores, view entities and graph structure for stores with direct mapping
 - **MCP**: Browse MCP servers, view available tools per server, and call tools directly
-- **Workflows**: Browse and execute workflows (both step-based and LangGraph), stream execution progress
+- **Workflows**: Browse and execute workflows (both step-based and ReAct), stream execution progress
+- **Skills**: Browse and inspect available skills
+- **Monitor**: View LLM call logs with context size, token estimates, and duration metrics
 - **IDE**: Full in-browser file editor with file tree navigation, syntax highlighting for YAML, JSON, and JavaScript, and hot-reload on save
 
 ## API Reference
@@ -1341,6 +1357,22 @@ Response: { "status": "ok", "timestamp": "..." }
 }
 ```
 
+### Skills
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/skills` | List all skills |
+| GET | `/api/skills/:name` | Get skill details |
+
+### Tasks
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tasks` | List all tasks |
+| POST | `/api/tasks` | Submit a new task |
+| GET | `/api/tasks/:id` | Get task status |
+| DELETE | `/api/tasks/:id` | Cancel a task |
+
 ### Files
 
 | Method | Endpoint | Description |
@@ -1384,6 +1416,8 @@ agent-orcha/
 │       ├── agents.route.ts
 │       ├── workflows.route.ts
 │       ├── knowledge.route.ts
+│       ├── skills.route.ts
+│       ├── tasks.route.ts
 │       ├── llm.route.ts
 │       ├── functions.route.ts
 │       ├── mcp.route.ts
@@ -1400,22 +1434,36 @@ agent-orcha/
 │   │   ├── types.ts
 │   │   ├── workflow-loader.ts
 │   │   ├── workflow-executor.ts
-│   │   └── langgraph-executor.ts
+│   │   └── react-workflow-executor.ts
 │   ├── knowledge/              # Knowledge store system
 │   │   ├── types.ts
-│   │   ├── knowledge-store-manager.ts
-│   │   └── graph-rag/
-│   │       └── types.ts
-│   ├── memory/                 # Conversation memory
-│   │   └── conversation-store.ts
-│   ├── llm/                    # LLM factory
-│   │   └── llm-factory.ts
+│   │   ├── knowledge-store.ts
+│   │   ├── sqlite-store.ts
+│   │   └── direct-mapper.ts
+│   ├── skills/                 # Skills system
+│   │   └── skill-loader.ts
+│   ├── tasks/                  # Task management
+│   │   ├── task-manager.ts
+│   │   └── task-store.ts
+│   ├── sandbox/                # Sandbox execution
+│   │   └── vm-executor.ts
+│   ├── integrations/           # External integrations
+│   │   └── integration-manager.ts
+│   ├── triggers/               # Cron & webhook triggers
+│   │   └── trigger-manager.ts
+│   ├── memory/                 # Memory system
+│   │   ├── conversation-store.ts
+│   │   └── memory-manager.ts
+│   ├── llm/                    # LLM factory + providers
+│   │   ├── llm-factory.ts
+│   │   └── providers/
 │   ├── mcp/                    # MCP client
 │   │   └── mcp-client.ts
 │   ├── functions/              # Function loader
 │   └── tools/                  # Tool registry and discovery
 │       ├── tool-registry.ts
-│       └── tool-discovery.ts
+│       └── built-in/
+│           └── knowledge-tools-factory.ts
 │
 ├── public/                     # Web UI (Studio)
 │   └── src/
@@ -1455,7 +1503,25 @@ tools:
 Framework-provided tools:
 ```yaml
 tools:
-  - builtin:ask_user       # Human-in-the-loop (LangGraph only)
+  - builtin:ask_user       # Human-in-the-loop (ReAct workflows)
+  - builtin:memory_save    # Save to persistent memory
+```
+
+### Sandbox Tools
+Sandboxed code execution:
+```yaml
+tools:
+  - sandbox:exec           # Execute code in sandbox
+  - sandbox:web_fetch      # Fetch URLs from sandbox
+  - sandbox:web_search     # Web search from sandbox
+```
+
+### Project Tools
+Workspace file access:
+```yaml
+tools:
+  - project:read           # Read project files
+  - project:write          # Write project files
 ```
 
 ## License

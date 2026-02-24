@@ -51,6 +51,40 @@ Tools are provided to agents via prefixed references:
 
 Knowledge tools are created by `lib/tools/built-in/knowledge-tools-factory.ts`. Stores with entities get extra graph tools (traverse, entity_lookup, graph_schema).
 
+### Skills System
+
+Skills are prompt augmentation files (`skills/*/SKILL.md`) with YAML frontmatter. Loaded by `lib/skills/skill-loader.ts`. Attached to agents via the `skills:` config field. Content is injected into the agent's system prompt at runtime.
+
+### Task Management
+
+`lib/tasks/task-manager.ts` and `task-store.ts` provide submit/track/cancel for async tasks. Exposed via `/api/tasks` routes.
+
+### Sandbox System
+
+`lib/sandbox/vm-executor.ts` provides sandboxed code execution. Three built-in tools: `sandbox_exec`, `sandbox_web_fetch`, `sandbox_web_search`. Referenced as `sandbox:` tool sources.
+
+### Integration System
+
+`lib/integrations/integration-manager.ts` manages external integrations. Currently includes Collabnook connector. Attached to agents via the `integrations:` config field.
+
+### Trigger System
+
+`lib/triggers/trigger-manager.ts` supports cron (node-cron) and webhook triggers. Attached to agents via the `triggers:` config field.
+
+### Memory System
+
+Two layers:
+- `ConversationStore` (`lib/memory/conversation-store.ts`) — Session-based in-memory message storage with FIFO and TTL
+- `MemoryManager` (`lib/memory/memory-manager.ts`) — Persistent agent memory saved to disk (`.memory/` directory)
+
+### Workflow Types
+
+Two types: `type: 'steps'` (default, sequential/parallel) and `type: 'react'` (autonomous). The `react` type was previously called `langgraph`. Executor: `ReactWorkflowExecutor` in `lib/workflows/react-workflow-executor.ts`.
+
+### Agent Config
+
+New fields beyond the base schema: `skills`, `memory`, `integrations`, `triggers`.
+
 ### Web UI (Studio)
 
-Located in `public/`. Uses vanilla JS web components (`Component` base class). No build step — served directly by Fastify static.
+Located in `public/`. Uses vanilla JS web components (`Component` base class). No build step — served directly by Fastify static. Tabs: Agents, Knowledge, MCP, Workflows, Skills, Monitor, IDE.

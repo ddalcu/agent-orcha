@@ -13,7 +13,8 @@ import { SkillLoader, type Skill } from './skills/index.ts';
 import { ToolRegistry } from './tools/tool-registry.ts';
 import { ToolDiscovery } from './tools/tool-discovery.ts';
 import { MCPConfigSchema } from './mcp/types.ts';
-import { loadLLMConfig } from './llm/llm-config.ts';
+import { loadLLMConfig, listModelConfigs } from './llm/llm-config.ts';
+import { resolveAgentLLMRef } from './llm/types.ts';
 import { ConversationStore } from './memory/conversation-store.ts';
 import { MemoryManager } from './memory/memory-manager.ts';
 import { TaskManager } from './tasks/task-manager.ts';
@@ -21,7 +22,7 @@ import { VmExecutor } from './sandbox/vm-executor.ts';
 import { createSandboxExecTool } from './sandbox/sandbox-exec.ts';
 import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
-import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary } from './tools/workspace/workspace-tools.ts';
+import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
 import { TriggerManager } from './triggers/trigger-manager.ts';
 import type { SandboxConfig } from './sandbox/types.ts';
@@ -36,7 +37,7 @@ import type { KnowledgeStoreInstance, KnowledgeConfig, KnowledgeStoreMetadata, I
 import type { KnowledgeMetadataManager } from './knowledge/knowledge-store-metadata.ts';
 import type { SqliteStore } from './knowledge/sqlite-store.ts';
 import type { StructuredTool } from './types/llm-types.ts';
-import { logger } from './logger.ts';
+import { logger, getRecentLogs } from './logger.ts';
 
 export interface OrchestratorConfig {
   workspaceRoot: string;
@@ -217,8 +218,62 @@ export class Orchestrator {
         functions: this.functionLoader.list().map(f => ({ name: f.name, description: f.metadata.description })),
         knowledge: this.knowledgeStoreManager.listConfigs().map(k => ({ name: k.name, description: k.description })),
       }),
+      getDiagnostics: () => this.buildDiagnosticsReport(),
     };
     return buildWorkspaceTools(deps);
+  }
+
+  private async buildDiagnosticsReport(): Promise<DiagnosticsReport> {
+    const modelNames = listModelConfigs();
+
+    // Agent diagnostics
+    const agents = await Promise.all(
+      this.agentLoader.list().map(async (agent) => {
+        const { name: llmName } = resolveAgentLLMRef(agent.llm);
+
+        const tools = await Promise.all(
+          agent.tools.map(async (toolRef) => {
+            const refStr = typeof toolRef === 'string' ? toolRef : `${toolRef.source}:${toolRef.name}`;
+            const resolved = await this.toolRegistry.resolveTools([toolRef]);
+            return { ref: refStr, resolved: resolved.length > 0 };
+          }),
+        );
+
+        const skills: { name: string; exists: boolean }[] = [];
+        if (agent.skills) {
+          const skillNames = Array.isArray(agent.skills) ? agent.skills : this.skillLoader.names();
+          for (const name of skillNames) {
+            skills.push({ name, exists: this.skillLoader.has(name) });
+          }
+        }
+
+        return { name: agent.name, llm: { name: llmName, exists: modelNames.includes(llmName) }, tools, skills };
+      }),
+    );
+
+    // Knowledge diagnostics
+    const knowledgeStatuses = await this.knowledgeStoreManager.getAllStatuses();
+    const knowledge = this.knowledgeStoreManager.listConfigs().map((config) => ({
+      name: config.name,
+      status: knowledgeStatuses.get(config.name)?.status ?? 'not_indexed',
+      errorMessage: knowledgeStatuses.get(config.name)?.errorMessage ?? null,
+    }));
+
+    // MCP diagnostics
+    const connectedServers = new Set(this.mcpClient.getServerNames());
+    const mcp = await Promise.all(
+      this.mcpClient.getConfiguredServerNames().map(async (name) => {
+        const connected = connectedServers.has(name);
+        let toolCount = 0;
+        if (connected) {
+          const serverTools = await this.mcpClient.getToolsByServer(name);
+          toolCount = serverTools.length;
+        }
+        return { name, connected, toolCount };
+      }),
+    );
+
+    return { agents, knowledge, mcp, logs: getRecentLogs(50) };
   }
 
   get sandbox(): SandboxAccessor {

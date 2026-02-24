@@ -6,8 +6,8 @@
 
   <!-- SEO Meta Tags -->
   <title>Documentation - Agent Orcha | Multi-Agent AI Framework</title>
-  <meta name="description" content="Complete documentation for Agent Orcha. Learn agents, workflows, knowledge stores, GraphRAG, LangGraph, MCP integration, and custom functions with YAML configuration.">
-  <meta name="keywords" content="agent orcha documentation, multi-agent AI, YAML configuration, MCP tools, RAG, GraphRAG, knowledge stores, LangGraph">
+  <meta name="description" content="Complete documentation for Agent Orcha. Learn agents, workflows, knowledge stores, ReAct workflows, MCP integration, and custom functions with YAML configuration.">
+  <meta name="keywords" content="agent orcha documentation, multi-agent AI, YAML configuration, MCP tools, RAG, knowledge stores, ReAct workflows">
   <meta name="author" content="Agent Orcha">
 
   <!-- Open Graph Tags -->
@@ -76,10 +76,15 @@
             <li><a href="#structured-output">Structured Output</a></li>
             <li><a href="#conversation-memory">Conversation Memory</a></li>
             <li><a href="#workflows">Workflows</a></li>
-            <li><a href="#langgraph-workflows">LangGraph Workflows</a></li>
+            <li><a href="#react-workflows">ReAct Workflows</a></li>
             <li><a href="#functions">Functions</a></li>
             <li><a href="#mcp-servers">MCP Servers</a></li>
             <li><a href="#skills">Skills</a></li>
+            <li><a href="#tasks">Tasks</a></li>
+            <li><a href="#sandbox">Sandbox</a></li>
+            <li><a href="#persistent-memory">Persistent Memory</a></li>
+            <li><a href="#triggers">Triggers</a></li>
+            <li><a href="#integrations">Integrations</a></li>
           </ul>
 
           <h4>Knowledge Stores</h4>
@@ -101,6 +106,7 @@
                 <li><a href="#knowledge-api">Knowledge API</a></li>
                 <li><a href="#functions-api">Functions API</a></li>
                 <li><a href="#skills-api">Skills API</a></li>
+                <li><a href="#tasks-api">Tasks API</a></li>
                 <li><a href="#mcp-api">MCP API</a></li>
                 <li><a href="#files-api">Files API</a></li>
                 <li><a href="#llm-api">LLM API</a></li>
@@ -328,7 +334,15 @@ output:
             </tr>
             <tr>
               <td><strong>Workflows</strong></td>
-              <td>Browse and execute workflows (step-based and LangGraph), stream execution progress</td>
+              <td>Browse and execute workflows (step-based and ReAct), stream execution progress</td>
+            </tr>
+            <tr>
+              <td><strong>Skills</strong></td>
+              <td>Browse and inspect available skills attached to agents</td>
+            </tr>
+            <tr>
+              <td><strong>Monitor</strong></td>
+              <td>View LLM call logs with context size, token estimates, and duration metrics</td>
             </tr>
             <tr>
               <td><strong>IDE</strong></td>
@@ -370,7 +384,7 @@ output:
 
         <!-- Docker Deployment -->
         <h3 id="docker" class="mt-xl">Docker Deployment</h3>
-        <p>Agent Orcha provides a Docker image <code>ddalcu/agent-orcha</code> for containerized deployments. The image uses the Bun runtime and mounts your project directory to <code>/data</code>.</p>
+        <p>Agent Orcha provides a Docker image <code>ddalcu/agent-orcha</code> for containerized deployments. The image uses the Node.js 24 runtime and mounts your project directory to <code>/data</code>.</p>
 
         <h4>Initialize a Project via Docker</h4>
         <div class="code-block">
@@ -519,7 +533,7 @@ metadata:
         </div>
 
         <h3 id="structured-output" class="mt-xl">Structured Output</h3>
-        <p>Agents can return validated, structured JSON output by specifying an <code>output.schema</code>. This uses LangChain's <code>withStructuredOutput()</code> to ensure responses match your schema.</p>
+        <p>Agents can return validated, structured JSON output by specifying an <code>output.schema</code>. This ensures responses match your schema with automatic validation.</p>
 
         <div class="code-block">
           <div class="code-header">
@@ -565,7 +579,7 @@ output:
         <h3 id="conversation-memory" class="mt-xl">Conversation Memory</h3>
         <p>Agents support session-based conversation memory for multi-turn dialogues. Pass a <code>sessionId</code> in API calls to maintain context across interactions.</p>
         <ul>
-          <li>In-memory session storage using LangChain messages</li>
+          <li>In-memory session storage with custom message types</li>
           <li>Automatic FIFO message limit (default: 50 messages per session)</li>
           <li>Optional TTL-based session cleanup</li>
           <li>Session management API endpoints for stats and cleanup</li>
@@ -589,7 +603,7 @@ curl -X POST http://localhost:3000/api/agents/chatbot/invoke \
         </div>
 
         <h3 id="workflows" class="mt-xl">Workflows</h3>
-        <p>Workflows orchestrate multiple agents. Agent Orcha supports two workflow types: <strong>step-based</strong> (sequential/parallel with explicit steps) and <strong>LangGraph</strong> (autonomous, prompt-driven).</p>
+        <p>Workflows orchestrate multiple agents. Agent Orcha supports two workflow types: <strong>step-based</strong> (sequential/parallel with explicit steps) and <strong>ReAct</strong> (autonomous, prompt-driven).</p>
 
         <h4>Step-Based Workflow Schema</h4>
         <div class="code-block">
@@ -668,18 +682,18 @@ output:                         # Output mapping (required)
           </tbody>
         </table>
 
-        <h3 id="langgraph-workflows" class="mt-xl">LangGraph Workflows</h3>
-        <p>LangGraph workflows use autonomous agents that discover and call tools/agents based on your prompt, without explicit step definitions.</p>
+        <h3 id="react-workflows" class="mt-xl">ReAct Workflows</h3>
+        <p>ReAct workflows use autonomous agents that discover and call tools/agents based on your prompt, without explicit step definitions.</p>
 
-        <h4>LangGraph Schema</h4>
+        <h4>ReAct Schema</h4>
         <div class="code-block">
           <div class="code-header">
             <span class="code-language">YAML</span>
-            <button class="code-copy-btn" data-copy-target="langgraph-schema">Copy</button>
+            <button class="code-copy-btn" data-copy-target="react-schema">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="langgraph-schema"><code>name: string
-type: langgraph                 # Required for LangGraph
+            <pre id="react-schema"><code>name: string
+type: react                     # Required for ReAct
 
 input:
   schema:
@@ -733,7 +747,7 @@ output:
         </table>
 
         <h4>Human-in-the-Loop</h4>
-        <p>LangGraph workflows support the <code>builtin:ask_user</code> tool. When called, the workflow pauses and waits for user input via <code>NodeInterrupt</code>.</p>
+        <p>ReAct workflows support the <code>builtin:ask_user</code> tool. When called, the workflow pauses and waits for user input.</p>
 
         <h3 id="functions" class="mt-xl">Functions</h3>
         <p>Functions are custom JavaScript tools that extend agent capabilities. They're simple to create and require no dependencies.</p>
@@ -969,6 +983,249 @@ skills:
           </tbody>
         </table>
         <p>Want to contribute a skill? Add it to <code>templates/skills/</code> and submit a pull request to the repository.</p>
+
+        <!-- Tasks -->
+        <h3 id="tasks" class="mt-xl">Tasks</h3>
+        <p>Tasks provide async execution for agents and workflows. Submit a task, poll its status, stream updates via SSE, or cancel it. Tasks are managed in-memory with automatic cleanup.</p>
+
+        <h4>Task Lifecycle</h4>
+        <p>Tasks progress through these statuses:</p>
+        <p><code>submitted</code> &rarr; <code>working</code> &rarr; <code>completed</code> | <code>failed</code> | <code>canceled</code></p>
+        <p>ReAct workflows may also reach <code>input-required</code> when the <code>builtin:ask_user</code> tool is called, pausing until you respond via the API.</p>
+
+        <h4>Submit a Task</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+          </div>
+          <div class="code-content">
+            <pre><code># Submit an agent task
+curl -X POST http://localhost:3000/api/tasks/agent \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent": "researcher",
+    "input": {"topic": "AI trends"},
+    "sessionId": "optional-session-id"
+  }'
+
+# Submit a workflow task
+curl -X POST http://localhost:3000/api/tasks/workflow \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workflow": "research-paper",
+    "input": {"topic": "AI trends"}
+  }'</code></pre>
+          </div>
+        </div>
+
+        <h4>Stream Task Status (SSE)</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+          </div>
+          <div class="code-content">
+            <pre><code>curl -N http://localhost:3000/api/tasks/TASK_ID/stream</code></pre>
+          </div>
+        </div>
+
+        <h4>Respond to Input Request</h4>
+        <p>When a ReAct workflow reaches <code>input-required</code>, respond to continue execution:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+          </div>
+          <div class="code-content">
+            <pre><code>curl -X POST http://localhost:3000/api/tasks/TASK_ID/respond \
+  -H "Content-Type: application/json" \
+  -d '{"response": "Yes, proceed with option A"}'</code></pre>
+          </div>
+        </div>
+
+        <!-- Sandbox -->
+        <h3 id="sandbox" class="mt-xl">Sandbox</h3>
+        <p>The sandbox system provides isolated code execution via Node.js VM. It includes three built-in tools that agents can use for code execution, web fetching, and web search.</p>
+
+        <h4>Configuration</h4>
+        <p>Configure sandbox behavior in <code>sandbox.json</code> (optional &mdash; defaults to enabled):</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">JSON</span>
+          </div>
+          <div class="code-content">
+            <pre><code>{
+  "enabled": true,
+  "commandTimeout": 30000,
+  "maxOutputChars": 50000
+}</code></pre>
+          </div>
+        </div>
+
+        <h4>Sandbox Tools</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Description</th>
+              <th>Parameters</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>sandbox:exec</code></td>
+              <td>Execute JavaScript code in a sandboxed VM</td>
+              <td><code>code</code> (string), <code>timeout</code> (number, optional)</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:web_fetch</code></td>
+              <td>Fetch a web page and convert HTML to Markdown</td>
+              <td><code>url</code> (string), <code>raw</code> (boolean, optional)</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:web_search</code></td>
+              <td>Search the web via DuckDuckGo</td>
+              <td><code>query</code> (string), <code>num_results</code> (number, optional)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Using Sandbox Tools in Agents</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+          </div>
+          <div class="code-content">
+            <pre><code>name: code-runner
+description: Agent that can execute code and search the web
+llm: default
+
+prompt:
+  system: |
+    You can execute JavaScript code and search the web.
+  inputVariables:
+    - task
+
+tools:
+  - sandbox:exec
+  - sandbox:web_fetch
+  - sandbox:web_search</code></pre>
+          </div>
+        </div>
+
+        <!-- Persistent Memory -->
+        <h3 id="persistent-memory" class="mt-xl">Persistent Memory</h3>
+        <p>Agent Orcha has two memory layers. <strong>Conversation memory</strong> (session-based, in-memory) tracks multi-turn dialogues. <strong>Persistent memory</strong> saves facts to disk so agents remember across sessions and server restarts.</p>
+
+        <h4>Agent Configuration</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+          </div>
+          <div class="code-content">
+            <pre><code>name: assistant
+description: Agent with persistent memory
+llm: default
+
+prompt:
+  system: |
+    You are a helpful assistant. Save important facts
+    about the user to your memory for future sessions.
+  inputVariables:
+    - message
+
+memory: true        # Enable persistent memory</code></pre>
+          </div>
+        </div>
+
+        <h4>How It Works</h4>
+        <ul>
+          <li>When <code>memory: true</code>, the agent gets a <code>save_memory</code> built-in tool</li>
+          <li>Memory is stored as Markdown files in <code>.memory/{agentName}.md</code></li>
+          <li>On each invocation, prior memory is loaded and injected into the system prompt</li>
+          <li>The agent decides what to remember by calling <code>save_memory</code></li>
+        </ul>
+
+        <!-- Triggers -->
+        <h3 id="triggers" class="mt-xl">Triggers</h3>
+        <p>Triggers allow agents to run automatically on a schedule (cron) or in response to external events (webhook).</p>
+
+        <h4>Cron Trigger</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+          </div>
+          <div class="code-content">
+            <pre><code>name: daily-reporter
+description: Runs every morning at 9am
+llm: default
+
+prompt:
+  system: Generate a daily summary report.
+  inputVariables:
+    - task
+
+triggers:
+  - type: cron
+    schedule: "0 9 * * *"
+    input:
+      task: "Generate the daily report"</code></pre>
+          </div>
+        </div>
+
+        <h4>Webhook Trigger</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+          </div>
+          <div class="code-content">
+            <pre><code>name: webhook-handler
+description: Responds to external webhook events
+llm: default
+
+prompt:
+  system: Process the incoming webhook payload.
+  inputVariables:
+    - data
+
+triggers:
+  - type: webhook
+    path: /api/triggers/webhooks/webhook-handler
+    input:
+      data: "default context"</code></pre>
+          </div>
+        </div>
+        <p>Webhook triggers register a <code>POST</code> endpoint at the specified path. The request body is merged with the base <code>input</code> and the agent is invoked immediately.</p>
+
+        <!-- Integrations -->
+        <h3 id="integrations" class="mt-xl">Integrations</h3>
+        <p>Integrations connect agents to external communication platforms. When configured, agents receive channel context as input and can post responses back to the channel.</p>
+
+        <h4>Agent Configuration</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+          </div>
+          <div class="code-content">
+            <pre><code>name: channel-bot
+description: Bot connected to a chat channel
+llm: default
+
+prompt:
+  system: |
+    You are a channel assistant.
+    Use the channel context to respond to messages.
+  inputVariables:
+    - message
+    - channelContext
+    - channelMembers
+
+integrations:
+  - type: collabnook
+    url: https://collabnook.example.com
+    channel: general
+    botName: orcha-bot</code></pre>
+          </div>
+        </div>
+        <p>When an integration is active, recent channel messages and member lists are automatically injected as agent input variables (<code>channelContext</code>, <code>channelMembers</code>). Combined with triggers, agents can monitor and respond to channel activity on a schedule.</p>
 
         <!-- Knowledge Stores -->
         <h2 id="knowledge-stores" class="mt-2xl">Knowledge Stores</h2>
@@ -1497,6 +1754,54 @@ Response:
           </tbody>
         </table>
 
+        <h3 id="tasks-api" class="mt-xl">Tasks API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/tasks</code></td>
+              <td>List all tasks (filter by <code>?status=</code>, <code>?kind=</code>, <code>?target=</code>)</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/tasks/:id</code></td>
+              <td>Get task status and result</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/tasks/agent</code></td>
+              <td>Submit an agent task</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/tasks/workflow</code></td>
+              <td>Submit a workflow task</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/tasks/:id/cancel</code></td>
+              <td>Cancel a running task</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/tasks/:id/respond</code></td>
+              <td>Respond to an input-required task (ReAct human-in-the-loop)</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/tasks/:id/stream</code></td>
+              <td>Stream task status updates (SSE)</td>
+            </tr>
+          </tbody>
+        </table>
+
         <h3 id="mcp-api" class="mt-xl">MCP API</h3>
         <table>
           <thead>
@@ -1716,19 +2021,19 @@ search:
           </div>
         </div>
 
-        <h3 class="mt-xl">Example 4: LangGraph Workflow</h3>
-        <p>An autonomous workflow using LangGraph with automatic tool and agent discovery.</p>
+        <h3 class="mt-xl">Example 4: ReAct Workflow</h3>
+        <p>An autonomous workflow using the ReAct pattern with automatic tool and agent discovery.</p>
 
         <div class="code-block">
           <div class="code-header">
             <span class="code-language">YAML - workflows/research.workflow.yaml</span>
-            <button class="code-copy-btn" data-copy-target="langgraph-example">Copy</button>
+            <button class="code-copy-btn" data-copy-target="react-example">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="langgraph-example"><code>name: langgraph-research
+            <pre id="react-example"><code>name: react-research
 description: Autonomous research using tool discovery
 version: "1.0.0"
-type: langgraph
+type: react
 
 input:
   schema:
@@ -1912,7 +2217,7 @@ output:
           <h4>About</h4>
           <ul class="footer-links">
             <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
-            <li>Version 0.0.3</li>
+            <li>Version 0.0.5</li>
             <li>MIT License</li>
           </ul>
         </div>

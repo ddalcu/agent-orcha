@@ -7,53 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Release 0.0.5
 
+### Breaking Changes
+
+- **LangChain removed** — All `@langchain/*` dependencies replaced with custom implementations and direct LLM provider SDKs
+- **Node.js 24+ required** — Leverages built-in TypeScript support; Docker image updated to `node:24-slim`
+- **Unified SQLite + sqlite-vec knowledge stores** — Chroma, Pinecone, Qdrant, Neo4j, and S3 backends removed; all stores now use a single SQLite persistence layer
+- **Workflow type renamed** — `type: langgraph` → `type: react` in workflow YAML configs; executor renamed to `ReactWorkflowExecutor`
+- **Config field renamed** — `projectRoot` → `workspaceRoot` in `Orchestrator` constructor
+- **Environment variable renamed** — `ORCHA_BASE_DIR` → `WORKSPACE`
+- **Knowledge config fields stripped by migration** — The following fields are automatically removed on load: `kind`, `store` (top-level), `graph.extractionMode`, `graph.extraction`, `graph.communities`, `graph.cache`, `graph.store`, `search.localSearch`, `search.globalSearch`
+
 ### Added
 
-- **Knowledge Graph Agent Tools**: New suite of built-in tools automatically registered for agents based on knowledge store configuration
-  - `knowledge_cypher` — Execute read-only Cypher queries against Neo4j-backed graph stores
-  - `knowledge_sql` — Execute read-only SQL queries against database-backed knowledge stores
-  - `knowledge_entity_lookup` — Look up entities by name or type in the graph
-  - `knowledge_traverse` — Traverse relationships from a given entity
-  - `knowledge_graph_schema` — Introspect graph schema (node labels, relationship types, property keys)
-  - Tools are created via `KnowledgeToolsFactory` and include read-only query validators to prevent mutations
-
-- **Direct SQL-to-Graph Mapping**: New `DirectMapper` for `graph-rag` stores with `extractionMode: 'direct'`
-  - Maps SQL query results directly to graph entities and relationships without LLM extraction
-  - Guarantees 100% data preservation — all rows contribute to the graph
-
-- **LLM Call Observability**: New `LLMCallLogger` integrated into `AgentExecutor` and `LangGraphExecutor`
-  - Logs context size breakdown (system prompt, messages, tool definitions)
-  - Estimated token counts and per-tool size breakdown
-  - Response metrics with call duration
-
-- **On-Demand Indexing with SSE Progress**: Knowledge stores are no longer initialized eagerly on startup
-  - `POST /api/knowledge/:name/index` — Trigger async indexing
-  - `GET /api/knowledge/:name/index/stream` — SSE stream for real-time indexing progress (phases: loading, chunking, embedding, extracting, building, done/error)
-  - `GET /api/knowledge/:name/status` — Get store metadata (status, counts, last indexed time, duration)
-
-- **Vector Store Cache**: New `VectorStoreCache` that persists in-memory vector stores to disk
-  - Content-hash invalidation to avoid re-embedding unchanged documents on restart
-
-- **Knowledge Store Metadata**: New `KnowledgeMetadataManager` for persistent tracking of indexing status
-  - Tracks document/chunk/entity/edge/community counts, embedding model, and error state
-
-- **Neo4j Graph Visualization**: New `GraphView` UI component in Agent Orcha Studio
-  - Interactive graph exploration via neo4jd3 with Cypher query execution
-  - Node/relationship inspection, drag-to-lock, dark theme
-  - New `/api/graph` route for direct Neo4j query execution
+- **Skills System** — Prompt augmentation via Markdown files (`skills/*/SKILL.md`) with YAML frontmatter; attach to agents via `skills:` config; loaded by `lib/skills/skill-loader.ts`
+- **Task Management** — Submit, track, and cancel async tasks via `TaskManager` and `TaskStore` (`lib/tasks/`)
+- **Sandbox Execution** — `VmExecutor` (`lib/sandbox/vm-executor.ts`) with three built-in tools: `sandbox_exec`, `sandbox_web_fetch`, `sandbox_web_search`
+- **Integrations System** — `IntegrationManager` (`lib/integrations/`) with Collabnook connector
+- **Trigger System** — Cron (node-cron) and webhook triggers via `TriggerManager` (`lib/triggers/`)
+- **Memory Manager** — Persistent agent memory to disk (`.memory/` directory) alongside session-based `ConversationStore`
+- **ReAct Loop** — New `react-loop.ts` implementing the ReAct reasoning pattern, replacing LangGraph dependency
+- **LLM Observability** — `LLMCallLogger` integrated into `AgentExecutor` and `ReactWorkflowExecutor` for context size breakdown, token estimates, and call duration metrics
+- **Knowledge Graph Tools** — `KnowledgeToolsFactory` creates `entity_lookup`, `traverse`, `graph_schema`, `sql`, and `search` tools for stores with entities
+- **Direct SQL-to-Graph Mapping** — `DirectMapper` maps SQL query results directly to graph entities and relationships without LLM extraction (100% data preservation)
+- **Custom LLM Providers** — OpenAI, Anthropic, and Gemini provider implementations in `lib/llm/providers/`
+- **Workspace Tools** — Project-scoped file tools (`project:` source)
+- **New UI Views** — `MonitorView` for LLM call monitoring, `SkillsView` for skill browsing
+- **CI/CD** — GitHub Actions workflows for testing and publishing
+- **Test Suite** — 100+ test files across all subsystems
+- **New Template Agents** — architect, chatbot, sandbox, knowledge-broker
+- **New Template Knowledge Stores** — org-chart, pet-store, web-docs
 
 ### Changed
 
-- **Enhanced Neo4j Graph Store** — Added `getSchema()`, `findEntities()`, and `getRelationships()` methods for richer graph introspection and traversal
-- **Enhanced Graph RAG Factory** — Supports direct mapping mode, improved extraction caching, and progress callback reporting throughout the indexing pipeline
-- **Enhanced Knowledge List API** — `GET /api/knowledge` now returns full status metadata including indexing state, counts, extraction mode, and store type
-- **Enhanced KnowledgeView UI** — Status badges, index/re-index buttons, progress bars, and richer store detail display
-- **Improved .env Loading** — Both CLI (`start` command) and programmatic entry (`src/index.ts`) now explicitly load `.env` from the project root before any imports that depend on env vars
-- Knowledge stores now initialize lazily on first access instead of eagerly at startup
+- Conversation store uses custom message types (no longer LangChain `HumanMessage`/`AIMessage`)
+- Tool registry expanded with `sandbox:` and `project:` tool sources
+- Workflow executors refactored — step-based executor unchanged, autonomous executor rewritten as `ReactWorkflowExecutor`
+- Knowledge list API returns full status metadata including indexing state and counts
+- `.env` loading improved — both CLI and programmatic entry load `.env` before any imports
+
+### Removed
+
+- All `@langchain/*` dependencies
+- Vector store backends: Chroma (`chromadb`), Pinecone, Qdrant, in-memory `VectorStoreCache`
+- S3 document loader (`@aws-sdk/*`)
+- Neo4j graph store (`neo4j-driver`)
+- LLM-based entity extraction (`EntityExtractor`)
+- Community detection (Louvain algorithm, community summaries)
+- GraphRAG local/global search modes
+- `neo4jd3` visualization library
+- `LangGraphExecutor` class
 
 ### Dependencies
 
-- Added `neo4jd3@^0.0.5`
+- **Added:** `@anthropic-ai/sdk`, `@google/generative-ai`, `openai@^6`, `sqlite-vec`, `better-sqlite3`, `jsdom`, `node-cron`, `ws`, `cheerio`
+- **Removed:** all `@langchain/*`, `chromadb`, `neo4j-driver`, `neo4jd3`, `@aws-sdk/*`, `graphology`, `graphology-communities-louvain`
 
 ## Release 0.0.3
 

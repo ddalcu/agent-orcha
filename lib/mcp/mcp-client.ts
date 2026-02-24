@@ -112,6 +112,10 @@ export class MCPClientManager {
     return Array.from(this.connections.keys());
   }
 
+  getConfiguredServerNames(): string[] {
+    return Object.keys(this.config.servers);
+  }
+
   getServerConfig(serverName: string): MCPServerConfig | undefined {
     const connection = this.connections.get(serverName);
     return connection?.config;
