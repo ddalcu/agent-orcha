@@ -1,5 +1,5 @@
-name: example
-description: Example vector store for semantic search
+name: transcripts
+description: Call transcripts for employee performance and conversation analysis
 
 source:
   type: directory
@@ -15,11 +15,15 @@ splitter:
   chunkSize: 1000
   chunkOverlap: 200
 
-embedding: default  # References embedding config in llm.json
+embedding: default
 
 search:
-  defaultK: 4
+  defaultK: 6
   scoreThreshold: 0.2
 
 metadata:
-  category: example
+  category: corporate
+  tags:
+    - transcripts
+    - calls
+    - performance

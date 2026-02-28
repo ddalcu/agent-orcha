@@ -131,6 +131,17 @@ export class FunctionLoader {
     return Array.from(this.functions.keys());
   }
 
+  remove(name: string): boolean {
+    return this.functions.delete(name);
+  }
+
+  nameForPath(absolutePath: string): string | undefined {
+    for (const [name, fn] of this.functions) {
+      if (path.resolve(fn.filePath) === absolutePath) return name;
+    }
+    return undefined;
+  }
+
   async reload(name: string): Promise<LoadedFunction> {
     const existing = this.functions.get(name);
     if (!existing) {

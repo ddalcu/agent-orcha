@@ -1,0 +1,138 @@
+name: music-store
+description: Music store catalog and customer purchases — artists, albums, tracks, genres, and who bought what
+
+source:
+  type: database
+  connectionString: sqlite://knowledge/music-store/musicstore.sqlite
+  query: |
+    SELECT
+      t.TrackId       AS track_id,
+      t.Name          AS track_name,
+      COALESCE(t.Composer, '') AS composer,
+      t.Milliseconds  AS duration_ms,
+      t.UnitPrice     AS price,
+      a.AlbumId       AS album_id,
+      a.Title         AS album_title,
+      ar.ArtistId     AS artist_id,
+      ar.Name         AS artist_name,
+      g.GenreId       AS genre_id,
+      g.Name          AS genre_name,
+      NULL            AS customer_id,
+      NULL            AS customer_name,
+      NULL            AS customer_country,
+      t.Name || ' by ' || COALESCE(ar.Name, 'Unknown')
+        || ' on album ' || a.Title
+        || ' [' || COALESCE(g.Name, 'Unknown') || ']'
+        || ' (' || (t.Milliseconds / 60000) || ':' || printf('%02d', (t.Milliseconds % 60000) / 1000) || ')'
+        || CASE WHEN t.Composer IS NOT NULL AND t.Composer <> '' THEN '. Composed by ' || t.Composer ELSE '' END
+      AS content
+    FROM Track t
+    JOIN Album a ON t.AlbumId = a.AlbumId
+    JOIN Artist ar ON a.ArtistId = ar.ArtistId
+    LEFT JOIN Genre g ON t.GenreId = g.GenreId
+
+    UNION ALL
+
+    SELECT
+      t.TrackId,
+      t.Name,
+      COALESCE(t.Composer, ''),
+      t.Milliseconds,
+      il.UnitPrice,
+      a.AlbumId,
+      a.Title,
+      ar.ArtistId,
+      ar.Name,
+      g.GenreId,
+      g.Name,
+      c.CustomerId,
+      c.FirstName || ' ' || c.LastName,
+      c.Country,
+      c.FirstName || ' ' || c.LastName || ' (' || c.Country || ')'
+        || ' purchased ' || t.Name || ' by ' || COALESCE(ar.Name, 'Unknown')
+        || ' from album ' || a.Title
+        || ' [' || COALESCE(g.Name, 'Unknown') || ']'
+      AS content
+    FROM InvoiceLine il
+    JOIN Invoice i ON il.InvoiceId = i.InvoiceId
+    JOIN Customer c ON i.CustomerId = c.CustomerId
+    JOIN Track t ON il.TrackId = t.TrackId
+    JOIN Album a ON t.AlbumId = a.AlbumId
+    JOIN Artist ar ON a.ArtistId = ar.ArtistId
+    LEFT JOIN Genre g ON t.GenreId = g.GenreId
+  contentColumn: content
+  metadataColumns:
+    - track_id
+    - track_name
+    - composer
+    - album_id
+    - album_title
+    - artist_id
+    - artist_name
+    - genre_id
+    - genre_name
+    - customer_id
+    - customer_name
+    - customer_country
+
+loader:
+  type: text
+
+splitter:
+  type: character
+  chunkSize: 500
+  chunkOverlap: 0
+
+embedding: default
+
+search:
+  defaultK: 10
+
+graph:
+  directMapping:
+    entities:
+      - type: Artist
+        idColumn: artist_id
+        nameColumn: artist_name
+        properties: []
+      - type: Album
+        idColumn: album_id
+        nameColumn: album_title
+        properties: []
+      - type: Track
+        idColumn: track_id
+        nameColumn: track_name
+        properties:
+          - composer
+          - duration_ms
+          - price
+      - type: Genre
+        idColumn: genre_id
+        nameColumn: genre_name
+        properties: []
+      - type: Customer
+        idColumn: customer_id
+        nameColumn: customer_name
+        properties:
+          - customer_country
+    relationships:
+      - type: PERFORMED_BY
+        source: Album
+        target: Artist
+        sourceIdColumn: album_id
+        targetIdColumn: artist_id
+      - type: ON_ALBUM
+        source: Track
+        target: Album
+        sourceIdColumn: track_id
+        targetIdColumn: album_id
+      - type: HAS_GENRE
+        source: Track
+        target: Genre
+        sourceIdColumn: track_id
+        targetIdColumn: genre_id
+      - type: PURCHASED
+        source: Customer
+        target: Track
+        sourceIdColumn: customer_id
+        targetIdColumn: track_id

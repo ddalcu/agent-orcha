@@ -67,6 +67,9 @@
             top: targetPosition,
             behavior: 'smooth'
           });
+
+          // Update URL hash without jumping
+          history.pushState(null, '', href);
         }
       });
     });
@@ -161,7 +164,7 @@
 
     if (!docsNav) return;
 
-    const sections = document.querySelectorAll('.docs-content h2[id], .docs-content h3[id]');
+    const sections = document.querySelectorAll('.docs-content h2[id], .docs-content h3[id], .docs-content h4[id]');
     const navLinks = docsNav.querySelectorAll('a');
 
     if ('IntersectionObserver' in window) {
@@ -185,6 +188,9 @@
             const activeLink = docsNav.querySelector(`a[href="#${id}"]`);
             if (activeLink) {
               activeLink.classList.add('active');
+
+              // Update URL hash to match current section
+              history.replaceState(null, '', `#${id}`);
             }
           }
         });

@@ -20,6 +20,7 @@ docker run -p 3000:3000 -v ./my-workspace:/data -e AUTH_PASSWORD=your-secret-pas
 - **Conversation Memory**: Built-in session-based memory for multi-turn dialogues with automatic message management and TTL cleanup.
 - **Structured Output**: Enforce JSON schemas on agent responses with automatic validation and type safety.
 - **Agent Orcha Studio**: Built-in web dashboard with agent testing, knowledge browsing, workflow execution, and an **in-browser IDE** for editing configs.
+- **Published Agents**: Share agents via standalone chat pages at `/chat/<name>` with optional per-agent password protection.
 - **Developer Experience**: Fully typed interfaces, intuitive CLI tooling, and a modular architecture designed for rapid iteration from prototype to production.
 - **Extensible Functions**: Drop in simple JavaScript functions to extend agent capabilities with zero boilerplate.
 
@@ -38,6 +39,12 @@ Agent Orcha enables you to:
 
 <p align="center">
   <img src="docs/architecture.svg" alt="Agent Orcha Architecture" width="100%" />
+</p>
+
+### Knowledge Layer
+
+<p align="center">
+  <img src="docs/knowledge-architecture.svg" alt="Agent Orcha Knowledge Architecture" width="100%" />
 </p>
 
 ### Alpha Status and Security Notice
@@ -397,7 +404,7 @@ tools:                          # Tools available to agent (optional)
   - builtin:<tool-name>         # Built-in tools
 
 output:                         # Output formatting (optional)
-  format: text | json | structured
+  format: text | structured
   schema:                       # Required when format is "structured"
     type: object
     properties: { ... }
@@ -410,7 +417,27 @@ skills:                         # Skills to attach (optional)
 memory: boolean                 # Enable persistent memory (optional)
 
 integrations:                   # External integrations (optional)
-  - integration-name
+  - type: collabnook             # CollabNook chat integration
+    url: wss://collabnook.com/ws
+    channel: general
+    botName: MyBot
+    password: secret             # Optional (private channels)
+    replyDelay: 1000             # Optional (ms delay before reply)
+  - type: email                  # Email integration (IMAP + SMTP)
+    imap:
+      host: imap.gmail.com
+      port: 993                  # Default: 993
+      secure: true               # Default: true
+    smtp:
+      host: smtp.gmail.com
+      port: 587                  # Default: 587
+      secure: false              # Default: false
+    auth:
+      user: agent@example.com
+      pass: app-password
+    fromName: "Support Agent"    # Optional display name
+    pollInterval: 60             # Seconds between IMAP checks (default: 60)
+    folder: INBOX                # IMAP folder to monitor (default: INBOX)
 
 triggers:                       # Cron or webhook triggers (optional)
   - type: cron
@@ -420,7 +447,27 @@ triggers:                       # Cron or webhook triggers (optional)
 metadata:                       # Custom metadata (optional)
   category: string
   tags: [string]
+
+publish: boolean | object       # Standalone chat page (optional)
+  # Simple: publish: true
+  # With password: publish: { enabled: true, password: "secret" }
 ```
+
+### Published Agents (Standalone Chat Pages)
+
+Agents can be shared via standalone URLs at `/chat/<agent-name>` without requiring the full Studio UI. Add the `publish` field to enable this:
+
+```yaml
+# Public — no password
+publish: true
+
+# Password-protected (independent of global AUTH_PASSWORD)
+publish:
+  enabled: true
+  password: "secret123"
+```
+
+The standalone chat page supports markdown rendering, code highlighting, thinking blocks, tool call visualization, file attachments, and streaming stats.
 
 ### Example Agent
 
@@ -850,7 +897,7 @@ output:
 
 Knowledge stores enable semantic search and RAG capabilities. All stores use **SQLite with sqlite-vec** as the unified persistence layer — no external vector databases required. Define knowledge stores in YAML files within the `knowledge/` directory.
 
-Optionally add a `graph.directMapping` section to build a knowledge graph from structured data (typically database sources).
+Optionally add a `graph.directMapping` section to build a knowledge graph from structured data (database, CSV, or JSON sources).
 
 ### Knowledge Store Schema
 
@@ -863,8 +910,10 @@ description: string             # Human-readable description (required)
 source:                         # Data source (required)
   type: directory | file | database | web
 
-loader:                         # Document loader (required)
-  type: text | pdf | csv | json | markdown
+loader:                         # Document loader (optional)
+  type: text | pdf | csv | json | markdown | html
+  # Defaults: html for web sources, text for file/directory
+  # Not used for database sources
 
 splitter:                       # Text chunking (required)
   type: character | recursive | token | markdown
@@ -890,6 +939,9 @@ graph:                          # Optional — enables entity graph
 search:                         # Search configuration (optional)
   defaultK: number              # Results per search (default: 4)
   scoreThreshold: number        # Minimum similarity (0-1)
+
+reindex:                        # Periodic re-indexing (optional)
+  schedule: string              # Cron expression (e.g., "0 * * * *" for hourly)
 ```
 
 #### Example: Vector-Only Store
@@ -940,9 +992,6 @@ source:
   contentColumn: content
   metadataColumns: [id, title, slug, author_name, author_email]
 
-loader:
-  type: text
-
 splitter:
   type: recursive
   chunkSize: 2000
@@ -972,6 +1021,48 @@ graph:
 
 search:
   defaultK: 10
+```
+
+#### Example: Web JSON API with Graph
+
+```yaml
+# knowledge/team.knowledge.yaml
+
+name: team-directory
+description: Team members from internal API
+
+source:
+  type: web
+  url: https://api.internal.com/v1/employees
+  headers:
+    Authorization: "Bearer ${EMPLOYEE_API_TOKEN}"
+
+loader:
+  type: json
+
+splitter:
+  type: character
+  chunkSize: 500
+
+embedding: default
+
+graph:
+  directMapping:
+    entities:
+      - type: Employee
+        idColumn: id
+        nameColumn: name
+        properties: [name, email, role]
+      - type: Department
+        idColumn: department
+        nameColumn: department
+        properties: [department]
+    relationships:
+      - type: BELONGS_TO
+        source: Employee
+        target: Department
+        sourceIdColumn: id
+        targetIdColumn: department
 ```
 
 **How it works:**
@@ -1004,13 +1095,33 @@ source:
   batchSize: 100
 ```
 
-#### Web Scraping Sources
+#### Web Sources
 ```yaml
+# HTML (default) — parsed with Cheerio, optional CSS selector
 source:
   type: web
   url: https://docs.example.com/guide/
   selector: article.documentation
+
+# JSON API — use jsonPath to extract a nested array
+source:
+  type: web
+  url: https://api.example.com/report?format=json
+  jsonPath: data.results          # dot-notation path to the array in the response
+  headers:
+    Authorization: "Bearer token"
+loader:
+  type: json
+
+# Raw text / markdown
+source:
+  type: web
+  url: https://raw.githubusercontent.com/user/repo/main/README.md
+loader:
+  type: text
 ```
+
+The `jsonPath` option extracts a nested value from the JSON response before parsing. When the extracted value is an array of objects, each object becomes a document with `_rawRow` metadata (supports `graph.directMapping`).
 
 
 ## Functions
@@ -1282,6 +1393,35 @@ When `AUTH_PASSWORD` is set, all `/api/*` routes require a valid session cookie.
 }
 ```
 
+### Chat (Published Agents)
+
+Standalone chat endpoints for published agents. Exempt from global `AUTH_PASSWORD` — each agent handles its own auth.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/chat/:agentName` | Serve standalone chat page |
+| GET | `/api/chat/:agentName/config` | Get published agent config |
+| POST | `/api/chat/:agentName/auth` | Authenticate with agent password |
+| POST | `/api/chat/:agentName/stream` | Stream agent response (SSE) |
+
+**Auth Request** (password-protected agents only):
+```json
+{ "password": "secret123" }
+```
+
+**Auth Response:**
+```json
+{ "token": "hex-token..." }
+```
+
+**Stream Request** (include `X-Chat-Token` header if password-protected):
+```json
+{
+  "input": { "message": "Hello!" },
+  "sessionId": "optional-session-id"
+}
+```
+
 ### Workflows
 
 | Method | Endpoint | Description |
@@ -1543,13 +1683,22 @@ tools:
 ```
 
 ### Sandbox Tools
-Sandboxed code execution:
+Sandboxed code execution, shell, and browser automation:
 ```yaml
 tools:
-  - sandbox:exec           # Execute code in sandbox
-  - sandbox:web_fetch      # Fetch URLs from sandbox
-  - sandbox:web_search     # Web search from sandbox
+  - sandbox:exec               # Execute JavaScript in sandboxed VM
+  - sandbox:shell              # Execute shell commands (non-root sandbox user)
+  - sandbox:web_fetch          # Fetch URLs from sandbox
+  - sandbox:web_search         # Web search from sandbox
+  - sandbox:browser_navigate   # Navigate browser to URL
+  - sandbox:browser_observe    # Text snapshot of current page
+  - sandbox:browser_click      # Click element by CSS selector
+  - sandbox:browser_type       # Type text into element
+  - sandbox:browser_screenshot # Take screenshot (multimodal image)
+  - sandbox:browser_evaluate   # Execute JS in browser page
 ```
+
+Browser tools require Chromium inside Docker (`BROWSER_SANDBOX=true`, enabled by default). A noVNC viewer is available at `http://localhost:6080`.
 
 ### Project Tools
 Workspace file access:
@@ -1557,6 +1706,7 @@ Workspace file access:
 tools:
   - project:read           # Read project files
   - project:write          # Write project files
+  - project:delete         # Delete files and unload resources
 ```
 
 ## License

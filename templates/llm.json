@@ -1,44 +1,20 @@
 {
-  "version": "1.0",
   "models": {
     "default": {
       "provider": "openai",
-      "baseUrl": "http://localhost:1234/v1",
+      "baseUrl": "http://192.168.2.61:1234/v1",
       "apiKey": "not-needed",
       "model": "your-model-name",
-      "temperature": 0.7
-    },
-    "openai": {
-      "provider": "openai",
-      "apiKey": "sk-your-openai-key-here",
-      "model": "gpt-4o",
-      "temperature": 0.7
-    },
-    "gemini": {
-      "provider": "gemini",
-      "apiKey": "your-gemini-api-key-here",
-      "model": "gemini-2.5-flash",
       "temperature": 0.7
     }
   },
   "embeddings": {
     "default": {
       "provider": "openai",
-      "baseUrl": "http://localhost:1234/v1",
+      "baseUrl": "http://192.168.2.61:1234/v1",
       "apiKey": "not-needed",
       "model": "text-embedding-nomic-embed-text-v1.5",
       "eosToken": " "
-    },
-    "openai": {
-      "provider": "openai",
-      "apiKey": "sk-your-openai-key-here",
-      "model": "text-embedding-3-small",
-      "dimensions": 1536
-    },
-    "gemini": {
-      "provider": "gemini",
-      "apiKey": "your-gemini-api-key-here",
-      "model": "gemini-embedding-001"
     }
   }
 }

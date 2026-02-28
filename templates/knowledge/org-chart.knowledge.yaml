@@ -36,6 +36,10 @@ graph:
           - rating
           - strengths
           - areas_for_growth
+          - email
+          - phone
+          - salary
+          - date_of_birth
     relationships:
       - type: WORKS_IN
         source: Employee

@@ -120,6 +120,13 @@ export function createReActAgent(config: ReActAgentConfig) {
             };
           }
 
+          if (chunk.reasoning) {
+            yield {
+              event: 'on_chat_model_stream',
+              data: { chunk: { reasoning: chunk.reasoning } },
+            };
+          }
+
           if (chunk.tool_calls?.length) {
             accumulatedToolCalls = chunk.tool_calls;
           }

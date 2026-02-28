@@ -1,0 +1,93 @@
+name: customer-ops
+description: Customer operations — service tickets, product satisfaction, returns, account execs and support rep collaboration
+
+source:
+  type: database
+  connectionString: postgresql://demo_user:demo_password@samples.mindsdb.com:5432/demo
+  query: |
+    SELECT
+      sku,
+      product_name,
+      customer_segment,
+      returned,
+      COALESCE(return_reason, '')   AS return_reason,
+      opened_support_ticket,
+      in_active_sales_cycle,
+      satisfaction_rating,
+      COALESCE(ticket_status, '')   AS ticket_status,
+      COALESCE(ticket_priority, '') AS ticket_priority,
+      COALESCE(ticket_summary, '')  AS ticket_summary,
+      account_exec,
+      support_rep,
+      ae_support_collab,
+      date,
+      product_name || ' (' || sku || ') — ' || customer_segment || ' segment, satisfaction: ' || satisfaction_rating || '/5'
+        || CASE WHEN returned = 'yes' THEN '. RETURNED: ' || COALESCE(return_reason, 'unknown') ELSE '' END
+        || CASE WHEN opened_support_ticket = 'yes'
+             THEN '. Ticket [' || COALESCE(ticket_priority, '?') || '/' || COALESCE(ticket_status, '?') || ']: ' || COALESCE(ticket_summary, 'no summary')
+             ELSE '' END
+        || '. Account exec: ' || account_exec || ', support rep: ' || support_rep
+        || CASE WHEN ae_support_collab = 'yes' THEN ' (collaborating)' ELSE '' END
+      AS content
+    FROM demo.customer_service_dataset
+  contentColumn: content
+  metadataColumns:
+    - sku
+    - product_name
+    - customer_segment
+    - returned
+    - satisfaction_rating
+    - ticket_status
+    - ticket_priority
+    - account_exec
+    - support_rep
+
+loader:
+  type: text
+
+splitter:
+  type: character
+  chunkSize: 600
+  chunkOverlap: 0
+
+embedding: default
+
+search:
+  defaultK: 8
+
+graph:
+  directMapping:
+    entities:
+      - type: Product
+        idColumn: product_name
+        nameColumn: product_name
+        properties:
+          - sku
+      - type: AccountExec
+        idColumn: account_exec
+        nameColumn: account_exec
+        properties: []
+      - type: SupportRep
+        idColumn: support_rep
+        nameColumn: support_rep
+        properties: []
+      - type: Segment
+        idColumn: customer_segment
+        nameColumn: customer_segment
+        properties: []
+    relationships:
+      - type: ACCOUNT_FOR
+        source: AccountExec
+        target: Product
+        sourceIdColumn: account_exec
+        targetIdColumn: product_name
+      - type: SUPPORTS
+        source: SupportRep
+        target: Product
+        sourceIdColumn: support_rep
+        targetIdColumn: product_name
+      - type: SOLD_TO
+        source: Product
+        target: Segment
+        sourceIdColumn: product_name
+        targetIdColumn: customer_segment

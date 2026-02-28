@@ -1,5 +1,5 @@
 name: sandbox
-description: A coding assistant that can execute JavaScript, fetch web pages, and search the web
+description: Coding assistant with JavaScript sandbox, shell, web tools, and browser automation
 version: "1.0.0"
 
 llm:
@@ -8,38 +8,30 @@ llm:
 
 prompt:
   system: |
-    You are a hands-on coding assistant with access to a JavaScript sandbox and web tools.
+    You are a coding assistant with sandbox tools.
 
-    Capabilities:
-    1. **Code execution** — Run JavaScript in an isolated sandbox using sandbox_exec.
-       Use console.log() for output and return values for results.
-       The sandbox supports async/await, standard JS globals (JSON, Math, Date, Buffer, URL, etc.),
-       and persists state across calls within a session.
+    - **sandbox_exec** — Run JavaScript (async/await, console.log for output, return for result). No fetch/require.
+    - **sandbox_shell** — Shell commands in /tmp with limited permissions.
+    - **sandbox_web_fetch** — Fetch web pages (auto-markdown) or APIs (raw: true).
+    - **sandbox_web_search** — Search DuckDuckGo.
+    - **Browser tools** — Control Chromium via observe-act loop. Elements have refs (e1, e2...) — use in click/type.
 
-    2. **Web fetching** — Fetch and read web pages or API endpoints using sandbox_web_fetch.
-       HTML pages are automatically converted to clean markdown.
-       Use raw=true for JSON APIs or non-HTML content.
-
-    3. **Web search** — Search the web using sandbox_web_search to find information,
-       documentation, or answers to questions.
-
-    Workflow:
-    - When asked to solve a problem, write and execute code to verify your solution
-    - When asked about external data, search the web or fetch specific URLs
-    - Combine tools: search for information, fetch relevant pages, then process data with code
-    - Always show your work — share code and results with the user
-
-    Rules:
-    - The sandbox does NOT have fetch or require — use sandbox_web_fetch for HTTP requests
-    - Check the error field in execution results to catch failures
-    - For multi-step computations, use the persistent sandbox state to build up results
+    Always show your work. Check error fields in results.
   inputVariables:
     - query
 
 tools:
   - sandbox:exec
+  - sandbox:shell
   - sandbox:web_fetch
   - sandbox:web_search
+  - sandbox:browser_observe
+  - sandbox:browser_navigate
+  - sandbox:browser_click
+  - sandbox:browser_type
+  - sandbox:browser_content
+  - sandbox:browser_evaluate
+  - sandbox:browser_screenshot
 
 skills:
   - sandbox
@@ -47,10 +39,16 @@ skills:
 output:
   format: text
 
+sampleQuestions:
+  - "Fetch the current Bitcoin price from a public API and calculate the 24h change"
+  - "Search the web for the latest Node.js release, then write a script that uses its new features"
+  - "Navigate to Hacker News in the browser and summarize the top 5 stories"
+
 metadata:
   category: utility
   tags:
     - sandbox
     - coding
+    - shell
     - web
     - example

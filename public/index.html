@@ -194,6 +194,24 @@
       animation: pulse-dot 1.5s ease-in-out infinite;
     }
 
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .modal-backdrop { animation: fadeIn 0.15s ease-out; }
+    .modal-content { animation: slideUp 0.2s ease-out; }
+
+    /* Sidebar slide for mobile */
+    @keyframes slideInLeft {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(0); }
+    }
+    .sidebar-open { animation: slideInLeft 0.2s ease-out; }
+
     .markdown-content blockquote {
       border-left: 3px solid #475569;
       padding-left: 1em;
@@ -215,6 +233,142 @@
     .markdown-content th {
       background: rgba(255, 255, 255, 0.05);
       font-weight: 600;
+    }
+
+    /* Welcome orca */
+    .welcome-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 2rem;
+    }
+
+    .welcome-orca {
+      width: 200px;
+      height: 140px;
+      animation: orca-swim 4s ease-in-out infinite;
+      filter: drop-shadow(0 0 12px rgba(0, 255, 255, 0.3));
+    }
+
+    .welcome-orca .orca-body {
+      fill: none;
+      stroke: #0ff;
+      stroke-width: 1.5;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      opacity: 0.7;
+    }
+
+    .welcome-orca .orca-detail {
+      fill: none;
+      stroke: #0ff;
+      stroke-width: 1;
+      opacity: 0.4;
+    }
+
+    .welcome-orca .orca-eye {
+      fill: #0ff;
+      opacity: 0.8;
+    }
+
+    .welcome-orca .orca-patch {
+      fill: rgba(0, 255, 255, 0.08);
+      stroke: #0ff;
+      stroke-width: 0.8;
+      opacity: 0.4;
+    }
+
+    @keyframes orca-swim {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      30% { transform: translateY(-10px) rotate(-1.5deg); }
+      70% { transform: translateY(10px) rotate(1.5deg); }
+    }
+
+    .welcome-text {
+      color: #67e8f9;
+      font-size: 0.95rem;
+      opacity: 0.7;
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+
+    /* Session reset banner */
+    .session-reset-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 0;
+      margin: 8px 0;
+    }
+
+    .session-reset-line {
+      flex: 1;
+      height: 1px;
+      background: #f59e0b33;
+    }
+
+    .session-reset-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #f59e0b;
+      font-size: 0.75rem;
+      white-space: nowrap;
+      opacity: 0.8;
+    }
+
+    /* Tools popover */
+    .tools-badge-wrapper {
+      position: relative;
+      display: inline-flex;
+    }
+
+    .tools-popover {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 6px 0;
+      min-width: 180px;
+      max-height: 240px;
+      overflow-y: auto;
+      z-index: 50;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .tools-popover::before {
+      content: '';
+      position: absolute;
+      top: -4px;
+      left: 50%;
+      transform: translateX(-50%) rotate(45deg);
+      width: 8px;
+      height: 8px;
+      background: #1e293b;
+      border-left: 1px solid #334155;
+      border-top: 1px solid #334155;
+    }
+
+    .tools-badge-wrapper:hover .tools-popover {
+      display: block;
+    }
+
+    .tools-popover-item {
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+    }
+
+    .tools-popover-item:hover {
+      background: #334155;
     }
   </style>
 </head>

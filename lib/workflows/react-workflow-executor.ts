@@ -1,5 +1,5 @@
 import type { ChatModel, BaseMessage, StructuredTool } from '../types/llm-types.ts';
-import { NodeInterrupt, aiMessage, toolMessage } from '../types/llm-types.ts';
+import { NodeInterrupt, aiMessage, toolMessage, contentToText } from '../types/llm-types.ts';
 import type {
   ReactWorkflowDefinition,
   WorkflowResult,
@@ -439,7 +439,7 @@ export class ReactWorkflowExecutor {
     for (const [key, template] of Object.entries(outputMapping)) {
       if (template.includes('{{state.messages[-1].content}}')) {
         const lastMessage = messages[messages.length - 1];
-        output[key] = lastMessage?.content ?? '';
+        output[key] = lastMessage ? contentToText(lastMessage.content) : '';
       } else {
         output[key] = template;
       }

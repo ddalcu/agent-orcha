@@ -24,6 +24,11 @@ export class ApiService {
         return res.json();
     }
 
+    async checkSession(sessionId) {
+        const res = await this._fetch(`/api/agents/sessions/${sessionId}`);
+        return res.ok;
+    }
+
     async streamAgent(name, input, sessionId, { signal } = {}) {
         return this._fetch(`/api/agents/${name}/stream`, {
             method: 'POST',
@@ -102,11 +107,11 @@ export class ApiService {
         return res.json();
     }
 
-    async streamLLM(name, message, { signal } = {}) {
+    async streamLLM(name, message, sessionId, attachments, { signal } = {}) {
         return this._fetch(`/api/llm/${name}/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message }),
+            body: JSON.stringify({ message, sessionId, ...(attachments ? { attachments } : {}) }),
             signal
         });
     }

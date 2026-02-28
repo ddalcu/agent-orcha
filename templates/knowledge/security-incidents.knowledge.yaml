@@ -1,0 +1,46 @@
+name: security-incidents
+description: Cybersecurity threat intelligence — CVEs, advisories, malware, ICS alerts from CISA, NVD, and other feeds
+
+source:
+  type: file
+  path: knowledge/security-incidents/incidents.json
+
+loader:
+  type: json
+
+splitter:
+  type: recursive
+  chunkSize: 800
+  chunkOverlap: 100
+
+embedding: default
+
+search:
+  defaultK: 8
+
+graph:
+  directMapping:
+    entities:
+      - type: Incident
+        idColumn: id
+        nameColumn: title
+        properties: [description, severity, category, source, publishedAt]
+      - type: Severity
+        idColumn: severity
+        nameColumn: severity
+        properties: []
+      - type: Category
+        idColumn: category
+        nameColumn: category
+        properties: []
+    relationships:
+      - type: HAS_SEVERITY
+        source: Incident
+        target: Severity
+        sourceIdColumn: id
+        targetIdColumn: severity
+      - type: IN_CATEGORY
+        source: Incident
+        target: Category
+        sourceIdColumn: id
+        targetIdColumn: category

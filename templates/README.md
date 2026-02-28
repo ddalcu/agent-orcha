@@ -38,12 +38,21 @@ Edit `llm.json` to configure your LLM providers:
 ### 2. Start the Server
 
 ```bash
-npx agent-orcha start
+docker run -d --name orcha \
+  -p 3000:3000 \
+  -v ./:/data \
+  ghcr.io/ddalcu/agent-orcha:latest
+```
+
+Or with Docker Compose (recommended):
+
+```bash
+docker compose up -d
 ```
 
 The server and Studio dashboard will be available at `http://localhost:3000`.
 
-To enable password authentication, set `AUTH_PASSWORD` in your `.env` file:
+To enable password authentication, set `AUTH_PASSWORD` in your `.env` file or pass it as an environment variable:
 ```bash
 AUTH_PASSWORD=your-secret-password
 ```
@@ -89,7 +98,7 @@ curl -X POST http://localhost:3000/api/agents/example/invoke \
 - **Knowledge Stores**: SQLite-based vector search with optional direct graph mapping
 - **Skills**: Prompt augmentation via Markdown files attached to agents
 - **Tasks**: Submit, track, and cancel async agent tasks
-- **Sandbox**: Sandboxed code execution with `sandbox_exec`, `sandbox_web_fetch`, `sandbox_web_search`
+- **Sandbox**: Code execution, shell commands, browser automation with `sandbox:exec`, `sandbox:shell`, `sandbox:browser_*`
 - **Triggers**: Cron and webhook triggers for automated agent invocation
 - **Functions**: Custom JavaScript tools with typed parameters
 - **MCP Servers**: Connect to external tools via Model Context Protocol

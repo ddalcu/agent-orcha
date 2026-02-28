@@ -45,6 +45,32 @@ export class TriggerManager {
     }
   }
 
+  removeAgentTriggers(agentName: string): void {
+    // Stop and remove cron handlers for this agent
+    const remainingCron: CronTriggerHandler[] = [];
+    for (const handler of this.cronHandlers) {
+      if (handler.agentName === agentName) {
+        handler.stop();
+        log.info(`Removed cron trigger for agent "${agentName}"`);
+      } else {
+        remainingCron.push(handler);
+      }
+    }
+    this.cronHandlers = remainingCron;
+
+    // Remove webhook handlers for this agent
+    // (Fastify routes can't be unregistered, but removing from list prevents new registrations)
+    const remainingWebhook: WebhookTriggerHandler[] = [];
+    for (const handler of this.webhookHandlers) {
+      if (handler.agentName === agentName) {
+        log.info(`Removed webhook trigger for agent "${agentName}" at ${handler.path}`);
+      } else {
+        remainingWebhook.push(handler);
+      }
+    }
+    this.webhookHandlers = remainingWebhook;
+  }
+
   close(): void {
     for (const handler of this.cronHandlers) {
       handler.stop();

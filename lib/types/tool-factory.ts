@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { StructuredTool } from './llm-types.ts';
+import type { StructuredTool, ContentPart } from './llm-types.ts';
 
 export interface ToolConfig<T extends z.ZodObject<any>> {
   name: string;
@@ -8,7 +8,7 @@ export interface ToolConfig<T extends z.ZodObject<any>> {
 }
 
 export function tool<T extends z.ZodObject<any>>(
-  fn: (input: z.infer<T>) => Promise<string>,
+  fn: (input: z.infer<T>) => Promise<string | ContentPart[]>,
   config: ToolConfig<T>
 ): StructuredTool {
   return {

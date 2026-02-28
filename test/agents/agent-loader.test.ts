@@ -60,4 +60,29 @@ describe('AgentLoader', () => {
     assert.ok(Array.isArray(agent.tools));
     assert.ok(Array.isArray(agent.prompt.inputVariables));
   });
+
+  it('should remove an agent by name', () => {
+    assert.equal(loader.has('test-agent'), true);
+    const result = loader.remove('test-agent');
+    assert.equal(result, true);
+    assert.equal(loader.has('test-agent'), false);
+    assert.equal(loader.get('test-agent'), undefined);
+  });
+
+  it('should return false when removing non-existent agent', () => {
+    assert.equal(loader.remove('nonexistent'), false);
+  });
+
+  it('should track file path to name mapping', async () => {
+    const newLoader = new AgentLoader(fixturesDir);
+    const filePath = path.join(fixturesDir, 'test-agent.agent.yaml');
+    await newLoader.loadOne(filePath);
+
+    const name = newLoader.nameForPath(path.resolve(filePath));
+    assert.equal(name, 'test-agent');
+  });
+
+  it('should return undefined nameForPath for unknown path', () => {
+    assert.equal(loader.nameForPath('/nonexistent/path.agent.yaml'), undefined);
+  });
 });

@@ -1,11 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1060" style="background:#0d1117;border-radius:12px">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 850" style="background:#0d1117">
   <defs>
     <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.4"/>
     </filter>
-    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6"/>
-    </marker>
     <marker id="arrow-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4"/>
     </marker>
@@ -30,6 +27,9 @@
     <marker id="arrow-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#14b8a6"/>
     </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6"/>
+    </marker>
     <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#0d1117"/>
       <stop offset="100%" stop-color="#161b22"/>
@@ -37,505 +37,310 @@
   </defs>
 
   <!-- Background -->
-  <rect width="1200" height="1060" rx="12" fill="url(#bg-grad)"/>
+  <rect width="1200" height="850" fill="url(#bg-grad)"/>
 
   <!-- Title -->
-  <text x="600" y="38" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="22" font-weight="700" fill="#e6edf3">Agent Orcha — Knowledge Layer Architecture</text>
-  <text x="600" y="56" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" fill="#7d8590">Semantic Search, GraphRAG, and Declarative Knowledge Pipelines</text>
+  <text x="600" y="38" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="22" font-weight="700" fill="#e6edf3">Agent Orcha — Knowledge Layer</text>
+  <text x="600" y="58" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" fill="#7d8590">Declarative knowledge pipelines with unified SQLite storage and automatic graph mapping</text>
 
   <!-- ═══════════════════════════════════════════ -->
-  <!-- ROW 1: YAML CONFIG + MANAGER + EMBEDDINGS  -->
+  <!-- ROW 1: CONFIGURE                            -->
   <!-- ═══════════════════════════════════════════ -->
 
-  <!-- YAML Configuration Schema (left) -->
-  <rect x="20" y="72" width="310" height="130" rx="10" fill="#1c2333" stroke="#64748b" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="175" y="92" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="700" fill="#94a3b8">*.knowledge.yaml</text>
-  <text x="175" y="106" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Declarative Knowledge Configuration</text>
+  <!-- YAML Config (left) -->
+  <rect x="20" y="80" width="280" height="110" rx="10" fill="#1c2333" stroke="#64748b" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="160" y="102" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="700" fill="#94a3b8">YAML Configuration</text>
+  <text x="160" y="118" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#7d8590">*.knowledge.yaml — zero code required</text>
 
-  <rect x="32" y="114" width="90" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75"/>
-  <text x="77" y="129" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#cbd5e1">name</text>
+  <rect x="35" y="130" width="75" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75"/>
+  <text x="72" y="145" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#cbd5e1">source</text>
+  <rect x="116" y="130" width="75" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75"/>
+  <text x="153" y="145" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#cbd5e1">embedding</text>
+  <rect x="197" y="130" width="90" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75"/>
+  <text x="242" y="145" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#cbd5e1">search</text>
 
-  <rect x="128" y="114" width="90" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75"/>
-  <text x="173" y="129" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#cbd5e1">source</text>
-
-  <rect x="224" y="114" width="96" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75"/>
-  <text x="272" y="129" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#cbd5e1">loader</text>
-
-  <rect x="32" y="142" width="90" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75"/>
-  <text x="77" y="157" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#cbd5e1">splitter</text>
-
-  <rect x="128" y="142" width="90" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75"/>
-  <text x="173" y="157" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#cbd5e1">embedding</text>
-
-  <rect x="224" y="142" width="96" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75"/>
-  <text x="272" y="157" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#cbd5e1">search</text>
-
-  <rect x="32" y="170" width="135" height="22" rx="4" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="99" y="185" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#c4b5fd">graph (GraphRAG only)</text>
-
-  <rect x="173" y="170" width="147" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="246" y="185" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">kind: vector | graph-rag</text>
+  <rect x="35" y="158" width="75" height="22" rx="4" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75" stroke-dasharray="4 2"/>
+  <text x="72" y="173" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#c4b5fd">graph</text>
+  <rect x="116" y="158" width="75" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75" stroke-dasharray="4 2"/>
+  <text x="153" y="173" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">reindex</text>
+  <rect x="197" y="158" width="90" height="22" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75" stroke-dasharray="4 2"/>
+  <text x="242" y="173" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">loader / splitter</text>
 
   <!-- Arrow: Config → Manager -->
-  <line x1="330" y1="137" x2="348" y2="137" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+  <line x1="300" y1="135" x2="328" y2="135" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
 
-  <!-- KnowledgeStoreManager (center) -->
-  <rect x="350" y="72" width="500" height="130" rx="10" fill="#162032" stroke="#f472b6" stroke-width="2" filter="url(#shadow)"/>
-  <text x="600" y="92" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="700" fill="#f472b6">KnowledgeStoreManager</text>
-  <text x="600" y="106" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Central hub — loads configs, manages store instances, handles lifecycle &amp; hot-reload</text>
+  <!-- Knowledge Manager (center) -->
+  <rect x="330" y="80" width="480" height="110" rx="10" fill="#162032" stroke="#f472b6" stroke-width="2" filter="url(#shadow)"/>
+  <text x="570" y="102" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="700" fill="#f472b6">Knowledge Manager</text>
+  <text x="570" y="118" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#7d8590">Loads configs, manages lifecycle, hot-reload, reindex scheduling</text>
 
-  <rect x="365" y="116" width="150" height="34" rx="6" fill="#1e293b" stroke="#f9a8d4" stroke-width="0.75"/>
-  <text x="440" y="131" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#fbcfe8">Store Instances</text>
-  <text x="440" y="143" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Map&lt;name, KnowledgeStore&gt;</text>
+  <rect x="345" y="132" width="140" height="26" rx="5" fill="#1e293b" stroke="#f9a8d4" stroke-width="0.75"/>
+  <text x="415" y="149" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fbcfe8">Store Instances</text>
+  <rect x="495" y="132" width="140" height="26" rx="5" fill="#1e293b" stroke="#f9a8d4" stroke-width="0.75"/>
+  <text x="565" y="149" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fbcfe8">Reindex Crons</text>
+  <rect x="645" y="132" width="150" height="26" rx="5" fill="#1e293b" stroke="#f9a8d4" stroke-width="0.75"/>
+  <text x="720" y="149" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fbcfe8">Concurrency Control</text>
 
-  <rect x="525" y="116" width="150" height="34" rx="6" fill="#1e293b" stroke="#f9a8d4" stroke-width="0.75"/>
-  <text x="600" y="131" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#fbcfe8">MetadataManager</text>
-  <text x="600" y="143" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Status, hashes, doc counts</text>
-
-  <rect x="685" y="116" width="150" height="34" rx="6" fill="#1e293b" stroke="#f9a8d4" stroke-width="0.75"/>
-  <text x="760" y="131" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#fbcfe8">Concurrency Control</text>
-  <text x="760" y="143" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Prevent duplicate indexing</text>
-
-  <rect x="365" y="158" width="230" height="34" rx="6" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="480" y="173" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fda4af">Orchestrator Accessor</text>
-  <text x="480" y="184" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">list, get, initialize, refresh, getStatus</text>
-
-  <rect x="605" y="158" width="230" height="34" rx="6" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="720" y="173" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fda4af">Progress Callbacks</text>
-  <text x="720" y="184" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">IndexingProgressCallback for UI updates</text>
+  <rect x="345" y="164" width="450" height="20" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
+  <text x="570" y="178" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">SHA-256 source hash caching — unchanged stores restore instantly</text>
 
   <!-- Arrow: Manager → Embeddings -->
-  <line x1="850" y1="137" x2="868" y2="137" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+  <line x1="810" y1="135" x2="838" y2="135" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
 
   <!-- Embedding Providers (right) -->
-  <rect x="870" y="72" width="310" height="130" rx="10" fill="#1c2333" stroke="#f59e0b" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="1025" y="92" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="700" fill="#f59e0b">Embedding Providers</text>
-  <text x="1025" y="106" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Validated Embedding Wrapper</text>
+  <rect x="840" y="80" width="340" height="110" rx="10" fill="#1c2333" stroke="#f59e0b" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="1010" y="102" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="700" fill="#f59e0b">Embedding Providers</text>
+  <text x="1010" y="118" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#7d8590">Configured via llm.json</text>
 
-  <rect x="882" y="116" width="136" height="26" rx="4" fill="#1e293b" stroke="#fbbf24" stroke-width="0.75"/>
-  <text x="950" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fde68a">OpenAI Embeddings</text>
+  <rect x="855" y="132" width="100" height="26" rx="4" fill="#1e293b" stroke="#fbbf24" stroke-width="0.75"/>
+  <text x="905" y="149" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fde68a">OpenAI</text>
+  <rect x="963" y="132" width="100" height="26" rx="4" fill="#1e293b" stroke="#fbbf24" stroke-width="0.75"/>
+  <text x="1013" y="149" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fde68a">Gemini</text>
+  <rect x="1071" y="132" width="100" height="26" rx="4" fill="#1e293b" stroke="#fbbf24" stroke-width="0.75"/>
+  <text x="1121" y="149" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fde68a">Local</text>
 
-  <rect x="1024" y="116" width="146" height="26" rx="4" fill="#1e293b" stroke="#fbbf24" stroke-width="0.75"/>
-  <text x="1097" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fde68a">Google Gemini</text>
-
-  <rect x="882" y="148" width="136" height="26" rx="4" fill="#1e293b" stroke="#fbbf24" stroke-width="0.75"/>
-  <text x="950" y="165" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fde68a">Local (Ollama/LMStudio)</text>
-
-  <rect x="1024" y="148" width="146" height="26" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="1097" y="162" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Dimension validation</text>
-  <text x="1097" y="172" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">EOS token support</text>
-
-  <rect x="882" y="180" width="288" height="14" rx="3" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
-  <text x="1025" y="191" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Validates: finite values, non-zero vectors, correct dimensions</text>
+  <rect x="855" y="164" width="316" height="20" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
+  <text x="1013" y="178" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Dimension validation, batch processing</text>
 
   <!-- ═══════════════════════════════════════════ -->
-  <!-- ROW 2: DATA INGESTION PIPELINE             -->
+  <!-- ROW 2: DATA INGESTION                       -->
   <!-- ═══════════════════════════════════════════ -->
 
-  <!-- Arrow: Manager → Data Ingestion -->
-  <line x1="600" y1="202" x2="600" y2="216" stroke="#f472b6" stroke-width="1.5" marker-end="url(#arrow-pink)"/>
+  <line x1="600" y1="190" x2="600" y2="210" stroke="#f472b6" stroke-width="1.5" marker-end="url(#arrow-pink)"/>
 
-  <rect x="20" y="218" width="1160" height="90" rx="10" fill="#1c2333" stroke="#ef4444" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="600" y="238" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="700" fill="#ef4444">Data Ingestion Pipeline</text>
-  <text x="600" y="252" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Source Resolution → Document Loading → Text Splitting</text>
+  <rect x="20" y="212" width="1160" height="118" rx="10" fill="#1c2333" stroke="#ef4444" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="600" y="234" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="700" fill="#ef4444">Data Ingestion</text>
+  <text x="600" y="250" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#7d8590">Connect any data source, parse any format, convert to vector embeddings</text>
 
-  <!-- Source Types -->
-  <text x="90" y="269" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fca5a5">Sources</text>
-  <rect x="32" y="274" width="60" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="62" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Directory</text>
-  <rect x="98" y="274" width="40" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="118" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">File</text>
-  <rect x="144" y="274" width="60" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="174" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Database</text>
-  <rect x="210" y="274" width="40" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="230" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Web</text>
+  <!-- ── Sources ── -->
+  <text x="165" y="268" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#fca5a5">Data Sources</text>
+
+  <!-- Directory -->
+  <rect x="35" y="274" width="68" height="48" rx="6" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <path d="M 60,289 L 60,285 L 66,285 L 68,287 L 78,287 L 78,289 Z M 60,289 L 60,301 L 78,301 L 78,289 Z" fill="none" stroke="#fca5a5" stroke-width="1.1" stroke-linejoin="round"/>
+  <text x="69" y="316" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Directory</text>
+
+  <!-- File -->
+  <rect x="111" y="274" width="55" height="48" rx="6" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <path d="M 130,285 L 137,285 L 141,289 L 141,303 L 130,303 Z M 137,285 L 137,289 L 141,289" fill="none" stroke="#fca5a5" stroke-width="1.1" stroke-linejoin="round"/>
+  <text x="138" y="316" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">File</text>
+
+  <!-- Database -->
+  <rect x="174" y="274" width="68" height="48" rx="6" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <ellipse cx="208" cy="288" rx="8" ry="3" fill="none" stroke="#fca5a5" stroke-width="1.1"/>
+  <path d="M 200,288 L 200,300" fill="none" stroke="#fca5a5" stroke-width="1.1"/>
+  <path d="M 216,288 L 216,300" fill="none" stroke="#fca5a5" stroke-width="1.1"/>
+  <ellipse cx="208" cy="300" rx="8" ry="3" fill="none" stroke="#fca5a5" stroke-width="1.1"/>
+  <text x="208" y="316" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Database</text>
+
+  <!-- Web -->
+  <rect x="250" y="274" width="55" height="48" rx="6" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <circle cx="277" cy="293" r="7" fill="none" stroke="#fca5a5" stroke-width="1.1"/>
+  <ellipse cx="277" cy="293" rx="3.5" ry="7" fill="none" stroke="#fca5a5" stroke-width="0.8"/>
+  <line x1="270" y1="293" x2="284" y2="293" stroke="#fca5a5" stroke-width="0.8"/>
+  <text x="277" y="316" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Web</text>
 
   <!-- Arrow: Sources → Loaders -->
-  <line x1="260" y1="286" x2="300" y2="286" stroke="#ef4444" stroke-width="1" marker-end="url(#arrow-red)"/>
+  <line x1="313" y1="298" x2="348" y2="298" stroke="#ef4444" stroke-width="1.2" marker-end="url(#arrow-red)"/>
 
-  <!-- Loaders -->
-  <text x="400" y="269" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fca5a5">Document Loaders</text>
-  <rect x="310" y="274" width="40" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="330" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Text</text>
-  <rect x="356" y="274" width="38" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="375" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">PDF</text>
-  <rect x="400" y="274" width="38" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="419" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">CSV</text>
-  <rect x="444" y="274" width="42" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="465" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">JSON</text>
-  <rect x="492" y="274" width="38" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="511" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">MD</text>
+  <!-- ── Document Loaders ── -->
+  <text x="530" y="268" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#fca5a5">Document Loaders</text>
 
-  <!-- Arrow: Loaders → Splitters -->
-  <line x1="540" y1="286" x2="580" y2="286" stroke="#ef4444" stroke-width="1" marker-end="url(#arrow-red)"/>
+  <!-- Text -->
+  <rect x="358" y="274" width="48" height="48" rx="6" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <line x1="371" y1="289" x2="393" y2="289" stroke="#fca5a5" stroke-width="0.8"/>
+  <line x1="371" y1="293" x2="390" y2="293" stroke="#fca5a5" stroke-width="0.8"/>
+  <line x1="371" y1="297" x2="393" y2="297" stroke="#fca5a5" stroke-width="0.8"/>
+  <line x1="371" y1="301" x2="387" y2="301" stroke="#fca5a5" stroke-width="0.8"/>
+  <text x="382" y="316" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Text</text>
 
-  <!-- Splitters -->
-  <text x="720" y="269" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fca5a5">Text Splitters</text>
-  <rect x="590" y="274" width="65" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="622" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Character</text>
-  <rect x="661" y="274" width="68" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="695" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Recursive</text>
-  <rect x="735" y="274" width="50" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="760" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Token</text>
-  <rect x="791" y="274" width="65" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="823" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">Markdown</text>
+  <!-- PDF -->
+  <rect x="414" y="274" width="48" height="48" rx="6" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <rect x="431" y="285" width="14" height="17" rx="1.5" fill="none" stroke="#fca5a5" stroke-width="1"/>
+  <text x="438" y="298" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="6" font-weight="700" fill="#fca5a5">P</text>
+  <text x="438" y="316" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">PDF</text>
 
-  <!-- Splitter config note -->
-  <rect x="880" y="274" width="288" height="24" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="1024" y="290" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">chunkSize (1000) | chunkOverlap (200) | separator</text>
+  <!-- CSV -->
+  <rect x="470" y="274" width="48" height="48" rx="6" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <rect x="486" y="286" width="16" height="12" rx="1" fill="none" stroke="#fca5a5" stroke-width="0.8"/>
+  <line x1="486" y1="290" x2="502" y2="290" stroke="#fca5a5" stroke-width="0.6"/>
+  <line x1="486" y1="294" x2="502" y2="294" stroke="#fca5a5" stroke-width="0.6"/>
+  <line x1="492" y1="286" x2="492" y2="298" stroke="#fca5a5" stroke-width="0.6"/>
+  <line x1="497" y1="286" x2="497" y2="298" stroke="#fca5a5" stroke-width="0.6"/>
+  <text x="494" y="316" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">CSV</text>
 
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- ROW 3: DUAL PIPELINE — VECTOR + GRAPHRAG   -->
-  <!-- ═══════════════════════════════════════════ -->
+  <!-- JSON -->
+  <rect x="526" y="274" width="48" height="48" rx="6" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="550" y="298" text-anchor="middle" font-family="monospace" font-size="12" fill="#fca5a5">{ }</text>
+  <text x="550" y="316" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">JSON</text>
 
-  <!-- Arrows from Data Ingestion to both pipelines -->
-  <line x1="350" y1="308" x2="280" y2="326" stroke="#4ade80" stroke-width="1.5" marker-end="url(#arrow-green)"/>
-  <line x1="800" y1="308" x2="870" y2="326" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <!-- Markdown -->
+  <rect x="582" y="274" width="48" height="48" rx="6" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="606" y="299" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="14" font-weight="700" fill="#fca5a5">M</text>
+  <text x="606" y="316" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">MD</text>
 
-  <!-- ══════════════════════════════ -->
-  <!-- VECTOR RAG PIPELINE (left)    -->
-  <!-- ══════════════════════════════ -->
-  <rect x="20" y="328" width="555" height="245" rx="10" fill="#1c2333" stroke="#4ade80" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="297" y="348" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="700" fill="#4ade80">Vector RAG Pipeline</text>
-  <text x="297" y="362" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">KnowledgeStoreFactory — Semantic similarity search via embeddings</text>
+  <!-- HTML -->
+  <rect x="638" y="274" width="56" height="48" rx="6" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="666" y="299" text-anchor="middle" font-family="monospace" font-size="11" fill="#fca5a5">&lt;/&gt;</text>
+  <text x="666" y="316" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fecaca">HTML</text>
 
-  <!-- Cache Check -->
-  <rect x="35" y="374" width="160" height="44" rx="6" fill="#1e293b" stroke="#4ade80" stroke-width="0.75"/>
-  <text x="115" y="392" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#86efac">1. Cache Check</text>
-  <text x="115" y="405" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">SHA-256 source hashes</text>
-  <text x="115" y="414" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Validate embedding model match</text>
+  <!-- Arrow: Loaders → Embed -->
+  <line x1="702" y1="298" x2="737" y2="298" stroke="#f59e0b" stroke-width="1.2" marker-end="url(#arrow-amber)"/>
 
-  <!-- Arrow -->
-  <line x1="195" y1="396" x2="208" y2="396" stroke="#4ade80" stroke-width="1" marker-end="url(#arrow-green)"/>
+  <!-- ── Embed ── -->
+  <text x="930" y="268" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#fde68a">Embed</text>
 
-  <!-- Embed Documents -->
-  <rect x="210" y="374" width="160" height="44" rx="6" fill="#1e293b" stroke="#4ade80" stroke-width="0.75"/>
-  <text x="290" y="392" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#86efac">2. Embed Chunks</text>
-  <text x="290" y="405" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Batch embed all chunks</text>
-  <text x="290" y="414" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Validated embedding wrapper</text>
-
-  <!-- Arrow -->
-  <line x1="370" y1="396" x2="383" y2="396" stroke="#4ade80" stroke-width="1" marker-end="url(#arrow-green)"/>
-
-  <!-- Build Store -->
-  <rect x="385" y="374" width="175" height="44" rx="6" fill="#1e293b" stroke="#4ade80" stroke-width="0.75"/>
-  <text x="472" y="392" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#86efac">3. Build Vector Store</text>
-  <text x="472" y="405" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">MemoryVectorStore</text>
-  <text x="472" y="414" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Cosine similarity index</text>
-
-  <!-- MemoryVectorStore detail -->
-  <rect x="35" y="430" width="250" height="60" rx="6" fill="#162032" stroke="#4ade80" stroke-width="1"/>
-  <text x="160" y="448" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#86efac">MemoryVectorStore</text>
-  <text x="160" y="462" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">In-memory cosine similarity search</text>
-  <text x="160" y="474" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Data: content + embedding[] + metadata + id</text>
-
-  <!-- Arrow -->
-  <line x1="160" y1="490" x2="160" y2="500" stroke="#4ade80" stroke-width="1" marker-end="url(#arrow-green)"/>
-
-  <!-- Vector Search -->
-  <rect x="35" y="502" width="250" height="60" rx="6" fill="#1e293b" stroke="#14b8a6" stroke-width="1"/>
-  <text x="160" y="520" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#5eead4">Similarity Search</text>
-  <text x="160" y="534" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">similaritySearchWithScore(query, k)</text>
-  <text x="160" y="548" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Returns top-K docs by cosine similarity + scores</text>
-
-  <!-- VectorStoreCache -->
-  <rect x="300" y="430" width="260" height="60" rx="6" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="430" y="448" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#94a3b8">VectorStoreCache</text>
-  <text x="430" y="462" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">.knowledge-cache/{name}/vectors.json</text>
-  <text x="430" y="474" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Vectors + metadata + source hashes + model name</text>
-
-  <!-- Metadata -->
-  <rect x="300" y="502" width="260" height="60" rx="6" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="430" y="520" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#94a3b8">Metadata Persistence</text>
-  <text x="430" y="534" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">.knowledge-cache/{name}/metadata.json</text>
-  <text x="430" y="548" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Status: not_indexed → indexing → indexed | error</text>
-
-  <!-- ══════════════════════════════ -->
-  <!-- GRAPHRAG PIPELINE (right)     -->
-  <!-- ══════════════════════════════ -->
-  <rect x="595" y="328" width="585" height="245" rx="10" fill="#1c2333" stroke="#8b5cf6" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="887" y="348" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="700" fill="#8b5cf6">GraphRAG Pipeline</text>
-  <text x="887" y="362" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">GraphRagFactory — Entity extraction, knowledge graphs, and community analysis</text>
-
-  <!-- Entity Extraction (LLM) -->
-  <rect x="610" y="374" width="155" height="52" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75"/>
-  <text x="687" y="392" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#c4b5fd">EntityExtractor</text>
-  <text x="687" y="404" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">LLM-based extraction</text>
-  <text x="687" y="414" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Custom entity/rel types</text>
-  <text x="687" y="424" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#ddd6fe">Deduplication &amp; merging</text>
-
-  <!-- DirectMapper -->
-  <rect x="775" y="374" width="130" height="52" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75"/>
-  <text x="840" y="392" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#c4b5fd">DirectMapper</text>
-  <text x="840" y="404" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">SQL → Entities</text>
-  <text x="840" y="414" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Column mapping</text>
-  <text x="840" y="424" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#ddd6fe">Zero data loss</text>
-
-  <!-- Arrow: Extractors → Graph Store -->
-  <line x1="750" y1="426" x2="750" y2="436" stroke="#8b5cf6" stroke-width="1" marker-end="url(#arrow-purple)"/>
-
-  <!-- MemoryGraphStore -->
-  <rect x="610" y="438" width="295" height="52" rx="6" fill="#162032" stroke="#8b5cf6" stroke-width="1"/>
-  <text x="757" y="456" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#c4b5fd">MemoryGraphStore</text>
-  <text x="757" y="468" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">graphology directed multigraph</text>
-  <text x="757" y="480" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">GraphNode[] + GraphEdge[] + embedding vectors</text>
-
-  <!-- Arrow: Graph Store → Community -->
-  <line x1="757" y1="490" x2="757" y2="500" stroke="#8b5cf6" stroke-width="1" marker-end="url(#arrow-purple)"/>
-
-  <!-- Community Detection -->
-  <rect x="610" y="502" width="140" height="60" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75"/>
-  <text x="680" y="520" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#c4b5fd">Community Detect</text>
-  <text x="680" y="534" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Louvain algorithm</text>
-  <text x="680" y="548" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Configurable resolution</text>
-
-  <!-- Arrow -->
-  <line x1="750" y1="532" x2="763" y2="532" stroke="#8b5cf6" stroke-width="1" marker-end="url(#arrow-purple)"/>
-
-  <!-- Community Summarization -->
-  <rect x="765" y="502" width="140" height="60" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75"/>
-  <text x="835" y="520" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#c4b5fd">Community Summ.</text>
-  <text x="835" y="534" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">LLM-generated titles</text>
-  <text x="835" y="548" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">&amp; semantic summaries</text>
-
-  <!-- Node Embed -->
-  <rect x="915" y="374" width="130" height="52" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-width="0.75"/>
-  <text x="980" y="392" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#fde68a">Node Embedding</text>
-  <text x="980" y="404" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Embed entity descriptions</text>
-  <text x="980" y="414" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">for semantic node search</text>
-
-  <!-- Arrow: Embed → Graph Store -->
-  <line x1="915" y1="410" x2="907" y2="450" stroke="#f59e0b" stroke-width="1" marker-end="url(#arrow-amber)"/>
-
-  <!-- ExtractionCache -->
-  <rect x="915" y="440" width="252" height="122" rx="6" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="1041" y="458" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#94a3b8">ExtractionCache</text>
-  <text x="1041" y="472" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">.graph-cache/ directory</text>
-
-  <rect x="927" y="480" width="110" height="18" rx="3" fill="#162032" stroke="#475569" stroke-width="0.5"/>
-  <text x="982" y="493" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#cbd5e1">entities.json</text>
-  <rect x="1043" y="480" width="112" height="18" rx="3" fill="#162032" stroke="#475569" stroke-width="0.5"/>
-  <text x="1099" y="493" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#cbd5e1">relationships.json</text>
-  <rect x="927" y="504" width="110" height="18" rx="3" fill="#162032" stroke="#475569" stroke-width="0.5"/>
-  <text x="982" y="517" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#cbd5e1">communities.json</text>
-  <rect x="1043" y="504" width="112" height="18" rx="3" fill="#162032" stroke="#475569" stroke-width="0.5"/>
-  <text x="1099" y="517" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#cbd5e1">nodes.json</text>
-  <rect x="927" y="528" width="228" height="18" rx="3" fill="#162032" stroke="#475569" stroke-width="0.5"/>
-  <text x="1041" y="541" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#cbd5e1">cache-metadata.json (source hash validation)</text>
-
-  <!-- 3-tier caching note -->
-  <text x="1041" y="557" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">3-tier: persistent store → disk cache → full pipeline</text>
+  <rect x="747" y="274" width="420" height="48" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-width="1"/>
+  <!-- Vector dots visualization -->
+  <circle cx="770" cy="293" r="3" fill="#f59e0b" opacity="0.9"/>
+  <circle cx="782" cy="289" r="2.5" fill="#f59e0b" opacity="0.7"/>
+  <circle cx="793" cy="296" r="3" fill="#f59e0b" opacity="0.5"/>
+  <circle cx="804" cy="291" r="2" fill="#f59e0b" opacity="0.8"/>
+  <circle cx="814" cy="295" r="2.5" fill="#f59e0b" opacity="0.6"/>
+  <text x="875" y="291" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#fde68a">Text → Vector Representations</text>
+  <text x="875" y="305" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Batch processing with dimension validation</text>
 
   <!-- ═══════════════════════════════════════════ -->
-  <!-- ROW 4: SEARCH & RETRIEVAL                   -->
+  <!-- ROW 3: STORE                                -->
   <!-- ═══════════════════════════════════════════ -->
 
-  <rect x="20" y="590" width="1160" height="100" rx="10" fill="#1c2333" stroke="#14b8a6" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="600" y="610" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="700" fill="#14b8a6">Search &amp; Retrieval Layer</text>
-  <text x="600" y="624" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Query-time routing and execution — vector similarity or graph-based search</text>
+  <line x1="600" y1="330" x2="600" y2="350" stroke="#4ade80" stroke-width="1.5" marker-end="url(#arrow-green)"/>
 
-  <!-- Vector Search (left side) -->
-  <rect x="35" y="634" width="200" height="44" rx="6" fill="#1e293b" stroke="#4ade80" stroke-width="1"/>
-  <text x="135" y="652" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#86efac">Vector Similarity</text>
-  <text x="135" y="665" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Cosine similarity, top-K, scoreThreshold</text>
+  <rect x="20" y="352" width="1160" height="140" rx="10" fill="#1c2333" stroke="#4ade80" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="600" y="374" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="700" fill="#4ade80">SQLite Persistence</text>
+  <text x="600" y="390" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#7d8590">Everything stored in SQLite + sqlite-vec — one file per knowledge store, no external databases</text>
 
-  <!-- Search Mode Detector -->
-  <rect x="260" y="634" width="200" height="44" rx="6" fill="#162032" stroke="#14b8a6" stroke-width="1"/>
-  <text x="360" y="652" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#5eead4">SearchModeDetector</text>
-  <text x="360" y="665" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Heuristic routing: local vs global</text>
+  <!-- SQLiteStore (left) -->
+  <rect x="35" y="404" width="540" height="76" rx="8" fill="#162032" stroke="#4ade80" stroke-width="1"/>
+  <text x="305" y="424" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="600" fill="#86efac">SQLiteStore</text>
 
-  <!-- Arrow: Detector → Local -->
-  <line x1="460" y1="650" x2="488" y2="650" stroke="#14b8a6" stroke-width="1" marker-end="url(#arrow-teal)"/>
+  <rect x="50" y="434" width="120" height="34" rx="4" fill="#1e293b" stroke="#4ade80" stroke-width="0.75"/>
+  <text x="110" y="449" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#86efac">Chunks</text>
+  <text x="110" y="462" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Document content</text>
 
-  <!-- Local Search -->
-  <rect x="490" y="634" width="230" height="44" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="1"/>
-  <text x="605" y="648" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#c4b5fd">LocalSearch</text>
-  <text x="605" y="660" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">1. Embed query → 2. Find similar entities</text>
-  <text x="605" y="671" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">3. BFS neighborhood expansion → 4. Format context</text>
+  <rect x="180" y="434" width="120" height="34" rx="4" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75"/>
+  <text x="240" y="449" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#c4b5fd">Entities</text>
+  <text x="240" y="462" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Graph nodes</text>
 
-  <!-- Arrow: Detector → Global -->
-  <line x1="460" y1="662" x2="488" y2="662" stroke="#14b8a6" stroke-width="1" marker-end="url(#arrow-teal)"/>
+  <rect x="310" y="434" width="120" height="34" rx="4" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75"/>
+  <text x="370" y="449" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#c4b5fd">Relationships</text>
+  <text x="370" y="462" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Graph edges</text>
 
-  <!-- Global Search -->
-  <rect x="740" y="634" width="230" height="44" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="1"/>
-  <text x="855" y="648" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#c4b5fd">GlobalSearch</text>
-  <text x="855" y="660" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">1. Retrieve top-N communities by size</text>
-  <text x="855" y="671" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">2. LLM map-reduce → 3. Synthesized answer</text>
+  <rect x="440" y="434" width="120" height="34" rx="4" fill="#1e293b" stroke="#f59e0b" stroke-width="0.75"/>
+  <text x="500" y="449" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#fde68a">Vectors</text>
+  <text x="500" y="462" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">sqlite-vec KNN index</text>
 
-  <!-- Default note -->
-  <rect x="990" y="634" width="178" height="44" rx="6" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="1079" y="649" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Global: "trends", "overall"</text>
-  <text x="1079" y="661" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Local: "who", "which" (default)</text>
-  <text x="1079" y="673" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Heuristic keyword detection</text>
+  <!-- DirectMapper (right) -->
+  <rect x="595" y="404" width="570" height="76" rx="8" fill="#162032" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="880" y="424" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="600" fill="#c4b5fd">DirectMapper</text>
 
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- ROW 5: AGENT KNOWLEDGE TOOLS                -->
-  <!-- ═══════════════════════════════════════════ -->
+  <rect x="610" y="434" width="260" height="34" rx="4" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75"/>
+  <text x="740" y="449" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#c4b5fd">Structured Data → Knowledge Graph</text>
+  <text x="740" y="462" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Deterministic column mapping — no LLM needed</text>
 
-  <!-- Arrow: Search → Tools -->
-  <line x1="600" y1="690" x2="600" y2="704" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
-
-  <rect x="20" y="706" width="1160" height="60" rx="10" fill="#162032" stroke="#3b82f6" stroke-width="2" filter="url(#shadow)"/>
-  <text x="600" y="726" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="700" fill="#3b82f6">Agent Knowledge Tools</text>
-  <text x="600" y="740" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">createKnowledgeTools() — auto-generated from knowledge config, registered in Tool Registry for agent use</text>
-
-  <rect x="35" y="748" width="100" height="14" rx="3" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
-  <text x="85" y="759" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#93c5fd">knowledge_search</text>
-
-  <rect x="145" y="748" width="110" height="14" rx="3" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
-  <text x="200" y="759" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#93c5fd">knowledge_traverse</text>
-
-  <rect x="265" y="748" width="125" height="14" rx="3" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
-  <text x="327" y="759" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#93c5fd">knowledge_entity_lookup</text>
-
-  <rect x="400" y="748" width="130" height="14" rx="3" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
-  <text x="465" y="759" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#93c5fd">knowledge_graph_schema</text>
-
-  <rect x="540" y="748" width="108" height="14" rx="3" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
-  <text x="594" y="759" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#93c5fd">knowledge_cypher</text>
-
-  <rect x="658" y="748" width="90" height="14" rx="3" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
-  <text x="703" y="759" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#93c5fd">knowledge_sql</text>
-
-  <rect x="760" y="748" width="120" height="14" rx="3" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="3 2"/>
-  <text x="820" y="759" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Vector: search only</text>
-
-  <rect x="890" y="748" width="280" height="14" rx="3" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="3 2"/>
-  <text x="1030" y="759" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">GraphRAG: search + traverse + entity + schema + cypher</text>
+  <rect x="880" y="434" width="270" height="34" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
+  <text x="1015" y="449" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#7d8590">Optional — only for structured sources</text>
+  <text x="1015" y="462" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">CSV, DB, JSON → entities + relationships automatically</text>
 
   <!-- ═══════════════════════════════════════════ -->
-  <!-- BOTTOM LEFT: GRAPH DATA STRUCTURES          -->
-  <!-- ═══════════════════════════════════════════ -->
-  <rect x="20" y="785" width="370" height="250" rx="10" fill="#1c2333" stroke="#8b5cf6" stroke-width="1" filter="url(#shadow)"/>
-  <text x="205" y="805" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="700" fill="#8b5cf6">Graph Data Structures</text>
-
-  <!-- GraphNode -->
-  <rect x="35" y="815" width="165" height="100" rx="6" fill="#1e293b" stroke="#c4b5fd" stroke-width="0.75"/>
-  <text x="117" y="832" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#c4b5fd">GraphNode</text>
-  <text x="45" y="848" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">id: type::name (normalized)</text>
-  <text x="45" y="860" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">type: Person, Org, ...</text>
-  <text x="45" y="872" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">name, description</text>
-  <text x="45" y="884" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">properties: Record&lt;string&gt;</text>
-  <text x="45" y="896" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">embedding?: number[]</text>
-  <text x="45" y="908" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">sourceChunkIds: string[]</text>
-
-  <!-- GraphEdge -->
-  <rect x="210" y="815" width="165" height="100" rx="6" fill="#1e293b" stroke="#c4b5fd" stroke-width="0.75"/>
-  <text x="292" y="832" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#c4b5fd">GraphEdge</text>
-  <text x="220" y="848" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">id: string</text>
-  <text x="220" y="860" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">type: WROTE, MANAGES</text>
-  <text x="220" y="872" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">sourceId → targetId</text>
-  <text x="220" y="884" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">description: string</text>
-  <text x="220" y="896" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">weight: 0.0 - 1.0</text>
-  <text x="220" y="908" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">properties: Record&lt;string&gt;</text>
-
-  <!-- Community -->
-  <rect x="35" y="922" width="340" height="40" rx="6" fill="#1e293b" stroke="#c4b5fd" stroke-width="0.75"/>
-  <text x="205" y="939" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#c4b5fd">Community</text>
-  <text x="205" y="953" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">id + nodeIds[] + title + summary (LLM-generated)</text>
-
-  <!-- Line connecting Node and Edge -->
-  <line x1="200" y1="865" x2="210" y2="865" stroke="#8b5cf6" stroke-width="1"/>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- BOTTOM CENTER: INDEXING PIPELINE FLOW       -->
-  <!-- ═══════════════════════════════════════════ -->
-  <rect x="405" y="785" width="380" height="250" rx="10" fill="#1c2333" stroke="#64748b" stroke-width="1" filter="url(#shadow)"/>
-  <text x="595" y="805" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="700" fill="#94a3b8">Indexing Pipeline Flow</text>
-
-  <!-- Vector Flow -->
-  <text x="500" y="824" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#4ade80">Vector Pipeline</text>
-
-  <rect x="420" y="832" width="160" height="18" rx="3" fill="#162032" stroke="#4ade80" stroke-width="0.75"/>
-  <text x="500" y="845" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#86efac">1. Cache check (5%)</text>
-
-  <rect x="420" y="854" width="160" height="18" rx="3" fill="#162032" stroke="#4ade80" stroke-width="0.75"/>
-  <text x="500" y="867" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#86efac">2. Load documents (10%)</text>
-
-  <rect x="420" y="876" width="160" height="18" rx="3" fill="#162032" stroke="#4ade80" stroke-width="0.75"/>
-  <text x="500" y="889" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#86efac">3. Split chunks (30%)</text>
-
-  <rect x="420" y="898" width="160" height="18" rx="3" fill="#162032" stroke="#f59e0b" stroke-width="0.75"/>
-  <text x="500" y="911" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#fde68a">4. Validate embeddings (50%)</text>
-
-  <rect x="420" y="920" width="160" height="18" rx="3" fill="#162032" stroke="#4ade80" stroke-width="0.75"/>
-  <text x="500" y="933" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#86efac">5. Build store (50-90%)</text>
-
-  <rect x="420" y="942" width="160" height="18" rx="3" fill="#162032" stroke="#64748b" stroke-width="0.75"/>
-  <text x="500" y="955" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#94a3b8">6. Persist cache (90%)</text>
-
-  <!-- Step arrows -->
-  <line x1="500" y1="850" x2="500" y2="853" stroke="#64748b" stroke-width="0.75"/>
-  <line x1="500" y1="872" x2="500" y2="875" stroke="#64748b" stroke-width="0.75"/>
-  <line x1="500" y1="894" x2="500" y2="897" stroke="#64748b" stroke-width="0.75"/>
-  <line x1="500" y1="916" x2="500" y2="919" stroke="#64748b" stroke-width="0.75"/>
-  <line x1="500" y1="938" x2="500" y2="941" stroke="#64748b" stroke-width="0.75"/>
-
-  <!-- GraphRAG Flow -->
-  <text x="700" y="824" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#8b5cf6">GraphRAG Pipeline</text>
-
-  <rect x="610" y="832" width="168" height="18" rx="3" fill="#162032" stroke="#8b5cf6" stroke-width="0.75"/>
-  <text x="694" y="845" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#c4b5fd">1. Load + Split (10-15%)</text>
-
-  <rect x="610" y="854" width="168" height="18" rx="3" fill="#162032" stroke="#8b5cf6" stroke-width="0.75"/>
-  <text x="694" y="867" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#c4b5fd">2. Extract entities (30%)</text>
-
-  <rect x="610" y="876" width="168" height="18" rx="3" fill="#162032" stroke="#f59e0b" stroke-width="0.75"/>
-  <text x="694" y="889" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#fde68a">3. Embed nodes (50-55%)</text>
-
-  <rect x="610" y="898" width="168" height="18" rx="3" fill="#162032" stroke="#8b5cf6" stroke-width="0.75"/>
-  <text x="694" y="911" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#c4b5fd">4. Build graph (65%)</text>
-
-  <rect x="610" y="920" width="168" height="18" rx="3" fill="#162032" stroke="#8b5cf6" stroke-width="0.75"/>
-  <text x="694" y="933" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#c4b5fd">5. Detect communities (75%)</text>
-
-  <rect x="610" y="942" width="168" height="18" rx="3" fill="#162032" stroke="#8b5cf6" stroke-width="0.75"/>
-  <text x="694" y="955" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#c4b5fd">6. LLM summarize (80%)</text>
-
-  <rect x="610" y="964" width="168" height="18" rx="3" fill="#162032" stroke="#64748b" stroke-width="0.75"/>
-  <text x="694" y="977" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#94a3b8">7. Cache to disk (90%)</text>
-
-  <!-- Step arrows -->
-  <line x1="694" y1="850" x2="694" y2="853" stroke="#64748b" stroke-width="0.75"/>
-  <line x1="694" y1="872" x2="694" y2="875" stroke="#64748b" stroke-width="0.75"/>
-  <line x1="694" y1="894" x2="694" y2="897" stroke="#64748b" stroke-width="0.75"/>
-  <line x1="694" y1="916" x2="694" y2="919" stroke="#64748b" stroke-width="0.75"/>
-  <line x1="694" y1="938" x2="694" y2="941" stroke="#64748b" stroke-width="0.75"/>
-  <line x1="694" y1="960" x2="694" y2="963" stroke="#64748b" stroke-width="0.75"/>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- BOTTOM RIGHT: DESIGN PRINCIPLES             -->
-  <!-- ═══════════════════════════════════════════ -->
-  <rect x="800" y="785" width="380" height="250" rx="10" fill="#1c2333" stroke="#64748b" stroke-width="1" filter="url(#shadow)"/>
-  <text x="990" y="805" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="700" fill="#94a3b8">Design Principles</text>
-
-  <text x="820" y="828" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#4ade80">3-Tier Cache Strategy</text>
-  <text x="820" y="842" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Persistent store → disk cache → full pipeline</text>
-  <text x="820" y="854" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">SHA-256 source hash validation for staleness</text>
-
-  <text x="820" y="876" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#06b6d4">Lazy Initialization</text>
-  <text x="820" y="890" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Stores index on first access, not on startup</text>
-  <text x="820" y="902" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Auto-restore from cache for instant restart</text>
-
-  <text x="820" y="924" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#f59e0b">Factory Pattern</text>
-  <text x="820" y="938" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">KnowledgeStoreFactory + GraphRagFactory</text>
-  <text x="820" y="950" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Routes to vector or graph-rag based on config kind</text>
-
-  <text x="820" y="972" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#f472b6">Progress Reporting</text>
-  <text x="820" y="986" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">IndexingProgressCallback for real-time UI updates</text>
-  <text x="820" y="998" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Phases: loading → splitting → extracting → done</text>
-
-  <text x="820" y="1020" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#ef4444">Error Resilience</text>
-  <text x="820" y="1030" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Failed chunks logged and skipped, stale state recovery</text>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- CONNECTING ARROWS between major sections    -->
+  <!-- ROW 4: SEARCH                               -->
   <!-- ═══════════════════════════════════════════ -->
 
-  <!-- Arrow: Vector pipeline down to search -->
-  <line x1="160" y1="573" x2="135" y2="632" stroke="#4ade80" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="600" y1="492" x2="600" y2="512" stroke="#14b8a6" stroke-width="1.5" marker-end="url(#arrow-teal)"/>
 
-  <!-- Arrow: GraphRAG down to search -->
-  <line x1="757" y1="573" x2="757" y2="590" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <rect x="20" y="514" width="1160" height="98" rx="10" fill="#1c2333" stroke="#14b8a6" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="600" y="536" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="700" fill="#14b8a6">Unified Search</text>
+  <text x="600" y="552" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#7d8590">Combined text + graph search — results merged and ranked by relevance score</text>
+
+  <rect x="35" y="566" width="170" height="34" rx="6" fill="#1e293b" stroke="#14b8a6" stroke-width="1"/>
+  <text x="120" y="581" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#5eead4">Embed Query</text>
+  <text x="120" y="594" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Vectorize the question</text>
+
+  <line x1="205" y1="583" x2="228" y2="583" stroke="#14b8a6" stroke-width="1" marker-end="url(#arrow-teal)"/>
+
+  <rect x="230" y="566" width="185" height="34" rx="6" fill="#1e293b" stroke="#4ade80" stroke-width="1"/>
+  <text x="322" y="581" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#86efac">Chunk Search</text>
+  <text x="322" y="594" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Find similar text passages</text>
+
+  <line x1="415" y1="583" x2="438" y2="583" stroke="#14b8a6" stroke-width="1" marker-end="url(#arrow-teal)"/>
+
+  <rect x="440" y="566" width="185" height="34" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="532" y="581" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#c4b5fd">Entity Search</text>
+  <text x="532" y="594" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Find matching graph nodes</text>
+
+  <line x1="625" y1="583" x2="648" y2="583" stroke="#14b8a6" stroke-width="1" marker-end="url(#arrow-teal)"/>
+
+  <rect x="650" y="566" width="185" height="34" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="742" y="581" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#c4b5fd">Graph Expansion</text>
+  <text x="742" y="594" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Explore connected entities</text>
+
+  <line x1="835" y1="583" x2="858" y2="583" stroke="#14b8a6" stroke-width="1" marker-end="url(#arrow-teal)"/>
+
+  <rect x="860" y="566" width="308" height="34" rx="6" fill="#162032" stroke="#14b8a6" stroke-width="1"/>
+  <text x="1014" y="581" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#5eead4">Merge &amp; Rank</text>
+  <text x="1014" y="594" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Combine all results, score, and return top matches</text>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- ROW 5: AGENT TOOLS                          -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <line x1="600" y1="612" x2="600" y2="632" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <rect x="20" y="634" width="1160" height="70" rx="10" fill="#162032" stroke="#3b82f6" stroke-width="2" filter="url(#shadow)"/>
+  <text x="600" y="656" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="700" fill="#3b82f6">Agent Knowledge Tools</text>
+  <text x="600" y="672" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#7d8590">Auto-generated tools registered in the Tool Registry — agents reference via knowledge:&lt;store-name&gt;</text>
+
+  <rect x="55" y="682" width="120" height="16" rx="4" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
+  <text x="115" y="694" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#93c5fd">knowledge_search</text>
+
+  <rect x="185" y="682" width="120" height="16" rx="4" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
+  <text x="245" y="694" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#93c5fd">knowledge_traverse</text>
+
+  <rect x="315" y="682" width="140" height="16" rx="4" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
+  <text x="385" y="694" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#93c5fd">knowledge_entity_lookup</text>
+
+  <rect x="465" y="682" width="145" height="16" rx="4" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
+  <text x="537" y="694" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#93c5fd">knowledge_graph_schema</text>
+
+  <rect x="620" y="682" width="100" height="16" rx="4" fill="#1e293b" stroke="#60a5fa" stroke-width="0.75"/>
+  <text x="670" y="694" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#93c5fd">knowledge_sql</text>
+
+  <rect x="740" y="682" width="200" height="16" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="3 2"/>
+  <text x="840" y="694" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">All stores get: search + sql</text>
+
+  <rect x="950" y="682" width="210" height="16" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="3 2"/>
+  <text x="1055" y="694" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">With graph: + traverse, lookup, schema</text>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- BOTTOM: KEY HIGHLIGHTS                      -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <rect x="20" y="730" width="1160" height="100" rx="10" fill="#1c2333" stroke="#64748b" stroke-width="1" filter="url(#shadow)"/>
+  <text x="600" y="754" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="700" fill="#94a3b8">Key Highlights</text>
+
+  <rect x="35" y="770" width="218" height="48" rx="6" fill="#1e293b" stroke="#4ade80" stroke-width="0.75"/>
+  <text x="144" y="787" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#86efac">Zero Dependencies</text>
+  <text x="144" y="802" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">SQLite + sqlite-vec only</text>
+  <text x="144" y="813" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">No external vector databases</text>
+
+  <rect x="263" y="770" width="218" height="48" rx="6" fill="#1e293b" stroke="#06b6d4" stroke-width="0.75"/>
+  <text x="372" y="787" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#67e8f9">Instant Restart</text>
+  <text x="372" y="802" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">SHA-256 source hash caching</text>
+  <text x="372" y="813" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Unchanged stores restore from disk</text>
+
+  <rect x="491" y="770" width="218" height="48" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75"/>
+  <text x="600" y="787" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#c4b5fd">Automatic Graphs</text>
+  <text x="600" y="802" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">DirectMapper builds knowledge graphs</text>
+  <text x="600" y="813" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">from structured data — no LLM cost</text>
+
+  <rect x="719" y="770" width="218" height="48" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-width="0.75"/>
+  <text x="828" y="787" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#fde68a">Scheduled Reindex</text>
+  <text x="828" y="802" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Cron-based data refresh</text>
+  <text x="828" y="813" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Keep knowledge stores current</text>
+
+  <rect x="947" y="770" width="218" height="48" rx="6" fill="#1e293b" stroke="#f472b6" stroke-width="0.75"/>
+  <text x="1056" y="787" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#f9a8d4">Declarative Config</text>
+  <text x="1056" y="802" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Define in YAML, not code</text>
+  <text x="1056" y="813" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Hot-reload on file change</text>
 
 </svg>

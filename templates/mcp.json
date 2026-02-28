@@ -4,12 +4,15 @@
     "fetch": {
       "transport": "streamable-http",
       "url": "https://remote.mcpservers.org/fetch/mcp",
-      "description": "Web fetch capabilities for retrieving URLs and returning markdown",
-      "timeout": 30000,
-      "enabled": true
+      "description": "Web fetch capabilities for retrieving URLs and returning markdown"
     },
     "htmlhost": {
       "url": "https://htmlhost.jax.workers.dev/mcp"
+    },
+    "isac-reports": {
+      "transport": "streamable-http",
+      "url": "https://security.deploy.dalcu.com/mcp",
+      "description": "OSINT threat intelligence aggregator — CVEs, advisories, malware, ICS alerts from CISA, NVD, and other feeds"
     }
   },
   "globalOptions": {

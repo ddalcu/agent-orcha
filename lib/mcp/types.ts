@@ -17,8 +17,7 @@ export const MCPServerConfigSchema = z.preprocess(
     args: z.array(z.string()).optional(),
     env: z.record(z.string()).optional(),
     description: z.string().optional(),
-    timeout: z.number().default(30000),
-    enabled: z.boolean().default(true),
+    timeout: z.number().default(10000),
   })
 );
 

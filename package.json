@@ -34,7 +34,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "dev": "node --watch src/index.ts",
+    "dev": "WORKSPACE=${WORKSPACE:-./templates} node --watch src/index.ts",
     "build": "tsc && npm run copy-assets",
     "copy-assets": "mkdir -p dist && cp -r public dist/ && cp -r templates dist/",
     "start": "node dist/src/index.js",
@@ -42,7 +42,9 @@
     "lint": "eslint src lib --ext .ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-force-exit 'test/**/*.test.ts'",
-    "test:coverage": "node --test --test-force-exit --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info --test-reporter=spec --test-reporter-destination=stdout 'test/**/*.test.ts'"
+    "test:coverage": "node --test --test-force-exit --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info --test-reporter=spec --test-reporter-destination=stdout 'test/**/*.test.ts'",
+    "docker": "docker compose up --build --watch",
+    "docker:auth": "AUTH_PASSWORD=${AUTH_PASSWORD:-password} docker compose up --build --watch"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",
@@ -55,9 +57,11 @@
     "fastify": "^5.2.0",
     "fastify-plugin": "^5.1.0",
     "glob": "^11.0.0",
+    "imapflow": "^1.2.10",
     "jsdom": "^28.1.0",
     "mysql2": "^3.12.0",
     "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.1",
     "openai": "^6.22.0",
     "pg": "^8.13.2",
     "pino": "^10.2.1",
@@ -72,6 +76,7 @@
     "@types/jsdom": "^27.0.0",
     "@types/node": "^22.10.5",
     "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^7.0.11",
     "@types/pg": "^8.11.10",
     "@types/ws": "^8.18.1",
     "eslint": "^9.17.0",

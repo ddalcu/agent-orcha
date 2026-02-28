@@ -79,4 +79,28 @@ describe('FunctionLoader', () => {
       /not found/
     );
   });
+
+  it('should remove a function by name', () => {
+    assert.ok(loader.get('hello'));
+    const result = loader.remove('hello');
+    assert.equal(result, true);
+    assert.equal(loader.get('hello'), undefined);
+  });
+
+  it('should return false when removing non-existent function', () => {
+    assert.equal(loader.remove('nonexistent'), false);
+  });
+
+  it('should track file path to name mapping', async () => {
+    const newLoader = new FunctionLoader(fixturesDir);
+    const filePath = path.join(fixturesDir, 'hello.function.js');
+    await newLoader.loadOne(filePath);
+
+    const name = newLoader.nameForPath(path.resolve(filePath));
+    assert.equal(name, 'hello');
+  });
+
+  it('should return undefined nameForPath for unknown path', () => {
+    assert.equal(loader.nameForPath('/nonexistent/path.function.js'), undefined);
+  });
 });

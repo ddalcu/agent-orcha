@@ -76,18 +76,10 @@
             <div class="terminal-content">
               <div class="terminal-line">
                 <span class="terminal-prompt">$</span>
-                <span class="terminal-command">npx agent-orcha init my-project</span>
+                <span class="terminal-command">docker run -p 3000:3000 -e AUTH_PASSWORD=mypass -v ./my-project:/data ddalcu/agent-orcha</span>
               </div>
               <div class="terminal-line">
                 <span class="terminal-output">✓ Project initialized with example agents and workflows</span>
-              </div>
-              <div class="terminal-line">
-                <span class="terminal-prompt">$</span>
-                <span class="terminal-command">cd my-project</span>
-              </div>
-              <div class="terminal-line">
-                <span class="terminal-prompt">$</span>
-                <span class="terminal-command">npx agent-orcha start</span>
               </div>
               <div class="terminal-line">
                 <span class="terminal-output"><i class="fa-solid fa-rocket"></i> Server running on http://localhost:3000</span>
@@ -106,11 +98,14 @@
       <div class="steps-grid">
         <div class="card fade-in">
           <div class="card-icon">1</div>
-          <h3 class="card-title">Initialize</h3>
-          <p class="card-description">One command to scaffold your project with example agents, workflows, and configurations. Start with working examples.</p>
+          <h3 class="card-title">Run</h3>
+          <p class="card-description">One command to get started. An empty workspace is automatically scaffolded with example agents, workflows, and configurations.</p>
           <div class="code-block">
             <div class="code-content">
-              <pre><code>npx agent-orcha init my-project</code></pre>
+              <pre><code>docker run -p 3000:3000 \
+  -e AUTH_PASSWORD=mypass \
+  -v ./my-project:/data \
+  ddalcu/agent-orcha</code></pre>
             </div>
           </div>
         </div>
@@ -129,17 +124,6 @@ workflows/
         </div>
         <div class="card fade-in">
           <div class="card-icon">3</div>
-          <h3 class="card-title">Start</h3>
-          <p class="card-description">Launch the API server with streaming support, logging, and CORS. Access via REST API or web UI.</p>
-          <div class="code-block">
-            <div class="code-content">
-              <pre><code>npx agent-orcha start
-# Server ready at :3000</code></pre>
-            </div>
-          </div>
-        </div>
-        <div class="card fade-in">
-          <div class="card-icon">4</div>
           <h3 class="card-title">Test in Studio</h3>
           <p class="card-description">Test agents, workflows, and knowledge stores via the built-in web dashboard. Chat with agents, run workflows, and browse knowledge stores.</p>
           <div class="code-block">
@@ -149,14 +133,12 @@ workflows/
           </div>
         </div>
         <div class="card fade-in">
-          <div class="card-icon">5</div>
-          <h3 class="card-title">Deploy with Docker</h3>
-          <p class="card-description">Deploy to any host using the <code>ddalcu/agent-orcha</code> Docker image. Mount your project directory and expose port 3000.</p>
+          <div class="card-icon">4</div>
+          <h3 class="card-title">Use Docker Compose</h3>
+          <p class="card-description">For persistent setups, use a <code>docker-compose.yaml</code> to manage your container, environment variables, and volume mounts.</p>
           <div class="code-block">
             <div class="code-content">
-              <pre><code>docker run -p 3000:3000 \
-  -v ./my-project:/data \
-  ddalcu/agent-orcha start</code></pre>
+              <pre><code>AUTH_PASSWORD=mypass docker compose up</code></pre>
             </div>
           </div>
         </div>

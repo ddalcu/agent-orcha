@@ -5,15 +5,28 @@ export class MarkdownRenderer {
   constructor() {
     // Configure marked for streaming-friendly rendering
     if (typeof marked !== 'undefined') {
+      const renderer = new marked.Renderer();
+      renderer.link = ({ href, title, tokens }) => {
+        const text = this.#parseInlineTokens(tokens);
+        const titleAttr = title ? ` title="${title}"` : '';
+        return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+      };
+
       marked.setOptions({
         gfm: true,              // GitHub Flavored Markdown
         breaks: true,           // Convert \n to <br>
         headerIds: false,       // Disable header IDs (not needed for chat)
         mangle: false,          // Don't mangle email addresses
         sanitize: false,        // We'll use DOMPurify instead
+        renderer,
       });
     }
 
+  }
+
+  #parseInlineTokens(tokens) {
+    if (!tokens) return '';
+    return tokens.map(t => t.raw || t.text || '').join('');
   }
 
   /**

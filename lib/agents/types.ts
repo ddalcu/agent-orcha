@@ -14,7 +14,7 @@ export const ToolReferenceSchema = z.union([
 ]);
 
 export const OutputConfigSchema = z.object({
-  format: z.enum(['text', 'json', 'structured']).default('text'),
+  format: z.enum(['text', 'structured']).default('text'),
   schema: z.record(z.unknown()).optional(),
 });
 
@@ -27,6 +27,24 @@ export const AgentMemoryConfigSchema = z.union([
 ]);
 
 export type AgentMemoryConfig = z.infer<typeof AgentMemoryConfigSchema>;
+
+export const AgentPublishConfigSchema = z.union([
+  z.boolean(),
+  z.object({
+    enabled: z.boolean(),
+    password: z.string().optional(),
+  }),
+]);
+
+export type AgentPublishConfig = z.infer<typeof AgentPublishConfigSchema>;
+
+export function resolvePublishConfig(
+  config?: AgentPublishConfig
+): { enabled: boolean; password?: string } {
+  if (config === undefined || config === false) return { enabled: false };
+  if (config === true) return { enabled: true };
+  return { enabled: config.enabled, password: config.password };
+}
 
 export const AgentDefinitionSchema = z.object({
   name: z.string().describe('Unique agent identifier'),
@@ -44,6 +62,8 @@ export const AgentDefinitionSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
   integrations: z.array(IntegrationSchema).optional(),
   triggers: z.array(TriggerSchema).optional(),
+  publish: AgentPublishConfigSchema.optional(),
+  sampleQuestions: z.array(z.string()).optional(),
 });
 
 export type ToolReference = z.infer<typeof ToolReferenceSchema>;

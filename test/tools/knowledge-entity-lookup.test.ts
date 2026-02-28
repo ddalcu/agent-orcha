@@ -156,7 +156,16 @@ describe('createKnowledgeEntityLookupTool', () => {
     const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
     const result = await tool.invoke({ type: 'product', limit: 2 }) as string;
     assert.ok(result.includes('Found 3'));
-    assert.ok(result.includes('showing 2'));
+    assert.ok(result.includes('showing 1-2'));
+    assert.ok(result.includes('use offset=2 to see more'));
+  });
+
+  it('should paginate with offset parameter', async () => {
+    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const result = await tool.invoke({ type: 'product', limit: 2, offset: 2 }) as string;
+    assert.ok(result.includes('Found 3'));
+    assert.ok(result.includes('showing 3-3'));
+    assert.ok(!result.includes('use offset=')); // no more pages
   });
 
   it('should display entity properties excluding internal fields', async () => {

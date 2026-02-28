@@ -86,6 +86,17 @@ export class SkillLoader {
     return this.skills.has(name);
   }
 
+  remove(name: string): boolean {
+    return this.skills.delete(name);
+  }
+
+  nameForPath(absolutePath: string): string | undefined {
+    for (const [name, skill] of this.skills) {
+      if (path.resolve(skill.filePath) === absolutePath) return name;
+    }
+    return undefined;
+  }
+
   resolveForAgent(config: AgentSkillsConfig): string {
     return this.resolveForAgentWithMeta(config).content;
   }

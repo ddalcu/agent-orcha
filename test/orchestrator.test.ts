@@ -305,6 +305,14 @@ describe('Orchestrator', () => {
     );
   });
 
+  it('should throw ensureInitialized for unloadFile', async () => {
+    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    await assert.rejects(
+      () => orch.unloadFile('test.agent.yaml'),
+      /not initialized/,
+    );
+  });
+
   it('should throw ensureInitialized for getReactWorkflowInterrupts', () => {
     const orch = new Orchestrator({ workspaceRoot: tempDir });
     assert.throws(
@@ -334,11 +342,11 @@ describe('Orchestrator', () => {
 
     // Manually set initialized and inject required deps
     (orch as any).initialized = true;
-    (orch as any).agentLoader = { loadOne: async () => {} };
-    (orch as any).workflowLoader = { loadOne: async () => {} };
-    (orch as any).knowledgeStoreManager = { loadOne: async () => {} };
-    (orch as any).functionLoader = { loadOne: async () => {} };
-    (orch as any).skillLoader = { loadOne: async () => {} };
+    (orch as any).agentLoader = { loadOne: async () => ({}), nameForPath: () => undefined };
+    (orch as any).workflowLoader = { loadOne: async () => ({}) };
+    (orch as any).knowledgeStoreManager = { loadOne: async () => ({}), nameForPath: () => undefined, evict: () => {} };
+    (orch as any).functionLoader = { loadOne: async () => ({}) };
+    (orch as any).skillLoader = { loadOne: async () => ({}) };
 
     assert.equal(await orch.reloadFile('test.agent.yaml'), 'agent');
     assert.equal(await orch.reloadFile('test.workflow.yaml'), 'workflow');
@@ -346,6 +354,84 @@ describe('Orchestrator', () => {
     assert.equal(await orch.reloadFile('test.function.js'), 'function');
     assert.equal(await orch.reloadFile('skills/SKILL.md'), 'skill');
     assert.equal(await orch.reloadFile('unknown.txt'), 'none');
+  });
+
+  it('should handle unloadFile after manual initialization', async () => {
+    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    (orch as any).initialized = true;
+
+    let agentRemoved = false;
+    let workflowRemoved = false;
+    let knowledgeEvicted = false;
+    let functionRemoved = false;
+    let skillRemoved = false;
+    let memoryDeleted = false;
+
+    (orch as any).agentLoader = {
+      nameForPath: () => 'my-agent',
+      remove: () => { agentRemoved = true; return true; },
+    };
+    (orch as any).workflowLoader = {
+      nameForPath: () => 'my-workflow',
+      remove: () => { workflowRemoved = true; return true; },
+    };
+    (orch as any).knowledgeStoreManager = {
+      nameForPath: () => 'my-kb',
+      evict: () => { knowledgeEvicted = true; },
+    };
+    (orch as any).functionLoader = {
+      nameForPath: () => 'my-func',
+      remove: () => { functionRemoved = true; return true; },
+    };
+    (orch as any).skillLoader = {
+      nameForPath: () => 'my-skill',
+      remove: () => { skillRemoved = true; return true; },
+    };
+    (orch as any).memoryManager = {
+      delete: async () => { memoryDeleted = true; },
+    };
+    (orch as any).triggerManager = {
+      removeAgentTriggers: () => {},
+    };
+    (orch as any).integrationManager = {
+      syncAgent: async () => {},
+    };
+
+    assert.equal(await orch.unloadFile('agents/my-agent.agent.yaml'), 'agent');
+    assert.ok(agentRemoved);
+    assert.ok(memoryDeleted);
+
+    assert.equal(await orch.unloadFile('workflows/my-wf.workflow.yaml'), 'workflow');
+    assert.ok(workflowRemoved);
+
+    assert.equal(await orch.unloadFile('knowledge/my-kb.knowledge.yaml'), 'knowledge');
+    assert.ok(knowledgeEvicted);
+
+    assert.equal(await orch.unloadFile('functions/my-func.function.js'), 'function');
+    assert.ok(functionRemoved);
+
+    assert.equal(await orch.unloadFile('skills/my-skill/SKILL.md'), 'skill');
+    assert.ok(skillRemoved);
+
+    assert.equal(await orch.unloadFile('unknown.txt'), 'none');
+  });
+
+  it('should handle unloadFile when resource name not found', async () => {
+    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    (orch as any).initialized = true;
+
+    (orch as any).agentLoader = { nameForPath: () => undefined };
+    (orch as any).workflowLoader = { nameForPath: () => undefined };
+    (orch as any).knowledgeStoreManager = { nameForPath: () => undefined };
+    (orch as any).functionLoader = { nameForPath: () => undefined };
+    (orch as any).skillLoader = { nameForPath: () => undefined };
+
+    // Should not throw — just returns the type
+    assert.equal(await orch.unloadFile('agents/gone.agent.yaml'), 'agent');
+    assert.equal(await orch.unloadFile('workflows/gone.workflow.yaml'), 'workflow');
+    assert.equal(await orch.unloadFile('knowledge/gone.knowledge.yaml'), 'knowledge');
+    assert.equal(await orch.unloadFile('functions/gone.function.js'), 'function');
+    assert.equal(await orch.unloadFile('skills/gone/SKILL.md'), 'skill');
   });
 
   it('should handle reloadFile for llm.json', async () => {

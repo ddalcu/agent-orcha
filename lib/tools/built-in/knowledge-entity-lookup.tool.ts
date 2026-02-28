@@ -17,8 +17,9 @@ export function createKnowledgeEntityLookupTool(
   const schemaInfo = buildGraphSchemaDescription(config);
 
   return tool(
-    async ({ id, name: entityName, type, limit }) => {
+    async ({ id, name: entityName, type, limit, offset }) => {
       const effectiveLimit = Math.min(limit ?? 10, 50);
+      const effectiveOffset = Math.max(offset ?? 0, 0);
 
       // Direct ID lookup
       if (id) {
@@ -59,10 +60,12 @@ export function createKnowledgeEntityLookupTool(
           return `No entities found matching ${criteria.join(', ')}.`;
         }
 
-        const results = filtered.slice(0, effectiveLimit);
+        const paged = filtered.slice(effectiveOffset);
+        const results = paged.slice(0, effectiveLimit);
         const total = filtered.length;
+        const hasMore = effectiveOffset + results.length < total;
 
-        return formatEntities(results, total > effectiveLimit ? total : undefined);
+        return formatEntities(results, total > effectiveLimit || effectiveOffset > 0 ? total : undefined, effectiveOffset, hasMore);
       } catch (error) {
         return `Lookup error: ${error instanceof Error ? error.message : String(error)}`;
       }
@@ -73,22 +76,25 @@ export function createKnowledgeEntityLookupTool(
 
 ${schemaInfo}
 
-TIPS: Use type filter to browse entities of a specific kind. Use name for searching. Use the returned entity IDs with knowledge_traverse_${name} to explore relationships.`,
+TIPS: Use type filter to browse entities of a specific kind. Use name for searching. Use the returned entity IDs with knowledge_traverse_${name} to explore relationships. Use offset to paginate through large result sets (e.g., offset=0 then offset=50 to get all entities).`,
       schema: z.object({
         id: z.string().optional().describe('Exact entity ID to look up (takes precedence over name/type filters)'),
         name: z.string().optional().describe('Search entities by name (case-insensitive partial match)'),
         type: z.string().optional().describe('Filter by entity type (case-insensitive exact match)'),
         limit: z.number().optional().describe('Max results to return (default 10, max 50)'),
+        offset: z.number().optional().describe('Skip this many results before returning (default 0). Use with limit to paginate.'),
       }),
     }
   );
 }
 
-function formatEntities(entities: EntityRow[], totalCount?: number): string {
+function formatEntities(entities: EntityRow[], totalCount?: number, offset = 0, hasMore = false): string {
   const lines: string[] = [];
 
   if (totalCount) {
-    lines.push(`Found ${totalCount} entities (showing ${entities.length}):\n`);
+    const rangeStart = offset + 1;
+    const rangeEnd = offset + entities.length;
+    lines.push(`Found ${totalCount} entities (showing ${rangeStart}-${rangeEnd})${hasMore ? ` — use offset=${rangeEnd} to see more` : ''}:\n`);
   } else {
     lines.push(`Found ${entities.length} entity(ies):\n`);
   }

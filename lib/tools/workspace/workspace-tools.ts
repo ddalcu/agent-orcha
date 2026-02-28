@@ -42,6 +42,7 @@ export interface DiagnosticsReport {
 export interface WorkspaceToolDeps {
   workspaceRoot: string;
   reloadFile: (relativePath: string) => Promise<string>;
+  unloadFile: (relativePath: string) => Promise<string>;
   listResources: () => WorkspaceResourceSummary;
   getDiagnostics: () => Promise<DiagnosticsReport>;
 }
@@ -197,11 +198,56 @@ function createWorkspaceDiagnosticsTool(deps: WorkspaceToolDeps): StructuredTool
   );
 }
 
+function createWorkspaceDeleteTool(deps: WorkspaceToolDeps): StructuredTool {
+  return tool(
+    async ({ filePath }) => {
+      const fullPath = await resolveSafePath(deps.workspaceRoot, filePath);
+
+      try {
+        const stat = await fs.stat(fullPath);
+        if (stat.isDirectory()) {
+          await fs.rm(fullPath, { recursive: true });
+        } else {
+          await fs.unlink(fullPath);
+        }
+      } catch {
+        return JSON.stringify({ success: false, error: 'File not found' });
+      }
+
+      logger.info(`[WorkspaceTool] File deleted: ${filePath}`);
+
+      let unloaded = 'none';
+      try {
+        unloaded = await deps.unloadFile(filePath);
+        if (unloaded !== 'none') {
+          logger.info(`[WorkspaceTool] Unloaded ${unloaded} from: ${filePath}`);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error(`[WorkspaceTool] Unload failed for ${filePath}: ${message}`);
+        return JSON.stringify({ success: true, path: filePath, unloaded: 'error', unloadError: message });
+      }
+
+      return JSON.stringify({ success: true, path: filePath, unloaded });
+    },
+    {
+      name: 'workspace_delete',
+      description:
+        'Delete a file or directory from the ORCHA workspace and unload the associated resource ' +
+        'from memory (stops triggers, closes integrations, evicts cached stores).',
+      schema: z.object({
+        filePath: z.string().describe('Relative path from workspace root (e.g. "agents/old-agent.agent.yaml")'),
+      }),
+    },
+  );
+}
+
 export function buildWorkspaceTools(deps: WorkspaceToolDeps): Map<string, StructuredTool> {
   const tools = new Map<string, StructuredTool>();
 
   tools.set('read', createWorkspaceReadTool(deps));
   tools.set('write', createWorkspaceWriteTool(deps));
+  tools.set('delete', createWorkspaceDeleteTool(deps));
   tools.set('list', createWorkspaceListTool(deps));
   tools.set('list_resources', createWorkspaceListResourcesTool(deps));
   tools.set('diagnostics', createWorkspaceDiagnosticsTool(deps));

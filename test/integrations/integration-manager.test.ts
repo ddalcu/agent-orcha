@@ -1,6 +1,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { IntegrationManager } from '../../lib/integrations/integration-manager.ts';
+import { EmailConnector } from '../../lib/integrations/email.ts';
 
 describe('IntegrationManager', () => {
   let manager: IntegrationManager;
@@ -170,5 +171,94 @@ describe('IntegrationManager', () => {
 
     const ctx = manager.getChannelContext('agent1');
     assert.equal(ctx, 'some context');
+  });
+
+  // Email integration tests
+
+  it('should return false for hasEmailIntegration when no connectors', () => {
+    assert.equal(manager.hasEmailIntegration('unknown'), false);
+  });
+
+  it('should return false for hasEmailIntegration when only non-email connectors', () => {
+    const mockConnector = {
+      getRecentMessages: () => '',
+      getChannelMembers: () => [],
+      postMessage: () => {},
+      close: () => {},
+    };
+    (manager as any).connectors.set('agent1', [mockConnector]);
+    assert.equal(manager.hasEmailIntegration('agent1'), false);
+  });
+
+  it('should not throw when sendEmail called for unknown agent', async () => {
+    await manager.sendEmail('unknown', 'a@b.com', 'test', 'body');
+  });
+
+  it('should not throw when sendEmail called for agent with only non-email connectors', async () => {
+    const mockConnector = {
+      getRecentMessages: () => '',
+      getChannelMembers: () => [],
+      postMessage: () => {},
+      close: () => {},
+    };
+    (manager as any).connectors.set('agent1', [mockConnector]);
+    await manager.sendEmail('agent1', 'a@b.com', 'test', 'body');
+  });
+
+  it('should route sendEmail to EmailConnector instances', async () => {
+    const sent: Array<{ to: string; subject: string; body: string }> = [];
+    const mockEmailConnector = Object.create(EmailConnector.prototype);
+    mockEmailConnector.sendEmail = async (to: string, subject: string, body: string) => {
+      sent.push({ to, subject, body });
+    };
+    mockEmailConnector.getRecentMessages = () => '';
+    mockEmailConnector.getChannelMembers = () => [];
+    mockEmailConnector.postMessage = () => {};
+    mockEmailConnector.close = () => {};
+
+    (manager as any).connectors.set('agent1', [mockEmailConnector]);
+
+    await manager.sendEmail('agent1', 'user@test.com', 'Hello', 'Body text');
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]!.to, 'user@test.com');
+    assert.equal(sent[0]!.subject, 'Hello');
+    assert.equal(sent[0]!.body, 'Body text');
+  });
+
+  it('should detect hasEmailIntegration for EmailConnector instances', () => {
+    const mockEmailConnector = Object.create(EmailConnector.prototype);
+    mockEmailConnector.getRecentMessages = () => '';
+    mockEmailConnector.getChannelMembers = () => [];
+    mockEmailConnector.postMessage = () => {};
+    mockEmailConnector.close = () => {};
+
+    (manager as any).connectors.set('agent1', [mockEmailConnector]);
+
+    assert.equal(manager.hasEmailIntegration('agent1'), true);
+  });
+
+  it('should handle mixed connector types correctly', () => {
+    const chatConnector = {
+      getRecentMessages: () => 'chat msg',
+      getChannelMembers: () => [{ userId: 'u1', name: 'Alice' }],
+      postMessage: () => {},
+      close: () => {},
+    };
+    const emailConnector = Object.create(EmailConnector.prototype);
+    emailConnector.getRecentMessages = () => '[bob@test.com] Re: Hello: hi there';
+    emailConnector.getChannelMembers = () => [{ userId: 'bob@test.com', name: 'Bob' }];
+    emailConnector.postMessage = () => {};
+    emailConnector.close = () => {};
+
+    (manager as any).connectors.set('agent1', [chatConnector, emailConnector]);
+
+    assert.equal(manager.hasEmailIntegration('agent1'), true);
+
+    const ctx = manager.getChannelContext('agent1');
+    assert.ok(ctx.includes('chat msg'));
+    assert.ok(ctx.includes('[bob@test.com]'));
+
+    const members = manager.getChannelMembers('agent1');
+    assert.equal(members.length, 2);
   });
 });

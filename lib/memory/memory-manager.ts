@@ -30,6 +30,15 @@ export class MemoryManager {
     logger.info(`[MemoryManager] Saved memory for agent: ${agentName} (${truncated.split('\n').length} lines)`);
   }
 
+  async delete(agentName: string): Promise<void> {
+    try {
+      await fs.unlink(this.getFilePath(agentName));
+      logger.info(`[MemoryManager] Deleted memory for agent: ${agentName}`);
+    } catch {
+      // File may not exist — that's fine
+    }
+  }
+
   private truncateToMaxLines(content: string, maxLines: number): string {
     const lines = content.split('\n');
     if (lines.length <= maxLines) return content;

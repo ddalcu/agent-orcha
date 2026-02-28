@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-import { initCommand } from './commands/init.ts';
-import { startCommand } from './commands/start.ts';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -35,12 +33,16 @@ Documentation: https://github.com/ddalcu/agent-orcha
 async function main(): Promise<void> {
   try {
     switch (command) {
-      case 'init':
+      case 'init': {
+        const { initCommand } = await import('./commands/init.ts');
         await initCommand(args.slice(1));
         break;
-      case 'start':
+      }
+      case 'start': {
+        const { startCommand } = await import('./commands/start.ts');
         await startCommand(args.slice(1));
         break;
+      }
       case 'help':
       case '--help':
       case '-h':

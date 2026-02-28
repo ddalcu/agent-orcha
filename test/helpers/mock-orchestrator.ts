@@ -60,10 +60,27 @@ export function createMockOrchestrator(overrides: Record<string, any> = {}) {
     },
     conversationStore: {
       getMessages: () => [],
+      addMessage: () => {},
       clearSession: () => {},
       hasSession: () => false,
       getSessionCount: () => 0,
+      getMessageCount: () => 0,
       ...overrides.conversationStore,
+    },
+    memory: {
+      getStore: () => ({
+        getMessages: () => [],
+        addMessage: () => {},
+        clearSession: () => {},
+        hasSession: () => false,
+        getSessionCount: () => 0,
+        getMessageCount: () => 0,
+      }),
+      clearSession: () => {},
+      getSessionCount: () => 0,
+      getMessageCount: () => 0,
+      hasSession: () => false,
+      ...overrides.memory,
     },
     agentExecutor: {
       createInstance: async () => ({
@@ -88,6 +105,8 @@ export function createMockOrchestrator(overrides: Record<string, any> = {}) {
     },
     runAgent: async () => ({ output: 'mock', metadata: { duration: 0 } }),
     runWorkflow: async () => ({ output: {}, metadata: { duration: 0, stepsExecuted: 0, success: true }, stepResults: {} }),
+    reloadFile: async () => 'none',
+    unloadFile: async () => 'none',
     workspaceRoot: '/tmp/test-project',
     ...overrides,
   } as any;

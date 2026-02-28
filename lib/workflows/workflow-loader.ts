@@ -8,6 +8,7 @@ import { logger } from '../logger.ts';
 export class WorkflowLoader {
   private workflowsDir: string;
   private workflows: Map<string, WorkflowDefinition> = new Map();
+  private pathToName: Map<string, string> = new Map();
 
   constructor(workflowsDir: string) {
     this.workflowsDir = workflowsDir;
@@ -35,6 +36,7 @@ export class WorkflowLoader {
     const parsed = parseYaml(content);
     const workflow = WorkflowDefinitionSchema.parse(parsed);
     this.workflows.set(workflow.name, workflow);
+    this.pathToName.set(path.resolve(filePath), workflow.name);
     return workflow;
   }
 
@@ -52,5 +54,13 @@ export class WorkflowLoader {
 
   names(): string[] {
     return Array.from(this.workflows.keys());
+  }
+
+  remove(name: string): boolean {
+    return this.workflows.delete(name);
+  }
+
+  nameForPath(absolutePath: string): string | undefined {
+    return this.pathToName.get(absolutePath);
   }
 }

@@ -14,6 +14,7 @@ import { ToolRegistry } from './tools/tool-registry.ts';
 import { ToolDiscovery } from './tools/tool-discovery.ts';
 import { MCPConfigSchema } from './mcp/types.ts';
 import { loadLLMConfig, listModelConfigs } from './llm/llm-config.ts';
+import { LLMFactory } from './llm/llm-factory.ts';
 import { resolveAgentLLMRef } from './llm/types.ts';
 import { ConversationStore } from './memory/conversation-store.ts';
 import { MemoryManager } from './memory/memory-manager.ts';
@@ -21,9 +22,12 @@ import { TaskManager } from './tasks/task-manager.ts';
 import { VmExecutor } from './sandbox/vm-executor.ts';
 import { createSandboxExecTool } from './sandbox/sandbox-exec.ts';
 import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web.ts';
+import { createSandboxShellTool } from './sandbox/sandbox-shell.ts';
+import { createBrowserTools } from './sandbox/sandbox-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
+import type { IntegrationAccessor } from './integrations/types.ts';
 import { TriggerManager } from './triggers/trigger-manager.ts';
 import type { SandboxConfig } from './sandbox/types.ts';
 import type { AgentDefinition, AgentResult } from './agents/types.ts';
@@ -130,7 +134,7 @@ export class Orchestrator {
       sandboxTools,
       workspaceTools,
     );
-    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader, this.memoryManager);
+    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader, this.memoryManager, this.integrations);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
 
     // Initialize ReAct workflow components
@@ -201,6 +205,12 @@ export class Orchestrator {
     tools.set('exec', createSandboxExecTool(this.vmExecutor, this.sandboxConfig));
     tools.set('web_fetch', createSandboxWebFetchTool(this.sandboxConfig));
     tools.set('web_search', createSandboxWebSearchTool());
+    tools.set('shell', createSandboxShellTool(this.sandboxConfig));
+
+    const browserTools = createBrowserTools(this.sandboxConfig);
+    for (const bt of browserTools) {
+      tools.set(bt.name.replace('sandbox_browser_', 'browser_'), bt);
+    }
 
     logger.info('[Orchestrator] Sandbox enabled with tools: ' + Array.from(tools.keys()).join(', '));
 
@@ -211,6 +221,7 @@ export class Orchestrator {
     const deps: WorkspaceToolDeps = {
       workspaceRoot: this.config.workspaceRoot,
       reloadFile: (relativePath: string) => this.reloadFile(relativePath),
+      unloadFile: (relativePath: string) => this.unloadFile(relativePath),
       listResources: (): WorkspaceResourceSummary => ({
         agents: this.agentLoader.list().map(a => ({ name: a.name, description: a.description })),
         workflows: this.workflowLoader.list().map(w => ({ name: w.name, description: w.description })),
@@ -359,6 +370,15 @@ export class Orchestrator {
       postMessage: (agentName: string, message: string) => {
         this.integrationManager?.postMessage(agentName, message);
       },
+      sendEmail: async (agentName: string, to: string, subject: string, body: string) => {
+        await this.integrationManager?.sendEmail(agentName, to, subject, body);
+      },
+      hasEmailIntegration: (agentName: string) => {
+        return this.integrationManager?.hasEmailIntegration(agentName) ?? false;
+      },
+      hasChannelIntegration: (agentName: string) => {
+        return this.integrationManager?.hasChannelIntegration(agentName) ?? false;
+      },
     };
   }
 
@@ -389,12 +409,73 @@ export class Orchestrator {
     };
   }
 
+  async unloadFile(relativePath: string): Promise<string> {
+    this.ensureInitialized();
+
+    const absolutePath = path.resolve(this.config.workspaceRoot, relativePath);
+
+    if (relativePath.endsWith('.agent.yaml')) {
+      const name = this.agentLoader.nameForPath(absolutePath);
+      if (name) {
+        this.agentLoader.remove(name);
+        this.triggerManager?.removeAgentTriggers(name);
+        await this.integrationManager?.syncAgent(this, name);
+        await this.memoryManager.delete(name);
+        logger.info(`[Orchestrator] Unloaded agent: ${name}`);
+      }
+      return 'agent';
+    }
+
+    if (relativePath.endsWith('.workflow.yaml')) {
+      const name = this.workflowLoader.nameForPath(absolutePath);
+      if (name) {
+        this.workflowLoader.remove(name);
+        logger.info(`[Orchestrator] Unloaded workflow: ${name}`);
+      }
+      return 'workflow';
+    }
+
+    if (relativePath.endsWith('.knowledge.yaml')) {
+      const name = this.knowledgeStoreManager.nameForPath(absolutePath);
+      if (name) {
+        this.knowledgeStoreManager.evict(name);
+        logger.info(`[Orchestrator] Unloaded knowledge store: ${name}`);
+      }
+      return 'knowledge';
+    }
+
+    if (relativePath.endsWith('.function.js')) {
+      const name = this.functionLoader.nameForPath(absolutePath);
+      if (name) {
+        this.functionLoader.remove(name);
+        logger.info(`[Orchestrator] Unloaded function: ${name}`);
+      }
+      return 'function';
+    }
+
+    if (relativePath.endsWith('SKILL.md')) {
+      const name = this.skillLoader.nameForPath(absolutePath);
+      if (name) {
+        this.skillLoader.remove(name);
+        logger.info(`[Orchestrator] Unloaded skill: ${name}`);
+      }
+      return 'skill';
+    }
+
+    // Singleton configs (mcp.json, llm.json, sandbox.json) — deleting is unusual, no-op
+    return 'none';
+  }
+
   async reloadFile(relativePath: string): Promise<string> {
     this.ensureInitialized();
 
     const absolutePath = path.resolve(this.config.workspaceRoot, relativePath);
 
     if (relativePath.endsWith('.agent.yaml')) {
+      const oldName = this.agentLoader.nameForPath(absolutePath);
+      if (oldName) {
+        this.triggerManager?.removeAgentTriggers(oldName);
+      }
       const agent = await this.agentLoader.loadOne(absolutePath);
       await this.integrationManager?.syncAgent(this, agent.name);
       return 'agent';
@@ -406,6 +487,11 @@ export class Orchestrator {
     }
 
     if (relativePath.endsWith('.knowledge.yaml')) {
+      // Evict the old cached store so it reinitializes with new config on next use
+      const oldName = this.knowledgeStoreManager.nameForPath(absolutePath);
+      if (oldName) {
+        this.knowledgeStoreManager.evict(oldName);
+      }
       await this.knowledgeStoreManager.loadOne(absolutePath);
       return 'knowledge';
     }
@@ -436,6 +522,7 @@ export class Orchestrator {
 
     if (relativePath === 'llm.json') {
       await loadLLMConfig(this.config.llmConfigPath);
+      LLMFactory.clearCache();
       return 'llm';
     }
 
@@ -719,6 +806,9 @@ export class Orchestrator {
     if (this.taskManager) {
       this.taskManager.destroy();
     }
+    if (this.knowledgeStoreManager) {
+      this.knowledgeStoreManager.close();
+    }
   }
 
   private ensureInitialized(): void {
@@ -791,12 +881,6 @@ interface TaskAccessor {
 interface TriggerAccessor {
   getManager: () => TriggerManager | null;
   setManager: (manager: TriggerManager) => void;
-}
-
-interface IntegrationAccessor {
-  getChannelContext: (agentName: string) => string;
-  getChannelMembers: (agentName: string) => Array<{ userId: string; name: string }>;
-  postMessage: (agentName: string, message: string) => void;
 }
 
 interface SandboxAccessor {

@@ -10,8 +10,6 @@ class Store extends EventTarget {
             activeTab: initialTab,
             agents: [],
             selectedAgent: null,
-            chatHistory: [],
-            sessionId: 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
             workflows: [],
             knowledgeStores: [],
             llms: [],

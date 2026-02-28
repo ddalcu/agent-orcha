@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { resolvePublishConfig } from '../../lib/agents/types.ts';
 
 interface AgentParams {
   name: string;
@@ -12,13 +13,19 @@ interface InvokeBody {
 export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/', async () => {
     const agents = fastify.orchestrator.agents.list();
-    return agents.map((agent) => ({
-      name: agent.name,
-      description: agent.description,
-      version: agent.version,
-      tools: agent.tools,
-      inputVariables: agent.prompt.inputVariables,
-    }));
+    return agents.map((agent) => {
+      const publish = resolvePublishConfig(agent.publish);
+      return {
+        name: agent.name,
+        description: agent.description,
+        version: agent.version,
+        tools: agent.tools,
+        memory: agent.memory,
+        inputVariables: agent.prompt.inputVariables,
+        publish: { enabled: publish.enabled, hasPassword: !!publish.password },
+        sampleQuestions: agent.sampleQuestions,
+      };
+    });
   });
 
   fastify.get<{ Params: AgentParams }>('/:name', async (request, reply) => {

@@ -1,6 +1,6 @@
 import { tool } from '../types/tool-factory.ts';
 import { z } from 'zod';
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import { htmlToMarkdown } from './html-to-markdown.ts';
 import { createLogger } from '../logger.ts';
 import type { StructuredTool } from '../types/llm-types.ts';
@@ -77,15 +77,23 @@ export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool
 
         let html = body;
         if (runScripts) {
-          const dom = new JSDOM(body, {
-            url: response.url,
-            runScripts: 'dangerously',
-            pretendToBeVisual: true,
-          });
-          // Brief delay for scripts to execute
-          await new Promise(r => setTimeout(r, 100));
-          html = dom.serialize();
-          dom.window.close();
+          try {
+            const virtualConsole = new VirtualConsole();
+            virtualConsole.on('jsdomError', () => { /* suppress script errors */ });
+            const dom = new JSDOM(body, {
+              url: response.url,
+              runScripts: 'dangerously',
+              pretendToBeVisual: true,
+              virtualConsole,
+            });
+            // Catch uncaught errors inside the jsdom window (e.g. dynamic import())
+            dom.window.addEventListener('error', (e: Event) => e.preventDefault());
+            await new Promise(r => setTimeout(r, 100));
+            html = dom.serialize();
+            dom.window.close();
+          } catch {
+            // Script execution failed entirely — fall back to raw HTML
+          }
         }
 
         let content = htmlToMarkdown(html);
@@ -111,7 +119,7 @@ export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool
       description:
         'Fetch the content of a web page or API endpoint. ' +
         'HTML is automatically converted to clean markdown. Use raw=true for API responses or non-HTML content. ' +
-        'Set runScripts=false to skip JavaScript execution (faster, but may miss dynamic content).',
+        'Set runScripts=true to execute page JavaScript before extraction (may fail on some sites).',
       schema: z.object({
         url: z
           .string()
@@ -124,8 +132,8 @@ export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool
         runScripts: z
           .boolean()
           .optional()
-          .default(true)
-          .describe('Run page JavaScript before extracting content (default: true)'),
+          .default(false)
+          .describe('Run page JavaScript before extracting content (default: false). May fail on pages with dynamic imports.'),
       }),
     },
   );

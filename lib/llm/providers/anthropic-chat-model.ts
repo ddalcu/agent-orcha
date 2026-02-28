@@ -1,15 +1,17 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type {
-  ChatModel,
-  ChatModelResponse,
-  BaseMessage,
-  StructuredTool,
-  ToolCall,
+import {
+  contentToText,
+  type ChatModel,
+  type ChatModelResponse,
+  type BaseMessage,
+  type StructuredTool,
+  type ToolCall,
 } from '../../types/llm-types.ts';
 
 interface AnthropicChatModelOptions {
   apiKey?: string;
+  baseURL?: string;
   modelName: string;
   temperature?: number;
   maxTokens?: number;
@@ -24,7 +26,10 @@ export class AnthropicChatModel implements ChatModel {
   private structuredSchema?: Record<string, unknown>;
 
   constructor(options: AnthropicChatModelOptions) {
-    this.client = new Anthropic({ apiKey: options.apiKey ?? process.env.ANTHROPIC_API_KEY ?? 'not-set' });
+    this.client = new Anthropic({
+      apiKey: options.apiKey ?? process.env.ANTHROPIC_API_KEY ?? 'not-set',
+      ...(options.baseURL ? { baseURL: options.baseURL } : {}),
+    });
     this.modelName = options.modelName;
     this.temperature = options.temperature;
     this.maxTokens = options.maxTokens ?? 4096;
@@ -38,16 +43,31 @@ export class AnthropicChatModel implements ChatModel {
 
     for (const msg of messages) {
       if (msg.role === 'system') {
-        system = system ? `${system}\n\n${msg.content}` : msg.content;
+        const text = contentToText(msg.content);
+        system = system ? `${system}\n\n${text}` : text;
         continue;
       }
 
       if (msg.role === 'human') {
-        anthropicMessages.push({ role: 'user', content: msg.content });
+        if (Array.isArray(msg.content)) {
+          const blocks: Anthropic.ContentBlockParam[] = msg.content.map(p => {
+            if (p.type === 'image') {
+              return {
+                type: 'image' as const,
+                source: { type: 'base64' as const, media_type: p.mediaType as 'image/jpeg', data: p.data },
+              };
+            }
+            return { type: 'text' as const, text: p.text };
+          });
+          anthropicMessages.push({ role: 'user', content: blocks });
+        } else {
+          anthropicMessages.push({ role: 'user', content: msg.content });
+        }
       } else if (msg.role === 'ai') {
         const content: Anthropic.ContentBlockParam[] = [];
-        if (msg.content) {
-          content.push({ type: 'text', text: msg.content });
+        const text = contentToText(msg.content);
+        if (text) {
+          content.push({ type: 'text', text });
         }
         if (msg.tool_calls?.length) {
           for (const tc of msg.tool_calls) {
@@ -61,16 +81,38 @@ export class AnthropicChatModel implements ChatModel {
         }
         anthropicMessages.push({ role: 'assistant', content });
       } else if (msg.role === 'tool') {
-        anthropicMessages.push({
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: msg.tool_call_id!,
-              content: msg.content,
-            },
-          ],
-        });
+        if (Array.isArray(msg.content)) {
+          const blocks: Anthropic.ToolResultBlockParam['content'] = msg.content.map((p) => {
+            if (p.type === 'image') {
+              return {
+                type: 'image' as const,
+                source: { type: 'base64' as const, media_type: p.mediaType as 'image/jpeg', data: p.data },
+              };
+            }
+            return { type: 'text' as const, text: p.text };
+          });
+          anthropicMessages.push({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: msg.tool_call_id!,
+                content: blocks,
+              },
+            ],
+          });
+        } else {
+          anthropicMessages.push({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: msg.tool_call_id!,
+                content: msg.content,
+              },
+            ],
+          });
+        }
       }
     }
 

@@ -27,8 +27,9 @@ export const DatabaseSourceConfigSchema = z.object({
 export const WebSourceConfigSchema = z.object({
   type: z.literal('web'),
   url: z.string().url().describe('URL to scrape'),
-  selector: z.string().optional().describe('CSS selector for targeted content extraction'),
+  selector: z.string().optional().describe('CSS selector for targeted content extraction (html only)'),
   headers: z.record(z.string()).optional().describe('Custom headers for the request'),
+  jsonPath: z.string().optional().describe('Dot-notation path to extract from JSON response (e.g., "items" or "data.results")'),
 });
 
 export const SourceConfigSchema = z.discriminatedUnion('type', [
@@ -39,7 +40,7 @@ export const SourceConfigSchema = z.discriminatedUnion('type', [
 ]);
 
 export const LoaderConfigSchema = z.object({
-  type: z.enum(['text', 'pdf', 'csv', 'json', 'markdown']).default('text'),
+  type: z.enum(['text', 'pdf', 'csv', 'json', 'markdown', 'html']).default('text'),
   options: z.record(z.unknown()).optional(),
 });
 
@@ -55,6 +56,10 @@ export const EmbeddingRefSchema = z.string().default('default');
 export const SearchConfigSchema = z.object({
   defaultK: z.number().default(4),
   scoreThreshold: z.number().optional(),
+});
+
+export const ReindexConfigSchema = z.object({
+  schedule: z.string().describe('Cron expression for periodic reindexing (e.g., "0 * * * *" for hourly)'),
 });
 
 // --- Extraction Types (moved from graph-rag/types.ts) ---
@@ -139,17 +144,28 @@ export const KnowledgeConfigSchema = z.preprocess(
       cleaned.search = s;
     }
 
+    // Default loader based on source type when not explicitly set
+    if (!cleaned.loader) {
+      const source = cleaned.source as Record<string, unknown> | undefined;
+      if (source?.type === 'web') {
+        cleaned.loader = { type: 'html' };
+      } else {
+        cleaned.loader = { type: 'text' };
+      }
+    }
+
     return cleaned;
   },
   z.object({
     name: z.string().describe('Unique knowledge store identifier'),
     description: z.string().describe('Human-readable description'),
     source: SourceConfigSchema,
-    loader: LoaderConfigSchema,
+    loader: LoaderConfigSchema.optional(),
     splitter: SplitterConfigSchema,
     embedding: EmbeddingRefSchema,
     graph: GraphConfigSchema.optional(),
     search: SearchConfigSchema.optional(),
+    reindex: ReindexConfigSchema.optional(),
     metadata: z.record(z.unknown()).optional(),
   })
 );
@@ -164,6 +180,7 @@ export type SourceConfig = z.infer<typeof SourceConfigSchema>;
 export type LoaderConfig = z.infer<typeof LoaderConfigSchema>;
 export type SplitterConfig = z.infer<typeof SplitterConfigSchema>;
 export type SearchConfig = z.infer<typeof SearchConfigSchema>;
+export type ReindexConfig = z.infer<typeof ReindexConfigSchema>;
 export type GraphConfig = z.infer<typeof GraphConfigSchema>;
 export type KnowledgeConfig = z.infer<typeof KnowledgeConfigSchema>;
 

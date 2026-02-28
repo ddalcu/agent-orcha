@@ -81,4 +81,29 @@ describe('SkillLoader', () => {
     const content = loader.resolveForAgent(['nonexistent']);
     assert.equal(content, '');
   });
+
+  it('should remove a skill by name', () => {
+    assert.equal(loader.has('test-skill'), true);
+    const result = loader.remove('test-skill');
+    assert.equal(result, true);
+    assert.equal(loader.has('test-skill'), false);
+    assert.equal(loader.get('test-skill'), undefined);
+  });
+
+  it('should return false when removing non-existent skill', () => {
+    assert.equal(loader.remove('nonexistent'), false);
+  });
+
+  it('should track file path to name mapping', async () => {
+    const newLoader = new SkillLoader(fixturesDir);
+    const filePath = path.join(fixturesDir, 'test-skill', 'SKILL.md');
+    await newLoader.loadOne(filePath);
+
+    const name = newLoader.nameForPath(path.resolve(filePath));
+    assert.equal(name, 'test-skill');
+  });
+
+  it('should return undefined nameForPath for unknown path', () => {
+    assert.equal(loader.nameForPath('/nonexistent/SKILL.md'), undefined);
+  });
 });

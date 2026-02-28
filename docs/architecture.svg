@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 960" style="background:#0d1117;border-radius:12px">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 960" style="background:#0d1117">
   <defs>
     <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.4"/>
@@ -31,7 +31,7 @@
   </defs>
 
   <!-- Background -->
-  <rect width="1200" height="960" rx="12" fill="url(#bg-grad)"/>
+  <rect width="1200" height="960" fill="url(#bg-grad)"/>
 
   <!-- Title -->
   <text x="600" y="38" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="22" font-weight="700" fill="#e6edf3">Agent Orcha — Architecture</text>
@@ -40,7 +40,7 @@
   <!-- ═══════════════════════════════════════════ -->
   <!-- FRONTEND UI (left column)                   -->
   <!-- ═══════════════════════════════════════════ -->
-  <rect x="20" y="80" width="155" height="260" rx="10" fill="#1c2333" stroke="#3b82f6" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="20" y="80" width="155" height="288" rx="10" fill="#1c2333" stroke="#3b82f6" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="97" y="100" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="700" fill="#3b82f6">Frontend UI</text>
   <text x="97" y="114" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Web Dashboard</text>
 
@@ -63,7 +63,10 @@
   <text x="97" y="279" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#93c5fd">Task Monitor</text>
 
   <rect x="32" y="292" width="131" height="22" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75"/>
-  <text x="97" y="307" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#93c5fd">Settings / Config</text>
+  <text x="97" y="307" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#93c5fd">Published Chat</text>
+
+  <rect x="32" y="320" width="131" height="22" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75"/>
+  <text x="97" y="335" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#93c5fd">Settings / Config</text>
 
   <!-- Arrow: UI → API -->
   <line x1="175" y1="210" x2="198" y2="210" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
@@ -75,29 +78,34 @@
   <text x="590" y="98" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="700" fill="#06b6d4">Input Layer</text>
 
   <!-- HTTP/REST API -->
-  <rect x="215" y="107" width="130" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
-  <text x="280" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">REST API</text>
-  <text x="280" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Fastify Server</text>
+  <rect x="215" y="107" width="110" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
+  <text x="270" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">REST API</text>
+  <text x="270" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Fastify Server</text>
 
   <!-- WebSocket -->
-  <rect x="355" y="107" width="130" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
-  <text x="420" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">ColabNook WS</text>
-  <text x="420" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Chat Integration</text>
+  <rect x="333" y="107" width="110" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
+  <text x="388" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">ColabNook WS</text>
+  <text x="388" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Chat Integration</text>
+
+  <!-- Email IMAP -->
+  <rect x="451" y="107" width="110" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
+  <text x="506" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">Email IMAP</text>
+  <text x="506" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">IMAP + SMTP</text>
 
   <!-- Cron -->
-  <rect x="495" y="107" width="130" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
-  <text x="560" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">Cron Triggers</text>
-  <text x="560" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Scheduled Tasks</text>
+  <rect x="569" y="107" width="110" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
+  <text x="624" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">Cron Triggers</text>
+  <text x="624" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Scheduled Tasks</text>
 
   <!-- Webhooks -->
-  <rect x="635" y="107" width="130" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
-  <text x="700" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">Webhooks</text>
-  <text x="700" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">HTTP Triggers</text>
+  <rect x="687" y="107" width="110" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
+  <text x="742" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">Webhooks</text>
+  <text x="742" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">HTTP Triggers</text>
 
   <!-- SSE Streaming -->
-  <rect x="775" y="107" width="130" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
-  <text x="840" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">SSE Streaming</text>
-  <text x="840" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Real-time Output</text>
+  <rect x="805" y="107" width="110" height="32" rx="6" fill="#1e293b" stroke="#22d3ee" stroke-width="1"/>
+  <text x="860" y="121" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" fill="#22d3ee">SSE Streaming</text>
+  <text x="860" y="133" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Real-time Output</text>
 
   <!-- ═══════════════════════════════════════════ -->
   <!-- LLM PROVIDERS (right column)                -->
@@ -177,7 +185,7 @@
   <text x="655" y="321" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Step-based flows</text>
 
   <rect x="725" y="290" width="120" height="44" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75"/>
-  <text x="785" y="308" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#c4b5fd">LangGraphExecutor</text>
+  <text x="785" y="308" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#c4b5fd">ReactWorkflowExecutor</text>
   <text x="785" y="321" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">ReAct agent loops</text>
 
   <rect x="855" y="290" width="110" height="44" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="0.75"/>
@@ -215,18 +223,18 @@
   <!-- Knowledge -->
   <rect x="20" y="500" width="225" height="190" rx="10" fill="#1c2333" stroke="#f472b6" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="132" y="520" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="700" fill="#f472b6">Knowledge Layer</text>
-  <text x="132" y="534" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Semantic Search &amp; GraphRAG</text>
+  <text x="132" y="534" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Semantic Search &amp; Knowledge Graphs</text>
 
   <rect x="32" y="544" width="100" height="34" rx="4" fill="#1e293b" stroke="#f9a8d4" stroke-width="0.75"/>
-  <text x="82" y="558" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fbcfe8">Vector RAG</text>
+  <text x="82" y="558" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fbcfe8">Chunk Search</text>
   <text x="82" y="569" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Similarity search</text>
 
   <rect x="140" y="544" width="95" height="34" rx="4" fill="#1e293b" stroke="#f9a8d4" stroke-width="0.75"/>
-  <text x="187" y="558" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fbcfe8">GraphRAG</text>
-  <text x="187" y="569" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Entity graphs</text>
+  <text x="187" y="558" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fbcfe8">Entity Graphs</text>
+  <text x="187" y="569" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Direct mapping</text>
 
   <rect x="32" y="584" width="203" height="22" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75"/>
-  <text x="133" y="599" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fda4af">Stores: Memory, Chroma, Pinecone, Qdrant</text>
+  <text x="133" y="599" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fda4af">Storage: SQLite + sqlite-vec</text>
 
   <rect x="32" y="612" width="203" height="22" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75"/>
   <text x="133" y="627" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fda4af">Splitters: recursive, token, markdown</text>
@@ -238,10 +246,10 @@
   <text x="92" y="672" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#fda4af">DB</text>
   <rect x="113" y="658" width="35" height="20" rx="3" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
   <text x="130" y="672" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#fda4af">Web</text>
-  <rect x="152" y="658" width="30" height="20" rx="3" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
-  <text x="167" y="672" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#fda4af">S3</text>
-  <rect x="186" y="658" width="45" height="20" rx="3" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
-  <text x="208" y="672" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#fda4af">Directory</text>
+  <rect x="152" y="658" width="38" height="20" rx="3" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+  <text x="171" y="672" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#fda4af">HTML</text>
+  <rect x="194" y="658" width="45" height="20" rx="3" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+  <text x="216" y="672" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#fda4af">Directory</text>
 
   <!-- Arrow: Tool Registry → Knowledge -->
   <line x1="400" y1="470" x2="200" y2="498" stroke="#f472b6" stroke-width="1.5" marker-end="url(#arrow-pink)"/>
@@ -258,7 +266,7 @@
   <text x="347" y="587" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fed7aa">Lazy tool loading + caching</text>
 
   <rect x="272" y="600" width="151" height="22" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="347" y="615" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Filesystem, DB, Custom...</text>
+  <text x="347" y="615" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Brave Search, GitHub, Custom...</text>
 
   <!-- Arrow: Tool Registry → MCP -->
   <line x1="460" y1="470" x2="380" y2="498" stroke="#fb923c" stroke-width="1.5"/>
@@ -280,48 +288,56 @@
   <!-- Sandbox -->
   <rect x="615" y="500" width="200" height="190" rx="10" fill="#1c2333" stroke="#ef4444" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="715" y="520" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="700" fill="#ef4444">Sandbox</text>
-  <text x="715" y="534" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Docker Containerized Execution</text>
+  <text x="715" y="534" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Isolated Execution Environment</text>
 
-  <rect x="627" y="544" width="88" height="30" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="671" y="558" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fecaca">exec</text>
-  <text x="671" y="568" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Run commands</text>
+  <rect x="627" y="544" width="88" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="671" y="556" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fecaca">exec</text>
+  <text x="671" y="565" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="6" fill="#7d8590">JS / Python</text>
 
-  <rect x="721" y="544" width="82" height="30" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="762" y="558" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fecaca">browser</text>
-  <text x="762" y="568" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Chromium</text>
+  <rect x="721" y="544" width="88" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="765" y="556" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fecaca">shell</text>
+  <text x="765" y="565" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="6" fill="#7d8590">Run commands</text>
 
-  <rect x="627" y="580" width="88" height="30" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="671" y="594" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fecaca">web_fetch</text>
-  <text x="671" y="604" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">HTML → Markdown</text>
+  <rect x="627" y="572" width="88" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="671" y="584" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#fecaca">browser_navigate</text>
 
-  <rect x="721" y="580" width="82" height="30" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="762" y="594" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fecaca">web_search</text>
-  <text x="762" y="604" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">DuckDuckGo</text>
+  <rect x="721" y="572" width="88" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="765" y="584" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#fecaca">browser_observe</text>
 
-  <rect x="627" y="616" width="88" height="30" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="671" y="630" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fecaca">read / write</text>
-  <text x="671" y="640" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">File operations</text>
+  <rect x="627" y="600" width="88" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="671" y="612" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#fecaca">browser_click</text>
 
-  <rect x="721" y="616" width="82" height="30" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
-  <text x="762" y="630" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fecaca">edit</text>
-  <text x="762" y="640" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Line-based edits</text>
+  <rect x="721" y="600" width="88" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="765" y="612" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#fecaca">browser_type</text>
 
-  <rect x="627" y="654" width="176" height="26" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.75" stroke-dasharray="4 2"/>
-  <text x="715" y="668" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">DockerManager: images, containers, pruning</text>
+  <rect x="627" y="628" width="88" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="671" y="640" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#fecaca">browser_screenshot</text>
+
+  <rect x="721" y="628" width="88" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="765" y="640" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" font-weight="600" fill="#fecaca">browser_evaluate</text>
+
+  <rect x="627" y="656" width="88" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="671" y="668" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fecaca">web_fetch</text>
+
+  <rect x="721" y="656" width="88" height="24" rx="4" fill="#1e293b" stroke="#fca5a5" stroke-width="0.75"/>
+  <text x="765" y="668" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" font-weight="600" fill="#fecaca">web_search</text>
 
   <!-- Arrow: Tool Registry → Sandbox -->
   <line x1="680" y1="470" x2="715" y2="498" stroke="#ef4444" stroke-width="1.5"/>
 
   <!-- Project Tools -->
-  <rect x="830" y="500" width="165" height="100" rx="10" fill="#1c2333" stroke="#14b8a6" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="830" y="500" width="165" height="128" rx="10" fill="#1c2333" stroke="#14b8a6" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="912" y="520" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="700" fill="#14b8a6">Project Tools</text>
   <text x="912" y="534" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Self-modification</text>
 
   <rect x="842" y="544" width="141" height="22" rx="4" fill="#1e293b" stroke="#5eead4" stroke-width="0.75"/>
-  <text x="912" y="559" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#99f6e4">List / inspect resources</text>
+  <text x="912" y="559" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#99f6e4">List / read / write resources</text>
 
   <rect x="842" y="572" width="141" height="22" rx="4" fill="#1e293b" stroke="#5eead4" stroke-width="0.75"/>
   <text x="912" y="587" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#99f6e4">Hot-reload modified files</text>
+
+  <rect x="842" y="600" width="141" height="22" rx="4" fill="#1e293b" stroke="#5eead4" stroke-width="0.75"/>
+  <text x="912" y="615" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#99f6e4">Delete / unload resources</text>
 
   <!-- Arrow: Tool Registry → Project -->
   <line x1="780" y1="470" x2="870" y2="498" stroke="#14b8a6" stroke-width="1.5"/>
@@ -388,30 +404,30 @@
   <line x1="707" y1="902" x2="707" y2="906" stroke="#64748b" stroke-width="1"/>
 
   <!-- Tool loop detail -->
-  <rect x="810" y="752" width="170" height="176" rx="8" fill="#162032" stroke="#475569" stroke-width="0.75" stroke-dasharray="4 2"/>
+  <rect x="810" y="752" width="180" height="176" rx="8" fill="#162032" stroke="#475569" stroke-width="0.75" stroke-dasharray="4 2"/>
   <text x="895" y="770" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" fill="#94a3b8">Tool Sources</text>
 
   <text x="825" y="788" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#fb923c">MCP</text>
-  <text x="868" y="788" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">External servers</text>
+  <text x="893" y="788" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">External servers</text>
 
   <text x="825" y="806" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#f472b6">Knowledge</text>
   <text x="893" y="806" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Semantic search</text>
 
   <text x="825" y="824" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#a78bfa">Functions</text>
-  <text x="885" y="824" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Custom JS</text>
+  <text x="893" y="824" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Custom JS</text>
 
   <text x="825" y="842" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#ef4444">Sandbox</text>
-  <text x="876" y="842" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Docker exec/browse</text>
+  <text x="893" y="842" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">exec/shell/browser</text>
 
   <text x="825" y="860" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#14b8a6">Project</text>
-  <text x="869" y="860" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Self-inspect/reload</text>
+  <text x="893" y="860" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">CRUD + hot-reload</text>
 
   <text x="825" y="878" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#4ade80">Built-in</text>
-  <text x="872" y="878" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Memory save</text>
+  <text x="893" y="878" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Memory, ask_user, etc</text>
 
   <!-- Output formats -->
   <rect x="810" y="900" width="170" height="28" rx="4" fill="#1e293b" stroke="#475569" stroke-width="0.75"/>
-  <text x="895" y="914" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#94a3b8">Output: text | json | structured</text>
+  <text x="895" y="914" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#94a3b8">Output: text | structured</text>
   <text x="895" y="924" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="7" fill="#7d8590">Schema validation via Zod</text>
 
   <!-- ═══════════════════════════════════════════ -->
@@ -427,7 +443,7 @@
   <text x="148" y="878" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">YAML agents/workflows/knowledge — no code required to build AI systems</text>
 
   <text x="40" y="896" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#f59e0b">Factory Pattern</text>
-  <text x="140" y="896" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">LLMFactory, KnowledgeStoreFactory, GraphRagFactory — cached instances</text>
+  <text x="140" y="896" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">LLMFactory, KnowledgeStoreFactory — cached instances</text>
 
   <text x="40" y="914" font-family="Segoe UI,system-ui,sans-serif" font-size="9" fill="#8b5cf6">Accessor Pattern</text>
   <text x="148" y="914" font-family="Segoe UI,system-ui,sans-serif" font-size="8" fill="#7d8590">Orchestrator exposes typed accessors for all components (agents, knowledge, etc.)</text>

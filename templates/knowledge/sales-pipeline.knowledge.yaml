@@ -1,0 +1,84 @@
+name: sales-pipeline
+description: Sales CRM pipeline — deals, customers, products, sales reps, and regional performance with win/loss tracking
+
+source:
+  type: database
+  connectionString: postgresql://demo_user:demo_password@samples.mindsdb.com:5432/demo
+  query: |
+    SELECT
+      "Column1"            AS deal_id,
+      customer,
+      product,
+      sales_rep,
+      emails_sent,
+      calls_made,
+      region,
+      status,
+      COALESCE(competitor, '')  AS competitor,
+      COALESCE(reason_lost, '') AS reason_lost,
+      win_loss,
+      customer || ' — ' || product || ' deal in ' || region
+        || ' (rep: ' || sales_rep || ', status: ' || status || ', win probability: ' || ROUND(win_loss::numeric * 100) || '%'
+        || CASE WHEN COALESCE(competitor, '') <> '' THEN ', competitor: ' || competitor ELSE '' END
+        || CASE WHEN COALESCE(reason_lost, '') <> '' THEN ', lost reason: ' || reason_lost ELSE '' END
+        || '. Outreach: ' || emails_sent || ' emails, ' || calls_made || ' calls)'
+      AS content
+    FROM demo.sales_dataset
+  contentColumn: content
+  metadataColumns:
+    - deal_id
+    - customer
+    - product
+    - sales_rep
+    - region
+    - status
+    - win_loss
+
+loader:
+  type: text
+
+splitter:
+  type: character
+  chunkSize: 600
+  chunkOverlap: 0
+
+embedding: default
+
+search:
+  defaultK: 8
+
+graph:
+  directMapping:
+    entities:
+      - type: Customer
+        idColumn: customer
+        nameColumn: customer
+        properties: []
+      - type: Product
+        idColumn: product
+        nameColumn: product
+        properties: []
+      - type: SalesRep
+        idColumn: sales_rep
+        nameColumn: sales_rep
+        properties: []
+      - type: Region
+        idColumn: region
+        nameColumn: region
+        properties: []
+    relationships:
+      - type: PURCHASED
+        source: Customer
+        target: Product
+        sourceIdColumn: customer
+        targetIdColumn: product
+      - type: MANAGED_BY
+        source: Customer
+        target: SalesRep
+        sourceIdColumn: customer
+        targetIdColumn: sales_rep
+      - type: OPERATES_IN
+        source: SalesRep
+        target: Region
+        sourceIdColumn: sales_rep
+        targetIdColumn: region

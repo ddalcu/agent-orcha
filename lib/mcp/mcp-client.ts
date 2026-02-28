@@ -24,10 +24,14 @@ export class MCPClientManager {
 
   async initialize(): Promise<void> {
     for (const [name, serverConfig] of Object.entries(this.config.servers)) {
-      if (!serverConfig.enabled) continue;
-
       try {
-        const connection = await this.connectToServer(name, serverConfig);
+        const timeout = serverConfig.timeout ?? 10000;
+        const connection = await Promise.race([
+          this.connectToServer(name, serverConfig),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Connection timed out after ${timeout}ms`)), timeout)
+          ),
+        ]);
         this.connections.set(name, connection);
         logger.info(`Connected to MCP server "${name}"`);
       } catch (error) {

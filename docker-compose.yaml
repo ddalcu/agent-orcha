@@ -4,6 +4,21 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - .local/workspace:/data
+      - ./templates:/data
     environment:
       PORT: 3000
+      NODE_ENV: development
+      BROWSER_SANDBOX: "true"
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-}
+    shm_size: "2gb"
+    develop:
+      watch:
+        - action: sync
+          path: ./lib
+          target: /app/lib
+        - action: sync
+          path: ./src
+          target: /app/src
+        - action: sync
+          path: ./public
+          target: /app/public

@@ -72,9 +72,13 @@ function verifyPassword(input: string): boolean {
 
 const PUBLIC_PATHS = new Set(['/api/auth/login', '/api/auth/check', '/api/auth/logout']);
 
+const PROTECTED_NON_API = ['/vnc', '/websockify'];
+
 function isPublicRequest(url: string): boolean {
   const path = url.split('?')[0] ?? url;
-  return path === '/health' || PUBLIC_PATHS.has(path) || !path.startsWith('/api/');
+  if (path === '/health' || PUBLIC_PATHS.has(path) || path.startsWith('/api/chat/')) return true;
+  if (PROTECTED_NON_API.some((p) => path === p || path.startsWith(p + '/'))) return false;
+  return !path.startsWith('/api/');
 }
 
 // --- Plugin (fp breaks encapsulation so the hook applies globally) ---

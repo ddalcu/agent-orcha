@@ -965,6 +965,12 @@ pre {
   border-bottom: none;
 }
 
+.docs-content ul,
+.docs-content ol {
+  margin: var(--space-md) 0;
+  padding-left: var(--space-lg);
+}
+
 /* Expandable sections for docs */
 .expandable {
   background-color: var(--color-bg-secondary);

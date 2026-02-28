@@ -31,6 +31,11 @@ tools:
 output:
   format: text
 
+sampleQuestions:
+  - "What pets are in the store and how do their prices compare by species?"
+  - "Cross-reference the org chart with the pet store — do any employees have namesake pets?"
+  - "Fetch a URL from the web docs and summarize the key points"
+
 metadata:
   category: rag-example
   tags:

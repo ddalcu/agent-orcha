@@ -1,0 +1,55 @@
+name: transport-ot
+description: ICS/SCADA/IoT systems inventory with tech stack and CPE identifiers for CVE cross-referencing across railroad, transit, and transportation sectors
+
+source:
+  type: file
+  path: knowledge/transport-ot/systems.csv
+
+loader:
+  type: csv
+
+splitter:
+  type: character
+  chunkSize: 800
+  chunkOverlap: 0
+
+embedding: default
+
+search:
+  defaultK: 8
+
+graph:
+  directMapping:
+    entities:
+      - type: System
+        idColumn: system_name
+        nameColumn: system_name
+        properties: [vendor, protocol, sector, description, os_firmware, known_software, cpe_id]
+      - type: Vendor
+        idColumn: vendor
+        nameColumn: vendor
+        properties: []
+      - type: Category
+        idColumn: category
+        nameColumn: category
+        properties: []
+      - type: Sector
+        idColumn: sector
+        nameColumn: sector
+        properties: []
+    relationships:
+      - type: MADE_BY
+        source: System
+        target: Vendor
+        sourceIdColumn: system_name
+        targetIdColumn: vendor
+      - type: BELONGS_TO_CATEGORY
+        source: System
+        target: Category
+        sourceIdColumn: system_name
+        targetIdColumn: category
+      - type: USED_IN
+        source: System
+        target: Sector
+        sourceIdColumn: system_name
+        targetIdColumn: sector

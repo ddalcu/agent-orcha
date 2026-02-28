@@ -6,7 +6,7 @@ import type { WebhookTrigger } from './types.ts';
 const log = createLogger('WebhookTrigger');
 
 export class WebhookTriggerHandler {
-  private agentName: string;
+  readonly agentName: string;
   private trigger: WebhookTrigger;
   private orchestrator: Orchestrator;
   readonly path: string;

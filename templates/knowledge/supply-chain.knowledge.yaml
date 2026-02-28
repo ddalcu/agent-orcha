@@ -1,0 +1,85 @@
+name: supply-chain
+description: Supply chain and inventory — SKUs, suppliers, warehouses, stock levels, demand velocity, and out-of-stock risk
+
+source:
+  type: database
+  connectionString: postgresql://demo_user:demo_password@samples.mindsdb.com:5432/demo
+  query: |
+    SELECT
+      sku,
+      count_in_stock,
+      ROUND(avg_daily_sales::numeric, 1)            AS avg_daily_sales,
+      lead_time_days,
+      supplier,
+      warehouse,
+      ROUND(price_per_unit::numeric, 2)              AS price_per_unit,
+      ROUND(demand_velocity::numeric, 3)             AS demand_velocity,
+      ROUND(sales_last_30_days::numeric, 0)          AS sales_last_30_days,
+      ROUND(projected_out_of_stock_days::numeric, 1) AS projected_oos_days,
+      ROUND(revenue_impact_if_oos::numeric, 2)       AS revenue_impact_if_oos,
+      overstock_flag,
+      bundle_discount_flag,
+      sku || ' — supplied by ' || supplier || ', stored at ' || warehouse
+        || '. Stock: ' || count_in_stock || ' units, avg daily sales: ' || ROUND(avg_daily_sales::numeric, 1)
+        || ', lead time: ' || lead_time_days || ' days'
+        || '. Price: $' || ROUND(price_per_unit::numeric, 2)
+        || '. Out-of-stock in ~' || ROUND(projected_out_of_stock_days::numeric, 1) || ' days'
+        || CASE WHEN revenue_impact_if_oos > 0 THEN ', revenue at risk: $' || ROUND(revenue_impact_if_oos::numeric, 2) ELSE '' END
+        || CASE WHEN overstock_flag THEN '. OVERSTOCKED' ELSE '' END
+      AS content
+    FROM demo.inventory_dataset
+  contentColumn: content
+  metadataColumns:
+    - sku
+    - supplier
+    - warehouse
+    - count_in_stock
+    - price_per_unit
+    - projected_oos_days
+    - overstock_flag
+
+loader:
+  type: text
+
+splitter:
+  type: character
+  chunkSize: 600
+  chunkOverlap: 0
+
+embedding: default
+
+search:
+  defaultK: 8
+
+graph:
+  directMapping:
+    entities:
+      - type: SKU
+        idColumn: sku
+        nameColumn: sku
+        properties:
+          - count_in_stock
+          - price_per_unit
+          - avg_daily_sales
+          - demand_velocity
+          - projected_oos_days
+          - overstock_flag
+      - type: Supplier
+        idColumn: supplier
+        nameColumn: supplier
+        properties: []
+      - type: Warehouse
+        idColumn: warehouse
+        nameColumn: warehouse
+        properties: []
+    relationships:
+      - type: SUPPLIED_BY
+        source: SKU
+        target: Supplier
+        sourceIdColumn: sku
+        targetIdColumn: supplier
+      - type: STORED_IN
+        source: SKU
+        target: Warehouse
+        sourceIdColumn: sku
+        targetIdColumn: warehouse

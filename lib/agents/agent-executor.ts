@@ -1,6 +1,6 @@
 import { createReActAgent } from './react-loop.ts';
-import { humanMessage, aiMessage } from '../types/llm-types.ts';
-import type { ChatModel, BaseMessage } from '../types/llm-types.ts';
+import { humanMessage, aiMessage, contentToText } from '../types/llm-types.ts';
+import type { ChatModel, BaseMessage, MessageContent, ContentPart } from '../types/llm-types.ts';
 import type { StructuredTool } from '../types/llm-types.ts';
 import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions, AgentMemoryConfig } from './types.ts';
 import { LLMFactory } from '../llm/llm-factory.ts';
@@ -8,7 +8,9 @@ import type { ToolRegistry } from '../tools/tool-registry.ts';
 import type { ConversationStore } from '../memory/conversation-store.ts';
 import type { SkillLoader } from '../skills/skill-loader.ts';
 import type { MemoryManager } from '../memory/memory-manager.ts';
+import type { IntegrationAccessor } from '../integrations/types.ts';
 import { createMemorySaveTool } from '../tools/built-in/memory-save.tool.ts';
+import { createIntegrationTools } from '../tools/built-in/integration-tools.ts';
 import { StructuredOutputWrapper } from './structured-output-wrapper.ts';
 import { logLLMCallStart, logLLMCallEnd } from '../llm/llm-call-logger.ts';
 import { logger } from '../logger.ts';
@@ -24,12 +26,14 @@ export class AgentExecutor {
   private conversationStore: ConversationStore;
   private skillLoader?: SkillLoader;
   private memoryManager?: MemoryManager;
+  private integrations?: IntegrationAccessor;
 
-  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, skillLoader?: SkillLoader, memoryManager?: MemoryManager) {
+  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, skillLoader?: SkillLoader, memoryManager?: MemoryManager, integrations?: IntegrationAccessor) {
     this.toolRegistry = toolRegistry;
     this.conversationStore = conversationStore;
     this.skillLoader = skillLoader;
     this.memoryManager = memoryManager;
+    this.integrations = integrations;
   }
 
   async createInstance(definition: AgentDefinition): Promise<AgentInstance> {
@@ -78,14 +82,27 @@ export class AgentExecutor {
       logger.info(`[AgentExecutor] Auto-injected save_memory tool for agent: ${definition.name}`);
     }
 
-    // Auto-inject sandbox tool if any skill requires it
+    // Auto-inject sandbox tools if any skill requires it (skip already-declared ones)
     if (skillsNeedSandbox) {
-      const sandboxTools = this.toolRegistry.getAllSandboxTools();
+      const existingNames = new Set(tools.map((t) => t.name));
+      const sandboxTools = this.toolRegistry.getAllSandboxTools()
+        .filter((t) => !existingNames.has(t.name));
       if (sandboxTools.length > 0) {
         tools.push(...sandboxTools);
-        logger.info(`[AgentExecutor] Auto-injected sandbox tool for agent: ${definition.name}`);
-      } else {
+        logger.info(`[AgentExecutor] Auto-injected ${sandboxTools.length} sandbox tools for agent: ${definition.name}`);
+      } else if (this.toolRegistry.getAllSandboxTools().length === 0) {
         logger.warn(`[AgentExecutor] Skill requires sandbox but sandbox is not configured`);
+      }
+    }
+
+    // Auto-inject integration tools if agent has integrations configured
+    if (definition.integrations?.length && this.integrations) {
+      const existingNames = new Set(tools.map((t) => t.name));
+      const integrationTools = createIntegrationTools(this.integrations, definition.name)
+        .filter((t) => !existingNames.has(t.name));
+      if (integrationTools.length > 0) {
+        tools.push(...integrationTools);
+        logger.info(`[AgentExecutor] Auto-injected ${integrationTools.length} integration tools for agent: ${definition.name}`);
       }
     }
 
@@ -145,8 +162,9 @@ export class AgentExecutor {
         systemPrompt: definition.prompt.system,
       });
 
-      const userMessage = this.formatUserMessage(definition, input);
-      const messages = this.buildMessagesWithHistory(userMessage, sessionId);
+      const userText = this.formatUserMessage(definition, input);
+      const userContent = this.buildUserContent(userText, input);
+      const messages = this.buildMessagesWithHistory(userContent, sessionId);
 
       const caller = `Agent: ${definition.name}`;
 
@@ -174,7 +192,7 @@ export class AgentExecutor {
       );
 
       const lastMsg = result.messages?.[result.messages.length - 1];
-      const responseContent = lastMsg && 'content' in lastMsg ? String(lastMsg.content) : '';
+      const responseContent = lastMsg && 'content' in lastMsg ? contentToText(lastMsg.content) : '';
       logLLMCallEnd(caller, llmStart, stats, {
         contentLength: responseContent.length,
         messageCount: result.messages?.length ?? 0,
@@ -201,7 +219,7 @@ export class AgentExecutor {
         output = this.extractStructuredOutput(lastMessage);
       } else if (typeof lastMessage === 'object' && lastMessage !== null) {
         if ('content' in lastMessage) {
-          output = String(lastMessage.content);
+          output = contentToText(lastMessage.content);
         } else {
           output = JSON.stringify(lastMessage);
         }
@@ -267,19 +285,20 @@ export class AgentExecutor {
     startTime: number,
     sessionId?: string
   ): Promise<AgentResult> {
-    const userMessage = this.formatUserMessage(definition, input);
+    const userText = this.formatUserMessage(definition, input);
+    const userContent = this.buildUserContent(userText, input);
 
     // Build messages with history for session-based conversations
     const messageHistory = sessionId ? this.conversationStore.getMessages(sessionId) : [];
     const allMessages: BaseMessage[] = [
       humanMessage(definition.prompt.system),
       ...messageHistory,
-      humanMessage(userMessage),
+      humanMessage(userContent),
     ];
 
-    // Store user message in session before invoking
+    // Store user message in session before invoking (text only — no base64 in memory)
     if (sessionId) {
-      this.conversationStore.addMessage(sessionId, humanMessage(userMessage));
+      this.conversationStore.addMessage(sessionId, humanMessage(userText));
     }
 
     const caller = `Agent: ${definition.name}`;
@@ -294,7 +313,7 @@ export class AgentExecutor {
     const result = await llm.invoke(allMessages);
 
     logLLMCallEnd(caller, llmStart, stats, {
-      contentLength: typeof result.content === 'string' ? result.content.length : JSON.stringify(result.content).length,
+      contentLength: result.content.length,
     });
 
     let output: string | Record<string, unknown>;
@@ -303,7 +322,7 @@ export class AgentExecutor {
     if (definition.output?.format === 'structured') {
       output = this.extractStructuredOutput(result);
     } else {
-      output = String(result.content);
+      output = contentToText(result.content);
     }
 
     // Store AI response in session
@@ -351,6 +370,20 @@ export class AgentExecutor {
       .join('\n');
   }
 
+  private buildUserContent(text: string, input: Record<string, unknown>): MessageContent {
+    const attachments = input.attachments;
+    if (!Array.isArray(attachments) || attachments.length === 0) return text;
+
+    const parts: ContentPart[] = [];
+    if (text) parts.push({ type: 'text', text });
+    for (const att of attachments) {
+      if (att && typeof att.data === 'string' && typeof att.mediaType === 'string') {
+        parts.push({ type: 'image', data: att.data, mediaType: att.mediaType });
+      }
+    }
+    return parts.length > 0 ? parts : text;
+  }
+
   private async *stream(
     definition: AgentDefinition,
     llm: ChatModel,
@@ -366,8 +399,9 @@ export class AgentExecutor {
         systemPrompt: definition.prompt.system,
       });
 
-      const userMessage = this.formatUserMessage(definition, actualInput);
-      const messages = this.buildMessagesWithHistory(userMessage, sessionId);
+      const userText = this.formatUserMessage(definition, actualInput);
+      const userContent = this.buildUserContent(userText, actualInput);
+      const messages = this.buildMessagesWithHistory(userContent, sessionId);
 
       const caller = `Agent: ${definition.name}`;
       const { startTime: llmStart, stats } = logLLMCallStart({
@@ -399,10 +433,13 @@ export class AgentExecutor {
         for await (const event of eventStream) {
           if (event.event === 'on_chat_model_stream') {
             const chunk = event.data.chunk as any;
-            const text = this.extractTextContent(chunk.content);
+            const text = contentToText(chunk.content ?? '');
             if (text) {
               accumulatedOutput += text;
               yield { type: 'content', content: text };
+            }
+            if (chunk.reasoning) {
+              yield { type: 'thinking', content: chunk.reasoning };
             }
           } else if (event.event === 'on_chat_model_end') {
             finalMessage = event.data.output;
@@ -482,19 +519,20 @@ export class AgentExecutor {
         };
       }
     } else {
-      const userMessage = this.formatUserMessage(definition, actualInput);
+      const userText = this.formatUserMessage(definition, actualInput);
+      const userContent = this.buildUserContent(userText, actualInput);
 
       // Build messages with history for session-based conversations
       const messageHistory = sessionId ? this.conversationStore.getMessages(sessionId) : [];
       const allMessages: BaseMessage[] = [
         humanMessage(definition.prompt.system),
         ...messageHistory,
-        humanMessage(userMessage),
+        humanMessage(userContent),
       ];
 
-      // Store user message in session before streaming
+      // Store user message in session before streaming (text only — no base64 in memory)
       if (sessionId) {
-        this.conversationStore.addMessage(sessionId, humanMessage(userMessage));
+        this.conversationStore.addMessage(sessionId, humanMessage(userText));
       }
 
       const caller = `Agent: ${definition.name}`;
@@ -513,9 +551,12 @@ export class AgentExecutor {
 
       for await (const chunk of stream) {
         finalChunk = chunk;
-        if (typeof chunk.content === 'string') {
+        if (typeof chunk.content === 'string' && chunk.content) {
           accumulatedOutput += chunk.content;
           yield { type: 'content', content: chunk.content };
+        }
+        if (chunk.reasoning) {
+          yield { type: 'thinking', content: chunk.reasoning };
         }
       }
 
@@ -551,7 +592,7 @@ export class AgentExecutor {
   }
 
   private buildMessagesWithHistory(
-    userMessage: string,
+    userContent: MessageContent,
     sessionId?: string
   ): BaseMessage[] {
     const messages: BaseMessage[] = [];
@@ -564,26 +605,15 @@ export class AgentExecutor {
       }
     }
 
-    // Add current user message
-    messages.push(humanMessage(userMessage));
+    // Add current user message (with attachments if present)
+    messages.push(humanMessage(userContent));
 
-    // Store user message
+    // Store user message (text only — no base64 in memory)
     if (sessionId) {
-      this.conversationStore.addMessage(sessionId, humanMessage(userMessage));
+      this.conversationStore.addMessage(sessionId, humanMessage(contentToText(userContent)));
     }
 
     return messages;
-  }
-
-  private extractTextContent(content: unknown): string {
-    if (typeof content === 'string') return content;
-    if (Array.isArray(content)) {
-      return content
-        .filter((block: any) => block.type === 'text' && block.text)
-        .map((block: any) => block.text)
-        .join('');
-    }
-    return '';
   }
 
   private buildStoredMessage(

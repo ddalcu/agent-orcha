@@ -79,6 +79,7 @@ export class LLMFactory {
     return new AnthropicChatModel({
       modelName: config.model,
       apiKey,
+      baseURL: config.baseUrl,
       maxTokens: config.maxTokens,
       ...(temperature !== undefined ? { temperature } : {}),
     });

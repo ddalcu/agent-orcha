@@ -1,17 +1,21 @@
 import { JSDOM } from 'jsdom';
 
-const SKIP = new Set([
-  'SCRIPT', 'STYLE', 'NAV', 'FOOTER', 'HEADER', 'ASIDE', 'NOSCRIPT', 'SVG', 'IFRAME',
-]);
+export interface HtmlToMarkdownOptions {
+  includeNavigation?: boolean;
+}
 
-function walk(node: Node): string {
+const SKIP_ALWAYS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'IFRAME']);
+const SKIP_FULL_PAGE = new Set(['NAV', 'FOOTER', 'HEADER', 'ASIDE']);
+
+function walk(node: Node, skip: Set<string>): string {
   if (node.nodeType === 3) return node.textContent ?? '';
   if (node.nodeType !== 1) return '';
 
   const el = node as Element;
-  if (SKIP.has(el.tagName)) return '';
+  if (SKIP_ALWAYS.has(el.tagName)) return '';
+  if (skip.has(el.tagName)) return '';
 
-  const kids = Array.from(el.childNodes).map(walk).join('');
+  const kids = Array.from(el.childNodes).map(c => walk(c, skip)).join('');
   const t = kids.trim();
 
   switch (el.tagName) {
@@ -44,15 +48,47 @@ function walk(node: Node): string {
       const src = el.getAttribute('src') ?? '';
       return src ? `![${alt}](${src})` : '';
     }
+    case 'INPUT': {
+      const type = el.getAttribute('type') ?? 'text';
+      const name = el.getAttribute('name') ?? '';
+      const value = el.getAttribute('value') ?? '';
+      const placeholder = el.getAttribute('placeholder') ?? '';
+      const parts = [`input:${type}`];
+      if (name) parts.push(`name="${name}"`);
+      if (value) parts.push(`value="${value}"`);
+      if (placeholder) parts.push(`placeholder="${placeholder}"`);
+      return `[${parts.join(' ')}]`;
+    }
+    case 'BUTTON': return `[button: ${t}]`;
+    case 'SELECT': {
+      const name = el.getAttribute('name') ?? '';
+      const options = Array.from(el.querySelectorAll('option'))
+        .map(o => `${o.hasAttribute('selected') ? '(*)' : '( )'} ${(o.textContent ?? '').trim()}`)
+        .join(', ');
+      return `[select${name ? ` name="${name}"` : ''}: ${options}]`;
+    }
+    case 'TEXTAREA': {
+      const name = el.getAttribute('name') ?? '';
+      return `[textarea${name ? ` name="${name}"` : ''}: ${t}]`;
+    }
+    case 'FORM': {
+      const action = el.getAttribute('action') ?? '';
+      return `\n[form${action ? ` action="${action}"` : ''}]\n${kids}\n[/form]\n`;
+    }
+    case 'LABEL': {
+      const forAttr = el.getAttribute('for') ?? '';
+      return forAttr ? `[label for="${forAttr}": ${t}]` : t;
+    }
     default: return kids;
   }
 }
 
-export function htmlToMarkdown(html: string): string {
+export function htmlToMarkdown(html: string, options?: HtmlToMarkdownOptions): string {
   const dom = new JSDOM(html);
   const body = dom.window.document.body;
   if (!body) return '';
 
-  const raw = walk(body);
+  const skip = options?.includeNavigation ? new Set<string>() : SKIP_FULL_PAGE;
+  const raw = walk(body, skip);
   return raw.replace(/\n{3,}/g, '\n\n').trim();
 }

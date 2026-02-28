@@ -1,6 +1,11 @@
 export { VmExecutor } from './vm-executor.ts';
 export { createSandboxExecTool } from './sandbox-exec.ts';
 export { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox-web.ts';
+export { createSandboxShellTool } from './sandbox-shell.ts';
+export { createBrowserTools } from './sandbox-browser.ts';
+export { CDPClient } from './cdp-client.ts';
+export { PageReadiness } from './page-readiness.ts';
+export type { PageSnapshot } from './page-readiness.ts';
 export { htmlToMarkdown } from './html-to-markdown.ts';
 export { SandboxConfigSchema } from './types.ts';
 export type { SandboxConfig, ExecResult } from './types.ts';

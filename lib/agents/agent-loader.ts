@@ -8,6 +8,7 @@ import { logger } from '../logger.ts';
 export class AgentLoader {
   private agentsDir: string;
   private agents: Map<string, AgentDefinition> = new Map();
+  private pathToName: Map<string, string> = new Map();
 
   constructor(agentsDir: string) {
     this.agentsDir = agentsDir;
@@ -35,6 +36,7 @@ export class AgentLoader {
     const parsed = parseYaml(content);
     const agent = AgentDefinitionSchema.parse(parsed);
     this.agents.set(agent.name, agent);
+    this.pathToName.set(path.resolve(filePath), agent.name);
     return agent;
   }
 
@@ -52,5 +54,13 @@ export class AgentLoader {
 
   names(): string[] {
     return Array.from(this.agents.keys());
+  }
+
+  remove(name: string): boolean {
+    return this.agents.delete(name);
+  }
+
+  nameForPath(absolutePath: string): string | undefined {
+    return this.pathToName.get(absolutePath);
   }
 }

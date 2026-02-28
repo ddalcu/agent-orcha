@@ -5,6 +5,108 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Release 0.0.6
+
+### Breaking Changes
+
+- **Message content type widened** — `BaseMessage.content` changed from `string` to `string | ContentPart[]` to support multimodal messages. Downstream code that assumed `string` must use the new `contentToText()` helper.
+- **Tool return type widened** — `StructuredTool.invoke()` now returns `string | ContentPart[]` instead of just `string`, enabling tools to return images.
+
+### Added
+
+- **Published Agents** — Agents can be shared via standalone chat pages at `/chat/<agent-name>` with optional per-agent password protection (`publish: true` or `publish: { enabled: true, password: "..." }`). Independent of global `AUTH_PASSWORD`.
+  - New route: `src/routes/chat.route.ts` with config, auth, and stream endpoints
+  - New standalone chat UI: `public/chat.html` + `public/src/components/StandaloneChat.js`
+  - Supports markdown rendering, code highlighting, thinking blocks, tool call visualization, file attachments, and streaming stats
+
+- **Browser Sandbox** — Full Chromium browser sandbox with CDP control, Xvfb, VNC, and noVNC for visual web interaction
+  - `lib/sandbox/cdp-client.ts` — Chrome DevTools Protocol WebSocket client
+  - `lib/sandbox/page-readiness.ts` — Page readiness detection with DOM observation
+  - `lib/sandbox/sandbox-browser.ts` — Browser tools: `sandbox_browser_navigate`, `sandbox_browser_observe`, `sandbox_browser_click`, `sandbox_browser_type`, `sandbox_browser_screenshot`, `sandbox_browser_evaluate`
+  - `sandbox_browser_screenshot` returns base64 images as `ContentPart[]`, enabling multimodal tool responses
+  - `src/routes/vnc.route.ts` — VNC status endpoint and WebSocket proxy for in-browser VNC viewer
+  - Docker image now includes Chromium, Xvfb, x11vnc, noVNC, websockify. Controlled via `BROWSER_SANDBOX=true` env var
+  - New ports exposed: 6080 (noVNC), 9222 (CDP)
+
+- **Shell Sandbox Tool** — `sandbox:shell` tool (`lib/sandbox/sandbox-shell.ts`) for executing shell commands inside the Docker container as a non-root `sandbox` user
+
+- **Email Integration** — Full IMAP polling + SMTP email connector (`lib/integrations/email.ts`)
+  - Agents are triggered by inbound emails and auto-reply to senders
+  - Agents receive an `email_send` tool for composing new emails
+  - Configurable poll interval, folder, from name/address
+
+- **Integration Tools** — Auto-injected tools for agents with integrations (`lib/tools/built-in/integration-tools.ts`)
+  - `integration_post` — Post messages to connected channels
+  - `integration_context` — Get recent channel context
+  - `email_send` — Send emails (for agents with email integrations)
+
+- **Multimodal Message Support** — New `ContentPart` type (`text` | `image`) and `MessageContent` union type in `lib/types/llm-types.ts`
+  - All three LLM providers (OpenAI, Anthropic, Gemini) now handle image content parts in user and tool messages
+  - OpenAI provider buffers tool-result images and injects them as user messages (OpenAI API constraint)
+  - Agents support `attachments` in input (array of `{ data, mediaType }`) for image uploads
+
+- **File Attachments in Studio** — AgentsView and LLM chat now support dragging/pasting images that are sent as base64 attachments
+
+- **Workspace Delete Tool** — `project:delete` tool for removing files/directories and unloading associated resources from memory
+
+- **Resource Unloading** — `Orchestrator.unloadFile()` method for cleanly removing agents, workflows, knowledge stores, functions, and skills from memory
+  - All loaders gain `remove()` and `nameForPath()` methods
+  - `MemoryManager.delete()` for removing persistent memory files
+  - IDE file delete and rename now properly unload old resources
+
+- **Knowledge Store Scheduled Reindexing** — `reindex.schedule` field (cron expression) for automatic periodic re-indexing via node-cron
+  - `KnowledgeStore.evict()` for clean teardown of individual stores
+  - `KnowledgeStore.close()` for stopping all reindex crons on shutdown
+
+- **Knowledge Store `jsonPath`** — Web sources support `jsonPath` (dot-notation) to extract a nested array from JSON responses before parsing
+
+- **Knowledge Loader `html` Type** — Explicit `html` loader type added; web sources now default to `html` loader (previously implicit)
+
+- **Reusable Content Parsers** — `parseJsonContent()` and `parseCsvContent()` extracted from file loaders for shared use with `WebLoader`
+
+- **LLM Chat Session Memory** — `/api/llm/:name/chat` and `/api/llm/:name/stream` endpoints now support `sessionId` and `attachments` parameters
+
+- **LLM Factory Cache Clear** — `LLMFactory.clearCache()` called when `llm.json` is reloaded, ensuring config changes take effect immediately
+
+- **Session Store** — `public/src/services/SessionStore.js` for persisting active agent/LLM sessions in the Studio UI across tab switches
+
+- **Docker Compose Watch** — `docker-compose.yaml` now supports `docker compose watch` with file sync for `lib/`, `src/`, and `public/` directories
+
+- **Docker Development Mode** — `NODE_ENV=development` enables `--watch-path` for auto-restart on code changes inside the container
+
+- **New Template Agents** — business-analyst, corporate, music-librarian, transport-security, web-pilot
+
+- **New Template Knowledge Stores** — customer-ops, music-store (with SQLite database), sales-pipeline, security-incidents, supply-chain, transport-ot
+
+- **New Template Skills** — pii-guard, web-pilot
+
+- **Demo Script** — `templates/Demo.md` with sample prompts showcasing all agent and knowledge capabilities
+
+### Changed
+
+- Agent executor auto-injects integration tools when agent has integrations configured
+- Agent executor skips duplicate sandbox tool injection when tools already declared
+- Studio AgentsView redesigned with sidebar navigation, session persistence, mobile support, and welcome screen with animated orca
+- Studio GraphView refactored for improved rendering
+- Studio AppRoot updated for new layout
+- Orchestrator passes `IntegrationAccessor` to `AgentExecutor`
+- Orchestrator registers `sandbox:shell` and `sandbox:browser_*` tools alongside existing sandbox tools
+- Orchestrator properly calls `knowledgeStoreManager.close()` on shutdown
+- `IntegrationAccessor` interface moved from `orchestrator.ts` to `lib/integrations/types.ts` and expanded with `sendEmail`, `hasEmailIntegration`, `hasChannelIntegration`
+- `TriggerManager.removeAgentTriggers()` added for clean trigger teardown on agent unload
+- IDE file rename now unloads old resource before reloading from new path
+- IDE file delete now unloads associated resource from memory
+- `contentToText()` helper used throughout for safe content extraction from multimodal messages
+- `WebLoader` now accepts `loaderType` parameter and supports `json`, `csv`, `text`, `html` parsing modes
+- File loaders refactored to export reusable `parseJsonContent()` and `parseCsvContent()` functions
+- Docker image now includes system tools (curl, wget, nmap, jq, python3, git, etc.) for sandbox use
+- Docker entrypoint defaults to `start` command, supports `NODE_ENV=development` watch mode
+- `dev` script now defaults `WORKSPACE` to `./templates`
+
+### Dependencies
+
+- **Added:** `imapflow`, `nodemailer`, `@types/nodemailer`
+
 ## Release 0.0.5
 
 ### Breaking Changes

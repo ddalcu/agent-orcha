@@ -26,9 +26,10 @@ export function createKnowledgeSqlTool(
 
       const effectiveLimit = Math.min(limit ?? 25, 100);
 
-      // Append LIMIT if not already present
-      const hasLimit = /\bLIMIT\b/i.test(query);
-      const finalQuery = hasLimit ? query : `${query.trimEnd()}\nLIMIT ${effectiveLimit}`;
+      // Strip trailing semicolons and append LIMIT if not already present
+      const trimmed = query.trimEnd().replace(/;+$/, '');
+      const hasLimit = /\bLIMIT\b/i.test(trimmed);
+      const finalQuery = hasLimit ? trimmed : `${trimmed}\nLIMIT ${effectiveLimit}`;
 
       try {
         const pool = getPool(dbSource.connectionString);

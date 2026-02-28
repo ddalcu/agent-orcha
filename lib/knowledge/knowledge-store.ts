@@ -13,6 +13,7 @@ import { GeminiEmbeddingsProvider } from '../llm/providers/gemini-embeddings.ts'
 import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.ts';
 import { detectProvider } from '../llm/provider-detector.ts';
 import { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
+import cron from 'node-cron';
 import { createLogger } from '../logger.ts';
 import type { Document, Embeddings } from '../types/llm-types.ts';
 import type {
@@ -40,6 +41,8 @@ export class KnowledgeStore {
   private sqliteStores: Map<string, SqliteStore> = new Map();
   private metadataManager: KnowledgeMetadataManager;
   private activeIndexing: Map<string, Promise<KnowledgeStoreInstance>> = new Map();
+  private reindexTasks: Map<string, cron.ScheduledTask> = new Map();
+  private pathToName: Map<string, string> = new Map();
 
   constructor(knowledgeDir: string, workspaceRoot: string) {
     this.knowledgeDir = knowledgeDir;
@@ -67,6 +70,7 @@ export class KnowledgeStore {
     const names = Array.from(this.configs.keys());
     await this.metadataManager.resetStaleIndexing(names);
     await this.restoreIndexedStores();
+    this.startReindexCrons();
   }
 
   async loadOne(filePath: string): Promise<KnowledgeConfig> {
@@ -83,6 +87,7 @@ export class KnowledgeStore {
     }
 
     this.configs.set(config.name, config);
+    this.pathToName.set(path.resolve(filePath), config.name);
     return config;
   }
 
@@ -100,6 +105,74 @@ export class KnowledgeStore {
         logger.warn(`Failed to restore "${name}": ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+  }
+
+  private startReindexCrons(): void {
+    for (const [name, config] of this.configs) {
+      if (!config.reindex?.schedule) continue;
+
+      if (!cron.validate(config.reindex.schedule)) {
+        logger.warn(`Invalid reindex cron "${config.reindex.schedule}" for "${name}", skipping`);
+        continue;
+      }
+
+      this.reindexTasks.get(name)?.stop();
+
+      const task = cron.schedule(config.reindex.schedule, async () => {
+        if (!this.stores.has(name)) {
+          logger.info(`Reindex cron fired for "${name}" but store is not initialized, skipping`);
+          return;
+        }
+        if (this.activeIndexing.has(name)) {
+          logger.info(`Reindex cron fired for "${name}" but indexing already in progress, skipping`);
+          return;
+        }
+        try {
+          logger.info(`Reindex cron firing for "${name}"...`);
+          await this.refresh(name);
+          logger.info(`Reindex cron completed for "${name}"`);
+        } catch (error) {
+          logger.error(`Reindex cron failed for "${name}":`, error);
+        }
+      });
+
+      this.reindexTasks.set(name, task);
+      logger.info(`Scheduled reindex cron for "${name}" [${config.reindex.schedule}]`);
+    }
+  }
+
+  evict(name: string): void {
+    // Stop reindex cron
+    const cronTask = this.reindexTasks.get(name);
+    if (cronTask) {
+      cronTask.stop();
+      this.reindexTasks.delete(name);
+    }
+
+    // Close and remove SQLite store
+    const sqliteStore = this.sqliteStores.get(name);
+    if (sqliteStore) {
+      sqliteStore.close();
+      this.sqliteStores.delete(name);
+    }
+
+    // Remove from all maps
+    this.stores.delete(name);
+    this.configs.delete(name);
+    this.activeIndexing.delete(name);
+
+    logger.info(`Evicted knowledge store "${name}"`);
+  }
+
+  nameForPath(absolutePath: string): string | undefined {
+    return this.pathToName.get(absolutePath);
+  }
+
+  close(): void {
+    for (const [, task] of this.reindexTasks) {
+      task.stop();
+    }
+    this.reindexTasks.clear();
   }
 
   // --- Initialization ---
@@ -578,10 +651,12 @@ export class KnowledgeStore {
     }
 
     if (config.source.type === 'web') {
-      const webLoader = new WebLoader(config.source);
+      const loaderType = config.loader?.type ?? 'html';
+      const webLoader = new WebLoader(config.source, loaderType);
       return webLoader.load();
     }
 
+    const loaderType = config.loader?.type ?? 'text';
     const sourcePath = path.join(workspaceRoot, config.source.path);
 
     if (config.source.type === 'directory') {
@@ -591,7 +666,7 @@ export class KnowledgeStore {
 
       const allDocs: Document[] = [];
       for (const file of files) {
-        const loader = this.createLoader(config.loader.type, file);
+        const loader = this.createLoader(loaderType, file);
         const docs = await loader.load();
         allDocs.push(...docs);
       }
@@ -599,7 +674,7 @@ export class KnowledgeStore {
     }
 
     if (config.source.type === 'file') {
-      const loader = this.createLoader(config.loader.type, sourcePath);
+      const loader = this.createLoader(loaderType, sourcePath);
       return loader.load();
     }
 

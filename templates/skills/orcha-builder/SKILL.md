@@ -5,335 +5,169 @@ description: Documentation for creating and modifying ORCHA resources (agents, w
 
 # ORCHA Resource Schemas
 
-Use this reference when creating or modifying ORCHA resources. All resource files live in the workspace root under their respective directories.
-
----
-
 ## Agents (`agents/<name>.agent.yaml`)
 
 ```yaml
-name: my-agent                    # Unique identifier (kebab-case)
-description: What the agent does  # Human-readable description
-version: "1.0.0"                  # Optional, defaults to 1.0.0
-
+name: my-agent
+description: What the agent does
 llm:
-  name: default                   # LLM config name from llm.json
-  temperature: 0.7                # 0.0 = deterministic, 1.0 = creative
-
+  name: default
+  temperature: 0.7
 prompt:
   system: |
-    You are a helpful assistant.
-    Your instructions go here.
-  inputVariables:
-    - query                       # Variables injected at runtime
-
-tools:                            # Optional tool references
-  - mcp:server-name               # All tools from an MCP server
-  - knowledge:store-name          # Knowledge search tools
-  - function:my-function          # Custom function tool
-  - builtin:tool-name             # Built-in tool
-  - sandbox:exec                  # Sandbox tools (exec, web_fetch, web_search)
-  - workspace:read                  # Workspace tools (read, write, list, list_resources)
-
-skills:                           # Optional skills
-  - skill-name                    # Skill name from skills directory
-  # OR
-  mode: all                       # Include all available skills
-
-output:                           # Optional output config
-  format: text                    # text | json | structured
-  schema:                         # Required if format is structured
-    type: object
-    properties:
-      result:
-        type: string
-
-memory:                           # Optional conversation memory
-  enabled: true
-  maxLines: 100                   # Max conversation history lines
-
-metadata:                         # Optional metadata
-  category: general
-  tags:
-    - example
-
-integrations:                     # Optional integrations
-  - type: collabnook
-    url: wss://collabnook.com/ws
-    channel: general
-    botName: MyBot
-
-triggers:                         # Optional triggers
-  - type: cron
-    schedule: "*/5 * * * *"       # Cron expression
-    input:
-      query: "Periodic task"
+    Your system prompt here.
+  inputVariables: [query]
+tools:                            # mcp:<server> | knowledge:<store> | function:<name>
+  - mcp:server-name               # builtin:<name> | sandbox:<tool> | project:<tool>
+  - knowledge:store-name           # sandbox: exec, shell, web_fetch, web_search, browser_*
+  - sandbox:browser_navigate       # project: read, write, delete, list, list_resources
+skills: [skill-name]              # or { mode: all }
+output:
+  format: text                    # text | structured
+memory: { enabled: true, maxLines: 100 }
+integrations:
+  - { type: collabnook, url: "wss://host/ws", channel: general, botName: Bot }
+  - { type: email, imap: { host: imap.gmail.com, port: 993 }, smtp: { host: smtp.gmail.com, port: 587 }, auth: { user: agent@example.com, pass: pw }, pollInterval: 60, folder: INBOX }
+triggers:
+  - { type: cron, schedule: "*/5 * * * *", input: { query: "Task" } }
+publish: true                     # or { enabled: true, password: "secret" }
+sampleQuestions:                  # optional — clickable chips shown in chat UI on initial load
+  - "What can you help me with?"
+  - "Summarize the latest report"
 ```
 
----
+Published agents are accessible at `/chat/<agent-name>` with optional per-agent password.
 
 ## Step-Based Workflows (`workflows/<name>.workflow.yaml`)
 
 ```yaml
 name: my-workflow
 description: What the workflow does
-version: "1.0.0"
-type: steps                       # "steps" for step-based workflows
-
+type: steps
 input:
-  schema:                         # Typed input fields
-    query:
-      type: string                # string | number | boolean | array | object
-      required: true
-      description: "The user query"
-
+  schema:
+    query: { type: string, required: true }
 steps:
-  - id: step-one                  # Unique step identifier (NOT "name")
-    agent: agent-name             # Agent to invoke
-    input:
-      query: "{{query}}"          # Variable interpolation
-    output:                       # Output is an object (NOT a string)
-      key: step_one_result        # Variable name to store result
-      extract: output             # Optional: extract a specific field
-
+  - id: step-one
+    agent: agent-name
+    input: { query: "{{query}}" }
+    output: { key: step_one_result, extract: output }
   - id: step-two
     agent: another-agent
-    input:
-      query: "{{step_one_result}}"
-    output:
-      key: step_two_result
-    condition: "{{step_one_result}}"  # Optional: skip if falsy
-
-  - parallel:                     # Parallel execution (no "name" key here)
+    input: { query: "{{step_one_result}}" }
+    output: { key: step_two_result }
+    condition: "{{step_one_result}}"
+  - parallel:
       - id: branch-a
         agent: agent-a
-        input:
-          query: "{{query}}"
-        output:
-          key: result_a
+        input: { query: "{{query}}" }
+        output: { key: result_a }
       - id: branch-b
         agent: agent-b
-        input:
-          query: "{{query}}"
-        output:
-          key: result_b
-
-config:                           # Optional workflow config
-  timeout: 300000                 # Default 300000ms
-  onError: stop                   # stop | continue | retry
-
+        input: { query: "{{query}}" }
+        output: { key: result_b }
+config: { timeout: 300000, onError: stop }  # stop | continue | retry
 output:
   result: "{{step_two_result}}"
 ```
 
----
-
-## LangGraph Workflows (`workflows/<name>.workflow.yaml`)
+## ReAct Workflows (`workflows/<name>.workflow.yaml`)
 
 ```yaml
-name: my-graph-workflow
-description: Graph-based workflow with tool and agent discovery
-version: "1.0.0"
-type: langgraph
-
+name: my-react-workflow
+description: Autonomous workflow with tool and agent discovery
+type: react
 input:
-  schema:                         # Typed input fields (same as step-based)
-    query:
-      type: string
-      required: true
-      description: "The user query"
-
-prompt:                           # REQUIRED for langgraph workflows
+  schema:
+    query: { type: string, required: true }
+prompt:
   system: |
-    You are a helpful assistant that uses available tools and agents.
-  goal: "Answer the user's query using available tools"
-
+    You are a helpful assistant.
+  goal: "Answer the user's query"
 graph:
-  model: default                  # LLM config name, defaults to "default"
+  model: default
   tools:
-    sources:                      # Tool sources to discover
-      - mcp
-      - knowledge
-      - function
-      - builtin
+    sources: [mcp, knowledge, function, builtin]
     mode: all                     # all | none | include | exclude
-    exclude:                      # Optional exclusion list
-      - dangerous_tool
+    exclude: [dangerous_tool]
   agents:
-    mode: all                     # all | none | include | exclude
-    exclude:
-      - architect                  # Prevent recursive invocation
-  executionMode: react            # react | single-turn (default: react)
-  maxIterations: 10               # Max tool-call loops (default: 10)
-  timeout: 300000                 # Timeout in ms (default: 300000)
-
+    mode: all
+    exclude: [architect]
+  executionMode: react            # react | single-turn
+  maxIterations: 10
+  timeout: 300000
 output:
   result: "{{result}}"
 ```
-
----
 
 ## Knowledge Stores (`knowledge/<name>.knowledge.yaml`)
 
 ```yaml
 name: my-knowledge
-description: What this knowledge store contains
-
+description: What this store contains
 source:
-  # Directory source
-  type: directory                 # directory | file | database | web | s3
-  path: ./docs                    # Relative to workspace root
-  pattern: "**/*.md"              # Glob pattern for file matching (NOT "glob")
-  recursive: true                 # Default: true
-
-  # --- OR file source ---
-  # type: file
-  # path: ./data/report.pdf
-
-  # --- OR database source ---
-  # type: database
-  # connectionString: postgresql://user:pass@host:5432/db  # postgresql://, mysql://, or sqlite://
-  # query: "SELECT content FROM documents"
-  # contentColumn: content        # Default: "content"
-  # metadataColumns: [id, title]  # Optional
-  # batchSize: 100                # Optional, default: 100
-
-  # --- OR web source ---
-  # type: web
-  # url: https://example.com/docs
-  # selector: ".main-content"     # Optional CSS selector
-  # headers:                      # Optional custom headers
-  #   Authorization: "Bearer token"
-
-loader:                           # REQUIRED (has defaults)
-  type: text                      # text | pdf | csv | json | markdown
-
+  type: directory                 # directory | file | database | web
+  path: ./docs
+  pattern: "**/*.md"
+  # Web-specific: url, selector (html only), headers, jsonPath (dot-notation for nested arrays)
+loader:                           # optional — defaults: html (web), text (file/directory)
+  type: text                      # text | pdf | csv | json | markdown | html
 splitter:
   type: recursive                 # character | recursive | token | markdown
   chunkSize: 1000
   chunkOverlap: 200
-
-embedding: default                # String reference to llm.json config (NOT an object)
-
-search:                           # Optional
-  defaultK: 4
-  scoreThreshold: 0.5             # Optional minimum score
-
-graph:                            # Optional: enable graph entities via direct mapping
+embedding: default                # reference to llm.json config
+search: { defaultK: 4, scoreThreshold: 0.5 }
+reindex:                          # optional — periodic refresh
+  schedule: "0 * * * *"          # cron expression
+graph:                            # optional — works with database, csv, json (array of objects)
   directMapping:
     entities:
-      - type: Person              # Entity type label
-        idColumn: id              # Column for entity ID
-        nameColumn: name          # Optional: column for display name
-        properties:               # Columns to include as properties
-          - email                 # String = same column name
-          - { role: job_title }   # Object = { propertyName: columnName }
-    relationships:                # Optional: define relationships
+      - type: Person
+        idColumn: id
+        nameColumn: name
+        properties: [email, { role: job_title }]
+    relationships:
       - type: WORKS_FOR
-        source: Person            # Source entity type
-        target: Organization      # Target entity type
+        source: Person
+        target: Organization
         sourceIdColumn: person_id
         targetIdColumn: org_id
-        groupNode: department     # Optional: group by column
 ```
 
----
+Web sources support all loader types. Use `loader.type: json` for APIs, `text` for raw content, `html` (default) for web pages with optional `selector`. Add `headers` for authenticated endpoints. Use `jsonPath` (e.g., `items` or `data.results`) to extract a nested array from the JSON response before parsing.
 
 ## Custom Functions (`functions/<name>.function.js`)
 
 ```javascript
-export const metadata = {
-  name: "my-function",
-  description: "What this function does",
-  version: "1.0.0",
-  tags: ["utility"]
-};
-
+export const metadata = { name: "my-function", description: "What it does" };
 export const parameters = {
   type: "object",
-  properties: {
-    input: {
-      type: "string",
-      description: "The input parameter"
-    }
-  },
+  properties: { input: { type: "string", description: "Input" } },
   required: ["input"]
 };
-
 export default async function({ input }) {
-  // Your logic here
   return { result: `Processed: ${input}` };
 }
 ```
 
----
-
 ## Skills (`skills/<name>/SKILL.md`)
 
-```markdown
----
-name: my-skill
-description: What this skill teaches the agent
----
+Markdown files with YAML frontmatter (`name`, `description`). Content is injected into the agent's system prompt. Add `sandbox: true` if the skill requires sandbox tools.
 
-# Skill Title
-
-Instructions, context, and knowledge that get injected into the agent's prompt.
-Use markdown formatting for structure.
-```
-
-Skills with `sandbox: true` in frontmatter indicate they require sandbox tools.
-
----
-
-## MCP Server Configuration (`mcp.json`)
-
-The `mcp.json` file in the workspace root configures external MCP servers. Agents reference them via `mcp:<server-name>` in their tools list.
+## MCP Servers (`mcp.json`)
 
 ```json
-{
-  "version": "1.0.0",
-  "servers": {
-    "server-name": {
-      "url": "https://example.com/mcp",
-      "description": "What this server provides",
-      "timeout": 30000,
-      "enabled": true
-    }
-  },
-  "globalOptions": {
-    "throwOnLoadError": false,
-    "prefixToolNameWithServerName": true,
-    "additionalToolNamePrefix": "",
-    "defaultToolTimeout": 30000
-  }
-}
+{ "servers": { "name": { "url": "https://example.com/mcp", "enabled": true } } }
 ```
 
-**Server config fields:**
-- `url` — Required for remote servers (auto-detects `streamable-http` transport)
-- `command` + `args` — Required for local stdio servers (auto-detects `stdio` transport)
-- `transport` — Explicit: `stdio`, `sse`, `streamable-http`, or `sse-only` (auto-detected if omitted)
-- `headers` — Optional HTTP headers (e.g. for auth)
-- `env` — Optional environment variables (for stdio servers)
-- `description` — Optional human-readable description
-- `timeout` — Request timeout in ms (default: 30000)
-- `enabled` — Set to `false` to disable without removing (default: true)
-
-**Adding a new MCP server:**
-1. Read `mcp.json` first to preserve existing servers
-2. Add the new server entry to the `servers` object
-3. Write the updated `mcp.json` back
-4. Create an agent that references it with `tools: [mcp:server-name]`
-
----
+Remote: `url`. Local: `command` + `args`. Optional: `headers`, `env`, `timeout`, `transport`, `description`. Transport is auto-detected. To add a server: read `mcp.json`, add entry, write back, then reference as `mcp:<name>` in agent tools.
 
 ## Best Practices
 
-- **Naming**: Use kebab-case for all resource names (e.g. `weather-bot`, `data-pipeline`)
-- **Temperature**: Use 0.0-0.3 for structured/deterministic tasks, 0.5-0.7 for creative/conversational
-- **Tools**: Only include tools the agent actually needs — fewer tools = better focus
-- **Prompts**: Be specific and include examples in system prompts; use inputVariables for dynamic content
-- **Read before write**: Always read an existing resource before modifying it to preserve fields you're not changing
-- **Uniqueness**: Check `workspace_list_resources` before creating to avoid name collisions
-- **Skills**: Use skills to share knowledge across multiple agents without duplicating prompt content
+- Use kebab-case for all resource names
+- Temperature: 0.0-0.3 for structured tasks, 0.5-0.7 for creative
+- Only include tools the agent actually needs
+- Always read existing resources before modifying them
+- Check `workspace_list_resources` before creating to avoid name collisions
+- Use skills to share knowledge across agents without duplicating prompts

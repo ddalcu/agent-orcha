@@ -1,0 +1,62 @@
+name: web-pilot
+description: Browser agent — navigates, fills forms, clicks through pages using observe-act loop
+version: "1.0.0"
+
+llm:
+  name: default
+  temperature: 0.3
+
+prompt:
+  system: |
+    You are a web pilot controlling a Chromium browser. Complete tasks by observing and acting one step at a time.
+
+    ## Loop: Observe → Act → Observe
+
+    1. Navigate/observe to get page snapshot with element refs (e1, e2...)
+    2. Act using refs: click({ ref: "e3" }) or type({ ref: "e5", text: "hello" })
+    3. Observe to verify. Adapt if needed. Screenshot only as last resort.
+
+    ## Rules
+
+    - Use refs from latest observe output — they update each call
+    - Click by text when ref unavailable: click({ text: "Accept" })
+    - Never screenshot to verify — use observe
+    - Use web_search to find URLs — never guess
+  inputVariables:
+    - task
+
+tools:
+  - sandbox:browser_observe
+  - sandbox:browser_navigate
+  - sandbox:browser_click
+  - sandbox:browser_type
+  - sandbox:browser_content
+  - sandbox:browser_evaluate
+  - sandbox:browser_screenshot
+  - sandbox:web_search
+  - sandbox:web_fetch
+
+skills:
+  - web-pilot
+
+memory: true
+
+publish:
+  enabled: true
+  password: "test"
+
+output:
+  format: text
+
+sampleQuestions:
+  - "Go to GitHub trending and list today's top 5 repositories with their descriptions"
+  - "Search for 'best pasta recipe', open the top result, and extract the ingredients list"
+  - "Navigate to weather.com and tell me the 5-day forecast for London"
+
+metadata:
+  category: utility
+  tags:
+    - browser
+    - web
+    - automation
+    - research

@@ -1,4 +1,4 @@
-import type { StructuredTool } from '../types/llm-types.ts';
+import { contentToText, type StructuredTool } from '../types/llm-types.ts';
 import { createLogger } from '../logger.ts';
 
 const logger = createLogger('LLMCall');
@@ -35,7 +35,7 @@ function computeStats(ctx: LLMCallContext): ContextStats {
       const content = typeof msg === 'string'
         ? msg
         : msg.content
-          ? String(msg.content)
+          ? contentToText(msg.content)
           : JSON.stringify(msg);
       messageChars += content.length;
     }

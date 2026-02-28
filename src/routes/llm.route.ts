@@ -1,14 +1,35 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { LLMFactory, listModelConfigs, getModelConfig } from '../../lib/llm/index.ts';
-import { humanMessage } from '../../lib/types/llm-types.ts';
+import { humanMessage, aiMessage } from '../../lib/types/llm-types.ts';
+import type { MessageContent, ContentPart } from '../../lib/types/llm-types.ts';
 import { logger } from '../../lib/logger.ts';
 
 interface LLMParams {
   name: string;
 }
 
+interface Attachment {
+  data: string;
+  mediaType: string;
+}
+
 interface ChatBody {
   message: string;
+  sessionId?: string;
+  attachments?: Attachment[];
+}
+
+function buildUserContent(text: string, attachments?: Attachment[]): MessageContent {
+  if (!Array.isArray(attachments) || attachments.length === 0) return text;
+
+  const parts: ContentPart[] = [];
+  if (text) parts.push({ type: 'text', text });
+  for (const att of attachments) {
+    if (att && typeof att.data === 'string' && typeof att.mediaType === 'string') {
+      parts.push({ type: 'image', data: att.data, mediaType: att.mediaType });
+    }
+  }
+  return parts.length > 0 ? parts : text;
 }
 
 export const llmRoutes: FastifyPluginAsync = async (fastify) => {
@@ -47,7 +68,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
     '/:name/chat',
     async (request, reply) => {
       const { name } = request.params;
-      const { message } = request.body;
+      const { message, sessionId, attachments } = request.body;
 
       if (!message || typeof message !== 'string') {
         return reply.status(400).send({ error: 'message is required' });
@@ -57,8 +78,19 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       const task = taskManager.track('llm', name, { message });
 
       try {
+        const store = fastify.orchestrator.memory.getStore();
+        const history = sessionId ? store.getMessages(sessionId) : [];
+        const userContent = buildUserContent(message, attachments);
+        const messages = [...history, humanMessage(userContent)];
+
         const llm = LLMFactory.create(name);
-        const response = await llm.invoke([humanMessage(message)]);
+        const response = await llm.invoke(messages);
+
+        // Store messages (text-only user message, no base64 in memory)
+        if (sessionId) {
+          store.addMessage(sessionId, humanMessage(message));
+          store.addMessage(sessionId, aiMessage(typeof response.content === 'string' ? response.content : ''));
+        }
 
         const result = {
           output: response.content,
@@ -94,7 +126,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
     '/:name/stream',
     async (request, reply) => {
       const { name } = request.params;
-      const { message } = request.body;
+      const { message, sessionId, attachments } = request.body;
 
       if (!message || typeof message !== 'string') {
         return reply.status(400).send({ error: 'message is required' });
@@ -119,20 +151,35 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       try {
+        const store = fastify.orchestrator.memory.getStore();
+        const history = sessionId ? store.getMessages(sessionId) : [];
+        const userContent = buildUserContent(message, attachments);
+        const messages = [...history, humanMessage(userContent)];
+
+        // Store text-only user message (no base64 in memory)
+        if (sessionId) store.addMessage(sessionId, humanMessage(message));
+
         const llm = LLMFactory.create(name);
-        const stream = await llm.stream([humanMessage(message)], { signal: abortController.signal });
+        const stream = await llm.stream(messages, { signal: abortController.signal });
 
         let lastChunk: any = null;
+        let accumulated = '';
         for await (const chunk of stream) {
           if (abortController.signal.aborted) break;
           lastChunk = chunk;
           const content = chunk.content;
           if (content) {
+            accumulated += content;
             reply.raw.write(`data: ${JSON.stringify({ content })}\n\n`);
           }
         }
 
         if (!abortController.signal.aborted) {
+          // Store AI response in conversation history
+          if (sessionId && accumulated) {
+            store.addMessage(sessionId, aiMessage(accumulated));
+          }
+
           // Send usage stats from the final chunk if available
           if (lastChunk?.usage_metadata) {
             const um = lastChunk.usage_metadata;

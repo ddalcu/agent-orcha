@@ -112,4 +112,87 @@ describe('TriggerManager', () => {
     manager.close();
     assert.equal(manager.cronCount, 0);
   });
+
+  it('should remove cron triggers for a specific agent', async () => {
+    const mockOrchestrator = {
+      agents: {
+        list: () => [
+          {
+            name: 'cron-a',
+            triggers: [{ type: 'cron', schedule: '*/5 * * * *', input: {} }],
+          },
+          {
+            name: 'cron-b',
+            triggers: [{ type: 'cron', schedule: '*/10 * * * *', input: {} }],
+          },
+        ],
+      },
+      integrations: {
+        getChannelContext: () => '',
+        getChannelMembers: () => [],
+        postMessage: () => {},
+      },
+      runAgent: async () => ({ output: 'done', metadata: { duration: 10 } }),
+    } as any;
+
+    const mockFastify = { post: () => {} } as any;
+
+    await manager.start(mockOrchestrator, mockFastify);
+    assert.equal(manager.cronCount, 2);
+
+    manager.removeAgentTriggers('cron-a');
+    assert.equal(manager.cronCount, 1);
+
+    // Removing again should be a no-op
+    manager.removeAgentTriggers('cron-a');
+    assert.equal(manager.cronCount, 1);
+
+    manager.close();
+  });
+
+  it('should remove webhook triggers for a specific agent', async () => {
+    const mockOrchestrator = {
+      agents: {
+        list: () => [
+          { name: 'wh-a', triggers: [{ type: 'webhook', path: '/hook/a', input: {} }] },
+          { name: 'wh-b', triggers: [{ type: 'webhook', path: '/hook/b', input: {} }] },
+        ],
+      },
+    } as any;
+
+    const mockFastify = { post: () => {} } as any;
+
+    await manager.start(mockOrchestrator, mockFastify);
+    assert.equal(manager.webhookCount, 2);
+
+    manager.removeAgentTriggers('wh-a');
+    assert.equal(manager.webhookCount, 1);
+
+    manager.close();
+  });
+
+  it('should not affect other agents when removing triggers', async () => {
+    const mockOrchestrator = {
+      agents: {
+        list: () => [
+          { name: 'keep-me', triggers: [{ type: 'webhook', path: '/hook/keep', input: {} }] },
+          { name: 'remove-me', triggers: [{ type: 'webhook', path: '/hook/remove', input: {} }] },
+        ],
+      },
+    } as any;
+
+    const mockFastify = { post: () => {} } as any;
+
+    await manager.start(mockOrchestrator, mockFastify);
+    assert.equal(manager.webhookCount, 2);
+
+    manager.removeAgentTriggers('remove-me');
+    assert.equal(manager.webhookCount, 1);
+
+    // Removing a non-existent agent should be safe
+    manager.removeAgentTriggers('nonexistent');
+    assert.equal(manager.webhookCount, 1);
+
+    manager.close();
+  });
 });

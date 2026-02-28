@@ -16,6 +16,7 @@ describe('buildWorkspaceTools', () => {
     deps = {
       workspaceRoot: tempDir,
       reloadFile: async () => 'none',
+      unloadFile: async () => 'none',
       listResources: () => ({
         agents: [{ name: 'a1', description: 'Agent 1' }],
         workflows: [],
@@ -36,11 +37,12 @@ describe('buildWorkspaceTools', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it('should build 5 workspace tools', () => {
+  it('should build 6 workspace tools', () => {
     const tools = buildWorkspaceTools(deps);
-    assert.equal(tools.size, 5);
+    assert.equal(tools.size, 6);
     assert.ok(tools.has('read'));
     assert.ok(tools.has('write'));
+    assert.ok(tools.has('delete'));
     assert.ok(tools.has('list'));
     assert.ok(tools.has('list_resources'));
     assert.ok(tools.has('diagnostics'));
@@ -187,5 +189,93 @@ describe('buildWorkspaceTools', () => {
     const result = await listTool.invoke({ subdir: 'agents' });
     const parsed = JSON.parse(result as string);
     assert.equal(parsed.root, 'agents');
+  });
+
+  it('delete tool should delete a file and call unloadFile', async () => {
+    await fs.writeFile(path.join(tempDir, 'to-delete.txt'), 'bye');
+
+    let unloadCalled = false;
+    const deleteDeps: WorkspaceToolDeps = {
+      ...deps,
+      unloadFile: async () => { unloadCalled = true; return 'none'; },
+    };
+
+    const tools = buildWorkspaceTools(deleteDeps);
+    const deleteTool = tools.get('delete')!;
+
+    const result = await deleteTool.invoke({ filePath: 'to-delete.txt' });
+    const parsed = JSON.parse(result as string);
+    assert.equal(parsed.success, true);
+    assert.ok(unloadCalled);
+
+    // Verify file is actually gone
+    try {
+      await fs.stat(path.join(tempDir, 'to-delete.txt'));
+      assert.fail('File should have been deleted');
+    } catch {
+      // Expected
+    }
+  });
+
+  it('delete tool should return error for non-existent file', async () => {
+    const tools = buildWorkspaceTools(deps);
+    const deleteTool = tools.get('delete')!;
+
+    const result = await deleteTool.invoke({ filePath: 'nonexistent.txt' });
+    const parsed = JSON.parse(result as string);
+    assert.equal(parsed.success, false);
+    assert.ok(parsed.error.includes('not found'));
+  });
+
+  it('delete tool should delete a directory', async () => {
+    const subDir = path.join(tempDir, 'skill-dir');
+    await fs.mkdir(subDir);
+    await fs.writeFile(path.join(subDir, 'SKILL.md'), '# content');
+
+    const tools = buildWorkspaceTools(deps);
+    const deleteTool = tools.get('delete')!;
+
+    const result = await deleteTool.invoke({ filePath: 'skill-dir' });
+    const parsed = JSON.parse(result as string);
+    assert.equal(parsed.success, true);
+  });
+
+  it('delete tool should report unload type for agent files', async () => {
+    await fs.mkdir(path.join(tempDir, 'agents'));
+    await fs.writeFile(path.join(tempDir, 'agents', 'test.agent.yaml'), 'name: test');
+
+    const deleteDeps: WorkspaceToolDeps = {
+      ...deps,
+      unloadFile: async (p: string) => {
+        if (p.endsWith('.agent.yaml')) return 'agent';
+        return 'none';
+      },
+    };
+
+    const tools = buildWorkspaceTools(deleteDeps);
+    const deleteTool = tools.get('delete')!;
+
+    const result = await deleteTool.invoke({ filePath: 'agents/test.agent.yaml' });
+    const parsed = JSON.parse(result as string);
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.unloaded, 'agent');
+  });
+
+  it('delete tool should handle unload error gracefully', async () => {
+    await fs.writeFile(path.join(tempDir, 'fail-unload.txt'), 'data');
+
+    const deleteDeps: WorkspaceToolDeps = {
+      ...deps,
+      unloadFile: async () => { throw new Error('Unload boom'); },
+    };
+
+    const tools = buildWorkspaceTools(deleteDeps);
+    const deleteTool = tools.get('delete')!;
+
+    const result = await deleteTool.invoke({ filePath: 'fail-unload.txt' });
+    const parsed = JSON.parse(result as string);
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.unloaded, 'error');
+    assert.ok(parsed.unloadError.includes('Unload boom'));
   });
 });

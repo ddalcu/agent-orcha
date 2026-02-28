@@ -1,6 +1,7 @@
 
 import { Component } from '../utils/Component.js';
 import { api } from '../services/ApiService.js';
+import { sessionStore } from '../services/SessionStore.js';
 import { store } from '../store.js';
 import { markdownRenderer } from '../utils/markdown.js';
 
@@ -12,11 +13,13 @@ export class AgentsView extends Component {
         this.streamStartTime = null;
         this.streamTimerInterval = null;
         this.streamUsageData = null;
+        this.pendingAttachments = [];
     }
 
     async connectedCallback() {
         super.connectedCallback();
         await Promise.all([this.loadAgents(), this.loadLLMs()]);
+        this.restoreActiveSession();
     }
 
     disconnectedCallback() {
@@ -116,15 +119,8 @@ export class AgentsView extends Component {
     async loadAgents() {
         try {
             const agents = await api.getAgents();
+            agents.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
             store.set('agents', agents);
-
-            if (agents.length > 0 && !store.get('selectedAgent') && !store.get('selectedLlm')) {
-                store.set('selectedAgent', agents[agents.length - 1]);
-                store.set('selectionType', 'agent');
-            }
-
-            this.renderAgentDropdown();
-            this.updateSelectedAgentUI();
         } catch (e) {
             console.error('Failed to load agents', e);
         }
@@ -134,136 +130,468 @@ export class AgentsView extends Component {
         try {
             const llms = await api.getLLMs();
             store.set('llms', llms);
-            this.renderAgentDropdown();
         } catch (e) {
             console.error('Failed to load LLMs', e);
         }
     }
 
-    renderAgentDropdown() {
-        const list = this.querySelector('#agentDropdownList');
-        const agents = store.get('agents') || [];
-        const llms = store.get('llms') || [];
-        const selectionType = store.get('selectionType');
-        const selectedAgent = store.get('selectedAgent');
-        const selectedLlm = store.get('selectedLlm');
+    // --- Sidebar toggle (mobile) ---
 
+    _isMobile() {
+        return !window.matchMedia('(min-width: 768px)').matches;
+    }
+
+    toggleSidebar(show) {
+        const sidebar = this.querySelector('#sidebar');
+        const backdrop = this.querySelector('#sidebarBackdrop');
+        if (!sidebar || !backdrop) return;
+
+        if (show) {
+            sidebar.classList.remove('hidden');
+            sidebar.classList.add('flex', 'sidebar-open');
+            backdrop.classList.remove('hidden');
+        } else {
+            sidebar.classList.add('hidden');
+            sidebar.classList.remove('flex', 'sidebar-open');
+            backdrop.classList.add('hidden');
+        }
+    }
+
+    // --- Session management ---
+
+    restoreActiveSession() {
+        const activeId = sessionStore.getActiveId();
+        if (activeId && sessionStore.get(activeId)) {
+            this.switchToSession(activeId);
+        } else {
+            this.showEmptyState();
+        }
+        this.renderSessionList();
+    }
+
+    renderSessionList() {
+        const list = this.querySelector('#sessionList');
         if (!list) return;
 
-        if (agents.length === 0 && llms.length === 0) {
-            list.innerHTML = '<div class="text-gray-500 text-sm text-center py-4">No agents or LLMs available</div>';
+        const sessions = sessionStore.getAll();
+        const activeId = sessionStore.getActiveId();
+
+        if (sessions.length === 0) {
+            list.innerHTML = '<div class="text-gray-500 text-sm text-center py-8">No conversations yet</div>';
             return;
         }
 
-        let html = '';
+        list.innerHTML = sessions.map(s => {
+            const isActive = s.id === activeId;
+            const isAgent = s.agentType === 'agent';
+            const displayName = isAgent ? (s.agentName || 'Agent') : (s.llmName || 'LLM');
+            const icon = isAgent ? 'fa-robot' : 'fa-microchip';
 
-        // Agents section
-        if (agents.length > 0) {
-            html += '<div class="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-dark-bg/50">Agents</div>';
-            html += agents.map(agent => {
-                const isSelected = selectionType === 'agent' && selectedAgent?.name === agent.name;
-                return `
-                    <div data-type="agent" data-name="${agent.name}" class="selection-item px-4 py-3 hover:bg-dark-hover cursor-pointer transition-colors border-b border-dark-border ${isSelected ? 'bg-dark-hover' : ''}">
-                        <div class="flex items-start justify-between">
-                            <div class="flex-1">
-                                <div class="font-medium text-gray-200 mb-0.5">${agent.name}</div>
-                                <div class="text-xs text-gray-500 line-clamp-2">${agent.description}</div>
-                            </div>
-                            ${isSelected ? '<i class="fas fa-check text-blue-400 ml-2 mt-1"></i>' : ''}
+            const activeClasses = isActive
+                ? 'bg-dark-hover/80 border-l-2 border-l-blue-500'
+                : 'hover:bg-dark-hover/40 border-l-2 border-l-transparent';
+
+            return `
+                <div data-session-id="${s.id}" class="session-item group flex items-start gap-2 px-3 py-2.5 cursor-pointer rounded-lg mb-0.5 transition-colors ${activeClasses}">
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm ${isActive ? 'text-gray-100' : 'text-gray-300'} truncate">${this.escapeHtml(s.title)}</div>
+                        <div class="flex items-center gap-1.5 mt-0.5 text-xs text-gray-500">
+                            <i class="fas ${icon} text-[10px]"></i>
+                            <span class="truncate">${this.escapeHtml(displayName)}</span>
                         </div>
                     </div>
-                `;
-            }).join('');
-        }
+                    <button data-delete-id="${s.id}" class="session-delete-btn flex-shrink-0 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 mt-0.5" title="Delete">
+                        <i class="fas fa-xmark text-xs"></i>
+                    </button>
+                </div>
+            `;
+        }).join('');
 
-        // LLMs section
-        if (llms.length > 0) {
-            html += '<div class="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-dark-bg/50">LLMs</div>';
-            html += llms.map(llm => {
-                const isSelected = selectionType === 'llm' && selectedLlm?.name === llm.name;
-                return `
-                    <div data-type="llm" data-name="${llm.name}" class="selection-item px-4 py-3 hover:bg-dark-hover cursor-pointer transition-colors border-b border-dark-border last:border-b-0 ${isSelected ? 'bg-dark-hover' : ''}">
-                        <div class="flex items-start justify-between">
-                            <div class="flex-1">
-                                <div class="font-medium text-gray-200 mb-0.5">${llm.name}</div>
-                                <div class="text-xs text-gray-500 line-clamp-2">${llm.model}</div>
-                            </div>
-                            ${isSelected ? '<i class="fas fa-check text-blue-400 ml-2 mt-1"></i>' : ''}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
+        // Event listeners
+        list.querySelectorAll('.session-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (e.target.closest('.session-delete-btn')) return;
+                this.switchToSession(item.dataset.sessionId);
+            });
+        });
 
-        list.innerHTML = html;
-
-        list.querySelectorAll('.selection-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const type = item.dataset.type;
-                const name = item.dataset.name;
-
-                // Check if we're actually switching to a different agent/llm
-                const currentType = store.get('selectionType');
-                const currentAgent = store.get('selectedAgent');
-                const currentLlm = store.get('selectedLlm');
-                const currentName = currentType === 'agent' ? currentAgent?.name : currentLlm?.name;
-
-                const isSwitching = !(type === currentType && name === currentName);
-
-                if (type === 'agent') {
-                    const agent = agents.find(a => a.name === name);
-                    store.set('selectedAgent', agent);
-                    store.set('selectedLlm', null);
-                    store.set('selectionType', 'agent');
-                } else if (type === 'llm') {
-                    const llm = llms.find(l => l.name === name);
-                    store.set('selectedLlm', llm);
-                    store.set('selectedAgent', null);
-                    store.set('selectionType', 'llm');
-                }
-
-                // Clear chat history when switching
-                if (isSwitching) {
-                    this.clearChatHistory();
-                }
-
-                this.updateSelectedAgentUI();
-                this.toggleDropdown(false);
-                this.renderAgentDropdown(); // Re-render to update selection checkmark
+        list.querySelectorAll('.session-delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteSession(btn.dataset.deleteId);
             });
         });
     }
 
-    updateSelectedAgentUI() {
-        const selectionType = store.get('selectionType');
-        const agent = store.get('selectedAgent');
-        const llm = store.get('selectedLlm');
-        const nameEl = this.querySelector('#selectedAgentName');
-        const btn = this.querySelector('#sendMessageBtn');
+    switchToSession(sessionId) {
+        // Abort any running stream
+        if (this.currentAbortController) {
+            this.currentAbortController.abort();
+            this.currentAbortController = null;
+        }
+        this.isLoading = false;
 
-        const selected = selectionType === 'agent' ? agent : llm;
+        const session = sessionStore.get(sessionId);
+        if (!session) return;
 
-        if (nameEl && selected) {
-            nameEl.textContent = selected.name;
-        } else if (nameEl) {
-            nameEl.textContent = 'Select Agent/LLM';
+        sessionStore.setActiveId(sessionId);
+
+        // Update store with this session's agent/LLM
+        const agents = store.get('agents') || [];
+        const llms = store.get('llms') || [];
+
+        if (session.agentType === 'agent') {
+            const agent = agents.find(a => a.name === session.agentName);
+            store.set('selectedAgent', agent || null);
+            store.set('selectedLlm', null);
+            store.set('selectionType', 'agent');
+        } else {
+            const llm = llms.find(l => l.name === session.llmName);
+            store.set('selectedLlm', llm || null);
+            store.set('selectedAgent', null);
+            store.set('selectionType', 'llm');
         }
 
-        if (btn) btn.disabled = !selected || this.isLoading;
+        this.restoreMessages(session);
+        this.updateChatHeader(session);
+        this.renderSessionList();
+        this.updateUiState();
+
+        // Close sidebar on mobile after selecting
+        if (this._isMobile()) {
+            this.toggleSidebar(false);
+        }
+
+        const input = this.querySelector('#chatInput');
+        if (input) {
+            input.disabled = false;
+            input.readOnly = false;
+            input.classList.remove('cursor-pointer');
+            input.focus();
+        }
     }
 
-    toggleDropdown(show) {
-        const dropdown = this.querySelector('#agentDropdown');
-        if (dropdown) {
-            if (show === undefined) {
-                dropdown.classList.toggle('hidden');
-            } else if (show) {
-                dropdown.classList.remove('hidden');
+    async restoreMessages(session) {
+        const container = this.querySelector('#chatMessages');
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (session.messages.length === 0) {
+            this._appendWelcomeMessage(container);
+            return;
+        }
+
+        for (const msg of session.messages) {
+            if (msg.role === 'user') {
+                this.appendMessage('user', msg.content);
             } else {
-                dropdown.classList.add('hidden');
+                this.appendRestoredAssistantMessage(msg.content);
+            }
+        }
+
+        // Check if server still has this session (survives restarts)
+        try {
+            const exists = await api.checkSession(session.id);
+            if (!exists) {
+                this._appendSessionResetBanner(container);
+            }
+        } catch {
+            // Server unreachable — skip banner
+        }
+    }
+
+    appendRestoredAssistantMessage(content) {
+        const container = this.querySelector('#chatMessages');
+        const div = document.createElement('div');
+        div.className = 'response-wrapper';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'flex justify-start';
+        bubble.innerHTML = `
+            <div class="response-bubble-inner max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-3 text-gray-100 text-[15px] leading-relaxed relative group">
+                <div class="response-content markdown-content"></div>
+            </div>
+        `;
+
+        const contentDiv = bubble.querySelector('.response-content');
+        const rendered = markdownRenderer.render(content);
+        contentDiv.innerHTML = rendered;
+        markdownRenderer.highlightCode(contentDiv);
+
+        div.appendChild(bubble);
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    showNewSessionModal() {
+        // Remove existing modal if any
+        const existing = document.querySelector('#newSessionModal');
+        if (existing) existing.remove();
+
+        const agents = store.get('agents') || [];
+        const llms = store.get('llms') || [];
+
+        const overlay = document.createElement('div');
+        overlay.id = 'newSessionModal';
+        overlay.className = 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/70';
+
+        let itemsHtml = '';
+
+        if (agents.length > 0) {
+            itemsHtml += '<div class="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Agents</div>';
+            itemsHtml += agents.map(a => `
+                <button data-type="agent" data-name="${this.escapeHtml(a.name)}" class="modal-pick-item w-full text-left px-4 py-3 hover:bg-dark-hover cursor-pointer transition-colors border-b border-dark-border/50 flex items-center gap-3">
+                    <i class="fas fa-robot text-blue-400 text-sm"></i>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium text-gray-200">${this.escapeHtml(a.name)}</div>
+                        <div class="text-xs text-gray-500 truncate">${this.escapeHtml(a.description || '')}</div>
+                    </div>
+                </button>
+            `).join('');
+        }
+
+        if (llms.length > 0) {
+            itemsHtml += '<div class="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">LLMs</div>';
+            itemsHtml += llms.map(l => `
+                <button data-type="llm" data-name="${this.escapeHtml(l.name)}" class="modal-pick-item w-full text-left px-4 py-3 hover:bg-dark-hover cursor-pointer transition-colors border-b border-dark-border/50 flex items-center gap-3">
+                    <i class="fas fa-microchip text-purple-400 text-sm"></i>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium text-gray-200">${this.escapeHtml(l.name)}</div>
+                        <div class="text-xs text-gray-500 truncate">${this.escapeHtml(l.model || '')}</div>
+                    </div>
+                </button>
+            `).join('');
+        }
+
+        if (!itemsHtml) {
+            itemsHtml = '<div class="text-gray-500 text-sm text-center py-8">No agents or LLMs available</div>';
+        }
+
+        overlay.innerHTML = `
+            <div class="modal-content bg-dark-surface border border-dark-border rounded-2xl shadow-2xl w-[420px] max-w-[90vw] max-h-[70vh] flex flex-col overflow-hidden">
+                <div class="flex items-center justify-between px-5 py-4 border-b border-dark-border">
+                    <h3 class="text-lg font-semibold text-gray-100">New conversation</h3>
+                    <button id="closeNewSessionModal" class="text-gray-400 hover:text-gray-200 transition-colors p-1">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="overflow-y-auto custom-scrollbar flex-1">
+                    ${itemsHtml}
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Close on backdrop click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.remove();
+        });
+
+        overlay.querySelector('#closeNewSessionModal').addEventListener('click', () => overlay.remove());
+
+        // Pick handler
+        overlay.querySelectorAll('.modal-pick-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const type = item.dataset.type;
+                const name = item.dataset.name;
+
+                const session = sessionStore.create({
+                    agentName: type === 'agent' ? name : null,
+                    agentType: type,
+                    llmName: type === 'llm' ? name : null
+                });
+
+                overlay.remove();
+                this.switchToSession(session.id);
+            });
+        });
+    }
+
+    deleteSession(sessionId) {
+        sessionStore.delete(sessionId);
+        const activeId = sessionStore.getActiveId();
+
+        if (!activeId || activeId === sessionId) {
+            // Switch to most recent remaining session
+            const sessions = sessionStore.getAll();
+            if (sessions.length > 0) {
+                this.switchToSession(sessions[0].id);
+            } else {
+                this.showEmptyState();
+                this.renderSessionList();
+            }
+        } else {
+            this.renderSessionList();
+        }
+    }
+
+    showEmptyState() {
+        const container = this.querySelector('#chatMessages');
+        if (container) {
+            container.innerHTML = `
+                <div class="flex-1 flex items-center justify-center h-full">
+                    <div class="text-center text-gray-500">
+                        <i class="fas fa-comments text-4xl mb-4 text-gray-600"></i>
+                        <p class="text-lg">Start a new conversation</p>
+                        <p class="text-sm mt-1">Click "New chat" to begin</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        this.updateChatHeader(null);
+
+        const input = this.querySelector('#chatInput');
+        if (input) {
+            input.disabled = false;
+            input.readOnly = true;
+            input.classList.add('cursor-pointer');
+        }
+
+        const btn = this.querySelector('#sendMessageBtn');
+        if (btn) btn.disabled = true;
+    }
+
+    updateChatHeader(session) {
+        const header = this.querySelector('#chatHeader');
+        if (!header) return;
+
+        if (!session) {
+            header.innerHTML = '<span class="text-gray-500">No conversation selected</span>';
+            return;
+        }
+
+        const isAgent = session.agentType === 'agent';
+        const name = isAgent ? (session.agentName || 'Agent') : (session.llmName || 'LLM');
+        const badgeText = isAgent ? 'Agent' : 'LLM';
+        const badgeColor = isAgent ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400';
+        const icon = isAgent ? 'fa-robot' : 'fa-microchip';
+
+        let extraBadges = '';
+        if (isAgent) {
+            const agents = store.get('agents') || [];
+            const agent = agents.find(a => a.name === session.agentName);
+            if (agent) {
+                if (agent.publish?.enabled) {
+                    const chatUrl = `/chat/${encodeURIComponent(agent.name)}`;
+                    extraBadges += `<a href="${chatUrl}" target="_blank" class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors no-underline" title="Open published chat"><i class="fas fa-globe text-[10px]"></i> Published</a>`;
+                }
+
+                const hasMemory = agent.memory === true || (agent.memory && agent.memory.enabled);
+                if (hasMemory) {
+                    extraBadges += `<span class="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400" title="Persistent memory enabled"><i class="fas fa-brain text-[10px]"></i> Memory</span>`;
+                }
+
+                if (agent.tools?.length) {
+                    const toolNames = agent.tools.map(t => typeof t === 'string' ? t : t.name);
+                    const toolListHtml = toolNames.map(t => `<div class="tools-popover-item">${this.escapeHtml(t)}</div>`).join('');
+                    extraBadges += `
+                        <span class="tools-badge-wrapper">
+                            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400 cursor-default"><i class="fas fa-wrench text-[10px]"></i> ${toolNames.length} tool${toolNames.length !== 1 ? 's' : ''}</span>
+                            <div class="tools-popover">${toolListHtml}</div>
+                        </span>`;
+                }
+            }
+        }
+
+        header.innerHTML = `
+            <div class="flex items-center gap-2 flex-wrap">
+                <i class="fas ${icon} text-sm text-gray-400"></i>
+                <span class="font-medium text-gray-200">${this.escapeHtml(name)}</span>
+                <span class="text-xs px-2 py-0.5 rounded-full ${badgeColor}">${badgeText}</span>
+                ${extraBadges}
+            </div>
+        `;
+    }
+
+    // --- File Attachments ---
+
+    handleFileSelect(e) {
+        const files = Array.from(e.target.files);
+        e.target.value = '';
+
+        const needsConversion = ['image/webp', 'image/bmp', 'image/tiff'];
+
+        for (const file of files) {
+            if (needsConversion.includes(file.type)) {
+                this.convertImageToJpeg(file);
+            } else {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const dataUrl = reader.result;
+                    const commaIdx = dataUrl.indexOf(',');
+                    const base64 = dataUrl.slice(commaIdx + 1);
+                    const mediaType = file.type || 'application/octet-stream';
+
+                    this.pendingAttachments.push({ data: base64, mediaType, name: file.name });
+                    this.renderAttachmentPreview();
+                };
+                reader.readAsDataURL(file);
             }
         }
     }
+
+    convertImageToJpeg(file) {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            URL.revokeObjectURL(url);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+            const base64 = dataUrl.split(',')[1];
+            this.pendingAttachments.push({ data: base64, mediaType: 'image/jpeg', name: file.name });
+            this.renderAttachmentPreview();
+        };
+        img.src = url;
+    }
+
+    renderAttachmentPreview() {
+        const preview = this.querySelector('#attachmentPreview');
+        if (!preview) return;
+
+        if (this.pendingAttachments.length === 0) {
+            preview.classList.add('hidden');
+            preview.innerHTML = '';
+            return;
+        }
+
+        preview.classList.remove('hidden');
+        preview.innerHTML = this.pendingAttachments.map((att, i) => {
+            const isImage = att.mediaType.startsWith('image/');
+            const thumb = isImage
+                ? `<img src="data:${att.mediaType};base64,${att.data}" class="w-10 h-10 object-cover rounded">`
+                : `<i class="fas fa-file text-gray-400 text-lg"></i>`;
+            return `
+                <div class="attachment-pill flex items-center gap-2 bg-dark-bg/60 border border-dark-border/50 rounded-lg px-2 py-1.5 text-xs text-gray-400">
+                    ${thumb}
+                    <span class="max-w-[120px] truncate">${this.escapeHtml(att.name)}</span>
+                    <button class="attachment-remove text-gray-500 hover:text-gray-300 ml-1" data-index="${i}">
+                        <i class="fas fa-xmark text-xs"></i>
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        preview.querySelectorAll('.attachment-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.currentTarget.dataset.index, 10);
+                this.pendingAttachments.splice(idx, 1);
+                this.renderAttachmentPreview();
+            });
+        });
+    }
+
+    clearAttachments() {
+        this.pendingAttachments = [];
+        this.renderAttachmentPreview();
+    }
+
+    // --- Messaging ---
 
     async sendMessage() {
         const input = this.querySelector('#chatInput');
@@ -271,15 +599,22 @@ export class AgentsView extends Component {
         const selectionType = store.get('selectionType');
         const agent = store.get('selectedAgent');
         const llm = store.get('selectedLlm');
+        const activeId = sessionStore.getActiveId();
 
         const selected = selectionType === 'agent' ? agent : llm;
+        const hasAttachments = this.pendingAttachments.length > 0;
 
-        if (!message || !selected || this.isLoading) return;
+        if ((!message && !hasAttachments) || !selected || this.isLoading || !activeId) return;
 
-        // Add user message
-        this.appendMessage('user', message);
+        // Capture attachments before clearing
+        const attachments = hasAttachments ? [...this.pendingAttachments] : null;
+
+        // Add user message (with optional attachment thumbnails)
+        this.appendMessage('user', message || '(attached files)', { attachments });
+        sessionStore.addMessage(activeId, 'user', message || '(attached files)');
         input.value = '';
         input.style.height = 'auto';
+        this.clearAttachments();
 
         this.isLoading = true;
         this.updateUiState();
@@ -296,9 +631,9 @@ export class AgentsView extends Component {
 
         try {
             if (selectionType === 'agent') {
-                finalContent = await this.sendAgentMessage(agent, message, responseId);
+                finalContent = await this.sendAgentMessage(agent, message, responseId, attachments);
             } else if (selectionType === 'llm') {
-                finalContent = await this.sendLlmMessage(llm, message, responseId);
+                finalContent = await this.sendLlmMessage(llm, message, responseId, attachments);
             }
         } catch (e) {
             if (e.name === 'AbortError') {
@@ -313,14 +648,26 @@ export class AgentsView extends Component {
             this.updateUiState();
             input.focus();
         }
+
+        // Persist assistant response
+        if (finalContent) {
+            sessionStore.addMessage(activeId, 'assistant', finalContent);
+        }
+
+        // Re-render sidebar (title/ordering may have changed)
+        this.renderSessionList();
     }
 
-    async sendAgentMessage(agent, message, responseId) {
+    async sendAgentMessage(agent, message, responseId, attachments) {
         const inputVars = agent.inputVariables || ['message'];
         const inputObj = {};
         inputObj[inputVars[0] || 'message'] = message;
+        if (attachments) {
+            inputObj.attachments = attachments;
+        }
 
-        const res = await api.streamAgent(agent.name, inputObj, store.get('sessionId'), { signal: this.currentAbortController?.signal });
+        const activeId = sessionStore.getActiveId();
+        const res = await api.streamAgent(agent.name, inputObj, activeId, { signal: this.currentAbortController?.signal });
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
 
@@ -377,6 +724,10 @@ export class AgentsView extends Component {
             }
         }
 
+        // Finalize any remaining thinking pill
+        const toolsDiv = bubble.querySelector('.tool-invocations');
+        this.finalizeThinkingPill(toolsDiv, thinkingState);
+
         // If tools were called but no text content was produced, clear loading state
         if (hasToolCalls && !currentContent.trim()) {
             const loadingDots = contentDiv.querySelector('.loading-dots');
@@ -392,8 +743,9 @@ export class AgentsView extends Component {
         return currentContent;
     }
 
-    async sendLlmMessage(llm, message, responseId) {
-        const res = await api.streamLLM(llm.name, message, { signal: this.currentAbortController?.signal });
+    async sendLlmMessage(llm, message, responseId, attachments) {
+        const activeId = sessionStore.getActiveId();
+        const res = await api.streamLLM(llm.name, message, activeId, attachments, { signal: this.currentAbortController?.signal });
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
 
@@ -471,153 +823,71 @@ export class AgentsView extends Component {
     }
 
     renderLlmContentStreaming(contentDiv, fullContent, responseId, state) {
-        // Parse content to find think sections and regular text
-        const parts = [];
-        let pos = 0;
-        let thinkIndex = 0;
-
-        while (pos < fullContent.length) {
-            const thinkStart = fullContent.indexOf('[THINK]', pos);
-
-            if (thinkStart === -1) {
-                // No more think sections, add remaining text
-                const text = fullContent.slice(pos).trim();
-                if (text) {
-                    parts.push({ type: 'text', content: text });
-                }
-                break;
-            }
-
-            // Add text before [THINK]
-            if (thinkStart > pos) {
-                const text = fullContent.slice(pos, thinkStart).trim();
-                if (text) {
-                    parts.push({ type: 'text', content: text });
-                }
-            }
-
-            // Find the end of this think section
-            const thinkContentStart = thinkStart + 7; // After [THINK]
-            const thinkEnd = fullContent.indexOf('[/THINK]', thinkContentStart);
-
-            if (thinkEnd === -1) {
-                // Think section is still streaming
-                const thinkContent = fullContent.slice(thinkContentStart).trim();
-                parts.push({ type: 'think', content: thinkContent, complete: false, index: thinkIndex });
-                thinkIndex++;
-                break;
-            } else {
-                // Complete think section
-                const thinkContent = fullContent.slice(thinkContentStart, thinkEnd).trim();
-                parts.push({ type: 'think', content: thinkContent, complete: true, index: thinkIndex });
-                thinkIndex++;
-                pos = thinkEnd + 8; // After [/THINK]
-            }
+        const existing = contentDiv.querySelector('.content-text');
+        if (existing) {
+            const renderedHtml = markdownRenderer.render(fullContent);
+            existing.innerHTML = renderedHtml;
+            markdownRenderer.highlightCode(existing);
+        } else {
+            const div = document.createElement('div');
+            div.className = 'content-text markdown-content';
+            div.innerHTML = markdownRenderer.render(fullContent);
+            markdownRenderer.highlightCode(div);
+            contentDiv.appendChild(div);
         }
+    }
 
-        // Update DOM incrementally instead of rebuilding
-        let currentChildIndex = 0;
-
-        for (let i = 0; i < parts.length; i++) {
-            const part = parts[i];
-            const existingChild = contentDiv.children[currentChildIndex];
-
-            if (part.type === 'text') {
-                if (existingChild && existingChild.classList.contains('content-text')) {
-                    // Update existing text element with markdown
-                    const renderedHtml = markdownRenderer.render(part.content);
-                    existingChild.innerHTML = renderedHtml;
-                    markdownRenderer.highlightCode(existingChild);
-                } else {
-                    // Create new text element
-                    const div = document.createElement('div');
-                    div.className = 'content-text markdown-content';
-                    const renderedHtml = markdownRenderer.render(part.content);
-                    div.innerHTML = renderedHtml;
-                    markdownRenderer.highlightCode(div);
-                    if (existingChild) {
-                        contentDiv.insertBefore(div, existingChild);
-                    } else {
-                        contentDiv.appendChild(div);
-                    }
-                }
-                currentChildIndex++;
-            } else if (part.type === 'think') {
-                const thinkId = `think-${responseId}-${part.index}`;
-
-                if (existingChild && existingChild.classList.contains('think-section')) {
-                    // Update existing think section
-                    const label = existingChild.querySelector('.think-label');
-                    const content = existingChild.querySelector('.think-content');
-                    if (label) {
-                        label.textContent = part.complete ? 'Thinking' : 'Thinking...';
-                    }
-                    if (content) {
-                        const renderedHtml = markdownRenderer.render(part.content);
-                        content.innerHTML = renderedHtml;
-                        content.classList.add('markdown-content');
-                        markdownRenderer.highlightCode(content);
-                    }
-                } else {
-                    // Create new think section with event listener
-                    const section = document.createElement('div');
-                    section.className = 'think-section mb-3 border-l-2 border-blue-500/40 pl-3 py-1';
-                    section.dataset.thinkIndex = part.index;
-
-                    const toggle = document.createElement('button');
-                    toggle.className = 'think-toggle flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 py-1 cursor-pointer';
-                    toggle.dataset.thinkId = thinkId;
-
-                    toggle.innerHTML = `
-                        <i class="fas fa-brain text-xs"></i>
-                        <span class="font-medium think-label">${part.complete ? 'Thinking' : 'Thinking...'}</span>
-                        <i class="fas fa-chevron-right text-[10px] transition-transform think-chevron"></i>
-                    `;
-
-                    const thinkContent = document.createElement('div');
-                    thinkContent.id = thinkId;
-                    thinkContent.className = 'think-content hidden text-sm text-gray-400 markdown-content mt-1 leading-relaxed';
-                    const renderedHtml = markdownRenderer.render(part.content);
-                    thinkContent.innerHTML = renderedHtml;
-                    markdownRenderer.highlightCode(thinkContent);
-
-                    // Add click handler ONCE when creating
-                    toggle.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const content = section.querySelector('.think-content');
-                        const chevron = section.querySelector('.think-chevron');
-
-                        if (content && chevron) {
-                            if (content.classList.contains('hidden')) {
-                                content.classList.remove('hidden');
-                                chevron.classList.remove('fa-chevron-right');
-                                chevron.classList.add('fa-chevron-down');
-                            } else {
-                                content.classList.add('hidden');
-                                chevron.classList.remove('fa-chevron-down');
-                                chevron.classList.add('fa-chevron-right');
-                            }
-                        }
-                    });
-
-                    section.appendChild(toggle);
-                    section.appendChild(thinkContent);
-
-                    if (existingChild) {
-                        contentDiv.insertBefore(section, existingChild);
-                    } else {
-                        contentDiv.appendChild(section);
-                    }
-                }
-                currentChildIndex++;
-            }
+    handleThinkingEvent(event, toolsDiv, thinkingState, container) {
+        if (!thinkingState.thinkingContent) {
+            thinkingState.thinkingContent = '';
         }
+        thinkingState.thinkingContent += event.content;
 
-        // Remove any extra children
-        while (contentDiv.children.length > currentChildIndex) {
-            contentDiv.removeChild(contentDiv.lastChild);
+        // Create pill on first thinking chunk
+        if (!thinkingState.thinkingPill) {
+            const pill = document.createElement('div');
+            pill.className = 'thinking-pill tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-purple-400 font-mono';
+            pill.innerHTML = `
+                <i class="fas fa-brain animate-pulse text-[10px]"></i>
+                <span>Thinking...</span>
+            `;
+            toolsDiv.appendChild(pill);
+            thinkingState.thinkingPill = pill;
+            container.scrollTop = container.scrollHeight;
         }
+    }
+
+    finalizeThinkingPill(toolsDiv, thinkingState) {
+        const pill = thinkingState.thinkingPill;
+        if (!pill) return;
+
+        const content = thinkingState.thinkingContent || '';
+        thinkingState.thinkingPill = null;
+        thinkingState.thinkingContent = '';
+
+        pill.className = 'thinking-pill tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
+        pill.innerHTML = '';
+
+        const pillContent = document.createElement('span');
+        pillContent.className = 'inline-flex items-center gap-1.5';
+        pillContent.innerHTML = `
+            <i class="fas fa-brain text-purple-400 text-[10px]"></i>
+            <span>Thinking</span>
+        `;
+        pill.appendChild(pillContent);
+
+        const popover = document.createElement('div');
+        popover.className = 'hidden absolute left-0 bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw] p-3';
+
+        const popoverContent = document.createElement('div');
+        popoverContent.className = 'text-xs text-gray-400 max-h-64 overflow-y-auto markdown-content custom-scrollbar';
+        popoverContent.innerHTML = markdownRenderer.render(content);
+        markdownRenderer.highlightCode(popoverContent);
+        popover.appendChild(popoverContent);
+        pill.appendChild(popover);
+
+        pill.addEventListener('mouseenter', () => popover.classList.remove('hidden'));
+        pill.addEventListener('mouseleave', () => popover.classList.add('hidden'));
     }
 
     createResponseBubble(id) {
@@ -643,7 +913,6 @@ export class AgentsView extends Component {
 
         wrapper.appendChild(div);
 
-        // Stream status bar (visible during streaming)
         const statusBar = document.createElement('div');
         statusBar.className = 'stream-status-bar flex items-center gap-2 mt-1.5 ml-1 text-xs text-gray-400';
         statusBar.innerHTML = `
@@ -656,10 +925,8 @@ export class AgentsView extends Component {
         `;
         wrapper.appendChild(statusBar);
 
-        // Wire up cancel button
         statusBar.querySelector('.stream-cancel-btn').addEventListener('click', () => this.cancelCurrentStream());
 
-        // Stats bar (visible after completion)
         const statsBar = document.createElement('div');
         statsBar.className = 'stream-stats-bar hidden flex items-center gap-3 mt-1.5 ml-1 text-xs text-gray-500';
         statsBar.innerHTML = `
@@ -698,7 +965,11 @@ export class AgentsView extends Component {
         const loadingDots = contentDiv.querySelector('.loading-dots');
         const container = this.querySelector('#chatMessages');
 
-        if (event.type === 'content') {
+        if (event.type === 'thinking') {
+            this.handleThinkingEvent(event, toolsDiv, thinkingState, container);
+        } else if (event.type === 'content') {
+            // Finalize any in-progress thinking pill
+            this.finalizeThinkingPill(toolsDiv, thinkingState);
             if (loadingDots) {
                 loadingDots.remove();
                 bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
@@ -709,6 +980,7 @@ export class AgentsView extends Component {
             this.renderLlmContentStreaming(contentDiv, currentContent, responseId, thinkingState);
             container.scrollTop = container.scrollHeight;
         } else if (event.type === 'tool_start') {
+            this.finalizeThinkingPill(toolsDiv, thinkingState);
             const toolId = `tool-${event.runId}`;
             const toolEl = document.createElement('div');
             toolEl.id = toolId;
@@ -731,7 +1003,6 @@ export class AgentsView extends Component {
                 toolEl.className = 'tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
                 toolEl.innerHTML = '';
 
-                // Pill content (icon + name)
                 const pillContent = document.createElement('span');
                 pillContent.className = 'inline-flex items-center gap-1.5';
                 pillContent.innerHTML = `
@@ -740,11 +1011,9 @@ export class AgentsView extends Component {
                 `;
                 toolEl.appendChild(pillContent);
 
-                // Popover details panel (positioned below the pill)
                 const details = document.createElement('div');
-                details.className = 'tool-invocation-details hidden absolute left-0 top-full mt-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
+                details.className = 'tool-invocation-details hidden absolute left-0 bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
 
-                // Input section
                 if (toolInput) {
                     const inputSection = document.createElement('div');
                     inputSection.className = 'p-3 border-b border-dark-border/50';
@@ -756,7 +1025,6 @@ export class AgentsView extends Component {
                     details.appendChild(inputSection);
                 }
 
-                // Output section
                 const outputSection = document.createElement('div');
                 outputSection.className = 'p-3';
                 outputSection.innerHTML = `<div class="text-xs font-semibold text-gray-400 mb-1">Output</div>`;
@@ -768,18 +1036,15 @@ export class AgentsView extends Component {
 
                 toolEl.appendChild(details);
 
-                // Toggle popover on click
                 toolEl.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    // Close any other open popovers
                     toolsDiv.querySelectorAll('.tool-invocation-details:not(.hidden)').forEach(d => {
                         if (d !== details) d.classList.add('hidden');
                     });
                     details.classList.toggle('hidden');
                 });
 
-                // Close popover when clicking outside
                 const closeHandler = (e) => {
                     if (!toolEl.contains(e.target)) {
                         details.classList.add('hidden');
@@ -797,7 +1062,6 @@ export class AgentsView extends Component {
                 contentDiv.innerHTML = '';
             }
 
-            // Display structured output as formatted JSON
             const resultContainer = document.createElement('div');
             resultContainer.className = 'bg-dark-bg/50 border border-dark-border rounded-lg p-4';
 
@@ -808,7 +1072,6 @@ export class AgentsView extends Component {
             resultContainer.appendChild(resultPre);
             contentDiv.appendChild(resultContainer);
 
-            // Scroll to bottom
             container.scrollTop = container.scrollHeight;
         } else if (event.type === 'error') {
             if (loadingDots) {
@@ -842,8 +1105,13 @@ export class AgentsView extends Component {
     updateUiState() {
         const btn = this.querySelector('#sendMessageBtn');
         const input = this.querySelector('#chatInput');
-        if (btn) btn.disabled = this.isLoading;
-        if (input) input.disabled = this.isLoading;
+        const hasActiveSession = !!sessionStore.getActiveId();
+        if (btn) btn.disabled = this.isLoading || !hasActiveSession;
+        if (input) {
+            input.disabled = this.isLoading;
+            input.readOnly = !hasActiveSession;
+            input.classList.toggle('cursor-pointer', !hasActiveSession);
+        }
     }
 
     appendMessage(role, content, metadata = {}) {
@@ -857,8 +1125,24 @@ export class AgentsView extends Component {
         const bubbleColor = isUser ? 'bg-dark-surface' : (hasError ? 'bg-red-900/20 border-red-900/30' : 'bg-dark-surface');
         const textColor = hasError ? 'text-red-300' : 'text-gray-100';
 
+        // Build attachment thumbnails for user messages
+        let attachmentHtml = '';
+        if (isUser && metadata.attachments && metadata.attachments.length > 0) {
+            const thumbs = metadata.attachments.map(att => {
+                if (att.mediaType.startsWith('image/')) {
+                    return `<img src="data:${att.mediaType};base64,${att.data}" class="w-16 h-16 object-cover rounded-lg border border-dark-border/50">`;
+                }
+                return `<div class="flex items-center gap-1.5 bg-dark-bg/60 border border-dark-border/50 rounded-lg px-2 py-1.5 text-xs text-gray-400">
+                    <i class="fas fa-file"></i>
+                    <span class="max-w-[100px] truncate">${this.escapeHtml(att.name)}</span>
+                </div>`;
+            }).join('');
+            attachmentHtml = `<div class="flex flex-wrap gap-2 mb-2">${thumbs}</div>`;
+        }
+
         div.innerHTML = `
             <div class="max-w-4xl ${bubbleColor} border ${isUser ? 'border-transparent' : 'border-dark-border'} rounded-3xl px-5 py-3 ${textColor} text-[15px] leading-relaxed relative group">
+                ${attachmentHtml}
                 <div class="whitespace-pre-wrap">${this.escapeHtml(content)}</div>
                 ${!isUser && !hasError ? `
                     <button class="copy-btn absolute -bottom-6 left-0 text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity p-1" title="Copy">
@@ -912,29 +1196,115 @@ export class AgentsView extends Component {
         return div.innerHTML;
     }
 
-    clearChatHistory() {
-        const container = this.querySelector('#chatMessages');
-        if (!container) return;
+    _getRandomWelcomeMessage() {
+        const messages = [
+            'Awaiting your command, master.',
+            'The agents are restless. Give them purpose.',
+            'Ready when you are. No pressure... okay, maybe a little.',
+            'Spinning up neurons... just kidding, I was already ready.',
+            'All systems nominal. Your move, human.',
+            'The orchestrator awaits. What shall we build today?',
+            'Standing by. The agents are stretching their digital legs.',
+            'Another day, another chance to orchestrate greatness.',
+            'Agents assembled. Awaiting mission briefing.',
+            'The stage is set. You are the conductor.',
+        ];
+        return messages[Math.floor(Math.random() * messages.length)];
+    }
 
-        // Clear all messages
-        container.innerHTML = '';
-
-        // Add welcome message
+    _appendWelcomeMessage(container) {
         const div = document.createElement('div');
-        div.className = 'flex justify-start';
+        div.className = 'welcome-container';
         div.innerHTML = `
-            <div class="max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-3 text-gray-100 text-[15px] leading-relaxed">
-                Welcome to Agent Orcha. Start chatting with your AI agents and LLMs.
-            </div>
+            <svg class="welcome-orca" viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg">
+                <!-- Main body -->
+                <path class="orca-body" d="
+                    M 30,68
+                    C 28,58 38,42 58,38
+                    C 68,35 74,30 78,18
+                    C 80,12 84,12 85,18
+                    C 87,28 86,35 92,38
+                    C 112,34 148,40 172,54
+                    C 176,50 182,44 188,40
+                    C 192,38 194,42 190,46
+                    C 186,50 184,54 182,56
+                    C 186,60 188,66 184,68
+                    C 180,70 178,66 176,62
+                    C 168,72 142,78 112,76
+                    C 82,74 52,70 38,66
+                    C 34,64 30,68 30,68 Z
+                "/>
+                <!-- Dorsal fin accent line -->
+                <path class="orca-detail" d="M 72,38 C 74,28 78,18 80,14"/>
+                <!-- Belly line -->
+                <path class="orca-detail" d="M 42,64 C 62,70 100,74 140,72 C 158,70 170,66 176,62"/>
+                <!-- Saddle patch -->
+                <path class="orca-patch" d="M 92,40 C 102,38 112,40 108,48 C 104,54 90,50 92,40 Z"/>
+                <!-- Eye patch -->
+                <path class="orca-patch" d="M 44,52 C 50,48 60,50 56,58 C 52,62 42,58 44,52 Z"/>
+                <!-- Eye -->
+                <circle class="orca-eye" cx="42" cy="54" r="2.5"/>
+                <!-- Pectoral fin -->
+                <path class="orca-body" d="M 65,66 C 70,74 64,82 58,76 C 54,72 60,66 65,66 Z"/>
+                <!-- Tail detail -->
+                <path class="orca-detail" d="M 172,54 C 176,52 180,48 184,44"/>
+                <path class="orca-detail" d="M 176,62 C 180,64 184,66 186,64"/>
+            </svg>
+            <div class="welcome-text">${this._getRandomWelcomeMessage()}</div>
+            ${this._renderSampleQuestionChips()}
         `;
         container.appendChild(div);
 
-        // Generate a new session ID for fresh conversation
-        store.set('sessionId', 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
+        div.querySelectorAll('.sample-question-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const input = this.querySelector('#chatInput');
+                if (input) {
+                    input.value = chip.textContent;
+                    input.focus();
+                }
+            });
+        });
+    }
+
+    _renderSampleQuestionChips() {
+        const agent = store.get('selectedAgent');
+        const questions = agent?.sampleQuestions;
+        if (!questions || questions.length === 0) return '';
+
+        const chips = questions.map(q =>
+            `<button class="sample-question-chip bg-dark-surface border border-dark-border/60 hover:border-gray-500 text-gray-300 text-sm px-4 py-2 rounded-2xl transition-colors text-left">${this.escapeHtml(q)}</button>`
+        ).join('');
+
+        return `
+            <div class="flex flex-wrap justify-center gap-2 max-w-2xl mt-4">${chips}</div>
+        `;
+    }
+
+    _appendSessionResetBanner(container) {
+        const div = document.createElement('div');
+        div.className = 'session-reset-banner';
+        div.innerHTML = `
+            <div class="session-reset-line"></div>
+            <span class="session-reset-label">
+                <i class="fas fa-rotate-right"></i>
+                Server restarted — new session
+            </span>
+            <div class="session-reset-line"></div>
+        `;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
     }
 
     postRender() {
         const input = this.querySelector('#chatInput');
+
+        // Open new conversation modal when clicking input with no active session
+        input.addEventListener('mousedown', (e) => {
+            if (!sessionStore.getActiveId()) {
+                e.preventDefault();
+                this.showNewSessionModal();
+            }
+        });
 
         // Auto-resize
         input.addEventListener('input', () => {
@@ -952,60 +1322,74 @@ export class AgentsView extends Component {
 
         this.querySelector('#sendMessageBtn').addEventListener('click', () => this.sendMessage());
 
-        // Dropdown toggle
-        const selectorBtn = this.querySelector('#agentSelectorBtn');
-        const dropdown = this.querySelector('#agentDropdown');
+        // Attach button + file input
+        this.querySelector('#attachBtn').addEventListener('click', () => this.querySelector('#fileInput').click());
+        this.querySelector('#fileInput').addEventListener('change', (e) => this.handleFileSelect(e));
 
-        selectorBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.toggleDropdown();
-        });
+        // New chat button
+        this.querySelector('#newChatBtn').addEventListener('click', () => this.showNewSessionModal());
 
-        document.addEventListener('click', (e) => {
-            if (!selectorBtn.contains(e.target) && !dropdown.contains(e.target)) {
-                this.toggleDropdown(false);
-            }
-        });
+        // Mobile sidebar toggle
+        this.querySelector('#sidebarToggleBtn').addEventListener('click', () => this.toggleSidebar(true));
+        this.querySelector('#sidebarBackdrop').addEventListener('click', () => this.toggleSidebar(false));
     }
 
     template() {
         return `
-            <div class="flex flex-col h-[calc(100vh-220px)]">
-                <!-- Chat Messages -->
-                <div id="chatMessages" class="flex-1 overflow-y-auto mb-6 space-y-4 pr-2 custom-scrollbar">
-                    <div class="flex justify-start">
-                        <div class="max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-3 text-gray-100 text-[15px] leading-relaxed">
-                            Welcome to Agent Orcha. Start chatting with your AI agents and LLMs.
-                        </div>
+            <div class="flex h-full relative border border-dark-border rounded-xl overflow-hidden bg-dark-surface/30">
+                <!-- Mobile sidebar backdrop -->
+                <div id="sidebarBackdrop" class="hidden fixed inset-0 bg-black/50 z-30 md:hidden"></div>
+
+                <!-- Sidebar -->
+                <div id="sidebar" class="hidden md:flex w-64 flex-shrink-0 bg-dark-bg md:bg-dark-bg/60 border-r border-dark-border/60 flex-col
+                    fixed md:relative inset-y-0 left-0 z-40 md:z-auto">
+                    <div class="p-3">
+                        <button id="newChatBtn" class="w-full flex items-center justify-center gap-2 px-3 py-2.5 hover:bg-dark-hover rounded-lg text-sm font-medium text-gray-300 transition-colors">
+                            <i class="fas fa-plus text-xs text-blue-400"></i>
+                            <span>New chat</span>
+                        </button>
                     </div>
+                    <div id="sessionList" class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-2"></div>
                 </div>
 
-                <!-- Input Area -->
-                <div class="border-t border-dark-border pt-4">
-                    <div class="relative bg-dark-surface border border-dark-border rounded-2xl focus-within:border-gray-500 transition-colors">
-                        <textarea id="chatInput" rows="1"
-                            class="w-full bg-transparent px-4 py-3 pr-32 text-gray-100 placeholder-gray-500 resize-none focus:outline-none max-h-[200px]"
-                            placeholder="Reply..."></textarea>
-                        
-                        <div class="absolute bottom-2 right-2 flex items-center gap-2">
-                            <!-- Agent Selector -->
-                            <div class="relative">
-                                <button id="agentSelectorBtn" class="flex items-center gap-2 px-3 py-1.5 bg-dark-bg hover:bg-dark-hover rounded-lg text-sm font-medium text-gray-300 transition-colors">
-                                    <span id="selectedAgentName">Select Agent/LLM</span>
-                                    <i class="fas fa-chevron-down text-xs text-gray-400"></i>
-                                </button>
+                <!-- Chat Area -->
+                <div class="flex-1 flex flex-col min-w-0">
+                    <!-- Chat Header -->
+                    <div class="flex-shrink-0 flex items-center gap-2 px-3 md:px-5 py-3 border-b border-dark-border/40 text-sm">
+                        <button id="sidebarToggleBtn" class="md:hidden text-gray-400 hover:text-gray-200 p-1 -ml-1">
+                            <i class="fas fa-bars"></i>
+                        </button>
+                        <div id="chatHeader" class="flex-1 min-w-0">
+                            <span class="text-gray-500">No conversation selected</span>
+                        </div>
+                    </div>
 
-                                <div id="agentDropdown" class="hidden absolute bottom-full mb-2 right-0 w-80 bg-dark-surface border border-dark-border rounded-xl shadow-2xl overflow-hidden z-10 max-h-96 flex flex-col">
-                                    <div id="agentDropdownList" class="overflow-y-auto custom-scrollbar">
-                                        <div class="text-gray-500 text-sm text-center py-4">Loading...</div>
-                                    </div>
-                                </div>
+                    <!-- Chat Messages -->
+                    <div id="chatMessages" class="flex-1 overflow-y-auto space-y-4 p-4 pr-2 pb-6 custom-scrollbar"></div>
+
+                    <!-- Input Area -->
+                    <div class="p-3 pt-0">
+                        <div id="attachmentPreview" class="hidden flex flex-wrap gap-2 px-2 pb-2"></div>
+                        <div class="relative bg-dark-surface border border-dark-border/60 rounded-2xl focus-within:border-gray-500 transition-colors">
+                            <input type="file" id="fileInput" multiple accept="image/*,.pdf" class="hidden">
+                            <textarea id="chatInput" rows="1" readonly
+                                class="w-full bg-transparent pl-11 pr-14 py-3 text-gray-100 placeholder-gray-500 resize-none focus:outline-none max-h-[200px] cursor-pointer"
+                                placeholder="Ask anything"></textarea>
+
+                            <div class="absolute bottom-2 left-2 flex items-center">
+                                <button id="attachBtn" type="button"
+                                    class="text-gray-500 hover:text-gray-300 p-1.5 rounded-lg hover:bg-dark-hover transition-colors"
+                                    title="Attach files">
+                                    <i class="fas fa-plus text-sm"></i>
+                                </button>
                             </div>
 
-                            <button id="sendMessageBtn" disabled
-                                class="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-all shadow-lg shadow-blue-900/20">
-                                <i class="fas fa-paper-plane text-sm"></i>
-                            </button>
+                            <div class="absolute bottom-2 right-2 flex items-center gap-2">
+                                <button id="sendMessageBtn" disabled
+                                    class="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-all shadow-lg shadow-blue-900/20">
+                                    <i class="fas fa-paper-plane text-sm"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

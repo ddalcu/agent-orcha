@@ -66,8 +66,8 @@ describe('JSONLoader', () => {
     const loader = new JSONLoader(filePath);
     const docs = await loader.load();
     assert.equal(docs.length, 2);
-    assert.equal(docs[0]!.pageContent, 'Post 1');
-    assert.equal(docs[1]!.pageContent, 'Post 2');
+    assert.equal(docs[0]!.pageContent, 'title: Post 1\nviews: 100');
+    assert.equal(docs[1]!.pageContent, 'title: Post 2\nviews: 200');
   });
 
   it('should handle nested objects', async () => {

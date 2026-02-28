@@ -6,7 +6,7 @@ import type { CronTrigger } from './types.ts';
 const log = createLogger('CronTrigger');
 
 export class CronTriggerHandler {
-  private agentName: string;
+  readonly agentName: string;
   private trigger: CronTrigger;
   private orchestrator: Orchestrator;
   private task: cron.ScheduledTask | null = null;

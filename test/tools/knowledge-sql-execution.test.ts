@@ -107,6 +107,40 @@ describe('knowledge-sql execution (SQLite)', () => {
     assert.equal(rows.length, 3);
   });
 
+  it('should strip trailing semicolon before appending LIMIT', async () => {
+    const config = createSqliteConfig(dbPath);
+    const tool = createKnowledgeSqlTool('test-products', config as any);
+    const result = await tool.invoke({ query: 'SELECT * FROM products;' });
+    const rows = JSON.parse(result as string);
+    assert.ok(Array.isArray(rows));
+    assert.equal(rows.length, 3);
+  });
+
+  it('should handle GROUP BY with trailing semicolon', async () => {
+    const config = createSqliteConfig(dbPath);
+    const tool = createKnowledgeSqlTool('test-products', config as any);
+    const result = await tool.invoke({ query: 'SELECT category, COUNT(*) as cnt FROM products GROUP BY category;' });
+    const rows = JSON.parse(result as string);
+    assert.ok(Array.isArray(rows));
+    assert.equal(rows.length, 2); // gadgets + tools
+  });
+
+  it('should handle ORDER BY with trailing semicolon', async () => {
+    const config = createSqliteConfig(dbPath);
+    const tool = createKnowledgeSqlTool('test-products', config as any);
+    const result = await tool.invoke({ query: 'SELECT name FROM products ORDER BY price DESC;' });
+    const rows = JSON.parse(result as string);
+    assert.equal(rows[0].name, 'Gizmo C');
+  });
+
+  it('should handle LIMIT already present with trailing semicolon', async () => {
+    const config = createSqliteConfig(dbPath);
+    const tool = createKnowledgeSqlTool('test-products', config as any);
+    const result = await tool.invoke({ query: 'SELECT * FROM products LIMIT 1;' });
+    const rows = JSON.parse(result as string);
+    assert.equal(rows.length, 1);
+  });
+
   it('should return error for invalid SQL', async () => {
     const config = createSqliteConfig(dbPath);
     const tool = createKnowledgeSqlTool('test-products', config as any);

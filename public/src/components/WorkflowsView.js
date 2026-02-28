@@ -22,6 +22,8 @@ export class WorkflowsView extends Component {
         this.workflows = [];
         this.selectedWorkflow = null;
         this.chartInterval = null;
+        this.activeTaskId = null;
+        this.eventSource = null;
     }
 
     async connectedCallback() {
@@ -31,6 +33,14 @@ export class WorkflowsView extends Component {
 
     disconnectedCallback() {
         this.stopChartUpdate();
+        this.closeEventSource();
+    }
+
+    closeEventSource() {
+        if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = null;
+        }
     }
 
     // ── Data ──
@@ -220,16 +230,7 @@ export class WorkflowsView extends Component {
 
     // ── Execution ──
 
-    async runWorkflow() {
-        if (!this.selectedWorkflow) return;
-
-        const inputs = {};
-        this.querySelectorAll('input[id^="wf-"]').forEach(input => {
-            const key = input.id.replace('wf-', '');
-            if (input.value) inputs[key] = input.value;
-        });
-
-        const runBtn = this.querySelector('#runWorkflow');
+    resetRunUI() {
         const logEl = this.querySelector('#statusLog');
         const outputEl = this.querySelector('#workflowOutput');
 
@@ -238,34 +239,182 @@ export class WorkflowsView extends Component {
         outputEl.className = outputEl.className.replace('text-gray-300', 'text-gray-500');
         this.querySelector('#statusMessage').textContent = 'Starting...';
         this.querySelector('#statusDot').className = 'inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse';
-        if (runBtn) runBtn.disabled = true;
+        this.clearInterruptPrompt();
+        this.closeEventSource();
+        this.activeTaskId = null;
+    }
 
+    collectInputs() {
+        const inputs = {};
+        this.querySelectorAll('input[id^="wf-"]').forEach(input => {
+            const key = input.id.replace('wf-', '');
+            if (input.value) inputs[key] = input.value;
+        });
+        return inputs;
+    }
+
+    async runWorkflow() {
+        if (!this.selectedWorkflow) return;
+
+        const inputs = this.collectInputs();
+        const runBtn = this.querySelector('#runWorkflow');
+        this.resetRunUI();
+        if (runBtn) runBtn.disabled = true;
         this.startChartUpdate();
 
+        const isReact = this.selectedWorkflow.type === 'react';
+
         try {
-            const res = await api.startWorkflowStream(this.selectedWorkflow.name, inputs);
-            const reader = res.body.getReader();
-            const decoder = new TextDecoder();
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value);
-                for (const line of chunk.split('\n')) {
-                    if (!line.startsWith('data: ')) continue;
-                    const data = line.slice(6);
-                    if (data === '[DONE]') continue;
-                    try { this.handleStatusUpdate(JSON.parse(data)); } catch (e) { }
-                }
+            if (isReact) {
+                await this.runReactWorkflow(inputs);
+            } else {
+                await this.runStepsWorkflow(inputs);
             }
         } catch (e) {
             this.addLog(`Error: ${e.message}`, 'workflow_error');
             this.querySelector('#statusMessage').textContent = 'Error';
             this.querySelector('#statusDot').className = 'inline-block w-2 h-2 rounded-full bg-red-400';
         } finally {
-            if (runBtn) runBtn.disabled = false;
-            this.stopChartUpdate();
+            if (!isReact) {
+                if (runBtn) runBtn.disabled = false;
+                this.stopChartUpdate();
+            }
+        }
+    }
+
+    async runStepsWorkflow(inputs) {
+        const res = await api.startWorkflowStream(this.selectedWorkflow.name, inputs);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            for (const line of chunk.split('\n')) {
+                if (!line.startsWith('data: ')) continue;
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+                try { this.handleStatusUpdate(JSON.parse(data)); } catch (e) { }
+            }
+        }
+    }
+
+    async runReactWorkflow(inputs) {
+        const { id: taskId } = await api.submitWorkflowTask(this.selectedWorkflow.name, inputs);
+        this.activeTaskId = taskId;
+        this.addLog('Task submitted', 'workflow_start');
+
+        this.eventSource = api.streamTask(taskId);
+
+        this.eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                this.handleTaskSSE(data);
+            } catch { /* ignore parse errors */ }
+        };
+
+        this.eventSource.onerror = () => {
+            this.closeEventSource();
+            this.finishReactRun();
+        };
+    }
+
+    handleTaskSSE(data) {
+        if (data.type === 'status') {
+            const statusMsg = this.querySelector('#statusMessage');
+            const statusDot = this.querySelector('#statusDot');
+
+            if (data.status === 'working') {
+                statusMsg.textContent = 'Working...';
+                statusDot.className = 'inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse';
+                this.clearInterruptPrompt();
+                this.addLog('Workflow running', 'react_iteration');
+            } else if (data.status === 'input-required') {
+                const question = data.inputRequest?.question || 'Input required';
+                statusMsg.textContent = 'Awaiting input';
+                statusDot.className = 'inline-block w-2 h-2 rounded-full bg-amber-400';
+                this.addLog(`Input required: ${question}`, 'workflow_interrupt');
+                this.showInterruptPrompt(question);
+            } else if (data.status === 'completed') {
+                statusMsg.textContent = 'Completed';
+                statusDot.className = 'inline-block w-2 h-2 rounded-full bg-green-400';
+                this.addLog('Workflow completed', 'workflow_complete');
+                if (data.result) {
+                    const outputEl = this.querySelector('#workflowOutput');
+                    outputEl.className = outputEl.className.replace('text-gray-500', 'text-gray-300');
+                    outputEl.textContent = JSON.stringify(data.result, null, 2);
+                }
+            } else if (data.status === 'failed') {
+                statusMsg.textContent = 'Error';
+                statusDot.className = 'inline-block w-2 h-2 rounded-full bg-red-400';
+                this.addLog(`Error: ${data.error || 'Unknown error'}`, 'workflow_error');
+            } else if (data.status === 'canceled') {
+                statusMsg.textContent = 'Canceled';
+                statusDot.className = 'inline-block w-2 h-2 rounded-full bg-yellow-400';
+                this.addLog('Task canceled', 'workflow_error');
+            }
+        }
+
+        if (data.type === 'done') {
+            this.closeEventSource();
+            this.finishReactRun();
+        }
+    }
+
+    finishReactRun() {
+        const runBtn = this.querySelector('#runWorkflow');
+        if (runBtn) runBtn.disabled = false;
+        this.stopChartUpdate();
+        this.activeTaskId = null;
+    }
+
+    showInterruptPrompt(question) {
+        const container = this.querySelector('#interruptPrompt');
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fas fa-question-circle text-amber-400"></i>
+                    <span class="text-sm font-medium text-amber-400">Input Required</span>
+                </div>
+                <p class="text-sm text-gray-300 mb-3">${this.escapeHtml(question)}</p>
+                <div class="flex gap-2">
+                    <input id="interruptInput" type="text" placeholder="Type your response..."
+                        class="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-amber-500" />
+                    <button id="interruptSendBtn" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors">
+                        Send
+                    </button>
+                </div>
+            </div>`;
+
+        this.querySelector('#interruptSendBtn').addEventListener('click', () => this.handleInterruptResponse());
+        this.querySelector('#interruptInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') this.handleInterruptResponse();
+        });
+        this.querySelector('#interruptInput').focus();
+    }
+
+    clearInterruptPrompt() {
+        const container = this.querySelector('#interruptPrompt');
+        if (container) container.innerHTML = '';
+    }
+
+    async handleInterruptResponse() {
+        const input = this.querySelector('#interruptInput');
+        const response = input?.value?.trim();
+        if (!response || !this.activeTaskId) return;
+
+        try {
+            await api.respondToTask(this.activeTaskId, response);
+            this.clearInterruptPrompt();
+            this.addLog(`Responded: ${response}`, 'tool_result');
+            this.querySelector('#statusMessage').textContent = 'Resuming...';
+            this.querySelector('#statusDot').className = 'inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse';
+        } catch (e) {
+            this.addLog(`Failed to respond: ${e.message}`, 'workflow_error');
         }
     }
 
@@ -397,6 +546,9 @@ export class WorkflowsView extends Component {
                             </div>
                             <div id="statusLog" class="bg-dark-bg rounded-lg p-2.5 h-32 overflow-y-auto space-y-0.5 border border-dark-border custom-scrollbar"></div>
                         </div>
+
+                        <!-- Interrupt prompt (shown when HITL input required) -->
+                        <div id="interruptPrompt"></div>
 
                         <!-- Output -->
                         <div>

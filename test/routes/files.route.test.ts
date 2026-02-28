@@ -364,4 +364,67 @@ describe('files.route', () => {
     });
     assert.equal(res.statusCode, 200);
   });
+
+  it('DELETE /delete should call unloadFile on the orchestrator', async () => {
+    await fs.writeFile(path.join(tempDir, 'agent.agent.yaml'), 'name: test');
+
+    let unloadedPath = '';
+    const result = await createTestApp(filesRoutes, '/api/files', {
+      workspaceRoot: tempDir,
+      unloadFile: async (p: string) => { unloadedPath = p; return 'agent'; },
+    });
+    app = result.app;
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/files/delete',
+      payload: { path: 'agent.agent.yaml' },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.unloaded, 'agent');
+    assert.equal(unloadedPath, 'agent.agent.yaml');
+  });
+
+  it('POST /rename should call unloadFile then reloadFile', async () => {
+    let unloadedPath = '';
+    let reloadedPath = '';
+    const result = await createTestApp(filesRoutes, '/api/files', {
+      workspaceRoot: tempDir,
+      unloadFile: async (p: string) => { unloadedPath = p; return 'agent'; },
+      reloadFile: async (p: string) => { reloadedPath = p; return 'agent'; },
+    });
+    app = result.app;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/files/rename',
+      payload: { oldPath: 'test.txt', newPath: 'renamed.txt' },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.payload);
+    assert.equal(body.unloaded, 'agent');
+    assert.equal(body.reloaded, 'agent');
+    assert.equal(unloadedPath, 'test.txt');
+    assert.equal(reloadedPath, 'renamed.txt');
+  });
+
+  it('DELETE /delete should handle unloadFile error gracefully', async () => {
+    await fs.writeFile(path.join(tempDir, 'fail-unload.txt'), 'data');
+
+    const result = await createTestApp(filesRoutes, '/api/files', {
+      workspaceRoot: tempDir,
+      unloadFile: async () => { throw new Error('Unload error'); },
+    });
+    app = result.app;
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/files/delete',
+      payload: { path: 'fail-unload.txt' },
+    });
+    // Should still succeed — unload error is logged but not fatal
+    assert.equal(res.statusCode, 200);
+    assert.equal(JSON.parse(res.payload).success, true);
+  });
 });

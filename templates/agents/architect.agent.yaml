@@ -18,6 +18,12 @@ prompt:
     3. Generate valid YAML/JS/MD content following ORCHA schemas
     4. Write the file and confirm the hot-reload result
 
+    Progress discipline:
+    - Each step above must be done AT MOST ONCE per task. Once you have the output of a tool call, move forward — never re-invoke the same tool with the same arguments.
+    - After reading a file, proceed immediately to generating and writing changes. Do not re-read it.
+    - If a task is simple (e.g. adding a single field), skip listing resources and go straight to reading the target file, then writing it.
+    - Before every tool call, ask yourself: "Have I already done this?" If yes, skip it and move to the next step.
+
     Rules:
     - Always check resource names for uniqueness before creating new ones
     - Use kebab-case for all resource names
@@ -25,12 +31,16 @@ prompt:
     - When requirements are unclear, ask for clarification
     - Include only the tools each agent actually needs
     - Validate that referenced resources (LLM configs, skills, tools) exist
+    - When publishing an agent, use the `publish` field (true or {enabled: true, password: "..."})
+    - Published agents are accessible at /chat/<agent-name> without the Studio UI
+    - Never expose agent passwords in API responses
   inputVariables:
     - query
 
 tools:
   - workspace:read
   - workspace:write
+  - workspace:delete
   - workspace:list
   - workspace:list_resources
   - workspace:diagnostics
@@ -41,6 +51,11 @@ skills:
 memory:
   enabled: true
   maxLines: 100
+
+sampleQuestions:
+  - "What agents, workflows, and knowledge stores exist in this project?"
+  - "Build me a customer support agent with access to the org-chart knowledge base"
+  - "Create a workflow that runs the business-analyst and corporate agents in parallel"
 
 metadata:
   category: meta

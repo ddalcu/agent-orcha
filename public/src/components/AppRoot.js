@@ -49,6 +49,7 @@ export class AppRoot extends Component {
             if (data.required && data.authenticated) {
                 this._showLogoutButton();
             }
+            this._checkVnc();
         } catch {
             // Server unreachable — will fail on actual API calls
         }
@@ -127,10 +128,34 @@ export class AppRoot extends Component {
         if (overlay) overlay.remove();
     }
 
+    async _checkVnc() {
+        try {
+            const res = await fetch('/api/vnc/status');
+            const data = await res.json();
+            if (data.enabled) this._showVncButton();
+        } catch { /* ignore */ }
+    }
+
+    _showVncButton() {
+        if (this.querySelector('#vnc-desktop-btn')) return;
+        const actions = this.querySelector('#header-actions');
+        if (!actions) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'vnc-desktop-btn';
+        btn.className = 'text-gray-400 hover:text-white transition-colors';
+        btn.title = 'View Browser Desktop';
+        btn.innerHTML = '<i class="fas fa-desktop"></i>';
+        btn.addEventListener('click', () => {
+            window.open('/vnc', 'vnc-desktop', 'width=1300,height=760,menubar=no,toolbar=no');
+        });
+        actions.appendChild(btn);
+    }
+
     _showLogoutButton() {
         if (this.querySelector('#auth-logout-btn')) return;
-        const header = this.querySelector('#app-header');
-        if (!header) return;
+        const actions = this.querySelector('#header-actions');
+        if (!actions) return;
 
         const btn = document.createElement('button');
         btn.id = 'auth-logout-btn';
@@ -142,7 +167,7 @@ export class AppRoot extends Component {
             btn.remove();
             this._showLogin();
         });
-        header.appendChild(btn);
+        actions.appendChild(btn);
     }
 
     switchTab(tabId) {
@@ -172,14 +197,14 @@ export class AppRoot extends Component {
     template() {
         return `
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-screen flex flex-col">
-                <div class="mb-4 flex-shrink-0">
+                <div class="hidden sm:block mb-4 flex-shrink-0">
                     <div id="app-header" class="flex items-center justify-between">
                         <div>
                             <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
                                 Agent Orcha
                             </h1>
-                            <p class="text-gray-400 mt-2">Declare the system. Orcha handles the REST.</p>
                         </div>
+                        <div id="header-actions" class="flex items-center gap-3"></div>
                     </div>
                 </div>
 

@@ -1,11 +1,12 @@
 import { GoogleGenerativeAI, type Content, type Part, type FunctionDeclarationSchema, type FunctionDeclaration, SchemaType } from '@google/generative-ai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type {
-  ChatModel,
-  ChatModelResponse,
-  BaseMessage,
-  StructuredTool,
-  ToolCall,
+import {
+  contentToText,
+  type ChatModel,
+  type ChatModelResponse,
+  type BaseMessage,
+  type StructuredTool,
+  type ToolCall,
 } from '../../types/llm-types.ts';
 
 interface GeminiChatModelOptions {
@@ -38,18 +39,30 @@ export class GeminiChatModel implements ChatModel {
 
     for (const msg of messages) {
       if (msg.role === 'system') {
+        const text = contentToText(msg.content);
         systemInstruction = systemInstruction
-          ? `${systemInstruction}\n\n${msg.content}`
-          : msg.content;
+          ? `${systemInstruction}\n\n${text}`
+          : text;
         continue;
       }
 
       if (msg.role === 'human') {
-        contents.push({ role: 'user', parts: [{ text: msg.content }] });
+        if (Array.isArray(msg.content)) {
+          const parts: Part[] = msg.content.map(p => {
+            if (p.type === 'image') {
+              return { inlineData: { mimeType: p.mediaType, data: p.data } };
+            }
+            return { text: p.text };
+          });
+          contents.push({ role: 'user', parts });
+        } else {
+          contents.push({ role: 'user', parts: [{ text: msg.content }] });
+        }
       } else if (msg.role === 'ai') {
         const parts: Part[] = [];
-        if (msg.content) {
-          parts.push({ text: msg.content });
+        const text = contentToText(msg.content);
+        if (text) {
+          parts.push({ text });
         }
         if (msg.tool_calls?.length) {
           for (const tc of msg.tool_calls) {
@@ -60,17 +73,38 @@ export class GeminiChatModel implements ChatModel {
         }
         contents.push({ role: 'model', parts });
       } else if (msg.role === 'tool') {
-        contents.push({
-          role: 'function',
-          parts: [
-            {
-              functionResponse: {
-                name: msg.name!,
-                response: { result: msg.content },
-              },
+        if (Array.isArray(msg.content)) {
+          const parts: Part[] = [];
+          // Add function response with text content
+          const textContent = contentToText(msg.content);
+          parts.push({
+            functionResponse: {
+              name: msg.name!,
+              response: { result: textContent },
             },
-          ],
-        });
+          });
+          // Add inline image data for image parts
+          for (const p of msg.content) {
+            if (p.type === 'image') {
+              parts.push({
+                inlineData: { mimeType: p.mediaType, data: p.data },
+              });
+            }
+          }
+          contents.push({ role: 'function', parts });
+        } else {
+          contents.push({
+            role: 'function',
+            parts: [
+              {
+                functionResponse: {
+                  name: msg.name!,
+                  response: { result: msg.content },
+                },
+              },
+            ],
+          });
+        }
       }
     }
 

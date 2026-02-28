@@ -55,4 +55,29 @@ describe('WorkflowLoader', () => {
     assert.ok(workflow);
     assert.equal(workflow.output.result, '{{steps.step1.output}}');
   });
+
+  it('should remove a workflow by name', () => {
+    assert.equal(loader.has('test-workflow'), true);
+    const result = loader.remove('test-workflow');
+    assert.equal(result, true);
+    assert.equal(loader.has('test-workflow'), false);
+    assert.equal(loader.get('test-workflow'), undefined);
+  });
+
+  it('should return false when removing non-existent workflow', () => {
+    assert.equal(loader.remove('nonexistent'), false);
+  });
+
+  it('should track file path to name mapping', async () => {
+    const newLoader = new WorkflowLoader(fixturesDir);
+    const filePath = path.join(fixturesDir, 'test-workflow.workflow.yaml');
+    await newLoader.loadOne(filePath);
+
+    const name = newLoader.nameForPath(path.resolve(filePath));
+    assert.equal(name, 'test-workflow');
+  });
+
+  it('should return undefined nameForPath for unknown path', () => {
+    assert.equal(loader.nameForPath('/nonexistent/path.workflow.yaml'), undefined);
+  });
 });

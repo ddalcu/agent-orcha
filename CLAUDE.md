@@ -17,6 +17,8 @@ Agent Orcha is a declarative multi-agent AI framework. Agents, workflows, knowle
 
 All knowledge stores use a **unified SQLite + sqlite-vec** persistence layer. There are no external vector database dependencies (no Chroma, Pinecone, etc.).
 
+**Loader config** is optional. Defaults to `html` for web sources, `text` for file/directory. Not used for database sources. Supported types: `text`, `pdf`, `csv`, `json`, `markdown`, `html`. Web sources support all types via `loader.type` (e.g., `json` for APIs, `text` for raw content). JSON arrays of objects produce `_rawRow` metadata for `graph.directMapping`. Web sources also support `jsonPath` (dot-notation, e.g., `items` or `data.results`) to extract a nested array from the JSON response before parsing.
+
 **Key files:**
 - `lib/knowledge/types.ts` — Zod schemas and TypeScript types
 - `lib/knowledge/knowledge-store.ts` — Main `KnowledgeStore` class (orchestrator)
@@ -28,7 +30,8 @@ All knowledge stores use a **unified SQLite + sqlite-vec** persistence layer. Th
 2. Documents are loaded, split into chunks, embedded, and stored in SQLite
 3. If `graph.directMapping` is present, entities and relationships are extracted from structured data (no LLM extraction)
 4. On restart, source hashes are compared — unchanged stores restore instantly from SQLite
-5. Search combines chunk KNN + entity KNN + neighborhood expansion, merged by score
+5. Stores with `reindex.schedule` (cron expression) automatically refresh on a schedule via `node-cron`. Cron cleanup happens in `KnowledgeStore.close()`
+6. Search combines chunk KNN + entity KNN + neighborhood expansion, merged by score
 
 **Graph extraction is direct mapping only** — there is no LLM-based entity extraction. The `EntityExtractor` class was removed. Graph entities come from `DirectMapper.mapQueryResults()` which maps SQL columns to entity types deterministically.
 
@@ -61,11 +64,35 @@ Skills are prompt augmentation files (`skills/*/SKILL.md`) with YAML frontmatter
 
 ### Sandbox System
 
-`lib/sandbox/vm-executor.ts` provides sandboxed code execution. Three built-in tools: `sandbox_exec`, `sandbox_web_fetch`, `sandbox_web_search`. Referenced as `sandbox:` tool sources.
+`lib/sandbox/` provides sandboxed execution environments. Tools are referenced with `sandbox:` prefix.
+
+**VM Execution:** `vm-executor.ts` — `sandbox_exec`, `sandbox_web_fetch`, `sandbox_web_search`
+**Shell:** `sandbox-shell.ts` — `sandbox_shell` executes commands as non-root `sandbox` user
+**Browser:** `sandbox-browser.ts` — CDP-based Chromium control with `sandbox_browser_navigate`, `sandbox_browser_observe`, `sandbox_browser_click`, `sandbox_browser_type`, `sandbox_browser_screenshot`, `sandbox_browser_evaluate`. Uses `cdp-client.ts` (WebSocket CDP) and `page-readiness.ts` (DOM observation). Browser tools return multimodal `ContentPart[]` (images).
+**Config:** `SandboxConfig` in `types.ts` with `browserCdpUrl` field (default: `http://localhost:9222`)
+
+### Published Agents
+
+Agents with `publish: true` (or `publish: { enabled: true, password: "..." }`) get standalone chat pages at `/chat/<agent-name>`. Handled by `src/routes/chat.route.ts` with per-agent token auth (independent of global `AUTH_PASSWORD`). UI: `public/chat.html` + `public/src/components/StandaloneChat.js`.
+
+### Resource Unloading
+
+All loaders (`AgentLoader`, `WorkflowLoader`, `FunctionLoader`, `SkillLoader`, `KnowledgeStore`) have `remove()` and `nameForPath()` methods. `Orchestrator.unloadFile()` cleanly removes a resource from memory (stops triggers, closes integrations, evicts cached stores). Used by IDE file delete/rename and the `project:delete` workspace tool.
 
 ### Integration System
 
-`lib/integrations/integration-manager.ts` manages external integrations. Currently includes Collabnook connector. Attached to agents via the `integrations:` config field.
+`lib/integrations/integration-manager.ts` manages external integrations. Attached to agents via the `integrations:` config field.
+
+**Supported connectors:**
+- **Collabnook** (`type: collabnook`) — WebSocket-based chat connector. Agents receive messages via @mention and reply in-channel.
+- **Email** (`type: email`) — IMAP polling + SMTP sending via `imapflow` and `nodemailer`. Agents are triggered by inbound emails and auto-reply to senders. Agents also get an `email_send` tool for composing new emails.
+
+**Key files:**
+- `lib/integrations/types.ts` — Zod schemas (`CollabnookIntegrationSchema`, `EmailIntegrationSchema`), `IntegrationAccessor` interface
+- `lib/integrations/collabnook.ts` — `CollabnookConnector`
+- `lib/integrations/email.ts` — `EmailConnector`
+- `lib/integrations/integration-manager.ts` — Lifecycle management for all connectors
+- `lib/tools/built-in/integration-tools.ts` — Auto-injected tools (`integration_post`, `integration_context`, `email_send`)
 
 ### Trigger System
 
@@ -83,8 +110,20 @@ Two types: `type: 'steps'` (default, sequential/parallel) and `type: 'react'` (a
 
 ### Agent Config
 
-New fields beyond the base schema: `skills`, `memory`, `integrations`, `triggers`.
+New fields beyond the base schema: `skills`, `memory`, `integrations`, `triggers`, `publish`.
 
 ### Web UI (Studio)
 
 Located in `public/`. Uses vanilla JS web components (`Component` base class). No build step — served directly by Fastify static. Tabs: Agents, Knowledge, MCP, Workflows, Skills, Monitor, IDE.
+
+### Documentation Sync
+
+Schema documentation lives in multiple files. When changing schemas (agents, knowledge, workflows, etc.), update **all** of these:
+- `README.md` — Public-facing docs with full schema reference and examples
+- `docs/documentation.html` — Hosted documentation site
+- `docs/hub-registry.json` — Community Hub card data (must match what exists in `templates/`)
+- `templates/skills/orcha-builder/SKILL.md` — Skill injected into agents that build/modify ORCHA resources
+- `CLAUDE.md` — This file (architecture context for AI assistants)
+- `lib/knowledge/types.ts` (or equivalent) — The Zod schema is the source of truth
+
+When adding, removing, or renaming templates (agents, skills, knowledge, functions, workflows), update `docs/hub-registry.json` to stay in sync.

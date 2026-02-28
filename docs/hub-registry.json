@@ -1,64 +1,112 @@
 [
   {
-    "name": "math",
+    "name": "architect",
     "type": "agent",
-    "description": "Mathematical assistant that calculates Fibonacci numbers and other math operations using function tools.",
+    "description": "Design and build agents, workflows, knowledge bases, and other ORCHA resources using natural language.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/math.agent.yaml",
-    "tags": ["math", "example"]
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/architect.agent.yaml",
+    "tags": ["meta-agent", "builder"]
   },
   {
-    "name": "call-center-analyst",
+    "name": "business-analyst",
     "type": "agent",
-    "description": "Analyzes call center transcripts using GraphRAG for entity-level and thematic insights across agent interactions, customer data, and outcomes.",
+    "description": "Business intelligence analyst with access to sales pipeline, supply chain, and customer operations knowledge graphs.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/call-center-analyst-simple.agent.yaml",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/business-analyst.agent.yaml",
     "tags": ["analytics", "rag"]
   },
   {
-    "name": "sentiment-structured",
+    "name": "chatbot",
     "type": "agent",
-    "description": "Performs sentiment analysis with structured JSON output. Returns sentiment category, confidence score, and key influencing keywords.",
+    "description": "General-purpose chatbot that connects to CollabNook, answers questions, and remembers channel context.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/sentiment-structured.agent.yaml",
-    "tags": ["structured-output", "nlp"]
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/chatbot.agent.yaml",
+    "tags": ["chatbot", "collabnook"]
   },
   {
-    "name": "weather",
-    "type": "skill",
-    "description": "Fetch weather information using wttr.in and Open-Meteo APIs. Free, no authentication required.",
+    "name": "corporate",
+    "type": "agent",
+    "description": "Corporate assistant with PII-safe knowledge graph access for org charts, people, and departments.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/weather",
-    "tags": ["api", "curl"]
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/corporate.agent.yaml",
+    "tags": ["corporate", "pii-security"]
   },
   {
-    "name": "spotify-player",
-    "type": "skill",
-    "description": "Control Spotify playback via the spogo CLI. Enables search, play, pause, skip, volume, and status commands.",
+    "name": "knowledge-broker",
+    "type": "agent",
+    "description": "Searches and analyzes multiple knowledge bases for cross-referenced insights.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/spotify-player",
-    "tags": ["media", "cli"]
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/knowledge-broker.agent.yaml",
+    "tags": ["knowledge", "analytics"]
   },
   {
-    "name": "wacli",
-    "type": "skill",
-    "description": "Send WhatsApp messages using the wacli CLI. Supports text, media, group messaging, and connection management.",
+    "name": "music-librarian",
+    "type": "agent",
+    "description": "Music store expert — explore the catalog, discover artists, and analyze customer listening patterns via knowledge graph.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/wacli",
-    "tags": ["messaging", "cli"]
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/music-librarian.agent.yaml",
+    "tags": ["music", "catalog"]
   },
   {
-    "name": "skill-creator",
-    "type": "skill",
-    "description": "Meta-skill that guides the creation of new SKILL.md files with best practices, format specs, and examples.",
+    "name": "sandbox",
+    "type": "agent",
+    "description": "Coding assistant with JavaScript sandbox, shell, web tools, and browser automation.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/skill-creator",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/sandbox.agent.yaml",
+    "tags": ["sandbox", "coding"]
+  },
+  {
+    "name": "transport-security",
+    "type": "agent",
+    "description": "Cross-references transport OT/ICS systems with cybersecurity threat intelligence and CVEs.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/transport-security.agent.yaml",
+    "tags": ["security", "ics", "ot"]
+  },
+  {
+    "name": "web-pilot",
+    "type": "agent",
+    "description": "Browser agent — navigates, fills forms, clicks through pages using an observe-act loop.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/web-pilot.agent.yaml",
+    "tags": ["browser", "automation"]
+  },
+  {
+    "name": "orcha-builder",
+    "type": "skill",
+    "description": "Documentation for creating and modifying ORCHA resources (agents, workflows, skills, functions, knowledge stores).",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/orcha-builder",
     "tags": ["meta", "authoring"]
+  },
+  {
+    "name": "pii-guard",
+    "type": "skill",
+    "description": "PII and OWASP security filtering rules — prevents agents from leaking sensitive personal data.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/pii-guard",
+    "tags": ["security", "pii"]
+  },
+  {
+    "name": "sandbox",
+    "type": "skill",
+    "description": "Execute JavaScript, shell commands, fetch web content, and control a browser in a sandboxed environment.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/sandbox",
+    "tags": ["sandbox", "coding"]
+  },
+  {
+    "name": "web-pilot",
+    "type": "skill",
+    "description": "Browser automation — observe-act loop with element refs for navigating, clicking, and typing.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/web-pilot",
+    "tags": ["browser", "automation"]
   },
   {
     "name": "example-workflow",
     "type": "workflow",
-    "description": "Multi-agent orchestration demo with sequential steps chaining call-center-analyst, math, and sentiment agents.",
+    "description": "Multi-agent orchestration demo with sequential steps chaining agents together.",
     "author": "Agent Orcha",
     "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/workflows/example.workflow.yaml",
     "tags": ["demo", "multi-agent"]
@@ -88,12 +136,84 @@
     "tags": ["text", "formatting"]
   },
   {
-    "name": "example-knowledge",
+    "name": "transcripts",
     "type": "knowledge",
-    "description": "Vector store for semantic search over call center transcripts. Uses character-based splitting with memory storage.",
+    "description": "Call transcripts knowledge store for employee performance and conversation analysis.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/example.knowledge.yaml",
-    "tags": ["vector", "rag"]
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/transcripts.knowledge.yaml",
+    "tags": ["vector", "rag", "corporate", "transcripts"]
+  },
+  {
+    "name": "org-chart",
+    "type": "knowledge",
+    "description": "Company org chart with personnel directory, departments, and reporting hierarchy as a knowledge graph.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/org-chart.knowledge.yaml",
+    "tags": ["graph", "corporate"]
+  },
+  {
+    "name": "pet-store",
+    "type": "knowledge",
+    "description": "Pet store product catalog with categories and inventory data.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/pet-store.knowledge.yaml",
+    "tags": ["catalog", "example"]
+  },
+  {
+    "name": "music-store",
+    "type": "knowledge",
+    "description": "Digital music catalog with artists, albums, tracks, genres, and customer purchase history as a knowledge graph.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/music-store.knowledge.yaml",
+    "tags": ["graph", "music"]
+  },
+  {
+    "name": "sales-pipeline",
+    "type": "knowledge",
+    "description": "CRM deal data with customers, products, sales reps, regions, and competitor intelligence.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/sales-pipeline.knowledge.yaml",
+    "tags": ["crm", "analytics"]
+  },
+  {
+    "name": "supply-chain",
+    "type": "knowledge",
+    "description": "Inventory and logistics — SKUs, suppliers, warehouses, stock levels, and demand velocity.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/supply-chain.knowledge.yaml",
+    "tags": ["logistics", "analytics"]
+  },
+  {
+    "name": "customer-ops",
+    "type": "knowledge",
+    "description": "Post-sale service data — product satisfaction, returns, support tickets, and account management.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/customer-ops.knowledge.yaml",
+    "tags": ["support", "analytics"]
+  },
+  {
+    "name": "security-incidents",
+    "type": "knowledge",
+    "description": "CVEs, advisories, malware, and threat intelligence from CISA, NVD, and other security feeds.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/security-incidents.knowledge.yaml",
+    "tags": ["security", "cve"]
+  },
+  {
+    "name": "transport-ot",
+    "type": "knowledge",
+    "description": "ICS/SCADA/IoT system inventory for rail, transit, and transport with vendor, protocol, and CPE data.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/transport-ot.knowledge.yaml",
+    "tags": ["ics", "ot", "transport"]
+  },
+  {
+    "name": "web-docs",
+    "type": "knowledge",
+    "description": "Knowledge store for indexing web documentation via URL sources.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/web-docs.knowledge.yaml",
+    "tags": ["web", "docs"]
   },
   {
     "name": "github",

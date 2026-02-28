@@ -34,7 +34,7 @@ describe('AgentDefinitionSchema', () => {
       llm: { name: 'fast', temperature: 0.5 },
       prompt: { system: 'Prompt', inputVariables: ['query'] },
       tools: ['function:search'],
-      output: { format: 'json' },
+      output: { format: 'text' },
       memory: true,
       metadata: { category: 'test' },
     });

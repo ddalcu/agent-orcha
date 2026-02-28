@@ -1,11 +1,12 @@
 import OpenAI from 'openai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type {
-  ChatModel,
-  ChatModelResponse,
-  BaseMessage,
-  StructuredTool,
-  ToolCall,
+import {
+  contentToText,
+  type ChatModel,
+  type ChatModelResponse,
+  type BaseMessage,
+  type StructuredTool,
+  type ToolCall,
 } from '../../types/llm-types.ts';
 
 interface OpenAIChatModelOptions {
@@ -37,17 +38,39 @@ export class OpenAIChatModel implements ChatModel {
     this.streamUsage = options.streamUsage ?? true;
   }
 
+  /**
+   * OpenAI tool messages only accept string or text-part arrays — no image_url.
+   * Images from tool results are extracted and injected as a user message with
+   * image_url parts after the tool message sequence ends.
+   */
   private toOpenAIMessages(messages: BaseMessage[]): OpenAI.ChatCompletionMessageParam[] {
-    return messages.map((msg): OpenAI.ChatCompletionMessageParam => {
+    const result: OpenAI.ChatCompletionMessageParam[] = [];
+    const pendingImages: Array<{ toolName: string; data: string; mediaType: string }> = [];
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i]!;
+
       switch (msg.role) {
         case 'system':
-          return { role: 'system', content: msg.content };
+          result.push({ role: 'system', content: contentToText(msg.content) });
+          break;
         case 'human':
-          return { role: 'user', content: msg.content };
+          if (Array.isArray(msg.content)) {
+            const parts: OpenAI.ChatCompletionContentPart[] = msg.content.map(p => {
+              if (p.type === 'image') {
+                return { type: 'image_url' as const, image_url: { url: `data:${p.mediaType};base64,${p.data}` } };
+              }
+              return { type: 'text' as const, text: p.text };
+            });
+            result.push({ role: 'user', content: parts });
+          } else {
+            result.push({ role: 'user', content: msg.content });
+          }
+          break;
         case 'ai': {
           const aiMsg: OpenAI.ChatCompletionAssistantMessageParam = {
             role: 'assistant',
-            content: msg.content || null,
+            content: contentToText(msg.content) || null,
           };
           if (msg.tool_calls?.length) {
             aiMsg.tool_calls = msg.tool_calls.map((tc) => ({
@@ -56,18 +79,52 @@ export class OpenAIChatModel implements ChatModel {
               function: { name: tc.name, arguments: JSON.stringify(tc.args) },
             }));
           }
-          return aiMsg;
+          result.push(aiMsg);
+          break;
         }
-        case 'tool':
-          return {
-            role: 'tool',
-            tool_call_id: msg.tool_call_id!,
-            content: msg.content,
-          };
+        case 'tool': {
+          // Tool messages: always text-only, buffer images for injection
+          if (Array.isArray(msg.content)) {
+            for (const p of msg.content) {
+              if (p.type === 'image') {
+                pendingImages.push({ toolName: msg.name ?? 'tool', data: p.data, mediaType: p.mediaType });
+              }
+            }
+            result.push({
+              role: 'tool',
+              tool_call_id: msg.tool_call_id!,
+              content: contentToText(msg.content) || 'Image captured.',
+            });
+          } else {
+            result.push({
+              role: 'tool',
+              tool_call_id: msg.tool_call_id!,
+              content: msg.content,
+            });
+          }
+
+          // Flush images as a user message once the tool sequence ends
+          const nextMsg = messages[i + 1];
+          if (pendingImages.length > 0 && (!nextMsg || nextMsg.role !== 'tool')) {
+            const label = pendingImages.map((img) => img.toolName).join(', ');
+            const parts: OpenAI.ChatCompletionContentPart[] = [
+              { type: 'text' as const, text: `[Image from ${label}]` },
+              ...pendingImages.map((img) => ({
+                type: 'image_url' as const,
+                image_url: { url: `data:${img.mediaType};base64,${img.data}` },
+              })),
+            ];
+            result.push({ role: 'user', content: parts });
+            pendingImages.length = 0;
+          }
+          break;
+        }
         default:
-          return { role: 'user', content: msg.content };
+          result.push({ role: 'user', content: contentToText(msg.content) });
       }
-    });
+    }
+
+    return result;
   }
 
   private toOpenAITools(): OpenAI.ChatCompletionTool[] | undefined {
@@ -119,9 +176,11 @@ export class OpenAIChatModel implements ChatModel {
 
     const response = await this.client.chat.completions.create(params);
     const choice = response.choices[0]!;
+    const reasoning = (choice.message as any)?.reasoning_content;
 
     return {
       content: choice.message.content ?? '',
+      ...(reasoning ? { reasoning } : {}),
       tool_calls: this.parseToolCalls(response.choices),
       usage_metadata: response.usage
         ? {
@@ -159,6 +218,12 @@ export class OpenAIChatModel implements ChatModel {
       // Yield content chunks
       if (delta?.content) {
         yield { content: delta.content };
+      }
+
+      // Yield reasoning chunks (e.g. Qwen3 reasoning_content)
+      const reasoning = (delta as any)?.reasoning_content;
+      if (reasoning) {
+        yield { content: '', reasoning };
       }
 
       // Accumulate tool call deltas

@@ -64,4 +64,19 @@ describe('MemoryManager', () => {
     const result = await manager.load('overwrite');
     assert.equal(result, 'second');
   });
+
+  it('should delete agent memory', async () => {
+    await manager.save('to-delete', 'some memory');
+    const before = await manager.load('to-delete');
+    assert.equal(before, 'some memory');
+
+    await manager.delete('to-delete');
+    const after = await manager.load('to-delete');
+    assert.equal(after, '');
+  });
+
+  it('should not throw when deleting non-existent memory', async () => {
+    // Should not throw
+    await manager.delete('never-existed');
+  });
 });

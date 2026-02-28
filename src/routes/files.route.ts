@@ -197,7 +197,30 @@ export const filesRoutes: FastifyPluginAsync = async (fastify) => {
     await fs.rename(fullOldPath, fullNewPath);
     logger.info(`[IDE] File renamed: ${oldPath} → ${newPath}`);
 
-    return { success: true, oldPath, newPath };
+    // Unload old resource, then reload from the new path
+    let unloaded = 'none';
+    let reloaded = 'none';
+    try {
+      unloaded = await fastify.orchestrator.unloadFile(oldPath);
+      if (unloaded !== 'none') {
+        logger.info(`[IDE] Unloaded ${unloaded} resource from old path: ${oldPath}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(`[IDE] Failed to unload resource from ${oldPath}: ${message}`);
+    }
+
+    try {
+      reloaded = await fastify.orchestrator.reloadFile(newPath);
+      if (reloaded !== 'none') {
+        logger.info(`[IDE] Reloaded ${reloaded} resource from new path: ${newPath}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(`[IDE] Failed to reload resource from ${newPath}: ${message}`);
+    }
+
+    return { success: true, oldPath, newPath, unloaded, reloaded };
   });
 
   fastify.delete<{ Body: DeleteBody }>('/delete', async (request, reply) => {
@@ -228,7 +251,19 @@ export const filesRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(404).send({ error: 'File not found' });
     }
 
-    return { success: true, path: relativePath };
+    // Unload the resource from memory so it's fully removed
+    let unloaded = 'none';
+    try {
+      unloaded = await fastify.orchestrator.unloadFile(relativePath);
+      if (unloaded !== 'none') {
+        logger.info(`[IDE] Unloaded ${unloaded} resource from: ${relativePath}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(`[IDE] Failed to unload resource from ${relativePath}: ${message}`);
+    }
+
+    return { success: true, path: relativePath, unloaded };
   });
 
   fastify.get<{ Querystring: { type: string; name: string } }>('/template', async (request, reply) => {
