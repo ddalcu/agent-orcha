@@ -64,6 +64,14 @@
     "tags": ["security", "ics", "ot"]
   },
   {
+    "name": "vision",
+    "type": "agent",
+    "description": "Vision browser agent — controls the browser using pixel coordinates from screenshots, like a human would.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/vision.agent.yaml",
+    "tags": ["browser", "vision", "automation"]
+  },
+  {
     "name": "web-pilot",
     "type": "agent",
     "description": "Browser agent — navigates, fills forms, clicks through pages using an observe-act loop.",
@@ -94,6 +102,14 @@
     "author": "Agent Orcha",
     "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/sandbox",
     "tags": ["sandbox", "coding"]
+  },
+  {
+    "name": "vision-browser",
+    "type": "skill",
+    "description": "Vision-based browser automation — pixel coordinate interaction from screenshots.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/vision-browser",
+    "tags": ["browser", "vision", "automation"]
   },
   {
     "name": "web-pilot",

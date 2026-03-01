@@ -55,6 +55,13 @@ export class MonitorView extends Component {
             if (this.selectedTask) {
                 const updated = tasks.find(t => t.id === this.selectedTask.id);
                 if (updated) {
+                    // Preserve events and metrics from SSE — list API doesn't include them
+                    if (this.selectedTask.events?.length && !updated.events?.length) {
+                        updated.events = this.selectedTask.events;
+                    }
+                    if (this.selectedTask.metrics && !updated.metrics) {
+                        updated.metrics = this.selectedTask.metrics;
+                    }
                     this.selectedTask = updated;
                     this.renderDetailPanel();
                 }
@@ -114,12 +121,18 @@ export class MonitorView extends Component {
         });
     }
 
-    selectTask(taskId) {
+    async selectTask(taskId) {
         const task = this.tasks.find(t => t.id === taskId);
         if (!task) return;
 
         this.selectedTask = task;
         this.renderTaskList();
+
+        // Fetch full task with events
+        try {
+            const full = await api.getTask(taskId);
+            this.selectedTask = full;
+        } catch { /* fall back to list data */ }
 
         const detailArea = this.querySelector('#taskDetailArea');
         detailArea.classList.remove('hidden');
@@ -169,6 +182,47 @@ export class MonitorView extends Component {
                     <span class="text-gray-300">${completed}</span>
                 </div>
             </div>`;
+
+        // Metrics section (react-loop telemetry)
+        const metricsContainer = this.querySelector('#detailMetrics');
+        if (task.metrics) {
+            const m = task.metrics;
+            metricsContainer.innerHTML = `
+                <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fas fa-chart-line text-indigo-400 text-sm"></i>
+                        <span class="text-sm font-medium text-gray-400">React-Loop Metrics</span>
+                    </div>
+                    <div class="grid grid-cols-3 md:grid-cols-6 gap-4 text-sm">
+                        <div>
+                            <span class="text-gray-500 block text-xs">Iteration</span>
+                            <span class="text-gray-200 font-mono">${m.iteration}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-xs">Messages</span>
+                            <span class="text-gray-200 font-mono">${m.messageCount}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-xs">Images</span>
+                            <span class="text-gray-200 font-mono">${m.imageCount}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-xs">Context Size</span>
+                            <span class="text-gray-200 font-mono">${formatContextSize(m.contextChars)}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-xs">Input Tokens</span>
+                            <span class="text-gray-200 font-mono">${m.inputTokens ? m.inputTokens.toLocaleString() : '-'}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-xs">Output Tokens</span>
+                            <span class="text-gray-200 font-mono">${m.outputTokens ? m.outputTokens.toLocaleString() : '-'}</span>
+                        </div>
+                    </div>
+                </div>`;
+        } else {
+            metricsContainer.innerHTML = '';
+        }
 
         // Input section
         this.querySelector('#detailInput').innerHTML = `
@@ -239,6 +293,73 @@ export class MonitorView extends Component {
         } else {
             actionsContainer.innerHTML = '';
         }
+
+        // Activity feed (events + LLM output)
+        this.renderActivityFeed();
+    }
+
+    renderActivityFeed() {
+        const container = this.querySelector('#detailActivity');
+        const events = this.selectedTask?.events;
+        if (!events?.length) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const rows = events.map(evt => {
+            const time = new Date(evt.timestamp).toLocaleTimeString();
+            if (evt.type === 'tool_start') {
+                const inputStr = typeof evt.input === 'string' ? evt.input : JSON.stringify(evt.input ?? {});
+                const truncInput = inputStr.length > 120 ? inputStr.slice(0, 120) + '...' : inputStr;
+                return `<div class="flex gap-2 py-1.5 border-b border-dark-border/50">
+                    <span class="text-gray-600 text-xs font-mono flex-shrink-0 w-16">${time}</span>
+                    <span class="text-xs"><i class="fas fa-play text-blue-400 mr-1"></i><span class="text-blue-300 font-medium">${escapeHtml(evt.tool)}</span> <span class="text-gray-500">${escapeHtml(truncInput)}</span></span>
+                </div>`;
+            }
+            if (evt.type === 'tool_end') {
+                let outputStr = '';
+                if (Array.isArray(evt.output)) {
+                    outputStr = evt.output.map(p => p.type === 'image' ? `[image ${formatContextSize(p.bytes)}]` : p.text || '').join(' ');
+                } else if (typeof evt.output === 'string') {
+                    outputStr = evt.output;
+                }
+                const truncOutput = outputStr.length > 200 ? outputStr.slice(0, 200) + '...' : outputStr;
+                return `<div class="flex gap-2 py-1.5 border-b border-dark-border/50">
+                    <span class="text-gray-600 text-xs font-mono flex-shrink-0 w-16">${time}</span>
+                    <span class="text-xs"><i class="fas fa-check text-green-400 mr-1"></i><span class="text-green-300 font-medium">${escapeHtml(evt.tool)}</span> <span class="text-gray-400">${escapeHtml(truncOutput)}</span></span>
+                </div>`;
+            }
+            if (evt.type === 'thinking') {
+                const truncContent = (evt.content || '').length > 200 ? evt.content.slice(0, 200) + '...' : evt.content;
+                return `<div class="flex gap-2 py-1.5 border-b border-dark-border/50">
+                    <span class="text-gray-600 text-xs font-mono flex-shrink-0 w-16">${time}</span>
+                    <span class="text-xs"><i class="fas fa-brain text-purple-400 mr-1"></i><span class="text-purple-300">${escapeHtml(truncContent)}</span></span>
+                </div>`;
+            }
+            if (evt.type === 'content') {
+                const truncContent = (evt.content || '').length > 300 ? evt.content.slice(0, 300) + '...' : evt.content;
+                return `<div class="flex gap-2 py-1.5 border-b border-dark-border/50">
+                    <span class="text-gray-600 text-xs font-mono flex-shrink-0 w-16">${time}</span>
+                    <span class="text-xs"><i class="fas fa-comment text-gray-400 mr-1"></i><span class="text-gray-300">${escapeHtml(truncContent)}</span></span>
+                </div>`;
+            }
+            return '';
+        }).join('');
+
+        container.innerHTML = `
+            <details open class="group">
+                <summary class="cursor-pointer text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors">
+                    <i class="fas fa-chevron-right text-xs mr-1 group-open:rotate-90 transition-transform inline-block"></i>
+                    Activity (${events.length} events)
+                </summary>
+                <div class="mt-2 bg-dark-bg border border-dark-border rounded-lg p-3 max-h-96 overflow-y-auto custom-scrollbar">
+                    ${rows}
+                </div>
+            </details>`;
+
+        // Auto-scroll to bottom
+        const feed = container.querySelector('.overflow-y-auto');
+        if (feed) feed.scrollTop = feed.scrollHeight;
     }
 
     async handleCancel() {
@@ -274,6 +395,15 @@ export class MonitorView extends Component {
                 const data = JSON.parse(event.data);
                 if (data.type === 'status' && this.selectedTask?.id === taskId) {
                     this.loadTasks();
+                }
+                if (data.type === 'metrics' && this.selectedTask?.id === taskId) {
+                    this.selectedTask.metrics = data.metrics;
+                    this.renderDetailPanel();
+                }
+                if (data.type === 'events' && this.selectedTask?.id === taskId) {
+                    if (!this.selectedTask.events) this.selectedTask.events = [];
+                    this.selectedTask.events.push(...data.events);
+                    this.renderActivityFeed();
                 }
                 if (data.type === 'done') {
                     this.closeEventSource();
@@ -360,9 +490,11 @@ export class MonitorView extends Component {
                     </div>
 
                     <div id="detailMeta" class="bg-dark-surface/50 border border-dark-border rounded-lg p-4"></div>
+                    <div id="detailMetrics"></div>
                     <div id="detailInputRequest"></div>
                     <div id="detailInput"></div>
                     <div id="detailResult"></div>
+                    <div id="detailActivity"></div>
                     <div id="detailActions"></div>
                 </div>
             </div>
@@ -383,6 +515,12 @@ function kindBadgeClass(kind) {
         llm: 'bg-emerald-500/20 text-emerald-400',
     };
     return map[kind] || 'bg-gray-500/20 text-gray-400';
+}
+
+function formatContextSize(chars) {
+    if (chars >= 1_000_000) return `${(chars / 1_000_000).toFixed(1)}M`;
+    if (chars >= 1_000) return `${(chars / 1_000).toFixed(1)}K`;
+    return `${chars}`;
 }
 
 customElements.define('monitor-view', MonitorView);

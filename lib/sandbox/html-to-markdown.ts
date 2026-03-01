@@ -1,21 +1,34 @@
 import { JSDOM } from 'jsdom';
 
 export interface HtmlToMarkdownOptions {
+  /** Keep nav, footer, header, aside elements (default: false). */
   includeNavigation?: boolean;
+  /** Keep form elements like buttons, inputs, selects (default: false). */
+  includeInteractiveElements?: boolean;
+  /** Keep image markdown (default: false). */
+  includeImages?: boolean;
 }
 
-const SKIP_ALWAYS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'IFRAME']);
-const SKIP_FULL_PAGE = new Set(['NAV', 'FOOTER', 'HEADER', 'ASIDE']);
+/** Strip <script> and <style> tags before DOM parsing to avoid jsdom vm crashes. */
+function stripScripts(html: string): string {
+  return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+}
 
-function walk(node: Node, skip: Set<string>): string {
+const SKIP_ALWAYS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'IFRAME', 'HEAD', 'META', 'LINK']);
+const SKIP_FULL_PAGE = new Set(['NAV', 'FOOTER', 'HEADER', 'ASIDE']);
+const INTERACTIVE_TAGS = new Set(['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM']);
+
+function walk(node: Node, skip: Set<string>, interactive: boolean, images: boolean): string {
   if (node.nodeType === 3) return node.textContent ?? '';
   if (node.nodeType !== 1) return '';
 
   const el = node as Element;
   if (SKIP_ALWAYS.has(el.tagName)) return '';
   if (skip.has(el.tagName)) return '';
+  if (!interactive && INTERACTIVE_TAGS.has(el.tagName)) return '';
 
-  const kids = Array.from(el.childNodes).map(c => walk(c, skip)).join('');
+  const kids = Array.from(el.childNodes).map(c => walk(c, skip, interactive, images)).join('');
   const t = kids.trim();
 
   switch (el.tagName) {
@@ -44,6 +57,7 @@ function walk(node: Node, skip: Set<string>): string {
     case 'BLOCKQUOTE': return `\n> ${t.replace(/\n/g, '\n> ')}\n`;
     case 'HR': return '\n---\n';
     case 'IMG': {
+      if (!images) return '';
       const alt = el.getAttribute('alt') ?? '';
       const src = el.getAttribute('src') ?? '';
       return src ? `![${alt}](${src})` : '';
@@ -83,12 +97,24 @@ function walk(node: Node, skip: Set<string>): string {
   }
 }
 
+/** Collapse runs of 3+ whitespace-only lines and strip lines with only symbols/punctuation. */
+function cleanOutput(raw: string): string {
+  return raw
+    .replace(/\n{3,}/g, '\n\n')
+    // Remove lines that are only icons/symbols (e.g. "*add_circle_outline*", "*settings*")
+    .replace(/^\s*\*[a-z_]+\*\s*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function htmlToMarkdown(html: string, options?: HtmlToMarkdownOptions): string {
-  const dom = new JSDOM(html);
+  const dom = new JSDOM(stripScripts(html));
   const body = dom.window.document.body;
   if (!body) return '';
 
   const skip = options?.includeNavigation ? new Set<string>() : SKIP_FULL_PAGE;
-  const raw = walk(body, skip);
-  return raw.replace(/\n{3,}/g, '\n\n').trim();
+  const interactive = options?.includeInteractiveElements ?? false;
+  const images = options?.includeImages ?? false;
+  const raw = walk(body, skip, interactive, images);
+  return cleanOutput(raw);
 }

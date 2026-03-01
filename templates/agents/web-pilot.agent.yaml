@@ -22,6 +22,10 @@ prompt:
     - Click by text when ref unavailable: click({ text: "Accept" })
     - Never screenshot to verify — use observe
     - Use web_search to find URLs — never guess
+    - Read textExcerpt in observe/navigate results first — it often has the data you need
+    - Use evaluate() with JS to extract structured data directly from the DOM
+    - Don't repeat failed tool calls — switch strategy immediately
+    - Prefer web_fetch for read-only pages where you just need content
   inputVariables:
     - task
 
@@ -34,7 +38,7 @@ tools:
   - sandbox:browser_evaluate
   - sandbox:browser_screenshot
   - sandbox:web_search
-  - sandbox:web_fetch
+#  - sandbox:web_fetch
 
 skills:
   - web-pilot

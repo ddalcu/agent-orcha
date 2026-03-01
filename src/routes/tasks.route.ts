@@ -32,7 +32,8 @@ export const tasksRoutes: FastifyPluginAsync = async (fastify) => {
   // List tasks with optional filters
   fastify.get<{ Querystring: ListQuery }>('/', async (request) => {
     const { status, kind, target } = request.query;
-    return getManager().listTasks({ status, kind, target });
+    // Exclude events from list to keep payload small
+    return getManager().listTasks({ status, kind, target }).map(({ events, ...rest }) => rest);
   });
 
   // Get single task
@@ -137,6 +138,8 @@ export const tasksRoutes: FastifyPluginAsync = async (fastify) => {
 
     const TERMINAL_STATUSES = ['completed', 'failed', 'canceled'];
     let lastStatus = '';
+    let lastMetricsIteration = 0;
+    let lastEventIndex = 0;
 
     const emit = (data: Record<string, unknown>) => {
       reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -148,6 +151,19 @@ export const tasksRoutes: FastifyPluginAsync = async (fastify) => {
         emit({ type: 'error', error: 'Task not found' });
         cleanup();
         return;
+      }
+
+      // Emit metrics updates even without status change
+      if (current.metrics && current.metrics.iteration !== lastMetricsIteration) {
+        lastMetricsIteration = current.metrics.iteration;
+        emit({ type: 'metrics', taskId: current.id, metrics: current.metrics });
+      }
+
+      // Emit new events since last poll
+      if (current.events && current.events.length > lastEventIndex) {
+        const newEvents = current.events.slice(lastEventIndex);
+        lastEventIndex = current.events.length;
+        emit({ type: 'events', taskId: current.id, events: newEvents });
       }
 
       if (current.status !== lastStatus) {

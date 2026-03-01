@@ -6,6 +6,9 @@ import { PageReadiness } from './page-readiness.ts';
 import type { StructuredTool, ContentPart } from '../types/llm-types.ts';
 import type { SandboxConfig } from './types.ts';
 
+/** Hard cap on content() output to prevent 50K+ char dumps blowing up context. */
+const CONTENT_MAX_CHARS = 15_000;
+
 export function createBrowserTools(config: SandboxConfig): StructuredTool[] {
   const cdpUrl = config.browserCdpUrl;
   let client: CDPClient | null = null;
@@ -42,7 +45,7 @@ export function createBrowserTools(config: SandboxConfig): StructuredTool[] {
     {
       name: 'sandbox_browser_observe',
       description:
-        'Text snapshot of current page: URL, title, headings, interactive elements with refs. Use before/after actions.',
+        'Text snapshot of current page: URL, title, headings, textExcerpt (first 2000 chars of visible text), interactive elements with refs. Check textExcerpt first — it often has what you need.',
       schema: z.object({}),
     },
   );
@@ -65,7 +68,7 @@ export function createBrowserTools(config: SandboxConfig): StructuredTool[] {
     {
       name: 'sandbox_browser_navigate',
       description:
-        'Navigate to URL. Waits for load+idle. Returns text snapshot with interactive elements.',
+        'Navigate to URL. Waits for load+idle. Returns text snapshot with textExcerpt and interactive elements.',
       schema: z.object({
         url: z.string().describe('The URL to navigate to'),
       }),
@@ -110,10 +113,11 @@ export function createBrowserTools(config: SandboxConfig): StructuredTool[] {
         if (!html) {
           return JSON.stringify({ error: selector ? `Element not found: ${selector}` : 'No content' });
         }
-        const markdown = htmlToMarkdown(html, { includeNavigation: !!selector });
+        const markdown = htmlToMarkdown(html, { includeNavigation: !!selector, includeInteractiveElements: true, includeImages: true });
+        const maxChars = Math.min(CONTENT_MAX_CHARS, config.maxOutputChars);
         let output = JSON.stringify({ content: markdown, selector: selector ?? null });
-        if (output.length > config.maxOutputChars) {
-          const truncated = markdown.substring(0, config.maxOutputChars);
+        if (output.length > maxChars) {
+          const truncated = markdown.substring(0, maxChars);
           output = JSON.stringify({ content: truncated, truncated: true, selector: selector ?? null });
         }
         return output;
@@ -124,7 +128,7 @@ export function createBrowserTools(config: SandboxConfig): StructuredTool[] {
     {
       name: 'sandbox_browser_content',
       description:
-        'Page content as markdown. Use selector to target a specific element.',
+        'Page content as markdown (capped at 15K chars). Use a CSS selector to target a specific section instead of fetching the full page.',
       schema: z.object({
         selector: z
           .string()

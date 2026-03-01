@@ -24,6 +24,7 @@ import { createSandboxExecTool } from './sandbox/sandbox-exec.ts';
 import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web.ts';
 import { createSandboxShellTool } from './sandbox/sandbox-shell.ts';
 import { createBrowserTools } from './sandbox/sandbox-browser.ts';
+import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
@@ -210,6 +211,13 @@ export class Orchestrator {
     const browserTools = createBrowserTools(this.sandboxConfig);
     for (const bt of browserTools) {
       tools.set(bt.name.replace('sandbox_browser_', 'browser_'), bt);
+    }
+
+    if (process.env.EXPERIMENTAL_VISION === 'true') {
+      const visionTools = createVisionBrowserTools(this.sandboxConfig);
+      for (const vt of visionTools) {
+        tools.set(vt.name.replace('sandbox_vision_', 'vision_'), vt);
+      }
     }
 
     logger.info('[Orchestrator] Sandbox enabled with tools: ' + Array.from(tools.keys()).join(', '));

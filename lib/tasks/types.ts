@@ -17,6 +17,24 @@ export interface TaskInputRequest {
   timestamp: number;
 }
 
+export interface TaskMetrics {
+  iteration: number;
+  messageCount: number;
+  imageCount: number;
+  contextChars: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface TaskEvent {
+  type: 'tool_start' | 'tool_end' | 'thinking' | 'content';
+  timestamp: number;
+  tool?: string;
+  input?: unknown;
+  output?: unknown;
+  content?: string;
+}
+
 export interface Task {
   id: string;
   kind: TaskKind;
@@ -27,6 +45,8 @@ export interface Task {
   result?: AgentResult | WorkflowResult | Record<string, unknown>;
   error?: string;
   inputRequest?: TaskInputRequest;
+  metrics?: TaskMetrics;
+  events?: TaskEvent[];
   createdAt: number;
   updatedAt: number;
   completedAt?: number;

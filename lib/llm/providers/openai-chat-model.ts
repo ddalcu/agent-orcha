@@ -8,6 +8,27 @@ import {
   type StructuredTool,
   type ToolCall,
 } from '../../types/llm-types.ts';
+import { logger } from '../../logger.ts';
+
+/**
+ * Parse tool call arguments JSON. Local models (LM Studio, Ollama) sometimes
+ * return malformed JSON (single quotes, trailing commas, unquoted keys).
+ * Falls back to an empty object so one bad tool call doesn't crash the stream.
+ */
+function parseToolArgs(raw: string | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // Try fixing common issues: single quotes → double quotes
+    try {
+      return JSON.parse(raw.replace(/'/g, '"'));
+    } catch {
+      logger.warn(`[OpenAI] Failed to parse tool args: ${raw.slice(0, 200)}`);
+      return {};
+    }
+  }
+}
 
 interface OpenAIChatModelOptions {
   apiKey?: string;
@@ -149,7 +170,7 @@ export class OpenAIChatModel implements ChatModel {
       .map((tc) => ({
         id: tc.id,
         name: tc.function.name,
-        args: JSON.parse(tc.function.arguments || '{}'),
+        args: parseToolArgs(tc.function.arguments),
       }));
   }
 
@@ -248,7 +269,7 @@ export class OpenAIChatModel implements ChatModel {
           ? Array.from(accumulatedToolCalls.values()).map((tc) => ({
               id: tc.id,
               name: tc.name,
-              args: JSON.parse(tc.args || '{}'),
+              args: parseToolArgs(tc.args),
             }))
           : undefined;
 

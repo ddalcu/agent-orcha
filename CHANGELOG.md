@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Release 0.0.7
+
+### Added
+
+- **Vision Browser (Experimental)** — Pixel-coordinate browser control using CDP Input events, designed for vision LLMs (e.g., Qwen3-VL via LM Studio). Enabled via `EXPERIMENTAL_VISION=true` env var. Tools: `sandbox_vision_screenshot`, `sandbox_vision_navigate`, `sandbox_vision_click`, `sandbox_vision_type`, `sandbox_vision_scroll`, `sandbox_vision_key`, `sandbox_vision_drag`. Every action tool auto-captures a JPEG screenshot (quality 55) and returns it as `ContentPart[]`, cutting the screenshot-infer-act loop to one call per action. New skill template: `templates/skills/vision-browser/`. New template agent: `vision`.
+
+- **Context Compaction** — `compactContext()` in `llm-types.ts` summarises old ReAct iteration groups into a concise `<action_history>` block, keeping only the most recent iterations in full. Prevents context overflow in long-running agent loops. Includes a "wrap up" nudge after configurable iteration count. `stripOldImages()` companion strips base64 image data from all but the most recent image-bearing message.
+
+- **ReAct Loop Rewrite** — Unified `runLoop()` generator replaces duplicated logic between `invoke()` and `streamEvents()`. Adds context size logging (KB + estimated tokens), image counting, no-tool-call nudging (3 retries before accepting as final answer), reasoning/thinking content preserved in message history, and cumulative token tracking.
+
+- **Agent `maxIterations` Config** — New optional `maxIterations` field on agent definitions. Overrides the default 200 iteration limit per agent.
+
+- **Task Telemetry** — Tasks now track `metrics` (iteration count, message count, image count, context size, token usage) and `events` (tool starts/ends, thinking blocks, content chunks). Updated via SSE streaming from the agent route. `TaskManager.updateMetrics()` and `TaskManager.addEvent()` methods added.
+
+- **Monitor Activity Feed** — MonitorView in Studio now shows real-time react-loop metrics (iteration, messages, images, context size, tokens) and a scrollable activity feed with tool calls, thinking blocks, and content events streamed via SSE.
+
+- **Session Messages API** — `GET /api/agents/sessions/:sessionId/messages` endpoint returns a compact summary of conversation messages (role, text char count, image count/bytes, tool call names) for debugging.
+
+- **Page Text Excerpt** — `PageReadiness.observe()` now returns `textExcerpt` (first 2000 chars of visible `innerText`). Browser tools advertise it in descriptions — often sufficient without fetching full page content.
+
+### Changed
+
+- **ReAct loop is now streaming-first** — `invoke()` consumes the shared `runLoop()` generator silently; `streamEvents()` yields from it. Both paths share identical logic.
+
+- **OpenAI provider: resilient tool arg parsing** — `parseToolArgs()` gracefully handles malformed JSON from local models (single quotes, trailing commas). Falls back to empty object instead of crashing the stream.
+
+- **HTML-to-Markdown improvements** — Images and interactive elements (buttons, inputs, forms) stripped by default; new `includeImages` and `includeInteractiveElements` options. `<script>`/`<style>` tags stripped before DOM parsing to avoid jsdom VM crashes. `HEAD`, `META`, `LINK` added to skip list. Icon font text lines cleaned from output.
+
+- **`sandbox_web_fetch` simplified** — Removed `runScripts` parameter and jsdom script execution (unreliable, security risk). HTML-to-markdown conversion uses raw HTML directly.
+
+- **`sandbox_browser_content` capped at 15K chars** — Hard cap prevents 50K+ char dumps from blowing up agent context.
+
+- **LLM call logger** — Now reports context in KB, tracks image count, uses compact single-line format for start/end logs.
+
+- **React workflow executor** — Uses `stripOldImages()` before LLM calls to prevent image accumulation across workflow iterations.
+
+- **Docker entrypoint** — Chromium output suppressed by default; `BROWSER_VERBOSE=true` restores it.
+
+- **Task list endpoint** — Strips `events` array from list responses to keep payloads small; full events available via individual task GET.
+
+- **Web-pilot agent/skill** — Updated with textExcerpt guidance, evaluate() strategy, "don't repeat failed calls" rule.
+
+- **Auto-inject sandbox tools from skills removed** — `resolveForAgentWithMeta()` replaced with simpler `resolveForAgent()`. Agents must explicitly declare sandbox tools.
+
 ## Release 0.0.6
 
 ### Breaking Changes

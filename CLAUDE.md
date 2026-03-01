@@ -69,6 +69,7 @@ Skills are prompt augmentation files (`skills/*/SKILL.md`) with YAML frontmatter
 **VM Execution:** `vm-executor.ts` — `sandbox_exec`, `sandbox_web_fetch`, `sandbox_web_search`
 **Shell:** `sandbox-shell.ts` — `sandbox_shell` executes commands as non-root `sandbox` user
 **Browser:** `sandbox-browser.ts` — CDP-based Chromium control with `sandbox_browser_navigate`, `sandbox_browser_observe`, `sandbox_browser_click`, `sandbox_browser_type`, `sandbox_browser_screenshot`, `sandbox_browser_evaluate`. Uses `cdp-client.ts` (WebSocket CDP) and `page-readiness.ts` (DOM observation). Browser tools return multimodal `ContentPart[]` (images).
+**Vision Browser:** `vision-browser.ts` — Pixel-coordinate browser control using CDP Input events. Tools: `sandbox_vision_screenshot`, `sandbox_vision_navigate`, `sandbox_vision_click`, `sandbox_vision_type`, `sandbox_vision_scroll`, `sandbox_vision_key`, `sandbox_vision_drag`. Every action tool auto-captures a JPEG screenshot (quality 55) and returns it as a `ContentPart[]` image, cutting the screenshot→infer→act loop to one call per action. Designed for use with vision LLMs (e.g., Qwen3-VL via LM Studio). Uses its own CDPClient/PageReadiness instances independent of the existing DOM-based browser tools.
 **Config:** `SandboxConfig` in `types.ts` with `browserCdpUrl` field (default: `http://localhost:9222`)
 
 ### Published Agents

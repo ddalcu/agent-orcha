@@ -63,6 +63,7 @@ export const AgentDefinitionSchema = z.object({
   integrations: z.array(IntegrationSchema).optional(),
   triggers: z.array(TriggerSchema).optional(),
   publish: AgentPublishConfigSchema.optional(),
+  maxIterations: z.number().int().positive().optional(),
   sampleQuestions: z.array(z.string()).optional(),
 });
 

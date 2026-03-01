@@ -8,6 +8,8 @@ export interface PageSnapshot {
   elements: string;
   headings: string[];
   summary: string;
+  /** First ~2000 chars of visible page text (innerText). */
+  textExcerpt: string;
 }
 
 interface ReadinessState {
@@ -59,7 +61,9 @@ const OBSERVE_SCRIPT = `(() => {
     if(el.disabled)line+=' disabled';
     lines.push(line);
   }
-  const tl=document.body?document.body.innerText.length:0;
+  const bt=document.body?document.body.innerText:'';
+  const tl=bt.length;
+  const te=bt.substring(0,2000);
   const fc=document.querySelectorAll('form').length;
   const ic=document.querySelectorAll('img').length;
   const sp=[];
@@ -68,7 +72,7 @@ const OBSERVE_SCRIPT = `(() => {
   sp.push(tl+' chars');
   return JSON.stringify({
     url:location.href,title:document.title,readyState:document.readyState,
-    headings:h,summary:sp.join(', '),
+    headings:h,summary:sp.join(', '),textExcerpt:te,
     elements:lines.join('\\n'),refs:refs
   });
   function bSel(el){
@@ -131,6 +135,11 @@ export class PageReadiness {
       this.cdp.on('DOM.documentUpdated', () => {
         this.state.lastDomChange = Date.now();
       }),
+      // Auto-dismiss JS dialogs (alert/confirm/prompt) — they block all
+      // Runtime.evaluate calls and hang waitForReady / observe.
+      this.cdp.on('Page.javascriptDialogOpening', () => {
+        this.cdp.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
+      }),
     );
   }
 
@@ -172,14 +181,19 @@ export class PageReadiness {
 
         if (elapsed > maxMs) { resolve(); return; }
 
-        // Fallback: if loadFired event was missed, check readyState via DOM
+        // Fallback: if loadFired event was missed, check readyState via DOM.
+        // Race with a timeout — Runtime.evaluate hangs if a JS dialog is open
+        // (auto-dismiss fires async, but the evaluate may already be queued).
         if (!this.state.loadFired && elapsed > 500) {
           try {
-            const rs = await this.cdp.send('Runtime.evaluate', {
-              expression: 'document.readyState',
-              returnByValue: true,
-            });
-            if ((rs as any).result?.value === 'complete') {
+            const rs = await Promise.race([
+              this.cdp.send('Runtime.evaluate', {
+                expression: 'document.readyState',
+                returnByValue: true,
+              }),
+              new Promise<null>((r) => setTimeout(() => r(null), 1_000)),
+            ]);
+            if (rs && (rs as any).result?.value === 'complete') {
               this.state.loadFired = true;
             }
           } catch { /* ignore */ }
@@ -238,7 +252,7 @@ export class PageReadiness {
     const raw = (result as any).result?.value;
     const parsed = raw
       ? JSON.parse(raw)
-      : { url: '', title: '', readyState: 'unknown', headings: [], summary: '', elements: '', refs: {} };
+      : { url: '', title: '', readyState: 'unknown', headings: [], summary: '', textExcerpt: '', elements: '', refs: {} };
 
     // Update ref→selector map
     this.refMap.clear();
@@ -254,6 +268,7 @@ export class PageReadiness {
       readyState: parsed.readyState,
       headings: parsed.headings,
       summary: parsed.summary,
+      textExcerpt: parsed.textExcerpt ?? '',
       elements: parsed.elements,
       inflightRequests: this.state.inflightRequests,
     };

@@ -10,10 +10,17 @@ if [ "${BROWSER_SANDBOX:-false}" = "true" ]; then
   sleep 1
   x11vnc -display :99 -rfbport 5900 -shared -forever -nopw &
   websockify --web /usr/share/novnc 6080 localhost:5900 &
-  chromium --no-sandbox --disable-gpu --disable-dev-shm-usage \
-    --disable-software-rasterizer --remote-debugging-address=0.0.0.0 \
-    --remote-debugging-port=9222 --window-size=1280,720 \
-    --user-data-dir=/tmp/.chromium about:blank &
+  if [ "${BROWSER_VERBOSE:-false}" = "true" ]; then
+    chromium --no-sandbox --disable-gpu --disable-dev-shm-usage \
+      --disable-software-rasterizer --remote-debugging-address=0.0.0.0 \
+      --remote-debugging-port=9222 --window-size=1280,720 \
+      --user-data-dir=/tmp/.chromium about:blank &
+  else
+    chromium --no-sandbox --disable-gpu --disable-dev-shm-usage \
+      --disable-software-rasterizer --remote-debugging-address=0.0.0.0 \
+      --remote-debugging-port=9222 --window-size=1280,720 \
+      --user-data-dir=/tmp/.chromium about:blank 2>/dev/null &
+  fi
   echo "Browser sandbox ready (noVNC: http://localhost:6080/vnc.html, CDP: ws://localhost:9222)"
 fi
 
