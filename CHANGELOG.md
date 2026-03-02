@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Vision Browser (Experimental)** — Pixel-coordinate browser control using CDP Input events, designed for vision LLMs (e.g., Qwen3-VL via LM Studio). Enabled via `EXPERIMENTAL_VISION=true` env var. Tools: `sandbox_vision_screenshot`, `sandbox_vision_navigate`, `sandbox_vision_click`, `sandbox_vision_type`, `sandbox_vision_scroll`, `sandbox_vision_key`, `sandbox_vision_drag`. Every action tool auto-captures a JPEG screenshot (quality 55) and returns it as `ContentPart[]`, cutting the screenshot-infer-act loop to one call per action. New skill template: `templates/skills/vision-browser/`. New template agent: `vision`.
 
-- **Context Compaction** — `compactContext()` in `llm-types.ts` summarises old ReAct iteration groups into a concise `<action_history>` block, keeping only the most recent iterations in full. Prevents context overflow in long-running agent loops. Includes a "wrap up" nudge after configurable iteration count. `stripOldImages()` companion strips base64 image data from all but the most recent image-bearing message.
+- **Image Stripping** — `stripOldImages()` in `llm-types.ts` strips base64 image data from all but the most recent image-bearing message, preventing context overflow in vision browser loops.
 
 - **ReAct Loop Rewrite** — Unified `runLoop()` generator replaces duplicated logic between `invoke()` and `streamEvents()`. Adds context size logging (KB + estimated tokens), image counting, no-tool-call nudging (3 retries before accepting as final answer), reasoning/thinking content preserved in message history, and cumulative token tracking.
 

@@ -6,7 +6,7 @@ import type {
   StructuredTool,
   ToolCall,
 } from '../types/llm-types.ts';
-import { aiMessage, toolMessage, compactContext } from '../types/llm-types.ts';
+import { aiMessage, toolMessage, stripOldImages } from '../types/llm-types.ts';
 import { logger } from '../logger.ts';
 
 function countImages(messages: BaseMessage[]): number {
@@ -71,13 +71,13 @@ async function* runLoop(
       throw new DOMException('Aborted', 'AbortError');
     }
 
-    const compacted = compactContext(allMessages);
-    const contextChars = estimateContextChars(compacted);
+    const prepared = stripOldImages(allMessages);
+    const contextChars = estimateContextChars(prepared);
     const contextKB = (contextChars / 1024).toFixed(1);
-    const images = countImages(compacted);
+    const images = countImages(prepared);
 
     logger.info(
-      `[ReactLoop] iteration ${i + 1} | messages: ${allMessages.length} (compacted: ${compacted.length}) | images: ${images} | context: ${contextKB} KB (~${Math.round(contextChars / 4).toLocaleString()} tokens)`,
+      `[ReactLoop] iteration ${i + 1} | messages: ${allMessages.length} | images: ${images} | context: ${contextKB} KB (~${Math.round(contextChars / 4).toLocaleString()} tokens)`,
     );
 
     yield {
@@ -91,7 +91,7 @@ async function* runLoop(
     let accumulatedToolCalls: ToolCall[] = [];
     let usageMetadata: ChatModelResponse['usage_metadata'] | undefined;
 
-    for await (const chunk of modelWithTools.stream(compacted, { signal: options?.signal })) {
+    for await (const chunk of modelWithTools.stream(prepared, { signal: options?.signal })) {
       if (chunk.content) {
         accumulatedContent += chunk.content;
         yield { event: 'on_chat_model_stream', data: { chunk: { content: chunk.content } } };
@@ -121,8 +121,7 @@ async function* runLoop(
     };
 
     // Store reasoning in AI message content so the model retains memory of
-    // what it observed/thought. compactContext summarises old observations;
-    // recent ones are kept in full.
+    // what it observed/thought across iterations.
     const messageContent = [accumulatedReasoning, accumulatedContent].filter(Boolean).join('\n\n');
     allMessages.push(aiMessage(messageContent, accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined));
 

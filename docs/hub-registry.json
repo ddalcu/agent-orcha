@@ -72,6 +72,14 @@
     "tags": ["browser", "vision", "automation"]
   },
   {
+    "name": "web-engineer",
+    "type": "agent",
+    "description": "Web software engineer that builds and publishes web applications using sandbox shell and htmlhost.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/web-engineer.agent.yaml",
+    "tags": ["web", "development", "sandbox"]
+  },
+  {
     "name": "web-pilot",
     "type": "agent",
     "description": "Browser agent — navigates, fills forms, clicks through pages using an observe-act loop.",

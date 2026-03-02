@@ -11,6 +11,8 @@ services:
       BROWSER_SANDBOX: "true"
       AUTH_PASSWORD: ${AUTH_PASSWORD:-}
     shm_size: "2gb"
+    cap_add:
+      - NET_RAW
     develop:
       watch:
         - action: sync

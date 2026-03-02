@@ -23,6 +23,7 @@ import { VmExecutor } from './sandbox/vm-executor.ts';
 import { createSandboxExecTool } from './sandbox/sandbox-exec.ts';
 import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web.ts';
 import { createSandboxShellTool } from './sandbox/sandbox-shell.ts';
+import { createFileTools } from './sandbox/sandbox-file.ts';
 import { createBrowserTools } from './sandbox/sandbox-browser.ts';
 import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
@@ -207,6 +208,11 @@ export class Orchestrator {
     tools.set('web_fetch', createSandboxWebFetchTool(this.sandboxConfig));
     tools.set('web_search', createSandboxWebSearchTool());
     tools.set('shell', createSandboxShellTool(this.sandboxConfig));
+
+    const fileTools = createFileTools(this.sandboxConfig);
+    for (const ft of fileTools) {
+      tools.set(ft.name.replace('sandbox_file_', 'file_'), ft);
+    }
 
     const browserTools = createBrowserTools(this.sandboxConfig);
     for (const bt of browserTools) {

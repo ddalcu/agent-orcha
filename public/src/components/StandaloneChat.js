@@ -490,7 +490,7 @@ class StandaloneChat extends HTMLElement {
                 toolEl.appendChild(pillContent);
 
                 const details = document.createElement('div');
-                details.className = 'tool-invocation-details hidden absolute left-0 bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
+                details.className = 'tool-invocation-details hidden absolute bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
 
                 if (toolInput) {
                     const inputSection = document.createElement('div');
@@ -515,12 +515,26 @@ class StandaloneChat extends HTMLElement {
                 toolEl.appendChild(details);
 
                 toolEl.addEventListener('click', (e) => {
+                    if (details.contains(e.target)) return;
                     e.preventDefault();
                     e.stopPropagation();
                     toolsDiv.querySelectorAll('.tool-invocation-details:not(.hidden)').forEach(d => {
                         if (d !== details) d.classList.add('hidden');
                     });
+                    const wasHidden = details.classList.contains('hidden');
                     details.classList.toggle('hidden');
+                    if (wasHidden) {
+                        const pillRect = toolEl.getBoundingClientRect();
+                        const containerRect = container.getBoundingClientRect();
+                        const spaceRight = containerRect.right - pillRect.left;
+                        if (spaceRight < 420) {
+                            details.style.right = '0';
+                            details.style.left = 'auto';
+                        } else {
+                            details.style.left = '0';
+                            details.style.right = 'auto';
+                        }
+                    }
                 });
 
                 document.addEventListener('click', (e) => {
@@ -562,6 +576,13 @@ class StandaloneChat extends HTMLElement {
                 output_tokens: event.output_tokens || 0,
                 total_tokens: event.total_tokens || 0,
             };
+        } else if (event.type === 'react_iteration') {
+            const wrapper = bubble.closest('.response-wrapper');
+            const statusText = wrapper?.querySelector('.stream-status-text');
+            if (statusText) {
+                const contextKB = (event.contextChars / 1024).toFixed(1);
+                statusText.textContent = `Iteration ${event.iteration} · ${contextKB} KB context`;
+            }
         }
     }
 
