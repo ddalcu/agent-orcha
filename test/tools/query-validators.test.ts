@@ -63,7 +63,7 @@ describe('validateReadonlySql', () => {
   it('should reject INSERT statements', () => {
     const result = validateReadonlySql('INSERT INTO users (name) VALUES ("Bob")');
     assert.equal(result.valid, false);
-    assert.ok(result.reason!.includes('INSERT'));
+    assert.ok(result.reason!.includes('SELECT'));
   });
 
   it('should reject UPDATE statements', () => {

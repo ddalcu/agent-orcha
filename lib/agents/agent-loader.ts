@@ -3,6 +3,7 @@ import * as path from 'path';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
 import { AgentDefinitionSchema, type AgentDefinition } from './types.ts';
+import { substituteEnvVars } from '../utils/env-substitution.ts';
 import { logger } from '../logger.ts';
 
 export class AgentLoader {
@@ -33,7 +34,7 @@ export class AgentLoader {
 
   async loadOne(filePath: string): Promise<AgentDefinition> {
     const content = await fs.readFile(filePath, 'utf-8');
-    const parsed = parseYaml(content);
+    const parsed = parseYaml(substituteEnvVars(content));
     const agent = AgentDefinitionSchema.parse(parsed);
     this.agents.set(agent.name, agent);
     this.pathToName.set(path.resolve(filePath), agent.name);

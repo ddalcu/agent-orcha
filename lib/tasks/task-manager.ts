@@ -1,5 +1,5 @@
 import type { Orchestrator } from '../orchestrator.ts';
-import type { SubmitAgentParams, SubmitWorkflowParams, Task, TaskKind, TaskStoreConfig } from './types.ts';
+import type { SubmitAgentParams, SubmitWorkflowParams, Task, TaskEvent, TaskKind, TaskMetrics, TaskStoreConfig } from './types.ts';
 import { TaskStore } from './task-store.ts';
 import { logger } from '../logger.ts';
 
@@ -200,6 +200,17 @@ export class TaskManager {
       error: error instanceof Error ? error.message : String(error),
       completedAt: Date.now(),
     });
+  }
+
+  updateMetrics(id: string, metrics: TaskMetrics): void {
+    this.store.update(id, { metrics });
+  }
+
+  addEvent(id: string, event: TaskEvent): void {
+    const task = this.store.get(id);
+    if (!task) return;
+    if (!task.events) task.events = [];
+    task.events.push(event);
   }
 
   getTask(id: string): Task | undefined {

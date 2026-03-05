@@ -60,6 +60,7 @@ export class LLMFactory {
       maxTokens: config.maxTokens,
       streamUsage: true,
       baseURL: config.baseUrl,
+      provider: provider as 'openai' | 'local',
       ...(temperature !== undefined ? { temperature } : {}),
     });
   }
@@ -81,6 +82,7 @@ export class LLMFactory {
       apiKey,
       baseURL: config.baseUrl,
       maxTokens: config.maxTokens,
+      thinkingBudget: config.thinkingBudget,
       ...(temperature !== undefined ? { temperature } : {}),
     });
   }

@@ -249,7 +249,9 @@ eventSource.onmessage = (event) => {
 ```
 
 **CORS Configuration:**
-For production deployments, configure CORS in your server startup or use a reverse proxy (nginx, Caddy, etc.) to handle CORS headers.
+By default, only same-origin requests are allowed. Set the `CORS_ORIGIN` environment variable to allow cross-origin requests:
+- `CORS_ORIGIN=*` — allow all origins
+- `CORS_ORIGIN=https://your-frontend.com` — allow a specific origin
 
 **Authentication:**
 Set the `AUTH_PASSWORD` environment variable to enable password authentication for all API routes. The Studio UI will prompt for the password on access. When unset, all routes are open (suitable for local development behind a firewall).
@@ -374,6 +376,12 @@ WORKSPACE=/path/to/project
 
 # Authentication (optional — when set, all API routes and Studio require this password)
 AUTH_PASSWORD=your-secret-password
+
+# CORS (optional — controls cross-origin request policy)
+# Not set = same-origin only (secure default)
+# CORS_ORIGIN=* = allow all origins
+# CORS_ORIGIN=https://example.com = allow specific origin
+CORS_ORIGIN=https://your-frontend.com
 ```
 
 ## Agents
@@ -444,10 +452,6 @@ triggers:                       # Cron or webhook triggers (optional)
     schedule: "0 * * * *"
   - type: webhook
 
-metadata:                       # Custom metadata (optional)
-  category: string
-  tags: [string]
-
 publish: boolean | object       # Standalone chat page (optional)
   # Simple: publish: true
   # With password: publish: { enabled: true, password: "secret" }
@@ -500,10 +504,6 @@ tools:
 
 output:
   format: text
-
-metadata:
-  category: research
-  tags: [research, web, knowledge]
 ```
 
 ### Conversation Memory

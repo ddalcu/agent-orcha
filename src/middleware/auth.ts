@@ -1,21 +1,36 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import { randomBytes, timingSafeEqual } from 'crypto';
+import { rateLimitHook } from './rate-limit.ts';
 
 const COOKIE_NAME = 'orcha_session';
 const MAX_AGE = 86400;
 
-// --- Session store ---
-const sessions = new Set<string>();
+// --- Session store (token -> expiration timestamp) ---
+const sessions = new Map<string, number>();
+
+// Cleanup expired sessions every hour
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, expiresAt] of sessions) {
+    if (now > expiresAt) sessions.delete(token);
+  }
+}, 60 * 60 * 1000);
 
 function createSession(): string {
   const token = randomBytes(32).toString('hex');
-  sessions.add(token);
+  sessions.set(token, Date.now() + MAX_AGE * 1000);
   return token;
 }
 
 function isValidSession(token: string): boolean {
-  return sessions.has(token);
+  const expiresAt = sessions.get(token);
+  if (expiresAt === undefined) return false;
+  if (Date.now() > expiresAt) {
+    sessions.delete(token);
+    return false;
+  }
+  return true;
 }
 
 function destroySession(token: string): void {
@@ -99,7 +114,9 @@ const authPluginImpl: FastifyPluginAsync = async (fastify) => {
     return { authenticated: !!token && isValidSession(token), required: true };
   });
 
-  fastify.post<{ Body: { password?: string } }>('/api/auth/login', async (request, reply) => {
+  const loginRateLimit = rateLimitHook(5, 60_000);
+
+  fastify.post<{ Body: { password?: string } }>('/api/auth/login', { preHandler: loginRateLimit }, async (request, reply) => {
     if (!isAuthEnabled()) return { authenticated: true, required: false };
 
     const { password } = request.body ?? {};

@@ -44,7 +44,6 @@ export function getRecentLogs(limit?: number): LogEntry[] {
 export function getPinoConfig() {
   const logLevel = process.env.LOG_LEVEL || 'debug';
   const isDevelopment = process.env.NODE_ENV !== 'production';
-  console.log("LogLevel", logLevel);
   return {
     level: logLevel,
     transport: isDevelopment

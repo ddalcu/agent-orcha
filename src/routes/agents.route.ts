@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { resolvePublishConfig } from '../../lib/agents/types.ts';
+import type { ContentPart } from '../../lib/types/llm-types.ts';
 
 interface AgentParams {
   name: string;
@@ -8,6 +9,19 @@ interface AgentParams {
 interface InvokeBody {
   input: Record<string, unknown>;
   sessionId?: string;
+}
+
+/** Strip base64 image data from tool output so stored events stay small. */
+function summarizeOutput(output: unknown): unknown {
+  if (typeof output === 'string') return output.length > 500 ? output.slice(0, 500) + '...' : output;
+  if (Array.isArray(output)) {
+    return output.map((p: any) => {
+      if (p?.type === 'image') return { type: 'image', mediaType: p.mediaType, bytes: p.data?.length ?? 0 };
+      if (p?.type === 'text') return p;
+      return p;
+    });
+  }
+  return output;
 }
 
 export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -38,7 +52,12 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    return agent;
+    const publish = resolvePublishConfig(agent.publish);
+    const { publish: _publish, ...rest } = agent;
+    return {
+      ...rest,
+      publish: { enabled: publish.enabled, hasPassword: !!publish.password },
+    };
   });
 
   fastify.post<{ Params: AgentParams; Body: InvokeBody }>(
@@ -92,15 +111,59 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         const stream = fastify.orchestrator.streamAgent(name, input, sessionId, abortController.signal);
 
+        // Accumulate streaming text chunks into complete events
+        let pendingText = { type: '', content: '', timestamp: 0 };
+        let lastThinkingContent = '';
+
+        const flushPendingText = () => {
+          const text = pendingText.content.trim();
+          if (!text) { pendingText = { type: '', content: '', timestamp: 0 }; return; }
+          // Deduplicate repeated identical thinking blocks from misbehaving models
+          if (pendingText.type === 'thinking' && text === lastThinkingContent) {
+            pendingText = { type: '', content: '', timestamp: 0 };
+            return;
+          }
+          if (pendingText.type === 'thinking') lastThinkingContent = text;
+          taskManager.addEvent(task.id, {
+            type: pendingText.type as any,
+            timestamp: pendingText.timestamp,
+            content: text,
+          });
+          pendingText = { type: '', content: '', timestamp: 0 };
+        };
+
         for await (const chunk of stream) {
           if (abortController.signal.aborted) break;
           if (typeof chunk === 'string') {
             reply.raw.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           } else {
-            // Already an event object
-            reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
+            const evt = chunk as Record<string, unknown>;
+            // Update task metrics on react-loop iterations
+            if (evt.type === 'react_iteration') {
+              const { type: _, ...metrics } = evt;
+              taskManager.updateMetrics(task.id, metrics as any);
+            }
+            // Accumulate thinking/content chunks into single events
+            if (evt.type === 'thinking' || evt.type === 'content') {
+              if (pendingText.type && pendingText.type !== evt.type) flushPendingText();
+              if (!pendingText.type) { pendingText.type = evt.type as string; pendingText.timestamp = Date.now(); }
+              pendingText.content += (evt.content as string) || '';
+            } else if (evt.type === 'tool_start' || evt.type === 'tool_end') {
+              // Tool event — flush accumulated text first, then store the tool event
+              flushPendingText();
+              const event: Record<string, unknown> = { type: evt.type, timestamp: Date.now() };
+              if (evt.tool) event.tool = evt.tool;
+              if (evt.input !== undefined) event.input = evt.input;
+              if (evt.output !== undefined) event.output = summarizeOutput(evt.output);
+              taskManager.addEvent(task.id, event as any);
+            } else {
+              // Other events (react_iteration, usage, etc.) — flush text but don't store
+              flushPendingText();
+            }
+            reply.raw.write(`data: ${JSON.stringify(evt)}\n\n`);
           }
         }
+        flushPendingText();
 
         if (!abortController.signal.aborted) {
           taskManager.resolve(task.id, { output: 'stream completed' });
@@ -159,6 +222,53 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       return {
         message: 'Session cleared',
         sessionId,
+      };
+    }
+  );
+
+  fastify.get<{ Params: { sessionId: string } }>(
+    '/sessions/:sessionId/messages',
+    async (request, reply) => {
+      const { sessionId } = request.params;
+
+      if (!fastify.orchestrator.memory.hasSession(sessionId)) {
+        return reply.status(404).send({ error: 'Session not found', sessionId });
+      }
+
+      const store = fastify.orchestrator.memory.getStore();
+      const rawMessages = store.getMessages(sessionId);
+      const messages = rawMessages.map((msg: { role: string; content: unknown; tool_calls?: { name: string }[]; name?: string }) => {
+        const entry: Record<string, unknown> = { role: msg.role };
+
+        if (typeof msg.content === 'string') {
+          entry.textChars = msg.content.length;
+          entry.images = 0;
+        } else if (Array.isArray(msg.content)) {
+          const parts = msg.content as ContentPart[];
+          let textChars = 0;
+          let images = 0;
+          let imageBytes = 0;
+          for (const p of parts) {
+            if (p.type === 'text') textChars += p.text.length;
+            else if (p.type === 'image') { images++; imageBytes += p.data.length; }
+          }
+          entry.textChars = textChars;
+          entry.images = images;
+          if (images > 0) entry.imageBytes = imageBytes;
+        }
+
+        if (msg.tool_calls?.length) {
+          entry.toolCalls = msg.tool_calls.map((tc) => tc.name);
+        }
+        if (msg.name) entry.name = msg.name;
+
+        return entry;
+      });
+
+      return {
+        sessionId,
+        messageCount: rawMessages.length,
+        messages,
       };
     }
   );

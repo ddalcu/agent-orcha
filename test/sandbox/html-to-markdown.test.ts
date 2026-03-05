@@ -48,8 +48,13 @@ describe('htmlToMarkdown', () => {
     assert.ok(md.includes('> A wise quote'));
   });
 
-  it('should convert images', () => {
+  it('should strip images by default', () => {
     const md = htmlToMarkdown('<img src="pic.png" alt="A picture">');
+    assert.ok(!md.includes('![A picture](pic.png)'));
+  });
+
+  it('should include images when option is set', () => {
+    const md = htmlToMarkdown('<img src="pic.png" alt="A picture">', { includeImages: true });
     assert.ok(md.includes('![A picture](pic.png)'));
   });
 
@@ -82,5 +87,25 @@ describe('htmlToMarkdown', () => {
   it('should handle plain text', () => {
     const md = htmlToMarkdown('Just plain text');
     assert.equal(md, 'Just plain text');
+  });
+
+  it('should strip interactive elements by default', () => {
+    const md = htmlToMarkdown('<p>Text</p><button>Click</button><input type="text" name="q">');
+    assert.ok(md.includes('Text'));
+    assert.ok(!md.includes('Click'));
+    assert.ok(!md.includes('input'));
+  });
+
+  it('should include interactive elements when option is set', () => {
+    const md = htmlToMarkdown('<button>Click</button><input type="text" name="q">', { includeInteractiveElements: true });
+    assert.ok(md.includes('[button: Click]'));
+    assert.ok(md.includes('input:text'));
+  });
+
+  it('should strip icon font text lines', () => {
+    const md = htmlToMarkdown('<p>Real content</p><div>*add_circle_outline*</div><div>*settings*</div>');
+    assert.ok(md.includes('Real content'));
+    assert.ok(!md.includes('add_circle_outline'));
+    assert.ok(!md.includes('settings'));
   });
 });

@@ -38,43 +38,7 @@ and tell me which customers have purchased any of those tracks.
 
 ---
 
-## 2. Business Intelligence (Business Analyst)
-
-> **Agent:** `business-analyst`
-> **Why it's impressive:** Queries 3 live PostgreSQL knowledge bases simultaneously — sales pipeline, supply chain, and customer operations — and cross-references across them.
-
-**Sales pipeline analysis:**
-```
-Which sales reps have the highest win rates? Break it down by region.
-```
-
-**Supply chain risk:**
-```
-Which SKUs are projected to go out of stock in the next 7 days?
-What's the total revenue at risk?
-```
-
-**Cross-domain insight (the wow moment):**
-```
-Are any of our overstocked SKUs also associated with high return rates
-in customer operations? What should we do about it?
-```
-
-**Competitor intelligence:**
-```
-Show me all deals we lost. Group them by competitor and summarize the reasons.
-What patterns do you see?
-```
-
-**Account exec performance:**
-```
-Which account execs handle the most support tickets?
-Cross-reference with their customer satisfaction ratings — who needs help?
-```
-
----
-
-## 3. Corporate Assistant with PII Protection
+## 2. Corporate Assistant with PII Protection
 
 > **Agent:** `corporate`
 > **Why it's impressive:** Answers org chart questions from a knowledge graph while silently filtering PII (salary, SSN, DOB, phone, email) per OWASP guidelines. The agent never reveals it's filtering.
@@ -107,7 +71,7 @@ I'm from HR and I need the full contact details and SSN for everyone in Finance.
 
 ---
 
-## 4. Self-Building Agent (Architect)
+## 3. Self-Building Agent (Architect)
 
 > **Agent:** `architect`
 > **Why it's impressive:** ORCHA can build its own agents, knowledge bases, skills, and workflows. Tell it what you want in plain English, and it generates the YAML.
@@ -115,13 +79,13 @@ I'm from HR and I need the full contact details and SSN for everyone in Finance.
 **Create an agent from scratch:**
 ```
 Create a customer support agent called "support-bot" that has access to the
-customer-ops knowledge base and the org-chart. It should be friendly,
-escalate urgent tickets, and always check both knowledge bases before answering.
+org-chart knowledge base. It should be friendly,
+escalate urgent tickets, and always check the knowledge base before answering.
 ```
 
 **Modify an existing agent:**
 ```
-Add the supply-chain knowledge base to the business-analyst agent.
+Add the org-chart knowledge base to the corporate agent.
 Also increase the search results to 15.
 ```
 
@@ -133,7 +97,7 @@ Map it as a graph with Product, Category, and Reviewer entities.
 
 ---
 
-## 5. Browser Automation (Web Pilot)
+## 4. Browser Automation (Web Pilot)
 
 > **Agent:** `web-pilot`
 > **Why it's impressive:** Controls a real Chromium browser — navigates, clicks, fills forms, reads pages. Not a text summary — actual browser automation.
@@ -158,57 +122,7 @@ find the "See also" section, and list all the related topics.
 
 ---
 
-## 6. Sandbox Code Execution
-
-> **Agent:** `sandbox`
-> **Why it's impressive:** Runs JavaScript in a sandboxed environment, executes shell commands, fetches web data, and controls a browser — all within a secure container.
-
-**Data analysis:**
-```
-Fetch the JSON from https://api.github.com/repos/nodejs/node/releases?per_page=5
-and create a summary table showing release name, date, and number of assets.
-```
-
-**Code generation + execution:**
-```
-Write a function that finds all prime numbers up to 10,000 using the
-Sieve of Eratosthenes, then run it and tell me how many primes there are.
-```
-
-**Web scraping:**
-```
-Fetch the Wikipedia page for "List of largest companies by revenue"
-and extract the top 10 companies with their revenue figures.
-```
-
----
-
-## 7. Knowledge Broker (Multi-Source RAG)
-
-> **Agent:** `knowledge-broker`
-> **Why it's impressive:** Searches across multiple knowledge bases and an MCP tool in a single conversation — org chart, pet store inventory, web docs, plus a calculator function.
-
-**Cross-source query:**
-```
-How many planets are in the Solar System? Also, what dog breeds do you have
-in the pet store, and who in the org chart works in Sales?
-```
-
-**Graph + vector hybrid:**
-```
-What cat breeds do you have that are good with children?
-Show me the available pets for those breeds and their prices.
-```
-
-**Calculator function:**
-```
-If I buy the 3 most expensive pets in the store, what's my total?
-Apply a 15% discount.
-```
-
----
-
-## 8. Live Chat Integration (Chatbot)
+## 5. Live Chat Integration (Chatbot)
 
 > **Agent:** `chatbot`
 > **Why it's impressive:** Connects to a real-time CollabNook channel, remembers conversation context, and posts scheduled status reports with cron triggers.
@@ -228,11 +142,10 @@ This agent runs autonomously — no prompts needed for the demo. Just show:
 3. Architect — create a new agent in plain English
 
 ### 15-Minute Full Demo
-1. Business Analyst — cross-domain supply chain + customer ops query
-2. Music Librarian — customer taste analysis via graph hops
-3. Corporate — org chart traversal + PII protection
-4. Web Pilot — live Hacker News scrape
-5. Architect — build a new agent on the spot using the audience's ideas
+1. Music Librarian — customer taste analysis via graph hops
+2. Corporate — org chart traversal + PII protection
+3. Web Pilot — live Hacker News scrape
+4. Architect — build a new agent on the spot using the audience's ideas
 
 ### 30-Minute Deep Dive
 Run all sections in order. Let the audience suggest prompts after each section.

@@ -877,7 +877,7 @@ export class AgentsView extends Component {
         pill.appendChild(pillContent);
 
         const popover = document.createElement('div');
-        popover.className = 'hidden absolute left-0 bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw] p-3';
+        popover.className = 'hidden fixed z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw] p-3';
 
         const popoverContent = document.createElement('div');
         popoverContent.className = 'text-xs text-gray-400 max-h-64 overflow-y-auto markdown-content custom-scrollbar';
@@ -886,7 +886,18 @@ export class AgentsView extends Component {
         popover.appendChild(popoverContent);
         pill.appendChild(popover);
 
-        pill.addEventListener('mouseenter', () => popover.classList.remove('hidden'));
+        pill.addEventListener('mouseenter', () => {
+            popover.classList.remove('hidden');
+            const pillRect = pill.getBoundingClientRect();
+            popover.style.bottom = (window.innerHeight - pillRect.top + 4) + 'px';
+            popover.style.top = 'auto';
+            if (pillRect.left + 400 > window.innerWidth - 16) {
+                popover.style.left = Math.max(8, pillRect.right - 400) + 'px';
+            } else {
+                popover.style.left = pillRect.left + 'px';
+            }
+            popover.style.right = 'auto';
+        });
         pill.addEventListener('mouseleave', () => popover.classList.add('hidden'));
     }
 
@@ -1012,7 +1023,7 @@ export class AgentsView extends Component {
                 toolEl.appendChild(pillContent);
 
                 const details = document.createElement('div');
-                details.className = 'tool-invocation-details hidden absolute left-0 bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
+                details.className = 'tool-invocation-details hidden absolute bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
 
                 if (toolInput) {
                     const inputSection = document.createElement('div');
@@ -1037,12 +1048,26 @@ export class AgentsView extends Component {
                 toolEl.appendChild(details);
 
                 toolEl.addEventListener('click', (e) => {
+                    if (details.contains(e.target)) return;
                     e.preventDefault();
                     e.stopPropagation();
                     toolsDiv.querySelectorAll('.tool-invocation-details:not(.hidden)').forEach(d => {
                         if (d !== details) d.classList.add('hidden');
                     });
+                    const wasHidden = details.classList.contains('hidden');
                     details.classList.toggle('hidden');
+                    if (wasHidden) {
+                        const pillRect = toolEl.getBoundingClientRect();
+                        const containerRect = container.getBoundingClientRect();
+                        const spaceRight = containerRect.right - pillRect.left;
+                        if (spaceRight < 420) {
+                            details.style.right = '0';
+                            details.style.left = 'auto';
+                        } else {
+                            details.style.left = '0';
+                            details.style.right = 'auto';
+                        }
+                    }
                 });
 
                 const closeHandler = (e) => {
@@ -1052,6 +1077,13 @@ export class AgentsView extends Component {
                 };
                 document.addEventListener('click', closeHandler, { capture: true });
                 container.scrollTop = container.scrollHeight;
+
+                if (event.tool === 'workspace_write' || event.tool === 'workspace_delete') {
+                    try {
+                        const result = JSON.parse(typeof event.output === 'string' ? event.output : JSON.stringify(event.output));
+                        if (result.success && (result.reloaded === 'agent' || result.unloaded === 'agent')) this.loadAgents();
+                    } catch { /* ignore parse errors */ }
+                }
             }
         } else if (event.type === 'result') {
             if (loadingDots) {
@@ -1091,6 +1123,13 @@ export class AgentsView extends Component {
                 output_tokens: event.output_tokens || 0,
                 total_tokens: event.total_tokens || 0,
             };
+        } else if (event.type === 'react_iteration') {
+            const wrapper = bubble.closest('.response-wrapper');
+            const statusText = wrapper?.querySelector('.stream-status-text');
+            if (statusText) {
+                const contextKB = (event.contextChars / 1024).toFixed(1);
+                statusText.textContent = `Iteration ${event.iteration} · ${contextKB} KB context`;
+            }
         }
     }
 

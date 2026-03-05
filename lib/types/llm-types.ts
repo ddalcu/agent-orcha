@@ -47,6 +47,52 @@ export function toolMessage(content: MessageContent, tool_call_id: string, name:
   return { role: 'tool', content, tool_call_id, name };
 }
 
+/**
+ * Returns a shallow copy of messages where images are stripped from all but the
+ * last message that contains images — regardless of role (tool, human, etc.).
+ * Keeps text parts intact. Prevents flooding context with stale images across
+ * multi-turn conversations and tool loops.
+ */
+export function stripOldImages(messages: BaseMessage[]): BaseMessage[] {
+  // Find the last message (any role) that contains images
+  let lastImageIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (Array.isArray(messages[i]!.content) && (messages[i]!.content as ContentPart[]).some(p => p.type === 'image')) {
+      lastImageIdx = i;
+      break;
+    }
+  }
+
+  if (lastImageIdx === -1) return messages;
+
+  // Check if there are any older images worth stripping
+  let hasOlderImages = false;
+  for (let i = 0; i < lastImageIdx; i++) {
+    if (Array.isArray(messages[i]!.content) && (messages[i]!.content as ContentPart[]).some(p => p.type === 'image')) {
+      hasOlderImages = true;
+      break;
+    }
+  }
+  if (!hasOlderImages) return messages;
+
+  return messages.map((msg, i) => {
+    if (i >= lastImageIdx) return msg;
+    if (!Array.isArray(msg.content)) return msg;
+
+    const parts = msg.content as ContentPart[];
+    const hasImage = parts.some(p => p.type === 'image');
+    if (!hasImage) return msg;
+
+    const textParts = parts.filter(p => p.type === 'text') as { type: 'text'; text: string }[];
+    const imageCount = parts.length - textParts.length;
+    const text = textParts.map(p => p.text).join(' ');
+    return {
+      ...msg,
+      content: [{ type: 'text' as const, text: `${text} (${imageCount} image(s) omitted)` }],
+    };
+  });
+}
+
 // --- Document Type ---
 
 export interface Document {

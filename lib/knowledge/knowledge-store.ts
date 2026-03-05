@@ -14,6 +14,7 @@ import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.ts';
 import { detectProvider } from '../llm/provider-detector.ts';
 import { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
 import cron from 'node-cron';
+import { substituteEnvVars } from '../utils/env-substitution.ts';
 import { createLogger } from '../logger.ts';
 import type { Document, Embeddings } from '../types/llm-types.ts';
 import type {
@@ -75,7 +76,7 @@ export class KnowledgeStore {
 
   async loadOne(filePath: string): Promise<KnowledgeConfig> {
     const content = await fs.readFile(filePath, 'utf-8');
-    const parsed = parseYaml(content);
+    const parsed = parseYaml(substituteEnvVars(content));
     const config = KnowledgeConfigSchema.parse(parsed);
 
     // Resolve sqlite:// paths relative to workspaceRoot so they work regardless of cwd

@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
+import { substituteEnvVars } from '../utils/env-substitution.ts';
 import { logger } from '../logger.ts';
 import type { Skill, AgentSkillsConfig } from './types.ts';
 
@@ -31,7 +32,7 @@ export class SkillLoader {
   async loadOne(filePath: string): Promise<Skill> {
     try {
       const raw = await fs.readFile(filePath, 'utf-8');
-      const { frontmatter, body } = this.parseFrontmatter(raw);
+      const { frontmatter, body } = this.parseFrontmatter(substituteEnvVars(raw));
 
       const dirName = path.basename(path.dirname(filePath));
       const name = typeof frontmatter.name === 'string' ? frontmatter.name : dirName;

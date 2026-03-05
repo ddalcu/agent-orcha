@@ -16,22 +16,43 @@ llm:
 prompt:
   system: |
     Your system prompt here.
-  inputVariables: [query]
-tools:                            # mcp:<server> | knowledge:<store> | function:<name>
-  - mcp:server-name               # builtin:<name> | sandbox:<tool> | project:<tool>
-  - knowledge:store-name           # sandbox: exec, shell, web_fetch, web_search, browser_*
-  - sandbox:browser_navigate       # project: read, write, delete, list, list_resources
-skills: [skill-name]              # or { mode: all }
+  inputVariables:
+    - query
+tools:                                # mcp:<server> | knowledge:<store> | function:<name>
+  - mcp:server-name                   # builtin:<name> | sandbox:<tool> | project:<tool>
+  - knowledge:store-name              # sandbox: exec, shell, web_fetch, web_search, browser_*
+  - sandbox:browser_navigate          # project: read, write, delete, list, list_resources
+skills:
+  - skill-name                        # or use mode: all to attach all skills
 output:
-  format: text                    # text | structured
-memory: { enabled: true, maxLines: 100 }
+  format: text                        # text | structured
+memory:
+  enabled: true
+  maxLines: 100
 integrations:
-  - { type: collabnook, url: "wss://host/ws", channel: general, botName: Bot }
-  - { type: email, imap: { host: imap.gmail.com, port: 993 }, smtp: { host: smtp.gmail.com, port: 587 }, auth: { user: agent@example.com, pass: pw }, pollInterval: 60, folder: INBOX }
+  - type: collabnook
+    url: "wss://collabnook.com/ws"          # optional — defaults to wss://collabnook.com/ws
+    channel: general
+    botName: Bot
+  - type: email
+    imap:
+      host: imap.gmail.com
+      port: 993
+    smtp:
+      host: smtp.gmail.com
+      port: 587
+    auth:
+      user: agent@example.com
+      pass: pw
+    pollInterval: 60
+    folder: INBOX
 triggers:
-  - { type: cron, schedule: "*/5 * * * *", input: { query: "Task" } }
-publish: true                     # or { enabled: true, password: "secret" }
-sampleQuestions:                  # optional — clickable chips shown in chat UI on initial load
+  - type: cron
+    schedule: "*/5 * * * *"
+    input:
+      query: "Task"
+publish: true                         # or { enabled: true, password: "secret" }
+sampleQuestions:                       # optional — clickable chips shown in chat UI on initial load
   - "What can you help me with?"
   - "Summarize the latest report"
 ```
@@ -46,27 +67,40 @@ description: What the workflow does
 type: steps
 input:
   schema:
-    query: { type: string, required: true }
+    query:
+      type: string
+      required: true
 steps:
   - id: step-one
     agent: agent-name
-    input: { query: "{{query}}" }
-    output: { key: step_one_result, extract: output }
+    input:
+      query: "{{query}}"
+    output:
+      key: step_one_result
+      extract: output
   - id: step-two
     agent: another-agent
-    input: { query: "{{step_one_result}}" }
-    output: { key: step_two_result }
+    input:
+      query: "{{step_one_result}}"
+    output:
+      key: step_two_result
     condition: "{{step_one_result}}"
   - parallel:
       - id: branch-a
         agent: agent-a
-        input: { query: "{{query}}" }
-        output: { key: result_a }
+        input:
+          query: "{{query}}"
+        output:
+          key: result_a
       - id: branch-b
         agent: agent-b
-        input: { query: "{{query}}" }
-        output: { key: result_b }
-config: { timeout: 300000, onError: stop }  # stop | continue | retry
+        input:
+          query: "{{query}}"
+        output:
+          key: result_b
+config:
+  timeout: 300000
+  onError: stop                       # stop | continue | retry
 output:
   result: "{{step_two_result}}"
 ```
@@ -79,7 +113,9 @@ description: Autonomous workflow with tool and agent discovery
 type: react
 input:
   schema:
-    query: { type: string, required: true }
+    query:
+      type: string
+      required: true
 prompt:
   system: |
     You are a helpful assistant.
@@ -87,13 +123,19 @@ prompt:
 graph:
   model: default
   tools:
-    sources: [mcp, knowledge, function, builtin]
-    mode: all                     # all | none | include | exclude
-    exclude: [dangerous_tool]
+    sources:
+      - mcp
+      - knowledge
+      - function
+      - builtin
+    mode: all                         # all | none | include | exclude
+    exclude:
+      - dangerous_tool
   agents:
     mode: all
-    exclude: [architect]
-  executionMode: react            # react | single-turn
+    exclude:
+      - architect
+  executionMode: react                # react | single-turn
   maxIterations: 10
   timeout: 300000
 output:
@@ -106,27 +148,31 @@ output:
 name: my-knowledge
 description: What this store contains
 source:
-  type: directory                 # directory | file | database | web
+  type: directory                     # directory | file | database | web
   path: ./docs
   pattern: "**/*.md"
   # Web-specific: url, selector (html only), headers, jsonPath (dot-notation for nested arrays)
-loader:                           # optional — defaults: html (web), text (file/directory)
-  type: text                      # text | pdf | csv | json | markdown | html
+loader:                               # optional — defaults: html (web), text (file/directory)
+  type: text                          # text | pdf | csv | json | markdown | html
 splitter:
-  type: recursive                 # character | recursive | token | markdown
+  type: recursive                     # character | recursive | token | markdown
   chunkSize: 1000
   chunkOverlap: 200
-embedding: default                # reference to llm.json config
-search: { defaultK: 4, scoreThreshold: 0.5 }
-reindex:                          # optional — periodic refresh
-  schedule: "0 * * * *"          # cron expression
-graph:                            # optional — works with database, csv, json (array of objects)
+embedding: default                    # reference to llm.json config
+search:
+  defaultK: 4
+  scoreThreshold: 0.5
+reindex:                              # optional — periodic refresh
+  schedule: "0 * * * *"              # cron expression
+graph:                                # optional — works with database, csv, json (array of objects)
   directMapping:
     entities:
       - type: Person
         idColumn: id
         nameColumn: name
-        properties: [email, { role: job_title }]
+        properties:
+          - email
+          - role: job_title
     relationships:
       - type: WORKS_FOR
         source: Person

@@ -1,6 +1,5 @@
 import { tool } from '../types/tool-factory.ts';
 import { z } from 'zod';
-import { JSDOM, VirtualConsole } from 'jsdom';
 import { htmlToMarkdown } from './html-to-markdown.ts';
 import { createLogger } from '../logger.ts';
 import type { StructuredTool } from '../types/llm-types.ts';
@@ -25,13 +24,46 @@ const BROWSER_HEADERS: Record<string, string> = {
   'Upgrade-Insecure-Requests': '1',
 };
 
+/** Block requests to private/internal IPs to prevent SSRF. */
+function isBlockedHost(hostname: string): string | null {
+  // Known internal hostnames
+  const blockedHostnames = ['localhost', 'host.docker.internal', 'gateway.docker.internal'];
+  if (blockedHostnames.includes(hostname.toLowerCase())) {
+    return `Blocked internal hostname: ${hostname}`;
+  }
+
+  // Check if hostname is an IP address
+  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const [, a, b] = ipv4Match.map(Number) as [number, number, number, number, number];
+    if (a === 127) return 'Blocked loopback address';           // 127.0.0.0/8
+    if (a === 10) return 'Blocked private address';             // 10.0.0.0/8
+    if (a === 172 && b! >= 16 && b! <= 31) return 'Blocked private address'; // 172.16.0.0/12
+    if (a === 192 && b === 168) return 'Blocked private address'; // 192.168.0.0/16
+    if (a === 169 && b === 254) return 'Blocked link-local address'; // 169.254.0.0/16
+    if (a === 0) return 'Blocked address';                      // 0.0.0.0/8
+  }
+
+  // IPv6 loopback
+  if (hostname === '::1' || hostname === '[::1]') {
+    return 'Blocked loopback address';
+  }
+
+  return null;
+}
+
 export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool {
   return tool(
-    async ({ url, raw, runScripts }) => {
+    async ({ url, raw }) => {
       try {
         const parsed = new URL(url);
         if (!['http:', 'https:'].includes(parsed.protocol)) {
           return JSON.stringify({ error: 'Only http and https URLs are supported' });
+        }
+
+        const blocked = isBlockedHost(parsed.hostname);
+        if (blocked) {
+          return JSON.stringify({ error: blocked });
         }
       } catch {
         return JSON.stringify({ error: `Invalid URL: ${url}` });
@@ -75,28 +107,7 @@ export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool
           });
         }
 
-        let html = body;
-        if (runScripts) {
-          try {
-            const virtualConsole = new VirtualConsole();
-            virtualConsole.on('jsdomError', () => { /* suppress script errors */ });
-            const dom = new JSDOM(body, {
-              url: response.url,
-              runScripts: 'dangerously',
-              pretendToBeVisual: true,
-              virtualConsole,
-            });
-            // Catch uncaught errors inside the jsdom window (e.g. dynamic import())
-            dom.window.addEventListener('error', (e: Event) => e.preventDefault());
-            await new Promise(r => setTimeout(r, 100));
-            html = dom.serialize();
-            dom.window.close();
-          } catch {
-            // Script execution failed entirely — fall back to raw HTML
-          }
-        }
-
-        let content = htmlToMarkdown(html);
+        let content = htmlToMarkdown(body);
         const truncated = content.length > config.maxOutputChars;
         if (truncated) {
           content = content.substring(0, config.maxOutputChars);
@@ -118,8 +129,7 @@ export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool
       name: 'sandbox_web_fetch',
       description:
         'Fetch the content of a web page or API endpoint. ' +
-        'HTML is automatically converted to clean markdown. Use raw=true for API responses or non-HTML content. ' +
-        'Set runScripts=true to execute page JavaScript before extraction (may fail on some sites).',
+        'HTML is automatically converted to clean markdown. Use raw=true for API responses or non-HTML content.',
       schema: z.object({
         url: z
           .string()
@@ -129,11 +139,6 @@ export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool
           .optional()
           .default(false)
           .describe('Return raw content without HTML-to-markdown conversion'),
-        runScripts: z
-          .boolean()
-          .optional()
-          .default(false)
-          .describe('Run page JavaScript before extracting content (default: false). May fail on pages with dynamic imports.'),
       }),
     },
   );

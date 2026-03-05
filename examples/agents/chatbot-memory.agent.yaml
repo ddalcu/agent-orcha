@@ -13,8 +13,3 @@ prompt:
     - message
 output:
   format: text
-metadata:
-  category: example
-  features:
-    - conversation-memory
-    - multi-turn-dialogue

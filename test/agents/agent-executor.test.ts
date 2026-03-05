@@ -17,7 +17,6 @@ const fixturePath = path.join(__dirname, '..', 'fixtures', 'llm.json');
 function mockToolRegistry(tools: any[] = []) {
   return {
     resolveTools: async () => tools,
-    getAllSandboxTools: () => [],
   } as any;
 }
 
@@ -126,7 +125,7 @@ describe('AgentExecutor', () => {
   it('should augment prompt with skill content', async () => {
     const store = new ConversationStore();
     const mockSkillLoader = {
-      resolveForAgentWithMeta: () => ({ content: '## Skill: Test\nDo test things', needsSandbox: false }),
+      resolveForAgent: () => '## Skill: Test\nDo test things',
     } as any;
 
     const executor = new AgentExecutor(mockToolRegistry(), store, mockSkillLoader);
@@ -173,22 +172,17 @@ describe('AgentExecutor', () => {
     assert.ok(instance);
   });
 
-  it('should inject sandbox tools when skill requires sandbox', async () => {
+  it('should not auto-inject sandbox tools from skills', async () => {
     const store = new ConversationStore();
     const mockSkillLoader = {
-      resolveForAgentWithMeta: () => ({ content: '## Skill: Code\nRun code', needsSandbox: true }),
+      resolveForAgent: () => '## Skill: Code\nRun code',
     } as any;
 
-    const sandboxTool = { name: 'sandbox_exec' } as any;
-    const registry = {
-      resolveTools: async () => [],
-      getAllSandboxTools: () => [sandboxTool],
-    } as any;
-
-    const executor = new AgentExecutor(registry, store, mockSkillLoader);
+    const executor = new AgentExecutor(mockToolRegistry(), store, mockSkillLoader);
     const def = minimalDefinition({ skills: 'all' });
     const instance = await executor.createInstance(def);
 
+    // Skill content is injected into prompt, but no sandbox tools auto-added
     assert.ok(instance.definition.prompt.system.includes('Skill: Code'));
   });
 
@@ -233,7 +227,7 @@ describe('AgentExecutor', () => {
   it('should not augment skills when content is empty', async () => {
     const store = new ConversationStore();
     const mockSkillLoader = {
-      resolveForAgentWithMeta: () => ({ content: '', needsSandbox: false }),
+      resolveForAgent: () => '',
     } as any;
 
     const executor = new AgentExecutor(mockToolRegistry(), store, mockSkillLoader);

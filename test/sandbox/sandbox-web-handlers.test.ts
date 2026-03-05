@@ -38,7 +38,7 @@ describe('createSandboxWebFetchTool - invoke handlers', () => {
       makeResponse('<html><body><h1>Hello</h1><p>World</p></body></html>', { contentType: 'text/html' })
     );
     const tool = createSandboxWebFetchTool(defaultConfig);
-    const result = JSON.parse(await tool.invoke({ url: 'https://example.com', runScripts: false }) as string);
+    const result = JSON.parse(await tool.invoke({ url: 'https://example.com' }) as string);
     assert.equal(result.status, 200);
     assert.ok(result.content.includes('Hello'));
     assert.ok(result.content.includes('World'));
@@ -58,7 +58,7 @@ describe('createSandboxWebFetchTool - invoke handlers', () => {
     const json = '{"key": "value"}';
     restore = mockFetch(async () => makeResponse(json, { contentType: 'application/json' }));
     const tool = createSandboxWebFetchTool(defaultConfig);
-    const result = JSON.parse(await tool.invoke({ url: 'https://example.com', runScripts: false }) as string);
+    const result = JSON.parse(await tool.invoke({ url: 'https://example.com' }) as string);
     assert.equal(result.content, json);
   });
 
@@ -66,7 +66,7 @@ describe('createSandboxWebFetchTool - invoke handlers', () => {
     const longContent = 'x'.repeat(100);
     restore = mockFetch(async () => makeResponse(longContent, { contentType: 'application/json' }));
     const tool = createSandboxWebFetchTool({ ...defaultConfig, maxOutputChars: 50 });
-    const result = JSON.parse(await tool.invoke({ url: 'https://example.com', runScripts: false }) as string);
+    const result = JSON.parse(await tool.invoke({ url: 'https://example.com' }) as string);
     assert.equal(result.content.length, 50);
     assert.equal(result.truncated, true);
   });
@@ -91,7 +91,7 @@ describe('createSandboxWebFetchTool - invoke handlers', () => {
     const bigBody = `<html><body><p>${'a'.repeat(200)}</p></body></html>`;
     restore = mockFetch(async () => makeResponse(bigBody, { contentType: 'text/html' }));
     const tool = createSandboxWebFetchTool({ ...defaultConfig, maxOutputChars: 50 });
-    const result = JSON.parse(await tool.invoke({ url: 'https://example.com', runScripts: false }) as string);
+    const result = JSON.parse(await tool.invoke({ url: 'https://example.com' }) as string);
     assert.equal(result.truncated, true);
     assert.ok(result.content.length <= 50);
   });

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { randomBytes, timingSafeEqual } from 'crypto';
 import type { FastifyPluginAsync } from 'fastify';
 import { resolvePublishConfig } from '../../lib/agents/types.ts';
+import { rateLimitHook } from '../middleware/rate-limit.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -89,8 +90,11 @@ export const chatRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // Authenticate with agent-specific password
+  const chatAuthRateLimit = rateLimitHook(5, 60_000);
+
   fastify.post<{ Params: AgentParams; Body: AuthBody }>(
     '/api/chat/:agentName/auth',
+    { preHandler: chatAuthRateLimit },
     async (request, reply) => {
       const agent = fastify.orchestrator.agents.get(request.params.agentName);
       if (!agent) {

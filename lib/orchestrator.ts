@@ -23,8 +23,11 @@ import { VmExecutor } from './sandbox/vm-executor.ts';
 import { createSandboxExecTool } from './sandbox/sandbox-exec.ts';
 import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web.ts';
 import { createSandboxShellTool } from './sandbox/sandbox-shell.ts';
+import { createFileTools } from './sandbox/sandbox-file.ts';
 import { createBrowserTools } from './sandbox/sandbox-browser.ts';
+import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
+import { substituteEnvVars } from './utils/env-substitution.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
 import type { IntegrationAccessor } from './integrations/types.ts';
@@ -166,7 +169,7 @@ export class Orchestrator {
   private async loadMCPConfig(): Promise<void> {
     try {
       const content = await fs.readFile(this.config.mcpConfigPath, 'utf-8');
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(substituteEnvVars(content));
       const mcpConfig = MCPConfigSchema.parse(parsed);
       this.mcpClient = new MCPClientManager(mcpConfig);
     } catch (error) {
@@ -181,7 +184,7 @@ export class Orchestrator {
   private async loadSandboxConfig(): Promise<void> {
     try {
       const content = await fs.readFile(this.config.sandboxConfigPath, 'utf-8');
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(substituteEnvVars(content));
       this.sandboxConfig = SandboxConfigSchema.parse(parsed);
     } catch {
       // No sandbox.json — use defaults (enabled by default)
@@ -207,9 +210,21 @@ export class Orchestrator {
     tools.set('web_search', createSandboxWebSearchTool());
     tools.set('shell', createSandboxShellTool(this.sandboxConfig));
 
+    const fileTools = createFileTools(this.sandboxConfig);
+    for (const ft of fileTools) {
+      tools.set(ft.name.replace('sandbox_file_', 'file_'), ft);
+    }
+
     const browserTools = createBrowserTools(this.sandboxConfig);
     for (const bt of browserTools) {
       tools.set(bt.name.replace('sandbox_browser_', 'browser_'), bt);
+    }
+
+    if (process.env.EXPERIMENTAL_VISION === 'true') {
+      const visionTools = createVisionBrowserTools(this.sandboxConfig);
+      for (const vt of visionTools) {
+        tools.set(vt.name.replace('sandbox_vision_', 'vision_'), vt);
+      }
     }
 
     logger.info('[Orchestrator] Sandbox enabled with tools: ' + Array.from(tools.keys()).join(', '));

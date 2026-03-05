@@ -8,6 +8,7 @@ import {
   type StructuredTool,
   type ToolCall,
 } from '../../types/llm-types.ts';
+import { logger } from '../../logger.ts';
 
 interface GeminiChatModelOptions {
   apiKey?: string;
@@ -22,6 +23,7 @@ export class GeminiChatModel implements ChatModel {
   private temperature?: number;
   private maxTokens?: number;
   private boundTools?: StructuredTool[];
+  private cachedProviderTools?: { functionDeclarations: FunctionDeclaration[] }[];
   private structuredSchema?: Record<string, unknown>;
 
   constructor(options: GeminiChatModelOptions) {
@@ -112,16 +114,18 @@ export class GeminiChatModel implements ChatModel {
   }
 
   private toGeminiTools(): { functionDeclarations: FunctionDeclaration[] }[] | undefined {
+    if (this.cachedProviderTools) return this.cachedProviderTools;
     if (!this.boundTools?.length) return undefined;
     const declarations: FunctionDeclaration[] = this.boundTools.map((t) => {
-      const jsonSchema = zodToJsonSchema(t.schema) as Record<string, unknown>;
+      const { $schema, ...jsonSchema } = zodToJsonSchema(t.schema) as Record<string, unknown>;
       return {
         name: t.name,
         description: t.description,
         parameters: this.convertToGeminiSchema(jsonSchema),
       };
     });
-    return [{ functionDeclarations: declarations }];
+    this.cachedProviderTools = [{ functionDeclarations: declarations }];
+    return this.cachedProviderTools;
   }
 
   private convertToGeminiSchema(jsonSchema: Record<string, unknown>): FunctionDeclarationSchema {
@@ -196,6 +200,7 @@ export class GeminiChatModel implements ChatModel {
   async invoke(messages: BaseMessage[]): Promise<ChatModelResponse> {
     const { systemInstruction, contents } = this.extractSystemAndContents(messages);
 
+    const tools = this.toGeminiTools();
     const model = this.genAI.getGenerativeModel({
       model: this.modelName,
       ...(systemInstruction ? { systemInstruction } : {}),
@@ -203,7 +208,7 @@ export class GeminiChatModel implements ChatModel {
         ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
         ...(this.maxTokens ? { maxOutputTokens: this.maxTokens } : {}),
       },
-      ...(this.toGeminiTools() ? { tools: this.toGeminiTools() } : {}),
+      ...(tools ? { tools } : {}),
     });
 
     const result = await model.generateContent({ contents });
@@ -211,16 +216,19 @@ export class GeminiChatModel implements ChatModel {
     const candidate = response.candidates?.[0];
 
     let content = '';
+    let reasoning = '';
     const toolCalls: ToolCall[] = [];
 
     if (candidate?.content?.parts) {
       for (const part of candidate.content.parts) {
-        if (part.text) {
+        if ((part as any).thought && part.text) {
+          reasoning += part.text;
+        } else if (part.text) {
           content += part.text;
         }
         if (part.functionCall) {
           toolCalls.push({
-            id: `call_${Math.random().toString(36).substring(7)}`,
+            id: `call_${crypto.randomUUID()}`,
             name: part.functionCall.name,
             args: (part.functionCall.args ?? {}) as Record<string, unknown>,
           });
@@ -228,10 +236,15 @@ export class GeminiChatModel implements ChatModel {
       }
     }
 
+    if (reasoning) {
+      logger.debug(`[Gemini] Thinking content received (${reasoning.length} chars)`);
+    }
+
     const usage = response.usageMetadata;
 
     return {
       content,
+      ...(reasoning ? { reasoning } : {}),
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       usage_metadata: usage
         ? {
@@ -245,10 +258,12 @@ export class GeminiChatModel implements ChatModel {
 
   async *stream(
     messages: BaseMessage[],
-    _options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal }
   ): AsyncIterable<ChatModelResponse> {
     const { systemInstruction, contents } = this.extractSystemAndContents(messages);
+    const signal = options?.signal;
 
+    const tools = this.toGeminiTools();
     const model = this.genAI.getGenerativeModel({
       model: this.modelName,
       ...(systemInstruction ? { systemInstruction } : {}),
@@ -256,24 +271,29 @@ export class GeminiChatModel implements ChatModel {
         ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
         ...(this.maxTokens ? { maxOutputTokens: this.maxTokens } : {}),
       },
-      ...(this.toGeminiTools() ? { tools: this.toGeminiTools() } : {}),
+      ...(tools ? { tools } : {}),
     });
 
     const result = await model.generateContentStream({ contents });
 
     for await (const chunk of result.stream) {
+      if (signal?.aborted) break;
+
       const candidate = chunk.candidates?.[0];
       let content = '';
+      let reasoning = '';
       const toolCalls: ToolCall[] = [];
 
       if (candidate?.content?.parts) {
         for (const part of candidate.content.parts) {
-          if (part.text) {
+          if ((part as any).thought && part.text) {
+            reasoning += part.text;
+          } else if (part.text) {
             content += part.text;
           }
           if (part.functionCall) {
             toolCalls.push({
-              id: `call_${Math.random().toString(36).substring(7)}`,
+              id: `call_${crypto.randomUUID()}`,
               name: part.functionCall.name,
               args: (part.functionCall.args ?? {}) as Record<string, unknown>,
             });
@@ -283,6 +303,7 @@ export class GeminiChatModel implements ChatModel {
 
       yield {
         content,
+        ...(reasoning ? { reasoning } : {}),
         tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
         usage_metadata: chunk.usageMetadata
           ? {

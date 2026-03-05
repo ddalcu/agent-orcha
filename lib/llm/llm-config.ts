@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import { z } from 'zod';
+import { substituteEnvVars } from '../utils/env-substitution.ts';
 import { logger } from '../logger.ts';
 import type { LLMProvider } from './provider-detector.ts';
 
@@ -28,6 +29,7 @@ export const ModelConfigSchema = z.object({
   model: z.string(),
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().optional(),
+  thinkingBudget: z.number().optional(),
 });
 
 // Schema for individual embedding configuration
@@ -56,7 +58,7 @@ let loadedConfig: LLMJsonConfig | null = null;
 
 export async function loadLLMConfig(llmJsonPath: string): Promise<LLMJsonConfig> {
   const content = await fs.readFile(llmJsonPath, 'utf-8');
-  const parsed = JSON.parse(content);
+  const parsed = JSON.parse(substituteEnvVars(content));
   const validated = LLMJsonConfigSchema.parse(parsed);
 
   loadedConfig = validated;

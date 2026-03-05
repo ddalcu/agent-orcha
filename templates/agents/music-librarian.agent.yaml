@@ -2,10 +2,6 @@ name: music-librarian
 description: Music store expert — explore the catalog, discover artists, and analyze customer listening patterns
 version: "1.0.0"
 
-llm:
-  name: default
-  temperature: 0.6
-
 prompt:
   system: |
     You are a Music Librarian for a digital music store. You have deep access to the store's
@@ -72,10 +68,3 @@ sampleQuestions:
   - "Which artists have tracks in both Rock and Jazz?"
   - "What has customer Heather Leacock purchased?"
   - "Find the longest tracks in the catalog"
-
-metadata:
-  category: entertainment
-  tags:
-    - music
-    - catalog
-    - recommendations

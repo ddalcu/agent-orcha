@@ -5,7 +5,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Networking & Security
     curl wget nmap netcat-openbsd dnsutils iputils-ping traceroute tcpdump \
-    whois openssh-client openssl socat arp-scan masscan \
+    whois openssh-client openssl socat \
     # Data Processing
     jq python3 python3-pip python3-venv \
     # System & File Tools

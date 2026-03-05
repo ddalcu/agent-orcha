@@ -10,8 +10,8 @@ sandbox: true
 
 | Tool | Purpose |
 |------|---------|
-| `sandbox_browser_observe` | Text snapshot: URL, title, headings, elements with refs |
-| `sandbox_browser_navigate` | Go to URL, wait for ready, return snapshot |
+| `sandbox_browser_observe` | Text snapshot: URL, title, headings, textExcerpt, elements with refs |
+| `sandbox_browser_navigate` | Go to URL, wait for ready, return snapshot with textExcerpt |
 | `sandbox_browser_click` | Click by ref (e.g. "e3") or visible text |
 | `sandbox_browser_type` | Type into input by ref (e.g. "e5") |
 | `sandbox_browser_content` | Page as markdown (optional CSS selector) |
@@ -35,6 +35,14 @@ Observe output lists elements like:
 - link "Home" [ref=e3]
 ```
 Use refs in click/type: `{ "ref": "e1" }`. Refs update on each observe — always use latest.
+
+## Data Extraction Strategy
+
+1. **Check textExcerpt first** — observe/navigate returns the first 2000 chars of visible text. For many tasks this is enough.
+2. **Use content(selector)** over content() — target a specific section (e.g. `{ selector: "main" }` or `{ selector: ".repo-list" }`) to avoid huge dumps.
+3. **Use evaluate() for structured extraction** — `evaluate({ expression: "..." })` with JS that returns exactly the data you need (e.g. `[...document.querySelectorAll('.repo')].map(...)`)
+4. **Prefer web_fetch for read-only pages** — if you just need page content without interaction, `sandbox_web_fetch` is cheaper than navigating.
+5. **Never repeat a failed approach** — if a tool call returns nothing useful, switch to a different strategy immediately.
 
 ## Patterns
 

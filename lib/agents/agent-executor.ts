@@ -39,11 +39,9 @@ export class AgentExecutor {
   async createInstance(definition: AgentDefinition): Promise<AgentInstance> {
     // Resolve skills and augment system prompt if configured
     let augmentedDefinition = definition;
-    let skillsNeedSandbox = false;
 
     if (definition.skills && this.skillLoader) {
-      const { content, needsSandbox } = this.skillLoader.resolveForAgentWithMeta(definition.skills);
-      skillsNeedSandbox = needsSandbox;
+      const content = this.skillLoader.resolveForAgent(definition.skills);
       if (content) {
         augmentedDefinition = {
           ...definition,
@@ -80,19 +78,6 @@ export class AgentExecutor {
     if (memoryConfig && this.memoryManager) {
       tools.push(createMemorySaveTool(this.memoryManager, definition.name, memoryConfig.maxLines));
       logger.info(`[AgentExecutor] Auto-injected save_memory tool for agent: ${definition.name}`);
-    }
-
-    // Auto-inject sandbox tools if any skill requires it (skip already-declared ones)
-    if (skillsNeedSandbox) {
-      const existingNames = new Set(tools.map((t) => t.name));
-      const sandboxTools = this.toolRegistry.getAllSandboxTools()
-        .filter((t) => !existingNames.has(t.name));
-      if (sandboxTools.length > 0) {
-        tools.push(...sandboxTools);
-        logger.info(`[AgentExecutor] Auto-injected ${sandboxTools.length} sandbox tools for agent: ${definition.name}`);
-      } else if (this.toolRegistry.getAllSandboxTools().length === 0) {
-        logger.warn(`[AgentExecutor] Skill requires sandbox but sandbox is not configured`);
-      }
     }
 
     // Auto-inject integration tools if agent has integrations configured
@@ -186,7 +171,7 @@ export class AgentExecutor {
           messages,
         },
         {
-          recursionLimit: 200,
+          recursionLimit: definition.maxIterations ?? 200,
           signal: undefined,
         }
       );
@@ -291,7 +276,7 @@ export class AgentExecutor {
     // Build messages with history for session-based conversations
     const messageHistory = sessionId ? this.conversationStore.getMessages(sessionId) : [];
     const allMessages: BaseMessage[] = [
-      humanMessage(definition.prompt.system),
+      { role: 'system', content: definition.prompt.system },
       ...messageHistory,
       humanMessage(userContent),
     ];
@@ -417,7 +402,7 @@ export class AgentExecutor {
         { messages },
         {
           version: 'v2',
-          recursionLimit: 200,
+          recursionLimit: definition.maxIterations ?? 200,
           signal,
         }
       );
@@ -470,6 +455,8 @@ export class AgentExecutor {
               output: event.data.output,
               runId: event.run_id,
             };
+          } else if (event.event === 'on_react_iteration') {
+            yield { type: 'react_iteration', ...event.data };
           }
         }
       } catch (streamError) {
@@ -525,7 +512,7 @@ export class AgentExecutor {
       // Build messages with history for session-based conversations
       const messageHistory = sessionId ? this.conversationStore.getMessages(sessionId) : [];
       const allMessages: BaseMessage[] = [
-        humanMessage(definition.prompt.system),
+        { role: 'system', content: definition.prompt.system },
         ...messageHistory,
         humanMessage(userContent),
       ];

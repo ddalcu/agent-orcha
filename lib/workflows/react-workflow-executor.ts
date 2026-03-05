@@ -1,5 +1,5 @@
 import type { ChatModel, BaseMessage, StructuredTool } from '../types/llm-types.ts';
-import { NodeInterrupt, aiMessage, toolMessage, contentToText } from '../types/llm-types.ts';
+import { NodeInterrupt, aiMessage, toolMessage, contentToText, stripOldImages } from '../types/llm-types.ts';
 import type {
   ReactWorkflowDefinition,
   WorkflowResult,
@@ -306,7 +306,7 @@ export class ReactWorkflowExecutor {
         tools: shouldBindTools ? tools : undefined,
       });
 
-      const response = await modelToUse.invoke(effectiveMessages);
+      const response = await modelToUse.invoke(stripOldImages(effectiveMessages));
 
       const responseContent = response.content ?? '';
       logLLMCallEnd(caller, llmStart, stats, { contentLength: responseContent.length });

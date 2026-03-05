@@ -88,6 +88,11 @@ export function validateReadonlySql(query: string): ValidationResult {
 
   const stripped = stripCommentsAndStrings(query);
 
+  // Ensure query starts with SELECT (blocks stacked queries like "; DROP TABLE")
+  if (!/^\s*SELECT\b/i.test(stripped)) {
+    return { valid: false, reason: 'Only SELECT queries are permitted.' };
+  }
+
   for (const keyword of SQL_WRITE_KEYWORDS) {
     const regex = new RegExp(`\\b${keyword}\\b`, 'i');
     if (regex.test(stripped)) {
