@@ -40,12 +40,3 @@ tools:
 
 output:
   format: text
-
-metadata:
-  category: graph-rag-example
-  tags:
-    - graph-rag
-    - knowledge-graph
-    - call-center
-    - analytics
-    - example

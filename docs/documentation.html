@@ -431,6 +431,11 @@ output:
               <td><em>unset (no auth)</em></td>
             </tr>
             <tr>
+              <td><code>CORS_ORIGIN</code></td>
+              <td>Controls cross-origin request policy. When unset, only same-origin requests are allowed. Set to <code>*</code> to allow all origins, or a specific URL (e.g. <code>https://your-frontend.com</code>) to allow that origin.</td>
+              <td><em>unset (same-origin only)</em></td>
+            </tr>
+            <tr>
               <td><code>BROWSER_SANDBOX</code></td>
               <td>When <code>true</code>, starts Chromium + Xvfb + VNC inside the container for browser sandbox tools. The VNC viewer is accessible through the Studio UI at <code>/vnc</code>.</td>
               <td><code>true</code></td>
@@ -519,10 +524,6 @@ output:                         # Output formatting (optional)
     properties: { ... }
     required: [string]
 
-metadata:                       # Custom metadata (optional)
-  category: string
-  tags: [string]
-
 triggers:                       # Automatic execution triggers (optional)
   - type: cron
     schedule: "0 9 * * *"       # Cron expression
@@ -575,10 +576,7 @@ tools:
   - function:fibonacci
 
 output:
-  format: text
-
-metadata:
-  category: research</code></pre>
+  format: text</code></pre>
           </div>
         </div>
 

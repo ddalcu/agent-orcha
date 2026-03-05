@@ -5,18 +5,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Networking & Security
     curl wget nmap netcat-openbsd dnsutils iputils-ping traceroute tcpdump \
-    whois openssh-client openssl socat arp-scan masscan libcap2-bin \
+    whois openssh-client openssl socat \
     # Data Processing
     jq python3 python3-pip python3-venv \
     # System & File Tools
     git zip unzip tar file htop lsof procps cron \
     # Browser Sandbox
     chromium xvfb x11vnc novnc websockify fonts-liberation fonts-noto-color-emoji \
-    && rm -rf /var/lib/apt/lists/* \
-    && setcap cap_net_raw+ep /usr/bin/nmap \
-    && setcap cap_net_raw+ep /usr/bin/masscan \
-    && setcap cap_net_raw+ep /usr/sbin/arp-scan \
-    && setcap cap_net_raw+ep /usr/bin/tcpdump
+    && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev

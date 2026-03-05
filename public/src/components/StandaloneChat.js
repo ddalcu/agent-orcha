@@ -641,7 +641,7 @@ class StandaloneChat extends HTMLElement {
         pill.appendChild(pillContent);
 
         const popover = document.createElement('div');
-        popover.className = 'hidden absolute left-0 bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw] p-3';
+        popover.className = 'hidden fixed z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw] p-3';
 
         const popoverContent = document.createElement('div');
         popoverContent.className = 'text-xs text-gray-400 max-h-64 overflow-y-auto markdown-content custom-scrollbar';
@@ -650,7 +650,18 @@ class StandaloneChat extends HTMLElement {
         popover.appendChild(popoverContent);
         pill.appendChild(popover);
 
-        pill.addEventListener('mouseenter', () => popover.classList.remove('hidden'));
+        pill.addEventListener('mouseenter', () => {
+            popover.classList.remove('hidden');
+            const pillRect = pill.getBoundingClientRect();
+            popover.style.bottom = (window.innerHeight - pillRect.top + 4) + 'px';
+            popover.style.top = 'auto';
+            if (pillRect.left + 400 > window.innerWidth - 16) {
+                popover.style.left = Math.max(8, pillRect.right - 400) + 'px';
+            } else {
+                popover.style.left = pillRect.left + 'px';
+            }
+            popover.style.right = 'auto';
+        });
         pill.addEventListener('mouseleave', () => popover.classList.add('hidden'));
     }
 

@@ -8,6 +8,7 @@ import {
   type StructuredTool,
   type ToolCall,
 } from '../../types/llm-types.ts';
+import { logger } from '../../logger.ts';
 
 interface AnthropicChatModelOptions {
   apiKey?: string;
@@ -15,6 +16,7 @@ interface AnthropicChatModelOptions {
   modelName: string;
   temperature?: number;
   maxTokens?: number;
+  thinkingBudget?: number;
 }
 
 export class AnthropicChatModel implements ChatModel {
@@ -22,7 +24,9 @@ export class AnthropicChatModel implements ChatModel {
   private modelName: string;
   private temperature?: number;
   private maxTokens: number;
+  private thinkingBudget?: number;
   private boundTools?: StructuredTool[];
+  private cachedProviderTools?: Anthropic.Tool[];
   private structuredSchema?: Record<string, unknown>;
 
   constructor(options: AnthropicChatModelOptions) {
@@ -32,7 +36,8 @@ export class AnthropicChatModel implements ChatModel {
     });
     this.modelName = options.modelName;
     this.temperature = options.temperature;
-    this.maxTokens = options.maxTokens ?? 4096;
+    this.maxTokens = options.maxTokens ?? 8192;
+    this.thinkingBudget = options.thinkingBudget;
   }
 
   private extractSystemAndMessages(
@@ -120,20 +125,28 @@ export class AnthropicChatModel implements ChatModel {
   }
 
   private toAnthropicTools(): Anthropic.Tool[] | undefined {
+    if (this.cachedProviderTools) return this.cachedProviderTools;
     if (!this.boundTools?.length) return undefined;
-    return this.boundTools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      input_schema: zodToJsonSchema(t.schema) as Anthropic.Tool.InputSchema,
-    }));
+    this.cachedProviderTools = this.boundTools.map((t) => {
+      const { $schema, ...input_schema } = zodToJsonSchema(t.schema) as Record<string, unknown>;
+      return {
+        name: t.name,
+        description: t.description,
+        input_schema: input_schema as Anthropic.Tool.InputSchema,
+      };
+    });
+    return this.cachedProviderTools;
   }
 
   private parseResponse(response: Anthropic.Message): ChatModelResponse {
     let content = '';
+    let reasoning = '';
     const toolCalls: ToolCall[] = [];
 
     for (const block of response.content) {
-      if (block.type === 'text') {
+      if (block.type === 'thinking') {
+        reasoning += (block as any).thinking;
+      } else if (block.type === 'text') {
         content += block.text;
       } else if (block.type === 'tool_use') {
         toolCalls.push({
@@ -144,8 +157,13 @@ export class AnthropicChatModel implements ChatModel {
       }
     }
 
+    if (reasoning) {
+      logger.debug(`[Anthropic] Thinking content received (${reasoning.length} chars)`);
+    }
+
     return {
       content,
+      ...(reasoning ? { reasoning } : {}),
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       usage_metadata: {
         input_tokens: response.usage.input_tokens,
@@ -158,13 +176,15 @@ export class AnthropicChatModel implements ChatModel {
   async invoke(messages: BaseMessage[]): Promise<ChatModelResponse> {
     const { system, messages: anthropicMessages } = this.extractSystemAndMessages(messages);
 
+    const tools = this.toAnthropicTools();
     const params: Anthropic.MessageCreateParamsNonStreaming = {
       model: this.modelName,
       max_tokens: this.maxTokens,
       messages: anthropicMessages,
       ...(system ? { system } : {}),
-      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
-      ...(this.toAnthropicTools() ? { tools: this.toAnthropicTools() } : {}),
+      ...(!this.thinkingBudget && this.temperature !== undefined ? { temperature: this.temperature } : {}),
+      ...(tools ? { tools } : {}),
+      ...(this.thinkingBudget ? { thinking: { type: 'enabled' as const, budget_tokens: this.thinkingBudget } } : {}),
     };
 
     const response = await this.client.messages.create(params);
@@ -177,26 +197,25 @@ export class AnthropicChatModel implements ChatModel {
   ): AsyncIterable<ChatModelResponse> {
     const { system, messages: anthropicMessages } = this.extractSystemAndMessages(messages);
 
+    const tools = this.toAnthropicTools();
     const stream = this.client.messages.stream({
       model: this.modelName,
       max_tokens: this.maxTokens,
       messages: anthropicMessages,
       ...(system ? { system } : {}),
-      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
-      ...(this.toAnthropicTools() ? { tools: this.toAnthropicTools() } : {}),
+      ...(!this.thinkingBudget && this.temperature !== undefined ? { temperature: this.temperature } : {}),
+      ...(tools ? { tools } : {}),
+      ...(this.thinkingBudget ? { thinking: { type: 'enabled' as const, budget_tokens: this.thinkingBudget } } : {}),
     }, { signal: options?.signal });
 
     const toolCalls: Map<number, { id: string; name: string; args: string }> = new Map();
+    let inputTokens = 0;
 
     for await (const event of stream) {
-      if (event.type === 'content_block_delta') {
-        if (event.delta.type === 'text_delta') {
-          yield { content: event.delta.text };
-        } else if (event.delta.type === 'input_json_delta') {
-          const existing = toolCalls.get(event.index);
-          if (existing) {
-            existing.args += event.delta.partial_json;
-          }
+      if (event.type === 'message_start') {
+        const msg = (event as any).message;
+        if (msg?.usage?.input_tokens) {
+          inputTokens = msg.usage.input_tokens;
         }
       } else if (event.type === 'content_block_start') {
         if (event.content_block.type === 'tool_use') {
@@ -205,6 +224,17 @@ export class AnthropicChatModel implements ChatModel {
             name: event.content_block.name,
             args: '',
           });
+        }
+      } else if (event.type === 'content_block_delta') {
+        if (event.delta.type === 'text_delta') {
+          yield { content: event.delta.text };
+        } else if (event.delta.type === 'thinking_delta') {
+          yield { content: '', reasoning: (event.delta as any).thinking };
+        } else if (event.delta.type === 'input_json_delta') {
+          const existing = toolCalls.get(event.index);
+          if (existing) {
+            existing.args += event.delta.partial_json;
+          }
         }
       } else if (event.type === 'message_delta') {
         // Final message with usage
@@ -216,16 +246,15 @@ export class AnthropicChatModel implements ChatModel {
             }))
           : undefined;
 
+        const outputTokens = event.usage?.output_tokens ?? 0;
         yield {
           content: '',
           tool_calls: parsedToolCalls,
-          usage_metadata: event.usage
-            ? {
-                input_tokens: 0,
-                output_tokens: event.usage.output_tokens,
-                total_tokens: event.usage.output_tokens,
-              }
-            : undefined,
+          usage_metadata: {
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
+            total_tokens: inputTokens + outputTokens,
+          },
         };
       }
     }
@@ -237,6 +266,7 @@ export class AnthropicChatModel implements ChatModel {
       modelName: this.modelName,
       temperature: this.temperature,
       maxTokens: this.maxTokens,
+      thinkingBudget: this.thinkingBudget,
     });
     bound.client = this.client;
     bound.boundTools = tools;
@@ -250,6 +280,7 @@ export class AnthropicChatModel implements ChatModel {
       modelName: this.modelName,
       temperature: this.temperature,
       maxTokens: this.maxTokens,
+      thinkingBudget: this.thinkingBudget,
     });
     wrapped.client = this.client;
     wrapped.structuredSchema = schema;

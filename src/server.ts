@@ -35,7 +35,7 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   });
 
   await fastify.register(cors, {
-    origin: process.env['CORS_ORIGIN'] ?? true,
+    origin: process.env['CORS_ORIGIN'] || false,
   });
 
   await fastify.register(authPlugin);

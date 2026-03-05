@@ -27,6 +27,7 @@ import { createFileTools } from './sandbox/sandbox-file.ts';
 import { createBrowserTools } from './sandbox/sandbox-browser.ts';
 import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
+import { substituteEnvVars } from './utils/env-substitution.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
 import type { IntegrationAccessor } from './integrations/types.ts';
@@ -168,7 +169,7 @@ export class Orchestrator {
   private async loadMCPConfig(): Promise<void> {
     try {
       const content = await fs.readFile(this.config.mcpConfigPath, 'utf-8');
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(substituteEnvVars(content));
       const mcpConfig = MCPConfigSchema.parse(parsed);
       this.mcpClient = new MCPClientManager(mcpConfig);
     } catch (error) {
@@ -183,7 +184,7 @@ export class Orchestrator {
   private async loadSandboxConfig(): Promise<void> {
     try {
       const content = await fs.readFile(this.config.sandboxConfigPath, 'utf-8');
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(substituteEnvVars(content));
       this.sandboxConfig = SandboxConfigSchema.parse(parsed);
     } catch {
       // No sandbox.json — use defaults (enabled by default)

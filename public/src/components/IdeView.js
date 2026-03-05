@@ -1,6 +1,7 @@
 
 import { Component } from '../utils/Component.js';
 import { api } from '../services/ApiService.js';
+import './AgentComposer.js';
 
 const FILE_ICONS = {
     yaml: { icon: 'fa-file-code', color: 'text-orange-400' },
@@ -66,6 +67,10 @@ function getExtension(filename) {
     return parts.length > 1 ? parts.pop().toLowerCase() : '';
 }
 
+function isAgentFile(path) {
+    return path && path.endsWith('.agent.yaml');
+}
+
 export class IdeView extends Component {
     constructor() {
         super();
@@ -75,6 +80,7 @@ export class IdeView extends Component {
         this.treeData = [];
         this.expandedDirs = new Set();
         this._renamingPath = null;
+        this._viewMode = 'source'; // 'source' | 'visual'
         this._handleKeyDown = this._handleKeyDown.bind(this);
         this._handleDocClick = this._handleDocClick.bind(this);
     }
@@ -86,6 +92,7 @@ export class IdeView extends Component {
             this.editor.destroy();
             this.editor = null;
         }
+        this._viewMode = 'source';
     }
 
     async postRender() {
@@ -105,6 +112,7 @@ export class IdeView extends Component {
             });
         }
 
+        this._attachModeToggle();
         await this._loadTree();
     }
 
@@ -395,7 +403,9 @@ export class IdeView extends Component {
             if (this.currentFile && this.currentFile.path === filePath) {
                 this.currentFile = null;
                 this.isDirty = false;
+                this._viewMode = 'source';
                 this._renderEditor();
+                this._updateModeToggle();
             }
 
             await this._loadTree();
@@ -604,8 +614,10 @@ export class IdeView extends Component {
             const data = await api.readFile(filePath);
             this.currentFile = { path: data.path, content: data.content };
             this.isDirty = false;
+            this._viewMode = 'source';
             this._renderEditor();
             this._renderTree();
+            this._updateModeToggle();
         } catch (err) {
             console.error('Failed to read file:', err);
         }
@@ -613,19 +625,18 @@ export class IdeView extends Component {
 
     _renderEditor() {
         const editorContainer = this.querySelector('#editorContainer');
+        const composerContainer = this.querySelector('#composerContainer');
         const welcomePanel = this.querySelector('#welcomePanel');
         const breadcrumb = this.querySelector('#breadcrumb');
-        const saveBtn = this.querySelector('#saveBtn');
-        const dirtyIndicator = this.querySelector('#dirtyIndicator');
 
         if (!this.currentFile) {
             if (welcomePanel) welcomePanel.classList.remove('hidden');
             if (editorContainer) editorContainer.classList.add('hidden');
+            if (composerContainer) composerContainer.classList.add('hidden');
             return;
         }
 
         if (welcomePanel) welcomePanel.classList.add('hidden');
-        if (editorContainer) editorContainer.classList.remove('hidden');
 
         // Update breadcrumb
         if (breadcrumb) {
@@ -635,6 +646,16 @@ export class IdeView extends Component {
 
         // Update dirty state
         this._updateDirtyState();
+
+        if (this._viewMode === 'visual') {
+            if (editorContainer) editorContainer.classList.add('hidden');
+            if (composerContainer) composerContainer.classList.remove('hidden');
+            return;
+        }
+
+        // Source mode
+        if (composerContainer) composerContainer.classList.add('hidden');
+        if (editorContainer) editorContainer.classList.remove('hidden');
 
         // Initialize or update Ace
         const aceEl = this.querySelector('#aceEditor');
@@ -690,9 +711,18 @@ export class IdeView extends Component {
     }
 
     async _saveFile() {
-        if (!this.currentFile || !this.isDirty || !this.editor) return;
+        if (!this.currentFile || !this.isDirty) return;
 
-        const content = this.editor.getValue();
+        let content;
+        if (this._viewMode === 'visual') {
+            const composer = this.querySelector('agent-composer');
+            if (!composer) return;
+            const data = composer.getData();
+            content = jsyaml.dump(data, { indent: 2, lineWidth: -1, noRefs: true, sortKeys: false });
+        } else {
+            if (!this.editor) return;
+            content = this.editor.getValue();
+        }
 
         try {
             const result = await api.writeFile(this.currentFile.path, content);
@@ -726,6 +756,122 @@ export class IdeView extends Component {
         }
     }
 
+    // ── Mode Toggle ──
+
+    _attachModeToggle() {
+        this.querySelectorAll('.mode-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.mode;
+                if (mode === this._viewMode) return;
+                if (mode === 'visual') this._switchToVisual();
+                else this._switchToSource();
+            });
+        });
+    }
+
+    _updateModeToggle() {
+        const toggle = this.querySelector('#modeToggle');
+        if (!toggle) return;
+
+        const show = this.currentFile && isAgentFile(this.currentFile.path);
+        toggle.classList.toggle('hidden', !show);
+
+        toggle.querySelectorAll('.mode-toggle-btn').forEach(btn => {
+            const active = btn.dataset.mode === this._viewMode;
+            btn.classList.toggle('bg-dark-hover', active);
+            btn.classList.toggle('text-white', active);
+            btn.classList.toggle('text-gray-500', !active);
+        });
+    }
+
+    _switchToVisual() {
+        if (!this.currentFile) return;
+
+        // Get current Ace content and parse
+        const content = this.editor ? this.editor.getValue() : this.currentFile.content;
+        let parsed;
+        try {
+            parsed = jsyaml.load(content);
+        } catch (err) {
+            this._showToast(`Invalid YAML: ${err.message}`, 'error');
+            return;
+        }
+
+        if (!parsed || typeof parsed !== 'object') {
+            this._showToast('YAML must be an object', 'error');
+            return;
+        }
+
+        this._viewMode = 'visual';
+        this._updateModeToggle();
+
+        // Hide Ace, show composer
+        const editorContainer = this.querySelector('#editorContainer');
+        const composerContainer = this.querySelector('#composerContainer');
+        if (editorContainer) editorContainer.classList.add('hidden');
+        if (composerContainer) composerContainer.classList.remove('hidden');
+
+        // Create or get the composer element
+        let composer = composerContainer.querySelector('agent-composer');
+        if (!composer) {
+            composer = document.createElement('agent-composer');
+            composer.classList.add('block', 'h-full');
+            composerContainer.appendChild(composer);
+        }
+
+        composer.data = parsed;
+
+        // Listen for changes
+        composer.addEventListener('composer:change', () => {
+            if (!this.isDirty) {
+                this.isDirty = true;
+                this._updateDirtyState();
+            }
+        });
+    }
+
+    _switchToSource() {
+        if (!this.currentFile) return;
+
+        const composer = this.querySelector('agent-composer');
+        if (composer && this._viewMode === 'visual') {
+            const data = composer.getData();
+            const yaml = jsyaml.dump(data, { indent: 2, lineWidth: -1, noRefs: true, sortKeys: false });
+
+            // Update Ace content
+            if (this.editor) {
+                this.editor.setValue(yaml, -1);
+            }
+            this.currentFile.content = yaml;
+        }
+
+        this._viewMode = 'source';
+        this._updateModeToggle();
+
+        const editorContainer = this.querySelector('#editorContainer');
+        const composerContainer = this.querySelector('#composerContainer');
+        if (composerContainer) composerContainer.classList.add('hidden');
+        if (editorContainer) editorContainer.classList.remove('hidden');
+
+        if (this.editor) {
+            this.editor.resize();
+            this.editor.focus();
+        }
+    }
+
+    _showToast(message, type = 'info') {
+        const existing = document.querySelector('#ideToast');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.id = 'ideToast';
+        const color = type === 'error' ? 'bg-red-600' : 'bg-blue-600';
+        toast.className = `fixed bottom-4 right-4 z-50 ${color} text-white text-sm px-4 py-2 rounded-lg shadow-lg`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+
     template() {
         return `
             <div class="flex flex-col h-full">
@@ -736,6 +882,15 @@ export class IdeView extends Component {
                         <span id="breadcrumb">Select a file to edit</span>
                     </div>
                     <div class="flex items-center gap-3">
+                        <!-- Mode toggle (only for .agent.yaml files) -->
+                        <div id="modeToggle" class="hidden flex items-center bg-dark-bg rounded border border-dark-border overflow-hidden">
+                            <button class="mode-toggle-btn px-2.5 py-1 text-xs transition-colors text-white bg-dark-hover" data-mode="source">
+                                <i class="fas fa-code mr-1"></i>Source
+                            </button>
+                            <button class="mode-toggle-btn px-2.5 py-1 text-xs transition-colors text-gray-500" data-mode="visual">
+                                <i class="fas fa-palette mr-1"></i>Visual
+                            </button>
+                        </div>
                         <span id="dirtyIndicator" class="hidden text-yellow-400 text-xs flex items-center gap-1">
                             <i class="fas fa-circle text-[6px]"></i> Unsaved
                         </span>
@@ -763,7 +918,7 @@ export class IdeView extends Component {
                         </div>
                     </div>
 
-                    <!-- Editor / Welcome -->
+                    <!-- Editor / Composer / Welcome -->
                     <div class="flex-1 min-w-0 relative">
                         <div id="welcomePanel" class="flex items-center justify-center h-full text-gray-500">
                             <div class="text-center">
@@ -775,6 +930,7 @@ export class IdeView extends Component {
                         <div id="editorContainer" class="hidden h-full">
                             <div id="aceEditor" class="h-full w-full"></div>
                         </div>
+                        <div id="composerContainer" class="hidden h-full overflow-hidden"></div>
                     </div>
                 </div>
             </div>

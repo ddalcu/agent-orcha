@@ -59,7 +59,6 @@ export const AgentDefinitionSchema = z.object({
   skills: AgentSkillsConfigSchema.optional(),
   output: OutputConfigSchema.optional(),
   memory: AgentMemoryConfigSchema.optional(),
-  metadata: z.record(z.unknown()).optional(),
   integrations: z.array(IntegrationSchema).optional(),
   triggers: z.array(TriggerSchema).optional(),
   publish: AgentPublishConfigSchema.optional(),

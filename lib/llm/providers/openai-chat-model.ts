@@ -11,6 +11,63 @@ import {
 import { logger } from '../../logger.ts';
 
 /**
+ * Streaming parser for <think>...</think> tags embedded in content.
+ * Models like Qwen3.5 output reasoning in <think> tags as regular content
+ * when the inference server (LM Studio, llama.cpp) doesn't natively separate
+ * reasoning_content. This parser extracts think blocks and routes them to
+ * the reasoning channel so they don't pollute the stored AI message content.
+ */
+class ThinkTagParser {
+  private buffer = '';
+  private insideThink = false;
+
+  feed(text: string): { content: string; reasoning: string } {
+    this.buffer += text;
+    let content = '';
+    let reasoning = '';
+
+    while (this.buffer.length > 0) {
+      if (this.insideThink) {
+        const endIdx = this.buffer.indexOf('</think>');
+        if (endIdx !== -1) {
+          reasoning += this.buffer.slice(0, endIdx);
+          this.buffer = this.buffer.slice(endIdx + 8);
+          this.insideThink = false;
+        } else {
+          // Keep potential partial </think> tag in buffer
+          const safe = Math.max(0, this.buffer.length - 7);
+          reasoning += this.buffer.slice(0, safe);
+          this.buffer = this.buffer.slice(safe);
+          break;
+        }
+      } else {
+        const startIdx = this.buffer.indexOf('<think>');
+        if (startIdx !== -1) {
+          content += this.buffer.slice(0, startIdx);
+          this.buffer = this.buffer.slice(startIdx + 7);
+          this.insideThink = true;
+        } else {
+          // Keep potential partial <think> tag in buffer
+          const safe = Math.max(0, this.buffer.length - 6);
+          content += this.buffer.slice(0, safe);
+          this.buffer = this.buffer.slice(safe);
+          break;
+        }
+      }
+    }
+
+    return { content, reasoning };
+  }
+
+  flush(): { content: string; reasoning: string } {
+    const remaining = this.buffer;
+    this.buffer = '';
+    if (this.insideThink) return { content: '', reasoning: remaining };
+    return { content: remaining, reasoning: '' };
+  }
+}
+
+/**
  * Parse tool call arguments JSON. Local models (LM Studio, Ollama) sometimes
  * return malformed JSON (single quotes, trailing commas, unquoted keys).
  * Falls back to an empty object so one bad tool call doesn't crash the stream.
@@ -37,6 +94,7 @@ interface OpenAIChatModelOptions {
   maxTokens?: number;
   baseURL?: string;
   streamUsage?: boolean;
+  provider?: 'openai' | 'local';
 }
 
 export class OpenAIChatModel implements ChatModel {
@@ -45,7 +103,10 @@ export class OpenAIChatModel implements ChatModel {
   private temperature?: number;
   private maxTokens?: number;
   private streamUsage: boolean;
+  private provider: 'openai' | 'local';
+  private isReasoningModel: boolean;
   private boundTools?: StructuredTool[];
+  private cachedProviderTools?: OpenAI.ChatCompletionTool[];
   private structuredSchema?: Record<string, unknown>;
 
   constructor(options: OpenAIChatModelOptions) {
@@ -57,6 +118,8 @@ export class OpenAIChatModel implements ChatModel {
     this.temperature = options.temperature;
     this.maxTokens = options.maxTokens;
     this.streamUsage = options.streamUsage ?? true;
+    this.provider = options.provider ?? 'openai';
+    this.isReasoningModel = this.provider === 'openai' && /^o[134]/.test(this.modelName);
   }
 
   /**
@@ -149,15 +212,16 @@ export class OpenAIChatModel implements ChatModel {
   }
 
   private toOpenAITools(): OpenAI.ChatCompletionTool[] | undefined {
+    if (this.cachedProviderTools) return this.cachedProviderTools;
     if (!this.boundTools?.length) return undefined;
-    return this.boundTools.map((t) => ({
-      type: 'function' as const,
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: zodToJsonSchema(t.schema) as Record<string, unknown>,
-      },
-    }));
+    this.cachedProviderTools = this.boundTools.map((t) => {
+      const { $schema, ...parameters } = zodToJsonSchema(t.schema) as Record<string, unknown>;
+      return {
+        type: 'function' as const,
+        function: { name: t.name, description: t.description, parameters },
+      };
+    });
+    return this.cachedProviderTools;
   }
 
   private parseToolCalls(
@@ -175,12 +239,17 @@ export class OpenAIChatModel implements ChatModel {
   }
 
   async invoke(messages: BaseMessage[]): Promise<ChatModelResponse> {
+    const tools = this.toOpenAITools();
     const params: OpenAI.ChatCompletionCreateParamsNonStreaming = {
       model: this.modelName,
       messages: this.toOpenAIMessages(messages),
-      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
-      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
-      ...(this.toOpenAITools() ? { tools: this.toOpenAITools() } : {}),
+      ...(!this.isReasoningModel && this.temperature !== undefined ? { temperature: this.temperature } : {}),
+      ...(this.maxTokens
+        ? this.isReasoningModel
+          ? { max_completion_tokens: this.maxTokens }
+          : { max_tokens: this.maxTokens }
+        : {}),
+      ...(tools ? { tools } : {}),
       ...(this.structuredSchema
         ? {
             response_format: {
@@ -197,10 +266,23 @@ export class OpenAIChatModel implements ChatModel {
 
     const response = await this.client.chat.completions.create(params);
     const choice = response.choices[0]!;
-    const reasoning = (choice.message as any)?.reasoning_content;
+    let reasoning = (choice.message as any)?.reasoning_content ?? '';
+    let content = choice.message.content ?? '';
+
+    // Extract <think> tags from content (Qwen3.5 and similar models)
+    if (!reasoning && content.includes('<think>')) {
+      content = content.replace(/<think>([\s\S]*?)<\/think>/g, (_, think) => {
+        reasoning += think;
+        return '';
+      }).trim();
+    }
+
+    if (reasoning) {
+      logger.debug(`[OpenAI] Reasoning content received (${reasoning.length} chars)`);
+    }
 
     return {
-      content: choice.message.content ?? '',
+      content,
       ...(reasoning ? { reasoning } : {}),
       tool_calls: this.parseToolCalls(response.choices),
       usage_metadata: response.usage
@@ -217,14 +299,19 @@ export class OpenAIChatModel implements ChatModel {
     messages: BaseMessage[],
     options?: { signal?: AbortSignal }
   ): AsyncIterable<ChatModelResponse> {
+    const tools = this.toOpenAITools();
     const params: OpenAI.ChatCompletionCreateParamsStreaming = {
       model: this.modelName,
       messages: this.toOpenAIMessages(messages),
       stream: true,
       stream_options: this.streamUsage ? { include_usage: true } : undefined,
-      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
-      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
-      ...(this.toOpenAITools() ? { tools: this.toOpenAITools() } : {}),
+      ...(!this.isReasoningModel && this.temperature !== undefined ? { temperature: this.temperature } : {}),
+      ...(this.maxTokens
+        ? this.isReasoningModel
+          ? { max_completion_tokens: this.maxTokens }
+          : { max_tokens: this.maxTokens }
+        : {}),
+      ...(tools ? { tools } : {}),
     };
 
     const stream = await this.client.chat.completions.create(params, {
@@ -232,16 +319,22 @@ export class OpenAIChatModel implements ChatModel {
     });
 
     let accumulatedToolCalls: Map<number, { id: string; name: string; args: string }> = new Map();
+    let chunkCount = 0;
+    const thinkParser = new ThinkTagParser();
 
     for await (const chunk of stream) {
+      chunkCount++;
       const delta = chunk.choices[0]?.delta;
 
-      // Yield content chunks
+      // Yield content chunks — parse <think> tags from models like Qwen3.5
+      // that embed reasoning in content instead of using reasoning_content
       if (delta?.content) {
-        yield { content: delta.content };
+        const parsed = thinkParser.feed(delta.content);
+        if (parsed.content) yield { content: parsed.content };
+        if (parsed.reasoning) yield { content: '', reasoning: parsed.reasoning };
       }
 
-      // Yield reasoning chunks (e.g. Qwen3 reasoning_content)
+      // Yield reasoning chunks (native API support, e.g. reasoning_content)
       const reasoning = (delta as any)?.reasoning_content;
       if (reasoning) {
         yield { content: '', reasoning };
@@ -282,7 +375,28 @@ export class OpenAIChatModel implements ChatModel {
             total_tokens: chunk.usage.total_tokens,
           },
         };
+        accumulatedToolCalls.clear();
       }
+    }
+
+    // Flush any remaining buffered content from <think> tag parsing
+    const remaining = thinkParser.flush();
+    if (remaining.content) yield { content: remaining.content };
+    if (remaining.reasoning) yield { content: '', reasoning: remaining.reasoning };
+
+    logger.debug(`[OpenAI] stream completed — ${chunkCount} chunks`);
+
+    // Flush any tool calls that weren't yielded (LM Studio / local models
+    // often don't send a usage chunk, so the block above never fires).
+    if (accumulatedToolCalls.size > 0) {
+      yield {
+        content: '',
+        tool_calls: Array.from(accumulatedToolCalls.values()).map((tc) => ({
+          id: tc.id,
+          name: tc.name,
+          args: parseToolArgs(tc.args),
+        })),
+      };
     }
   }
 
@@ -293,6 +407,7 @@ export class OpenAIChatModel implements ChatModel {
       temperature: this.temperature,
       maxTokens: this.maxTokens,
       streamUsage: this.streamUsage,
+      provider: this.provider,
     });
     bound.boundTools = tools;
     bound.structuredSchema = this.structuredSchema;
@@ -308,6 +423,7 @@ export class OpenAIChatModel implements ChatModel {
       temperature: this.temperature,
       maxTokens: this.maxTokens,
       streamUsage: this.streamUsage,
+      provider: this.provider,
     });
     wrapped.structuredSchema = schema;
     wrapped.boundTools = this.boundTools;

@@ -1,11 +1,9 @@
 name: architect
 description: Design and build agents, workflows, knowledge bases, and other ORCHA resources — just tell me what you need
-version: "1.0.0"
-
+version: 1.0.0
 llm:
   name: default
   temperature: 0.3
-
 prompt:
   system: |
     You are the ORCHA Architect. Users come to you when they need new agents,
@@ -36,7 +34,6 @@ prompt:
     - Never expose agent passwords in API responses
   inputVariables:
     - query
-
 tools:
   - workspace:read
   - workspace:write
@@ -44,21 +41,17 @@ tools:
   - workspace:list
   - workspace:list_resources
   - workspace:diagnostics
-
+  - sandbox:web_fetch
+  - sandbox:web_search
+  - sandbox:shell
+  - builtin:ask_user
 skills:
   - orcha-builder
-
+output:
+  format: text
 memory:
   enabled: true
   maxLines: 100
-
 sampleQuestions:
-  - "What agents, workflows, and knowledge stores exist in this project?"
-  - "Build me a customer support agent with access to the org-chart knowledge base"
-  - "Create a workflow that runs the business-analyst and corporate agents in parallel"
-
-metadata:
-  category: meta
-  tags:
-    - architect
-    - meta-agent
+  - What agents, workflows, and knowledge stores exist in this project?
+  - Build me a customer support agent, ask me for any clarifying questions

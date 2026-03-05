@@ -3,6 +3,7 @@ import * as path from 'path';
 import { glob } from 'glob';
 import { parse as parseYaml } from 'yaml';
 import { WorkflowDefinitionSchema, type WorkflowDefinition } from './types.ts';
+import { substituteEnvVars } from '../utils/env-substitution.ts';
 import { logger } from '../logger.ts';
 
 export class WorkflowLoader {
@@ -33,7 +34,7 @@ export class WorkflowLoader {
 
   async loadOne(filePath: string): Promise<WorkflowDefinition> {
     const content = await fs.readFile(filePath, 'utf-8');
-    const parsed = parseYaml(content);
+    const parsed = parseYaml(substituteEnvVars(content));
     const workflow = WorkflowDefinitionSchema.parse(parsed);
     this.workflows.set(workflow.name, workflow);
     this.pathToName.set(path.resolve(filePath), workflow.name);

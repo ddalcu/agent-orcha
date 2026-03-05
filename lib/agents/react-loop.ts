@@ -86,6 +86,7 @@ async function* runLoop(
     };
 
     // Stream LLM response
+    const llmStart = Date.now();
     let accumulatedContent = '';
     let accumulatedReasoning = '';
     let accumulatedToolCalls: ToolCall[] = [];
@@ -113,6 +114,12 @@ async function* runLoop(
       totalOutputTokens += usageMetadata.output_tokens;
     }
 
+    const llmTime = Date.now() - llmStart;
+
+    if (accumulatedReasoning) {
+      logger.debug(`[ReactLoop] iteration ${i + 1} — reasoning/thinking: ${accumulatedReasoning.length} chars`);
+    }
+
     yield {
       event: 'on_chat_model_end',
       data: {
@@ -123,11 +130,19 @@ async function* runLoop(
     // Store reasoning in AI message content so the model retains memory of
     // what it observed/thought across iterations.
     const messageContent = [accumulatedReasoning, accumulatedContent].filter(Boolean).join('\n\n');
-    allMessages.push(aiMessage(messageContent, accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined));
+    const hasContent = messageContent.trim().length > 0;
+    const hasToolCalls = accumulatedToolCalls.length > 0;
+
+    // Only push AI message if it has content or tool calls — empty messages
+    // confuse small LLMs (they see piling content:null and keep returning null)
+    if (hasContent || hasToolCalls) {
+      allMessages.push(aiMessage(messageContent, hasToolCalls ? accumulatedToolCalls : undefined));
+    }
 
     // No tool calls — accept substantial text as final answer, nudge otherwise
-    if (accumulatedToolCalls.length === 0) {
-      if (accumulatedContent.trim().length > 50) {
+    if (!hasToolCalls) {
+      logger.info(`[ReactLoop] iteration ${i + 1} timing — LLM: ${(llmTime / 1000).toFixed(1)}s | no tools`);
+      if (accumulatedContent.trim().length > 50 || (accumulatedReasoning && accumulatedContent.trim())) {
         logger.info(`[ReactLoop] iteration ${i + 1} — text response (${accumulatedContent.trim().length} chars), accepting as final answer`);
         break;
       }
@@ -136,43 +151,74 @@ async function* runLoop(
         logger.warn(`[ReactLoop] iteration ${i + 1} — no tool calls after ${noToolStreak} attempts, accepting as final answer`);
         break;
       }
-      logger.warn(`[ReactLoop] iteration ${i + 1} — no tool call (attempt ${noToolStreak}/${MAX_NO_TOOL_RETRIES}), nudging model`);
-      allMessages.push({ role: 'human', content: 'You MUST call a tool. Do not respond with text. Pick a tool and call it now.' });
+
+      // Nudge the model based on context — small/local LLMs sometimes return
+      // empty responses after tool results and need explicit guidance
+      const lastMsg = allMessages[allMessages.length - 1];
+      const nudge = lastMsg?.role === 'tool'
+        ? 'The tool above returned results. Please respond to the user based on that data.'
+        : 'Please continue. Either call a tool or provide your response.';
+      logger.warn(`[ReactLoop] iteration ${i + 1} — empty response (attempt ${noToolStreak}/${MAX_NO_TOOL_RETRIES}), nudging model`);
+      allMessages.push({ role: 'human', content: nudge });
       continue;
     }
 
     noToolStreak = 0;
 
-    // Execute tool calls
-    for (const tc of accumulatedToolCalls) {
-      if (options?.signal?.aborted) {
-        throw new DOMException('Aborted', 'AbortError');
-      }
+    // Execute tool calls in parallel
+    if (options?.signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
 
-      const runId = `run_${Math.random().toString(36).substring(7)}`;
-      const tool = toolMap.get(tc.name);
+    const toolStart = Date.now();
+    const toolEntries = accumulatedToolCalls.map((tc) => ({
+      tc,
+      runId: `run_${Math.random().toString(36).substring(7)}`,
+      tool: toolMap.get(tc.name),
+    }));
 
+    // Emit all on_tool_start events before execution
+    const pendingEvents: StreamEvent[] = [];
+    for (const { tc, runId, tool } of toolEntries) {
       if (!tool) {
-        const errorResult = `Tool "${tc.name}" not found`;
-        allMessages.push(toolMessage(errorResult, tc.id, tc.name));
-        yield { event: 'on_tool_start', name: tc.name, run_id: runId, data: { input: tc.args } };
-        yield { event: 'on_tool_end', name: tc.name, run_id: runId, data: { output: errorResult } };
-        continue;
-      }
-
-      yield { event: 'on_tool_start', name: tc.name, run_id: runId, data: { input: tc.args } };
-
-      try {
-        const result = await tool.invoke(tc.args);
-        allMessages.push(toolMessage(result, tc.id, tc.name));
-        yield { event: 'on_tool_end', name: tc.name, run_id: runId, data: { output: result } };
-      } catch (error) {
-        if (error instanceof Error && error.name === 'NodeInterrupt') throw error;
-        const errMsg = error instanceof Error ? error.message : String(error);
-        allMessages.push(toolMessage(`Error: ${errMsg}`, tc.id, tc.name));
-        yield { event: 'on_tool_end', name: tc.name, run_id: runId, data: { output: `Error: ${errMsg}` } };
+        pendingEvents.push({ event: 'on_tool_start', name: tc.name, run_id: runId, data: { input: tc.args } });
+        pendingEvents.push({ event: 'on_tool_end', name: tc.name, run_id: runId, data: { output: `Tool "${tc.name}" not found` } });
+      } else {
+        pendingEvents.push({ event: 'on_tool_start', name: tc.name, run_id: runId, data: { input: tc.args } });
       }
     }
+    for (const evt of pendingEvents) yield evt;
+
+    // Run all tool calls concurrently
+    const results = await Promise.all(
+      toolEntries.map(async ({ tc, runId, tool }) => {
+        if (!tool) {
+          return { tc, runId, output: `Tool "${tc.name}" not found`, error: false };
+        }
+        try {
+          const result = await tool.invoke(tc.args);
+          return { tc, runId, output: result, error: false };
+        } catch (error) {
+          if (error instanceof Error && error.name === 'NodeInterrupt') throw error;
+          const errMsg = error instanceof Error ? error.message : String(error);
+          return { tc, runId, output: `Error: ${errMsg}`, error: true };
+        }
+      }),
+    );
+
+    // Push messages and emit on_tool_end events in original order
+    for (const { tc, runId, output, error } of results) {
+      const tool = toolMap.get(tc.name);
+      if (!tool) {
+        allMessages.push(toolMessage(output as string, tc.id, tc.name));
+        continue; // on_tool_end already emitted above
+      }
+      allMessages.push(toolMessage(error ? output as string : output, tc.id, tc.name));
+      yield { event: 'on_tool_end', name: tc.name, run_id: runId, data: { output } };
+    }
+
+    const toolTime = Date.now() - toolStart;
+    logger.info(`[ReactLoop] iteration ${i + 1} timing — LLM: ${(llmTime / 1000).toFixed(1)}s | Tools: ${(toolTime / 1000).toFixed(1)}s (${accumulatedToolCalls.length} calls)`);
   }
 }
 

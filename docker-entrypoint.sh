@@ -12,12 +12,12 @@ if [ "${BROWSER_SANDBOX:-false}" = "true" ]; then
   websockify --web /usr/share/novnc 6080 localhost:5900 &
   if [ "${BROWSER_VERBOSE:-false}" = "true" ]; then
     chromium --no-sandbox --disable-gpu --disable-dev-shm-usage \
-      --disable-software-rasterizer --remote-debugging-address=0.0.0.0 \
+      --disable-software-rasterizer --remote-debugging-address=127.0.0.1 \
       --remote-debugging-port=9222 --window-size=1280,720 \
       --user-data-dir=/tmp/.chromium about:blank &
   else
     chromium --no-sandbox --disable-gpu --disable-dev-shm-usage \
-      --disable-software-rasterizer --remote-debugging-address=0.0.0.0 \
+      --disable-software-rasterizer --remote-debugging-address=127.0.0.1 \
       --remote-debugging-port=9222 --window-size=1280,720 \
       --user-data-dir=/tmp/.chromium about:blank 2>/dev/null &
   fi

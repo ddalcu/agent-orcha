@@ -21,20 +21,16 @@ prompt:
     - Sweep the entire 192.168.0.0/16 range for live hosts using fast ping scan:
       `nmap -sn -T4 --min-rate 1000 192.168.0.0/16`
     - If that's too slow, start with the local /24 and adjacent /24s, then expand
-    - Also try ARP scan on local segments: `nmap -PR -sn 192.168.x.0/24`
     - Log every live host IP for the next phase
 
     ### Phase 3: Port Scanning (Aggressive)
     For each discovered host, run a full port scan:
-    - TCP SYN scan on all 65535 ports: `nmap -sS -p- -T4 --min-rate 5000 <target>`
-    - UDP scan on top 100 ports: `nmap -sU --top-ports 100 -T4 <target>`
+    - TCP connect scan on all 65535 ports: `nmap -sT -p- -T4 --min-rate 5000 <target>`
     - Record all open ports per host
-    - Note: SYN scan is available via NET_RAW capability, no need to fall back to connect scans
 
     ### Phase 4: Service & OS Fingerprinting
     On hosts with open ports:
     - Version detection: `nmap -sV --version-intensity 5 <target> -p <open_ports>`
-    - OS fingerprinting: `nmap -O --osscan-guess <target>`
     - Grab banners: `nmap -sV --script=banner <target> -p <open_ports>`
 
     ### Phase 5: Vulnerability Assessment

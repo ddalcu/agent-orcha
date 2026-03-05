@@ -20,6 +20,7 @@ interface ContextStats {
   toolDescriptionChars: number;
   totalChars: number;
   estimatedTokens: number;
+  toolSizeMap: Map<string, number>;
 }
 
 /**
@@ -54,18 +55,16 @@ function computeStats(ctx: LLMCallContext): ContextStats {
 
   let toolCount = 0;
   let toolDescriptionChars = 0;
+  const toolSizeMap = new Map<string, number>();
   if (ctx.tools) {
     toolCount = ctx.tools.length;
     for (const t of ctx.tools) {
-      toolDescriptionChars += (t.name?.length ?? 0) + (t.description?.length ?? 0);
-      // Schema JSON also counts toward context
+      let size = (t.name?.length ?? 0) + (t.description?.length ?? 0);
       if (t.schema) {
-        try {
-          toolDescriptionChars += JSON.stringify(t.schema).length;
-        } catch {
-          // skip if schema can't be serialized
-        }
+        try { size += JSON.stringify(t.schema).length; } catch { /* skip */ }
       }
+      toolSizeMap.set(t.name, size);
+      toolDescriptionChars += size;
     }
   }
 
@@ -73,7 +72,7 @@ function computeStats(ctx: LLMCallContext): ContextStats {
   // Rough estimate: ~4 chars per token for English text
   const estimatedTokens = Math.round(totalChars / 4);
 
-  return { systemPromptChars, messageCount, messageChars, imageCount, toolCount, toolDescriptionChars, totalChars, estimatedTokens };
+  return { systemPromptChars, messageCount, messageChars, imageCount, toolCount, toolDescriptionChars, totalChars, estimatedTokens, toolSizeMap };
 }
 
 /**
@@ -94,13 +93,9 @@ export function logLLMCallStart(ctx: LLMCallContext): { startTime: number; stats
   logger.info(parts.join(' '));
 
   // Log individual tool sizes if there are any, for debugging bloated descriptions
-  if (stats.toolCount > 0 && ctx.tools) {
-    const toolSizes = ctx.tools
-      .map((t) => {
-        let size = (t.name?.length ?? 0) + (t.description?.length ?? 0);
-        try { size += JSON.stringify(t.schema).length; } catch { /* skip */ }
-        return { name: t.name, chars: size };
-      })
+  if (stats.toolCount > 0 && stats.toolSizeMap.size > 0) {
+    const toolSizes = Array.from(stats.toolSizeMap.entries())
+      .map(([name, chars]) => ({ name, chars }))
       .sort((a, b) => b.chars - a.chars);
 
     const toolSummary = toolSizes.map((t) => `${t.name}(${formatChars(t.chars)})`).join(', ');

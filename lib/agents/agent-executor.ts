@@ -276,7 +276,7 @@ export class AgentExecutor {
     // Build messages with history for session-based conversations
     const messageHistory = sessionId ? this.conversationStore.getMessages(sessionId) : [];
     const allMessages: BaseMessage[] = [
-      humanMessage(definition.prompt.system),
+      { role: 'system', content: definition.prompt.system },
       ...messageHistory,
       humanMessage(userContent),
     ];
@@ -512,7 +512,7 @@ export class AgentExecutor {
       // Build messages with history for session-based conversations
       const messageHistory = sessionId ? this.conversationStore.getMessages(sessionId) : [];
       const allMessages: BaseMessage[] = [
-        humanMessage(definition.prompt.system),
+        { role: 'system', content: definition.prompt.system },
         ...messageHistory,
         humanMessage(userContent),
       ];

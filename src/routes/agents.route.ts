@@ -52,7 +52,12 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    return agent;
+    const publish = resolvePublishConfig(agent.publish);
+    const { publish: _publish, ...rest } = agent;
+    return {
+      ...rest,
+      publish: { enabled: publish.enabled, hasPassword: !!publish.password },
+    };
   });
 
   fastify.post<{ Params: AgentParams; Body: InvokeBody }>(
