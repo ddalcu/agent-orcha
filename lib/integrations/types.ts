@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const CollabnookIntegrationSchema = z.object({
   type: z.literal('collabnook'),
-  url: z.string(),
+  url: z.string().default('wss://collabnook.com/ws'),
   channel: z.string(),
   botName: z.string(),
   password: z.string().optional(),

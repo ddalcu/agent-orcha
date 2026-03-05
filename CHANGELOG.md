@@ -25,11 +25,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Page Text Excerpt** — `PageReadiness.observe()` now returns `textExcerpt` (first 2000 chars of visible `innerText`). Browser tools advertise it in descriptions — often sufficient without fetching full page content.
 
+- **Environment Variable Substitution** — All config files (agent YAML, knowledge YAML, workflow YAML, skill frontmatter, `llm.json`, `mcp.json`, `sandbox.json`) now support `${ENV_VAR}` and `${ENV_VAR:-default}` placeholders, resolved from `process.env` at load time. New utility: `lib/utils/env-substitution.ts`.
+
+- **Thinking/Reasoning Support** — All three LLM providers now extract and forward thinking/reasoning content. Anthropic supports `thinkingBudget` config for extended thinking. OpenAI provider includes a streaming `ThinkTagParser` for models (e.g., Qwen3.5) that embed `<think>` tags in content. Gemini provider detects `thought` parts. New `thinkingBudget` field in `llm.json` model config.
+
+- **Agent Composer (Visual Editor)** — New `AgentComposer` web component (`public/src/components/AgentComposer.js`) provides a visual form editor for agent YAML files. Edits identity, LLM, prompt, tools (with picker), skills, memory, output, publish, integrations, triggers, sample questions, and metadata. Integrated into the IDE via a source/visual mode toggle for `.agent.yaml` files.
+
+- **Rate Limiting** — In-memory sliding-window rate limiter (`src/middleware/rate-limit.ts`). Applied to `/api/auth/login` (5 attempts/60s) and `/api/chat/:agentName/auth` (5 attempts/60s) to prevent brute-force attacks.
+
+- **SSRF Protection** — `sandbox_web_fetch` now blocks requests to private/internal IPs (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, ::1) and internal hostnames (localhost, host.docker.internal).
+
+- **SQL Injection Hardening** — `validateReadonlySql()` now requires queries to start with `SELECT`, blocking stacked queries (e.g., `; DROP TABLE`).
+
+- **Sandbox File Tools** — Read, write, edit, insert, and replace_lines tools scoped to `/tmp` with symlink-escape protection.
+
+- **Network Security Agent Template** — Offensive recon and vulnerability scanning agent template.
+
+- **Web Engineer Agent Template** — Building and publishing web apps via htmlhost.
+
 ### Changed
 
 - **ReAct loop is now streaming-first** — `invoke()` consumes the shared `runLoop()` generator silently; `streamEvents()` yields from it. Both paths share identical logic.
 
+- **Parallel tool execution** — ReAct loop now executes all tool calls from a single LLM response concurrently via `Promise.all()`, with per-iteration LLM and tool timing logged.
+
+- **Smarter nudging for small LLMs** — Empty AI messages (no content and no tool calls) are no longer pushed to history, preventing confusion in small models. Nudge messages are context-aware: after tool results, the model is asked to respond based on the data; otherwise, a generic continue prompt is used.
+
+- **System message role** — Agent executor now sends the system prompt as `role: 'system'` instead of wrapping it in a `humanMessage()`.
+
 - **OpenAI provider: resilient tool arg parsing** — `parseToolArgs()` gracefully handles malformed JSON from local models (single quotes, trailing commas). Falls back to empty object instead of crashing the stream.
+
+- **OpenAI provider: reasoning model support** — Models matching `o1`/`o3`/`o4` patterns use `max_completion_tokens` instead of `max_tokens` and skip temperature (as required by the API).
+
+- **OpenAI provider: local model tool flush** — Tool calls are now flushed at end of stream even without a usage chunk, fixing dropped tool calls with LM Studio and similar servers.
+
+- **Anthropic provider: streaming token tracking** — Input tokens are now captured from the `message_start` event, giving accurate total token counts in streaming mode.
+
+- **Tool schema cleanup** — All three providers now strip `$schema` from zod-generated JSON schemas before sending to the API, and cache converted tool definitions to avoid repeated serialization.
 
 - **HTML-to-Markdown improvements** — Images and interactive elements (buttons, inputs, forms) stripped by default; new `includeImages` and `includeInteractiveElements` options. `<script>`/`<style>` tags stripped before DOM parsing to avoid jsdom VM crashes. `HEAD`, `META`, `LINK` added to skip list. Icon font text lines cleaned from output.
 
@@ -37,17 +69,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`sandbox_browser_content` capped at 15K chars** — Hard cap prevents 50K+ char dumps from blowing up agent context.
 
-- **LLM call logger** — Now reports context in KB, tracks image count, uses compact single-line format for start/end logs.
+- **LLM call logger** — Now reports context in KB, tracks image count, uses compact single-line format for start/end logs. Tool size map computed once and reused for the per-tool summary.
 
 - **React workflow executor** — Uses `stripOldImages()` before LLM calls to prevent image accumulation across workflow iterations.
 
-- **Docker entrypoint** — Chromium output suppressed by default; `BROWSER_VERBOSE=true` restores it.
+- **Docker entrypoint** — Chromium output suppressed by default; `BROWSER_VERBOSE=true` restores it. CDP remote debugging now binds to `127.0.0.1` instead of `0.0.0.0`.
+
+- **Docker image slimmed** — Removed `arp-scan`, `masscan`, `libcap2-bin` packages and `NET_RAW` capability grants from Dockerfile and docker-compose.
+
+- **CORS locked down** — Default CORS policy changed from `origin: true` (reflect all origins) to `origin: false` (same-origin only). Cross-origin access requires explicitly setting `CORS_ORIGIN`.
+
+- **Auth session expiry** — Sessions now store an expiration timestamp and are cleaned up hourly, replacing the previous never-expiring `Set`.
+
+- **Agent API: publish field sanitized** — `GET /api/agents/:name` now returns `publish: { enabled, hasPassword }` instead of exposing the raw password.
+
+- **AgentsView: auto-refresh on workspace changes** — Agent list reloads automatically when workspace_write or workspace_delete tool calls modify agent resources.
+
+- **Tool popover positioning** — Tool call detail popovers in AgentsView and StandaloneChat now use fixed positioning with viewport-aware placement, preventing clipping at screen edges.
 
 - **Task list endpoint** — Strips `events` array from list responses to keep payloads small; full events available via individual task GET.
 
 - **Web-pilot agent/skill** — Updated with textExcerpt guidance, evaluate() strategy, "don't repeat failed calls" rule.
 
 - **Auto-inject sandbox tools from skills removed** — `resolveForAgentWithMeta()` replaced with simpler `resolveForAgent()`. Agents must explicitly declare sandbox tools.
+
+- **Anthropic default maxTokens** — Increased from 4096 to 8192.
+
+- **Template agents cleaned up** — Removed `metadata` field from all template and example agents. Architect agent now includes sandbox and ask_user tools.
+
+- **Template llm.json** — Uses `${OPENAI_API_KEY}` env var placeholder instead of hardcoded "not-needed".
+
+### Removed
+
+- **`metadata` field from agent schema** — The `metadata: z.record(z.unknown()).optional()` field has been removed from `AgentDefinitionSchema`. Existing metadata in YAML files is ignored.
 
 ## Release 0.0.6
 

@@ -12,7 +12,7 @@
     "isac-reports": {
       "transport": "streamable-http",
       "url": "https://security.deploy.dalcu.com/mcp",
-      "description": "OSINT threat intelligence aggregator — CVEs, advisories, malware, ICS alerts from CISA, NVD, and other feeds"
+      "description": "OSINT threat intelligence aggregator — CVEs, advisories, malware"
     }
   },
   "globalOptions": {

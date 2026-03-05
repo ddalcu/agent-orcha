@@ -8,14 +8,6 @@
     "tags": ["meta-agent", "builder"]
   },
   {
-    "name": "business-analyst",
-    "type": "agent",
-    "description": "Business intelligence analyst with access to sales pipeline, supply chain, and customer operations knowledge graphs.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/business-analyst.agent.yaml",
-    "tags": ["analytics", "rag"]
-  },
-  {
     "name": "chatbot",
     "type": "agent",
     "description": "General-purpose chatbot that connects to CollabNook, answers questions, and remembers channel context.",
@@ -32,28 +24,12 @@
     "tags": ["corporate", "pii-security"]
   },
   {
-    "name": "knowledge-broker",
-    "type": "agent",
-    "description": "Searches and analyzes multiple knowledge bases for cross-referenced insights.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/knowledge-broker.agent.yaml",
-    "tags": ["knowledge", "analytics"]
-  },
-  {
     "name": "music-librarian",
     "type": "agent",
     "description": "Music store expert — explore the catalog, discover artists, and analyze customer listening patterns via knowledge graph.",
     "author": "Agent Orcha",
     "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/music-librarian.agent.yaml",
     "tags": ["music", "catalog"]
-  },
-  {
-    "name": "sandbox",
-    "type": "agent",
-    "description": "Coding assistant with JavaScript sandbox, shell, web tools, and browser automation.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/sandbox.agent.yaml",
-    "tags": ["sandbox", "coding"]
   },
   {
     "name": "transport-security",
@@ -190,30 +166,6 @@
     "author": "Agent Orcha",
     "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/music-store.knowledge.yaml",
     "tags": ["graph", "music"]
-  },
-  {
-    "name": "sales-pipeline",
-    "type": "knowledge",
-    "description": "CRM deal data with customers, products, sales reps, regions, and competitor intelligence.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/sales-pipeline.knowledge.yaml",
-    "tags": ["crm", "analytics"]
-  },
-  {
-    "name": "supply-chain",
-    "type": "knowledge",
-    "description": "Inventory and logistics — SKUs, suppliers, warehouses, stock levels, and demand velocity.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/supply-chain.knowledge.yaml",
-    "tags": ["logistics", "analytics"]
-  },
-  {
-    "name": "customer-ops",
-    "type": "knowledge",
-    "description": "Post-sale service data — product satisfaction, returns, support tickets, and account management.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/customer-ops.knowledge.yaml",
-    "tags": ["support", "analytics"]
   },
   {
     "name": "security-incidents",

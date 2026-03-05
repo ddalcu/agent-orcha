@@ -2,7 +2,7 @@
   "models": {
     "default": {
       "provider": "openai",
-      "baseUrl": "http://192.168.2.61:1234/v1",
+      "baseUrl": "http://host.docker.internal:1234/v1",
       "apiKey": "${OPENAI_API_KEY}",
       "model": "default",
       "temperature": 0.6,
@@ -12,7 +12,7 @@
   "embeddings": {
     "default": {
       "provider": "openai",
-      "baseUrl": "http://192.168.2.61:1234/v1",
+      "baseUrl": "http://host.docker.internal:1234/v1",
       "apiKey": "${OPENAI_API_KEY}",
       "model": "text-embedding-nomic-embed-text-v1.5",
       "eosToken": " "
