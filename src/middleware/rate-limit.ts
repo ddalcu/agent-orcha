@@ -3,20 +3,11 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 /**
  * In-memory sliding-window rate limiter.
  * Tracks request timestamps per IP and rejects with 429 when the limit is exceeded.
+ * Each call creates an independent limiter with its own state.
  */
-const buckets = new Map<string, number[]>();
-
-// Cleanup stale entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, timestamps] of buckets) {
-    const fresh = timestamps.filter((t) => now - t < 120_000); // keep 2 min max
-    if (fresh.length === 0) buckets.delete(key);
-    else buckets.set(key, fresh);
-  }
-}, 5 * 60 * 1000);
-
 export function rateLimitHook(maxAttempts: number, windowMs: number) {
+  const buckets = new Map<string, number[]>();
+
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const ip = request.ip;
     const now = Date.now();

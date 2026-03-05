@@ -34,8 +34,9 @@ class ThinkTagParser {
           this.buffer = this.buffer.slice(endIdx + 8);
           this.insideThink = false;
         } else {
-          // Keep potential partial </think> tag in buffer
-          const safe = Math.max(0, this.buffer.length - 7);
+          // Only buffer if there's a `<` that could start `</think>`
+          const lastLt = this.buffer.lastIndexOf('<');
+          const safe = (lastLt >= 0 && this.buffer.length - lastLt < 8) ? lastLt : this.buffer.length;
           reasoning += this.buffer.slice(0, safe);
           this.buffer = this.buffer.slice(safe);
           break;
@@ -47,8 +48,9 @@ class ThinkTagParser {
           this.buffer = this.buffer.slice(startIdx + 7);
           this.insideThink = true;
         } else {
-          // Keep potential partial <think> tag in buffer
-          const safe = Math.max(0, this.buffer.length - 6);
+          // Only buffer if there's a `<` that could start `<think>`
+          const lastLt = this.buffer.lastIndexOf('<');
+          const safe = (lastLt >= 0 && this.buffer.length - lastLt < 7) ? lastLt : this.buffer.length;
           content += this.buffer.slice(0, safe);
           this.buffer = this.buffer.slice(safe);
           break;
