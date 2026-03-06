@@ -69,10 +69,11 @@ export class ModelManager {
 
     for (const entry of entries) {
       if (!entry.endsWith('.gguf')) continue;
+      // Skip mmproj (multimodal projector) files — they are not standalone models
+      if (entry.toLowerCase().includes('mmproj')) continue;
       const filePath = path.join(this.modelsDir, entry);
       const stat = await fs.stat(filePath);
       const meta = await this.readMeta(entry);
-      const isMmproj = entry.toLowerCase().includes('mmproj');
 
       models.push({
         id: this.fileNameToId(entry),
@@ -81,7 +82,6 @@ export class ModelManager {
         sizeBytes: stat.size,
         repo: meta?.repo,
         downloadedAt: meta?.downloadedAt ?? stat.birthtime.toISOString(),
-        ...(isMmproj ? { mmproj: true } : {}),
       });
     }
 
