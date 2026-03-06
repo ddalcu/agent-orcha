@@ -320,3 +320,8 @@ async function downloadBinary(destDir: string, platform: Platform, gpu: GpuInfo)
 
   logger.info(`[BinaryManager] llama-server ready at ${path.join(destDir, BINARY_NAME)}`);
 }
+
+// Exported for testing — not part of the public API
+export { getAssetPatterns as _getAssetPatterns, getBinaryDirName as _getBinaryDirName };
+export type { Platform as _Platform };
+export function _resetGpuCache() { cachedGpu = null; }

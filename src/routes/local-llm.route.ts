@@ -85,6 +85,21 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
           },
         );
 
+        // Auto-download mmproj for vision models (skip if user downloaded an mmproj directly)
+        if (!clientDisconnected && !fileName.toLowerCase().includes('mmproj')) {
+          const mmproj = await manager.autoDownloadMmproj(
+            repo,
+            (progress) => {
+              if (!clientDisconnected) {
+                reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
+              }
+            },
+          );
+          if (mmproj && !clientDisconnected) {
+            reply.raw.write(`data: ${JSON.stringify({ type: 'mmproj', model: mmproj })}\n\n`);
+          }
+        }
+
         if (!clientDisconnected) {
           reply.raw.write(`data: ${JSON.stringify({ type: 'complete', model })}\n\n`);
         }

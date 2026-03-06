@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { LlamaServerProcess } from './llama-server-process.ts';
 import { ModelManager } from './model-manager.ts';
 import { readGGUFModelInfo, calculateOptimalContextSize, kvCacheBytesPerToken } from './gguf-reader.ts';
@@ -23,6 +24,7 @@ export const llamaEngine = {
 
   _detectedContextSize: null as number | null,
   _memoryEstimate: null as { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null,
+  _supportsVision: false,
 
   async load(modelPath: string, contextSize?: number): Promise<void> {
     if (!chatServer) chatServer = new LlamaServerProcess(this._baseDir);
@@ -44,12 +46,23 @@ export const llamaEngine = {
       };
     }
 
+    // Auto-detect multimodal projector (mmproj) for vision support
+    const modelFileName = path.basename(modelPath);
+    const manager = new ModelManager(this._baseDir);
+    const mmproj = await manager.findMmprojForModel(modelFileName);
+    this._supportsVision = !!mmproj;
+
+    if (mmproj) {
+      logger.info(`[LlamaEngine] Vision enabled with mmproj: ${path.basename(mmproj)}`);
+    }
+
     this._detectedContextSize = contextSize ?? null;
     const gpu = detectGpu();
     const isGpu = gpu.accel !== 'none';
     await chatServer.start({
       modelPath,
       contextSize,
+      mmproj: mmproj ?? undefined,
       ...(isGpu ? { batchSize: 4096, ubatchSize: 1024 } : {}),
     });
   },
@@ -70,7 +83,7 @@ export const llamaEngine = {
     await this.load(filePath, contextSize);
   },
 
-  getStatus(): { running: boolean; activeModel: string | null; port: number | null; contextSize: number | null; memoryEstimate: { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null; gpu: GpuInfo } {
+  getStatus(): { running: boolean; activeModel: string | null; port: number | null; contextSize: number | null; memoryEstimate: { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null; gpu: GpuInfo; supportsVision: boolean } {
     return {
       running: chatServer?.running ?? false,
       activeModel: chatServer?.modelPath ?? null,
@@ -78,6 +91,7 @@ export const llamaEngine = {
       contextSize: this._detectedContextSize,
       memoryEstimate: this._memoryEstimate,
       gpu: detectGpu(),
+      supportsVision: this._supportsVision,
     };
   },
 

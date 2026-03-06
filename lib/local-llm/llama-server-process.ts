@@ -5,6 +5,7 @@ import { getBinaryPath } from './binary-manager.ts';
 
 export interface ServerOptions {
   modelPath: string;
+  mmproj?: string;
   port?: number;
   embedding?: boolean;
   gpuLayers?: number;
@@ -62,6 +63,7 @@ export class LlamaServerProcess {
       '--n-gpu-layers', String(options.gpuLayers ?? -1),
     ];
 
+    if (options.mmproj) args.push('--mmproj', options.mmproj);
     if (options.contextSize) args.push('--ctx-size', String(options.contextSize));
     if (options.flashAttn !== false) args.push('--flash-attn', 'on');
     if (options.threads) args.push('--threads', String(options.threads));

@@ -72,6 +72,7 @@ export class ModelManager {
       const filePath = path.join(this.modelsDir, entry);
       const stat = await fs.stat(filePath);
       const meta = await this.readMeta(entry);
+      const isMmproj = entry.toLowerCase().includes('mmproj');
 
       models.push({
         id: this.fileNameToId(entry),
@@ -80,6 +81,7 @@ export class ModelManager {
         sizeBytes: stat.size,
         repo: meta?.repo,
         downloadedAt: meta?.downloadedAt ?? stat.birthtime.toISOString(),
+        ...(isMmproj ? { mmproj: true } : {}),
       });
     }
 
@@ -91,10 +93,67 @@ export class ModelManager {
     return models.find((m) => m.id === id) ?? null;
   }
 
+  /** Auto-download an mmproj file from the same repo if needed for vision support. */
+  async autoDownloadMmproj(
+    repo: string,
+    onProgress?: (progress: DownloadProgress) => void,
+  ): Promise<LocalModel | null> {
+    await this.ensureDir();
+
+    // Already have an mmproj from this repo?
+    const entries = await fs.readdir(this.modelsDir);
+    for (const entry of entries) {
+      if (!entry.toLowerCase().includes('mmproj') || !entry.endsWith('.gguf')) continue;
+      const meta = await this.readMeta(entry);
+      if (meta?.repo === repo) return null;
+    }
+
+    // Fetch repo file list from HuggingFace
+    try {
+      const res = await fetch(`https://huggingface.co/api/models/${repo}?blobs=true`);
+      if (!res.ok) return null;
+      const detail: any = await res.json();
+
+      const mmprojFiles = (detail.siblings ?? [])
+        .filter((s: any) => s.rfilename?.endsWith('.gguf') && s.rfilename.toLowerCase().includes('mmproj'))
+        .map((s: any) => ({ fileName: s.rfilename as string, sizeBytes: (s.size ?? 0) as number }));
+
+      if (mmprojFiles.length === 0) return null;
+
+      // Prefer F16/BF16 (smaller, good quality) over F32
+      const preferred = mmprojFiles.find((f: { fileName: string }) =>
+        /f16|bf16/i.test(f.fileName) && !/f32/i.test(f.fileName)
+      ) ?? mmprojFiles[0];
+
+      logger.info(`[ModelManager] Auto-downloading mmproj: ${preferred.fileName} from ${repo}`);
+      return this.downloadModel(repo, preferred.fileName, onProgress);
+    } catch (err) {
+      logger.warn(`[ModelManager] Failed to auto-download mmproj: ${err}`);
+      return null;
+    }
+  }
+
   async findModelFile(modelName: string): Promise<string | null> {
     const models = await this.listModels();
     const match = models.find((m) => m.id === modelName || m.fileName === modelName);
     return match?.filePath ?? null;
+  }
+
+  /** Find a multimodal projector (mmproj) file from the same repo as the given model. */
+  async findMmprojForModel(modelFileName: string): Promise<string | null> {
+    const modelMeta = await this.readMeta(modelFileName);
+    if (!modelMeta?.repo) return null;
+
+    await this.ensureDir();
+    const entries = await fs.readdir(this.modelsDir);
+
+    for (const entry of entries) {
+      if (!entry.toLowerCase().includes('mmproj') || !entry.endsWith('.gguf')) continue;
+      const meta = await this.readMeta(entry);
+      if (meta?.repo === modelMeta.repo) return path.join(this.modelsDir, entry);
+    }
+
+    return null;
   }
 
   async downloadModel(

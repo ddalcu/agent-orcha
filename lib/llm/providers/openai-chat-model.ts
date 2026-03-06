@@ -97,6 +97,7 @@ interface OpenAIChatModelOptions {
   baseURL?: string;
   streamUsage?: boolean;
   provider?: 'openai' | 'local';
+  supportsVision?: boolean;
 }
 
 export class OpenAIChatModel implements ChatModel {
@@ -106,6 +107,7 @@ export class OpenAIChatModel implements ChatModel {
   private maxTokens?: number;
   private streamUsage: boolean;
   private provider: 'openai' | 'local';
+  private supportsVision: boolean;
   private isReasoningModel: boolean;
   private boundTools?: StructuredTool[];
   private cachedProviderTools?: OpenAI.ChatCompletionTool[];
@@ -121,6 +123,7 @@ export class OpenAIChatModel implements ChatModel {
     this.maxTokens = options.maxTokens;
     this.streamUsage = options.streamUsage ?? true;
     this.provider = options.provider ?? 'openai';
+    this.supportsVision = options.supportsVision ?? true;
     this.isReasoningModel = this.provider === 'openai' && /^o[134]/.test(this.modelName);
   }
 
@@ -142,12 +145,18 @@ export class OpenAIChatModel implements ChatModel {
           break;
         case 'human':
           if (Array.isArray(msg.content)) {
-            const parts: OpenAI.ChatCompletionContentPart[] = msg.content.map(p => {
+            const parts: OpenAI.ChatCompletionContentPart[] = [];
+            for (const p of msg.content) {
               if (p.type === 'image') {
-                return { type: 'image_url' as const, image_url: { url: `data:${p.mediaType};base64,${p.data}` } };
+                if (this.supportsVision) {
+                  parts.push({ type: 'image_url' as const, image_url: { url: `data:${p.mediaType};base64,${p.data}` } });
+                } else {
+                  parts.push({ type: 'text' as const, text: '[Image omitted — model does not support vision]' });
+                }
+              } else {
+                parts.push({ type: 'text' as const, text: p.text });
               }
-              return { type: 'text' as const, text: p.text };
-            });
+            }
             result.push({ role: 'user', content: parts });
           } else {
             result.push({ role: 'user', content: msg.content });
@@ -191,6 +200,7 @@ export class OpenAIChatModel implements ChatModel {
 
           // Flush images as a user message once the tool sequence ends
           const nextMsg = messages[i + 1];
+          if (!this.supportsVision) pendingImages.length = 0;
           if (pendingImages.length > 0 && (!nextMsg || nextMsg.role !== 'tool')) {
             const label = pendingImages.map((img) => img.toolName).join(', ');
             const parts: OpenAI.ChatCompletionContentPart[] = [
@@ -410,6 +420,7 @@ export class OpenAIChatModel implements ChatModel {
       maxTokens: this.maxTokens,
       streamUsage: this.streamUsage,
       provider: this.provider,
+      supportsVision: this.supportsVision,
     });
     bound.boundTools = tools;
     bound.structuredSchema = this.structuredSchema;
@@ -426,6 +437,7 @@ export class OpenAIChatModel implements ChatModel {
       maxTokens: this.maxTokens,
       streamUsage: this.streamUsage,
       provider: this.provider,
+      supportsVision: this.supportsVision,
     });
     wrapped.structuredSchema = schema;
     wrapped.boundTools = this.boundTools;
