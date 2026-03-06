@@ -51,6 +51,7 @@ export class AppRoot extends Component {
                 this._showLogoutButton();
             }
             this._checkVnc();
+            this._checkLlmConfig();
         } catch {
             // Server unreachable — will fail on actual API calls
         }
@@ -169,6 +170,49 @@ export class AppRoot extends Component {
             this._showLogin();
         });
         actions.appendChild(btn);
+    }
+
+    async _checkLlmConfig() {
+        try {
+            const res = await fetch('/api/llm/readiness');
+            const data = await res.json();
+            if (!data.ready) this._showLlmSetupModal(data.issues);
+        } catch { /* ignore */ }
+    }
+
+    _showLlmSetupModal(issues) {
+        if (this.querySelector('#llm-setup-overlay')) return;
+
+        const issueList = (issues || [])
+            .map(i => `<li class="flex items-start gap-2"><i class="fas fa-circle text-[5px] text-amber-400 mt-1.5 flex-shrink-0"></i><span>${i}</span></li>`)
+            .join('');
+
+        const overlay = document.createElement('div');
+        overlay.id = 'llm-setup-overlay';
+        overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70';
+        overlay.innerHTML = `
+            <div class="bg-[#1e1e2e] border border-[#313244] rounded-lg shadow-xl w-full max-w-md mx-4 p-8 text-center">
+                <div class="w-14 h-14 rounded-full bg-amber-500/15 flex items-center justify-center mx-auto mb-5">
+                    <i class="fas fa-microchip text-2xl text-amber-400"></i>
+                </div>
+                <h2 class="text-xl font-semibold text-gray-100 mb-2">LLM Setup Required</h2>
+                <p class="text-sm text-gray-400 mb-4">
+                    Your models aren't ready yet. Head to the <strong class="text-gray-200">LLM</strong> tab to get started.
+                </p>
+                ${issueList ? `<ul class="text-xs text-gray-500 text-left space-y-1 mb-6 bg-[#11111b] rounded-lg p-3">${issueList}</ul>` : ''}
+                <button id="llm-setup-go"
+                    class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-arrow-right mr-2"></i>Go to LLM
+                </button>
+            </div>
+        `;
+        this.appendChild(overlay);
+
+        overlay.querySelector('#llm-setup-go').addEventListener('click', () => {
+            overlay.remove();
+            store.set('activeTab', 'llm');
+            window.location.hash = 'llm';
+        });
     }
 
     switchTab(tabId) {

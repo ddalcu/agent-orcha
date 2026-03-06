@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { LLMFactory, listModelConfigs, getModelConfig } from '../../lib/llm/index.ts';
+import { LLMFactory, listModelConfigs, getModelConfig, listEmbeddingConfigs, getEmbeddingConfig, resolveApiKey } from '../../lib/llm/index.ts';
+import { detectProvider } from '../../lib/llm/provider-detector.ts';
+import { ModelManager } from '../../lib/local-llm/index.ts';
 import { humanMessage, aiMessage } from '../../lib/types/llm-types.ts';
 import type { MessageContent, ContentPart } from '../../lib/types/llm-types.ts';
 import { logger } from '../../lib/logger.ts';
@@ -32,7 +34,43 @@ function buildUserContent(text: string, attachments?: Attachment[]): MessageCont
   return parts.length > 0 ? parts : text;
 }
 
+async function checkConfigReady(
+  config: { provider?: string; baseUrl?: string; apiKey?: string; model: string },
+  manager: ModelManager,
+): Promise<{ ready: boolean; reason?: string }> {
+  const provider = detectProvider(config as any);
+  if (provider === 'local' && !config.baseUrl) {
+    const filePath = await manager.findModelFile(config.model);
+    if (!filePath) return { ready: false, reason: `Model "${config.model}" not downloaded` };
+  } else if (provider !== 'local') {
+    const key = resolveApiKey(provider, config.apiKey);
+    if (!key) return { ready: false, reason: `No API key for ${provider}` };
+  }
+  return { ready: true };
+}
+
 export const llmRoutes: FastifyPluginAsync = async (fastify) => {
+  const manager = new ModelManager(fastify.orchestrator.workspaceRoot);
+
+  // GET /readiness — check if default model + embedding are usable
+  fastify.get('/readiness', async () => {
+    const issues: string[] = [];
+
+    if (listModelConfigs().includes('default')) {
+      const result = await checkConfigReady(getModelConfig('default'), manager);
+      if (!result.ready) issues.push(`Chat: ${result.reason}`);
+    } else {
+      issues.push('No default model configured');
+    }
+
+    if (listEmbeddingConfigs().includes('default')) {
+      const result = await checkConfigReady(getEmbeddingConfig('default'), manager);
+      if (!result.ready) issues.push(`Embedding: ${result.reason}`);
+    }
+
+    return { ready: issues.length === 0, issues };
+  });
+
   // List all available LLM configs
   fastify.get('/', async () => {
     const names = listModelConfigs();

@@ -13,7 +13,8 @@ import { SkillLoader, type Skill } from './skills/index.ts';
 import { ToolRegistry } from './tools/tool-registry.ts';
 import { ToolDiscovery } from './tools/tool-discovery.ts';
 import { MCPConfigSchema } from './mcp/types.ts';
-import { loadLLMConfig, listModelConfigs } from './llm/llm-config.ts';
+import { loadLLMConfig, listModelConfigs, listEmbeddingConfigs, getModelConfig, getEmbeddingConfig, resolveApiKey } from './llm/llm-config.ts';
+import { detectProvider } from './llm/provider-detector.ts';
 import { LLMFactory } from './llm/llm-factory.ts';
 import { resolveAgentLLMRef } from './llm/types.ts';
 import { ConversationStore } from './memory/conversation-store.ts';
@@ -29,6 +30,7 @@ import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
 import { substituteEnvVars } from './utils/env-substitution.ts';
 import { llamaEngine, llamaEmbeddingEngine } from './local-llm/llama-provider.ts';
+import { ModelManager } from './local-llm/model-manager.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
 import type { IntegrationAccessor } from './integrations/types.ts';
@@ -123,6 +125,8 @@ export class Orchestrator {
     llamaEngine.setBaseDir(this.config.workspaceRoot);
     llamaEmbeddingEngine.setBaseDir(this.config.workspaceRoot);
 
+    await this.checkLlmReadiness();
+
     await this.loadMCPConfig();
     await this.mcpClient.initialize();
 
@@ -169,6 +173,33 @@ export class Orchestrator {
     // Start integrations after initialization (non-blocking)
     this.integrationManager = new IntegrationManager();
     await this.integrationManager.start(this);
+  }
+
+  private async checkLlmReadiness(): Promise<void> {
+    const issues: string[] = [];
+    const manager = new ModelManager(this.config.workspaceRoot);
+
+    const checks: [string, boolean, () => { model: string; baseUrl?: string; apiKey?: string }][] = [
+      ['Chat model', listModelConfigs().includes('default'), () => getModelConfig('default')],
+      ['Embedding', listEmbeddingConfigs().includes('default'), () => getEmbeddingConfig('default')],
+    ];
+
+    for (const [label, hasDefault, getConfig] of checks) {
+      if (!hasDefault) { issues.push(`${label}: no default configured`); continue; }
+      const config = getConfig();
+      const provider = detectProvider(config);
+      if (provider === 'local' && !config.baseUrl) {
+        const filePath = await manager.findModelFile(config.model);
+        if (!filePath) issues.push(`${label}: model "${config.model}" not downloaded`);
+      } else if (provider !== 'local') {
+        const key = resolveApiKey(provider, config.apiKey);
+        if (!key) issues.push(`${label}: no API key for ${provider}`);
+      }
+    }
+
+    if (issues.length > 0) {
+      logger.warn(`[Orchestrator] LLM not ready — ${issues.join('; ')}. Open the Studio and go to the LLM tab to set up your models.`);
+    }
   }
 
   private async loadMCPConfig(): Promise<void> {
