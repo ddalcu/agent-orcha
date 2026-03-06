@@ -2,7 +2,7 @@ import { OpenAIChatModel } from './providers/openai-chat-model.ts';
 import { AnthropicChatModel } from './providers/anthropic-chat-model.ts';
 import { GeminiChatModel } from './providers/gemini-chat-model.ts';
 import type { ChatModel } from '../types/llm-types.ts';
-import { getModelConfig, resolveApiKey, type ModelConfig } from './llm-config.ts';
+import { getModelConfig, getLLMConfig, getLLMConfigPath, saveLLMConfig, resolveApiKey, type ModelConfig } from './llm-config.ts';
 import { resolveAgentLLMRef, type AgentLLMRef } from './types.ts';
 import { detectProvider, type LLMProvider } from './provider-detector.ts';
 import { llamaEngine } from '../local-llm/llama-provider.ts';
@@ -31,7 +31,20 @@ export class LLMFactory {
 
     // Auto-start local llama server if needed (skip if user provides their own baseUrl)
     if (provider === 'local' && !config.baseUrl) {
-      await llamaEngine.ensureRunning(config.model);
+      await llamaEngine.ensureRunning(config.model, config.contextSize);
+
+      // Persist auto-detected contextSize to llm.json
+      if (!config.contextSize) {
+        const detectedCtx = llamaEngine.getStatus().contextSize;
+        if (detectedCtx) {
+          config.contextSize = detectedCtx;
+          const fullConfig = getLLMConfig();
+          const configPath = getLLMConfigPath();
+          if (fullConfig && configPath) {
+            await saveLLMConfig(configPath, fullConfig);
+          }
+        }
+      }
     }
 
     logger.info(`[LLMFactory] Creating LLM: ${name} (provider: ${provider}, model: ${config.model}, temp: ${temperature ?? 'default'})`);

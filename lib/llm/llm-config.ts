@@ -30,6 +30,7 @@ export const ModelConfigSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().optional(),
   thinkingBudget: z.number().optional(),
+  contextSize: z.number().optional(),
 });
 
 // Schema for individual embedding configuration
@@ -55,6 +56,7 @@ export type LLMJsonConfig = z.infer<typeof LLMJsonConfigSchema>;
 
 // Singleton config manager
 let loadedConfig: LLMJsonConfig | null = null;
+let loadedConfigPath: string | null = null;
 
 export async function loadLLMConfig(llmJsonPath: string): Promise<LLMJsonConfig> {
   const content = await fs.readFile(llmJsonPath, 'utf-8');
@@ -62,6 +64,7 @@ export async function loadLLMConfig(llmJsonPath: string): Promise<LLMJsonConfig>
   const validated = LLMJsonConfigSchema.parse(parsed);
 
   loadedConfig = validated;
+  loadedConfigPath = llmJsonPath;
 
   logger.info(`[LLMConfig] Loaded ${Object.keys(validated.models).length} model(s), ${Object.keys(validated.embeddings).length} embedding(s)`);
 
@@ -116,6 +119,10 @@ export function isLLMConfigLoaded(): boolean {
 
 export function getLLMConfig(): LLMJsonConfig | null {
   return loadedConfig;
+}
+
+export function getLLMConfigPath(): string | null {
+  return loadedConfigPath;
 }
 
 export async function saveLLMConfig(llmJsonPath: string, config: LLMJsonConfig): Promise<void> {

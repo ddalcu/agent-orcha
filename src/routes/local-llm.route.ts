@@ -116,9 +116,11 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const setAsDefault = (request.body as any)?.setAsDefault === true;
+      const detectedCtx = llamaEngine.getStatus().contextSize;
       const localLlamaEntry = {
         provider: 'local' as const,
         model: model.fileName.replace(/\.gguf$/i, ''),
+        ...(detectedCtx ? { contextSize: detectedCtx } : {}),
       };
 
       // Update llm.json

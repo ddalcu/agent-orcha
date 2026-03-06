@@ -7,6 +7,7 @@ export {
   listEmbeddingConfigs,
   isLLMConfigLoaded,
   getLLMConfig,
+  getLLMConfigPath,
   saveLLMConfig,
   resolveApiKey,
 } from './llm-config.ts';

@@ -254,27 +254,60 @@ export class LocalLlmView extends Component {
         // Chat model status
         if (running) {
             const modelName = activeModel ? activeModel.split('/').pop() : 'Unknown';
+            const mem = this.status.memoryEstimate;
+            const totalRam = this.status.systemRamBytes;
+            const ctxSize = this.status.contextSize;
+            const memPct = mem && totalRam ? Math.round((mem.totalBytes / totalRam) * 100) : null;
+            const memBarColor = memPct > 80 ? 'bg-red-500' : memPct > 60 ? 'bg-amber-500' : 'bg-green-500';
+
+            html += `
+                <div class="bg-dark-surface border border-dark-border rounded-lg px-4 py-3 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="relative flex h-2.5 w-2.5">
+                                <span class="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping"></span>
+                                <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-400"></span>
+                            </span>
+                            <span class="text-sm text-gray-200">Chat Model</span>
+                            <span class="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono">${escapeHtml(modelName)}</span>
+                            ${ctxSize ? `<span class="text-xs text-gray-500">${(ctxSize / 1024).toFixed(0)}K ctx</span>` : ''}
+                            ${this.status.port ? `<span class="text-xs text-gray-500">port ${this.status.port}</span>` : ''}
+                        </div>
+                        <button id="stopBtn" class="px-3 py-1.5 text-xs font-medium bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-colors">
+                            <i class="fas fa-stop mr-1"></i>Stop
+                        </button>
+                    </div>
+                    ${mem ? `
+                    <div class="flex items-center gap-3">
+                        <div class="flex-1">
+                            <div class="w-full bg-dark-bg rounded-full h-1.5">
+                                <div class="${memBarColor} h-1.5 rounded-full transition-all" style="width: ${memPct}%"></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 text-xs text-gray-500 flex-shrink-0">
+                            <span title="Model weights"><i class="fas fa-cube mr-0.5"></i>${formatBytes(mem.modelBytes)}</span>
+                            <span title="KV cache"><i class="fas fa-memory mr-0.5"></i>${formatBytes(mem.kvCacheBytes)}</span>
+                            <span title="Total estimated / System RAM">${formatBytes(mem.totalBytes)} / ${formatBytes(totalRam)}</span>
+                        </div>
+                    </div>` : ''}
+                </div>`;
+        } else {
+            const lastModel = this.status.lastActiveModel;
+            const lastModelName = lastModel ? this.models.find(m => m.id === lastModel) : null;
             html += `
                 <div class="flex items-center justify-between bg-dark-surface border border-dark-border rounded-lg px-4 py-3">
                     <div class="flex items-center gap-3">
-                        <span class="relative flex h-2.5 w-2.5">
-                            <span class="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping"></span>
-                            <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-400"></span>
-                        </span>
-                        <span class="text-sm text-gray-200">Chat Model</span>
-                        <span class="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono">${escapeHtml(modelName)}</span>
-                        ${this.status.port ? `<span class="text-xs text-gray-500">port ${this.status.port}</span>` : ''}
+                        <span class="inline-flex h-2.5 w-2.5 rounded-full bg-gray-500"></span>
+                        <span class="text-sm text-gray-400">Chat Model</span>
+                        ${lastModelName
+                            ? `<span class="text-xs text-gray-600">${escapeHtml(lastModelName.fileName)}</span>`
+                            : '<span class="text-xs text-gray-600">Activate a model to start</span>'}
                     </div>
-                    <button id="stopBtn" class="px-3 py-1.5 text-xs font-medium bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-colors">
-                        <i class="fas fa-stop mr-1"></i>Stop
-                    </button>
-                </div>`;
-        } else {
-            html += `
-                <div class="flex items-center gap-3 bg-dark-surface border border-dark-border rounded-lg px-4 py-3">
-                    <span class="inline-flex h-2.5 w-2.5 rounded-full bg-gray-500"></span>
-                    <span class="text-sm text-gray-400">Chat Model</span>
-                    <span class="text-xs text-gray-600">Activate a model to start</span>
+                    ${lastModelName
+                        ? `<button id="startLastBtn" class="px-3 py-1.5 text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 rounded-lg transition-colors" data-id="${escapeHtml(lastModel)}">
+                                <i class="fas fa-play mr-1"></i>Start
+                            </button>`
+                        : ''}
                 </div>`;
         }
 
@@ -300,6 +333,7 @@ export class LocalLlmView extends Component {
         container.innerHTML = html;
         this.querySelector('#stopBtn')?.addEventListener('click', () => this.stopServer());
         this.querySelector('#stopEmbBtn')?.addEventListener('click', () => this.stopEmbedding());
+        this.querySelector('#startLastBtn')?.addEventListener('click', (e) => this.activateModel(e.currentTarget.dataset.id));
     }
 
     renderModels() {
@@ -523,7 +557,7 @@ export class LocalLlmView extends Component {
 
         try {
             await api.stopLocalLlm();
-            await this.loadStatus();
+            await this.refresh();
         } catch (e) {
             console.error('Failed to stop server:', e);
         }

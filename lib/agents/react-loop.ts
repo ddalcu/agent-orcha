@@ -165,8 +165,6 @@ async function* runLoop(
       continue;
     }
 
-    noToolStreak = 0;
-
     // Detect repeated identical tool calls (same tool + same args)
     let loopDetected = false;
     for (const tc of accumulatedToolCalls) {
@@ -184,8 +182,16 @@ async function* runLoop(
         accumulatedToolCalls[0]!.id,
         accumulatedToolCalls[0]!.name,
       ));
+      noToolStreak++;
+      if (noToolStreak >= MAX_NO_TOOL_RETRIES) {
+        logger.warn(`[ReactLoop] iteration ${i + 1} — repeated loop detections (${noToolStreak}), stopping`);
+        break;
+      }
       continue;
     }
+
+    // Only reset streak when making genuine progress (non-repeated tool calls)
+    noToolStreak = 0;
 
     // Execute tool calls in parallel
     if (options?.signal?.aborted) {

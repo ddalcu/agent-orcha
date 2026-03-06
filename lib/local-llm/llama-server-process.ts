@@ -59,9 +59,9 @@ export class LlamaServerProcess {
       '--n-gpu-layers', String(options.gpuLayers ?? -1),
     ];
 
+    if (options.contextSize) args.push('--ctx-size', String(options.contextSize));
     if (options.flashAttn !== false) args.push('--flash-attn', 'on');
     if (options.embedding || this.isEmbedding) args.push('--embedding');
-    if (!this.isEmbedding) args.push('--reasoning-format', 'deepseek');
 
     logger.info(`[LlamaServer] Starting: ${binaryPath} ${args.join(' ')}`);
 
@@ -128,6 +128,7 @@ export class LlamaServerProcess {
     } catch { /* server may be down */ }
     return null;
   }
+
 
   private async waitForReady(): Promise<void> {
     const start = Date.now();

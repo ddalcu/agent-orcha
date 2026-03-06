@@ -1,5 +1,6 @@
 import { LlamaServerProcess } from './llama-server-process.ts';
 import { ModelManager } from './model-manager.ts';
+import { readGGUFModelInfo, calculateOptimalContextSize, kvCacheBytesPerToken } from './gguf-reader.ts';
 import { logger } from '../logger.ts';
 
 // ─── Singleton Server Instances ─────────────────────────────────────────────
@@ -19,33 +20,56 @@ export const llamaEngine = {
 
   setBaseDir(dir: string) { this._baseDir = dir; },
 
-  async load(modelPath: string): Promise<void> {
+  _detectedContextSize: null as number | null,
+  _memoryEstimate: null as { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null,
+
+  async load(modelPath: string, contextSize?: number): Promise<void> {
     if (!chatServer) chatServer = new LlamaServerProcess(this._baseDir);
     if (chatServer.running && chatServer.modelPath === modelPath) return;
-    await chatServer.start({ modelPath });
+
+    // Calculate optimal context size from GGUF metadata + available RAM
+    const modelInfo = await readGGUFModelInfo(modelPath);
+    if (!contextSize && modelInfo) {
+      contextSize = calculateOptimalContextSize(modelInfo);
+    }
+
+    // Estimate memory usage for status reporting
+    if (modelInfo && contextSize) {
+      const kvBytes = contextSize * kvCacheBytesPerToken(modelInfo);
+      this._memoryEstimate = {
+        modelBytes: modelInfo.fileSizeBytes,
+        kvCacheBytes: kvBytes,
+        totalBytes: modelInfo.fileSizeBytes + kvBytes,
+      };
+    }
+
+    this._detectedContextSize = contextSize ?? null;
+    await chatServer.start({ modelPath, contextSize });
   },
 
   async unload(): Promise<void> {
     if (chatServer) await chatServer.stop();
   },
 
-  async swap(modelPath: string): Promise<void> {
+  async swap(modelPath: string, contextSize?: number): Promise<void> {
     await this.unload();
-    await this.load(modelPath);
+    await this.load(modelPath, contextSize);
   },
 
-  async ensureRunning(modelName: string): Promise<void> {
+  async ensureRunning(modelName: string, contextSize?: number): Promise<void> {
     if (chatServer?.running) return;
     logger.info(`[LlamaEngine] Auto-starting chat model: ${modelName}`);
     const filePath = await resolveModelPath(this._baseDir, modelName);
-    await this.load(filePath);
+    await this.load(filePath, contextSize);
   },
 
-  getStatus(): { running: boolean; activeModel: string | null; port: number | null } {
+  getStatus(): { running: boolean; activeModel: string | null; port: number | null; contextSize: number | null; memoryEstimate: { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null } {
     return {
       running: chatServer?.running ?? false,
       activeModel: chatServer?.modelPath ?? null,
       port: chatServer?.port ?? null,
+      contextSize: this._detectedContextSize,
+      memoryEstimate: this._memoryEstimate,
     };
   },
 
