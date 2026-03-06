@@ -34,9 +34,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "dev": "WORKSPACE=${WORKSPACE:-./templates} node --watch src/index.ts",
+    "dev": "node --watch src/index.ts",
     "build": "tsc && npm run copy-assets",
-    "copy-assets": "mkdir -p dist && cp -r public dist/ && cp -r templates dist/",
+    "copy-assets": "node -e \"const fs=require('fs');fs.cpSync('public','dist/public',{recursive:true});fs.cpSync('templates','dist/templates',{recursive:true})\"",
     "start": "node dist/src/index.js",
     "prepublishOnly": "npm run build",
     "lint": "eslint src lib --ext .ts",
@@ -44,7 +44,7 @@
     "test": "node --test --test-force-exit 'test/**/*.test.ts'",
     "test:coverage": "node --test --test-force-exit --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info --test-reporter=spec --test-reporter-destination=stdout 'test/**/*.test.ts'",
     "docker": "docker compose up --build --watch",
-    "docker:auth": "AUTH_PASSWORD=${AUTH_PASSWORD:-password} docker compose up --build --watch"
+    "docker:auth": "docker compose up --build --watch"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",

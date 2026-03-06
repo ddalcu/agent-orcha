@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolve base directory first, then load .env from it
 const baseDir = process.env.WORKSPACE
   ? path.resolve(process.env.WORKSPACE)
-  : path.resolve(__dirname, '..');
+  : path.resolve(__dirname, '..', 'templates');
 
 const envPath = path.join(baseDir, '.env');
 if (fs.existsSync(envPath)) {

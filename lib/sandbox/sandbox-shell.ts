@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { tool } from '../types/tool-factory.ts';
 import { z } from 'zod';
 import type { StructuredTool } from '../types/llm-types.ts';
@@ -82,18 +83,21 @@ function executeShell(
   inDocker: boolean,
 ): Promise<ShellResult> {
   return new Promise((resolve) => {
+    const isWin = process.platform === 'win32';
     const options: Record<string, unknown> = {
       timeout,
       maxBuffer: 10 * 1024 * 1024,
-      cwd: '/tmp',
+      cwd: isWin ? tmpdir() : '/tmp',
     };
 
-    if (inDocker) {
+    if (inDocker && !isWin) {
       options.uid = SANDBOX_UID;
       options.gid = SANDBOX_GID;
     }
 
-    execFile('/bin/sh', ['-c', command], options, (error, stdout, stderr) => {
+    const shell = isWin ? 'cmd.exe' : '/bin/sh';
+    const shellArgs = isWin ? ['/c', command] : ['-c', command];
+    execFile(shell, shellArgs, options, (error, stdout, stderr) => {
       let exitCode = 0;
       if (error && 'code' in error && typeof error.code === 'number') {
         exitCode = error.code;
