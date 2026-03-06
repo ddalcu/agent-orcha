@@ -578,11 +578,21 @@ export class LocalLlmView extends Component {
         const result = this.searchResults[idx];
         const file = this.selectedFileForRow(idx);
         if (!result || !file) return;
+
         const downloaded = this.isModelDownloaded(result.repoId, file.fileName);
+        const downloadId = `${result.repoId}/${file.fileName}`;
+        const isDownloading = this.activeDownloads.has(downloadId);
+
+        // Always clear download-in-progress classes first
+        btn.classList.remove('opacity-50', 'pointer-events-none');
+
         if (downloaded) {
             btn.disabled = true;
             btn.className = btn.className.replace(/bg-amber-500\/20 hover:bg-amber-500\/30 text-amber-400/, 'bg-green-500/20 text-green-400 cursor-default');
             btn.innerHTML = '<i class="fas fa-check mr-1"></i>Downloaded';
+        } else if (isDownloading) {
+            btn.classList.add('opacity-50', 'pointer-events-none');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         } else {
             btn.disabled = false;
             btn.className = btn.className.replace(/bg-green-500\/20 text-green-400 cursor-default/, 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400');
@@ -656,14 +666,6 @@ export class LocalLlmView extends Component {
                     </select>
                     <span class="ram-warning text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 flex-shrink-0 ${firstTooLarge ? '' : 'hidden'}" data-idx="${idx}" title="File size exceeds system RAM (${formatBytes(ram)})"><i class="fas fa-memory mr-0.5"></i>won't fit</span>
                     <div class="flex items-center gap-2 flex-shrink-0">
-                        <div class="download-progress hidden" data-idx="${idx}">
-                            <div class="flex items-center gap-2">
-                                <div class="w-24 bg-dark-bg rounded-full h-1.5">
-                                    <div class="progress-fill bg-amber-500 h-1.5 rounded-full transition-all duration-300"></div>
-                                </div>
-                                <span class="progress-text text-xs text-gray-500 font-mono w-12 text-right"></span>
-                            </div>
-                        </div>
                         <button class="download-btn px-3 py-1.5 text-xs font-medium rounded transition-colors ${firstDownloaded
                             ? 'bg-green-500/20 text-green-400 cursor-default'
                             : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400'}" data-idx="${idx}" ${firstDownloaded ? 'disabled' : ''}>
@@ -707,45 +709,23 @@ export class LocalLlmView extends Component {
         const es = api.downloadLocalModel(repo, fileName);
         this.activeDownloads.set(downloadId, es);
 
-        // Show progress, hide download button (only if tied to a search result row)
-        const progressEl = rowIdx != null ? this.querySelector(`.download-progress[data-idx="${rowIdx}"]`) : null;
-        const btn = rowIdx != null ? this.querySelector(`.download-btn[data-idx="${rowIdx}"]`) : null;
-        if (progressEl) progressEl.classList.remove('hidden');
-        if (btn) {
-            btn.classList.add('opacity-50', 'pointer-events-none');
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        }
+        // Update button state for the search result row (if any)
+        if (rowIdx != null) this.updateRowDownloadState(rowIdx);
 
         es.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
 
-                if (data.type === 'progress' && progressEl) {
-                    const fill = progressEl.querySelector('.progress-fill');
-                    const text = progressEl.querySelector('.progress-text');
-                    if (fill) fill.style.width = `${data.percent}%`;
-                    if (text) text.textContent = `${data.percent}%`;
-                }
-
                 if (data.type === 'complete') {
                     this.cleanupDownload(downloadId);
-                    if (progressEl) progressEl.classList.add('hidden');
-                    if (btn) {
-                        btn.classList.remove('opacity-50', 'pointer-events-none');
-                        btn.innerHTML = '<i class="fas fa-check mr-1"></i>Downloaded';
-                        btn.disabled = true;
-                    }
+                    if (rowIdx != null) this.updateRowDownloadState(rowIdx);
                     this.loadModels();
                 }
 
                 if (data.type === 'error') {
                     console.error('Download error:', data.error);
                     this.cleanupDownload(downloadId);
-                    if (btn) {
-                        btn.classList.remove('opacity-50', 'pointer-events-none');
-                        btn.innerHTML = '<i class="fas fa-download mr-1"></i>Download';
-                    }
-                    if (progressEl) progressEl.classList.add('hidden');
+                    if (rowIdx != null) this.updateRowDownloadState(rowIdx);
                 }
             } catch {
                 // ignore parse errors
@@ -754,6 +734,7 @@ export class LocalLlmView extends Component {
 
         es.onerror = () => {
             this.cleanupDownload(downloadId);
+            if (rowIdx != null) this.updateRowDownloadState(rowIdx);
         };
     }
 

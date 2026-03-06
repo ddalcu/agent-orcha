@@ -264,6 +264,9 @@ export class OpenAIChatModel implements ChatModel {
             },
           }
         : {}),
+      ...(this.provider === 'local'
+        ? { chat_template_kwargs: { enable_thinking: true } } as any
+        : {}),
     };
 
     const response = await this.client.chat.completions.create(params);
@@ -314,6 +317,9 @@ export class OpenAIChatModel implements ChatModel {
           : { max_tokens: this.maxTokens }
         : {}),
       ...(tools ? { tools } : {}),
+      ...(this.provider === 'local'
+        ? { chat_template_kwargs: { enable_thinking: true } } as any
+        : {}),
     };
 
     const stream = await this.client.chat.completions.create(params, {

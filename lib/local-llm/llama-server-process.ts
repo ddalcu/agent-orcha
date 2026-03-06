@@ -61,6 +61,7 @@ export class LlamaServerProcess {
 
     if (options.flashAttn !== false) args.push('--flash-attn', 'on');
     if (options.embedding || this.isEmbedding) args.push('--embedding');
+    if (!this.isEmbedding) args.push('--reasoning-format', 'deepseek');
 
     logger.info(`[LlamaServer] Starting: ${binaryPath} ${args.join(' ')}`);
 
