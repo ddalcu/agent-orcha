@@ -56,42 +56,16 @@ describe('createKnowledgeSqlTool', () => {
     assert.ok(tool.description.includes('mysql'));
   });
 
-  it('should include source query in description', () => {
+  it('should include table schema in description', () => {
     const tool = createKnowledgeSqlTool('orders-db', POSTGRES_CONFIG as any);
-    assert.ok(tool.description.includes('SELECT o.id'));
-    assert.ok(tool.description.includes('orders o JOIN customers c'));
+    assert.ok(tool.description.includes('Tables:'));
+    assert.ok(tool.description.includes('orders'));
+    assert.ok(tool.description.includes('customers'));
   });
 
-  it('should include content column in description', () => {
+  it('should include SELECT restriction in description', () => {
     const tool = createKnowledgeSqlTool('orders-db', POSTGRES_CONFIG as any);
-    assert.ok(tool.description.includes('Content column: customer_name'));
-  });
-
-  it('should include metadata columns in description', () => {
-    const tool = createKnowledgeSqlTool('orders-db', POSTGRES_CONFIG as any);
-    assert.ok(tool.description.includes('Metadata columns: id, status, total, email'));
-  });
-
-  it('should generate example queries with table name from source query', () => {
-    const tool = createKnowledgeSqlTool('orders-db', POSTGRES_CONFIG as any);
-    assert.ok(tool.description.includes('COUNT(*)'));
-    assert.ok(tool.description.includes('ILIKE'));
-  });
-
-  it('should generate GROUP BY example when multiple metadata columns exist', () => {
-    const tool = createKnowledgeSqlTool('orders-db', POSTGRES_CONFIG as any);
-    assert.ok(tool.description.includes('GROUP BY'));
-  });
-
-  it('should omit GROUP BY example when no metadata columns', () => {
-    const tool = createKnowledgeSqlTool('minimal-db', MINIMAL_CONFIG as any);
-    assert.ok(!tool.description.includes('GROUP BY'));
-  });
-
-  it('should include restriction text', () => {
-    const tool = createKnowledgeSqlTool('orders-db', POSTGRES_CONFIG as any);
-    assert.ok(tool.description.includes('RESTRICTIONS'));
-    assert.ok(tool.description.includes('Only SELECT queries allowed'));
+    assert.ok(tool.description.includes('Only SELECT allowed'));
   });
 
   it('should reject DELETE queries', async () => {

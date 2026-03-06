@@ -83,7 +83,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
         const userContent = buildUserContent(message, attachments);
         const messages = [...history, humanMessage(userContent)];
 
-        const llm = LLMFactory.create(name);
+        const llm = await LLMFactory.create(name);
         const response = await llm.invoke(messages);
 
         // Store messages (text-only user message, no base64 in memory)
@@ -159,7 +159,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
         // Store text-only user message (no base64 in memory)
         if (sessionId) store.addMessage(sessionId, humanMessage(message));
 
-        const llm = LLMFactory.create(name);
+        const llm = await LLMFactory.create(name);
         const stream = await llm.stream(messages, { signal: abortController.signal });
 
         let lastChunk: any = null;

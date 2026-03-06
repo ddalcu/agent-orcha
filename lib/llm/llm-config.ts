@@ -113,3 +113,13 @@ export function listEmbeddingConfigs(): string[] {
 export function isLLMConfigLoaded(): boolean {
   return loadedConfig !== null;
 }
+
+export function getLLMConfig(): LLMJsonConfig | null {
+  return loadedConfig;
+}
+
+export async function saveLLMConfig(llmJsonPath: string, config: LLMJsonConfig): Promise<void> {
+  await fs.writeFile(llmJsonPath, JSON.stringify(config, null, 2));
+  loadedConfig = config;
+  logger.info(`[LLMConfig] Saved config with ${Object.keys(config.models).length} model(s), ${Object.keys(config.embeddings).length} embedding(s)`);
+}

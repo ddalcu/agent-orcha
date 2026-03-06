@@ -56,26 +56,6 @@ const ENTITIES: EntityRow[] = [
   },
 ];
 
-function catalogConfig() {
-  return {
-    name: 'catalog',
-    description: 'Product catalog with categories and brands',
-    graph: {
-      directMapping: {
-        entities: [
-          { type: 'Product', idColumn: 'id', nameColumn: 'name', properties: ['sku', 'price', 'inStock'] },
-          { type: 'Category', idColumn: 'category_id', nameColumn: 'category_name', properties: ['slug'] },
-          { type: 'Brand', idColumn: 'brand_id', nameColumn: 'brand_name', properties: ['country'] },
-        ],
-        relationships: [
-          { type: 'BELONGS_TO', source: 'Product', target: 'Category' },
-          { type: 'MADE_BY', source: 'Product', target: 'Brand' },
-        ],
-      },
-    },
-  } as any;
-}
-
 function mockSqliteStore(overrides: Record<string, any> = {}) {
   return {
     getEntity: (id: string) => ENTITIES.find(e => e.id === id),
@@ -87,16 +67,14 @@ function mockSqliteStore(overrides: Record<string, any> = {}) {
 }
 
 describe('createKnowledgeEntityLookupTool', () => {
-  it('should create a tool with correct name and schema info in description', () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+  it('should create a tool with correct name', () => {
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     assert.equal(tool.name, 'knowledge_entity_lookup_catalog');
     assert.ok(tool.description.includes('catalog'));
-    assert.ok(tool.description.includes('Product'));
-    assert.ok(tool.description.includes('BELONGS_TO'));
   });
 
   it('should lookup entity by exact ID', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ id: 'product::1' }) as string;
     assert.ok(result.includes('Ergonomic Wireless Keyboard'));
     assert.ok(result.includes('[Product]'));
@@ -106,14 +84,14 @@ describe('createKnowledgeEntityLookupTool', () => {
   });
 
   it('should return not-found for unknown ID', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ id: 'product::999' }) as string;
     assert.ok(result.includes('No entity found'));
     assert.ok(result.includes('product::999'));
   });
 
   it('should search by name (case-insensitive partial match)', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ name: 'keyboard' }) as string;
     assert.ok(result.includes('Ergonomic Wireless Keyboard'));
     assert.ok(!result.includes('Curved Monitor'));
@@ -121,7 +99,7 @@ describe('createKnowledgeEntityLookupTool', () => {
   });
 
   it('should filter by entity type', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ type: 'category' }) as string;
     assert.ok(result.includes('Peripherals'));
     assert.ok(result.includes('Monitors'));
@@ -131,7 +109,7 @@ describe('createKnowledgeEntityLookupTool', () => {
   });
 
   it('should combine name and type filters', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ name: 'key', type: 'brand' }) as string;
     assert.ok(result.includes('KeyTech'));
     assert.ok(result.includes('Found 1'));
@@ -139,13 +117,13 @@ describe('createKnowledgeEntityLookupTool', () => {
   });
 
   it('should also match by ID substring in name search', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ name: 'brand::100' }) as string;
     assert.ok(result.includes('KeyTech'));
   });
 
   it('should return no-match message with filter criteria', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ name: 'laptop', type: 'product' }) as string;
     assert.ok(result.includes('No entities found'));
     assert.ok(result.includes('name="laptop"'));
@@ -153,7 +131,7 @@ describe('createKnowledgeEntityLookupTool', () => {
   });
 
   it('should respect limit parameter', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ type: 'product', limit: 2 }) as string;
     assert.ok(result.includes('Found 3'));
     assert.ok(result.includes('showing 1-2'));
@@ -161,7 +139,7 @@ describe('createKnowledgeEntityLookupTool', () => {
   });
 
   it('should paginate with offset parameter', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ type: 'product', limit: 2, offset: 2 }) as string;
     assert.ok(result.includes('Found 3'));
     assert.ok(result.includes('showing 3-3'));
@@ -169,7 +147,7 @@ describe('createKnowledgeEntityLookupTool', () => {
   });
 
   it('should display entity properties excluding internal fields', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ id: 'product::1' }) as string;
     assert.ok(result.includes('sku'));
     assert.ok(result.includes('price'));
@@ -178,7 +156,7 @@ describe('createKnowledgeEntityLookupTool', () => {
   });
 
   it('should display entity description', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ id: 'brand::100' }) as string;
     assert.ok(result.includes('Description: Premium keyboard manufacturer'));
   });
@@ -187,7 +165,7 @@ describe('createKnowledgeEntityLookupTool', () => {
     const store = mockSqliteStore({
       getEntity: () => { throw new Error('SQLite busy'); },
     });
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeEntityLookupTool('catalog',store);
     const result = await tool.invoke({ id: 'product::1' }) as string;
     assert.ok(result.includes('Lookup error'));
     assert.ok(result.includes('SQLite busy'));
@@ -197,13 +175,13 @@ describe('createKnowledgeEntityLookupTool', () => {
     const store = mockSqliteStore({
       getAllEntities: () => { throw new Error('Table locked'); },
     });
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeEntityLookupTool('catalog',store);
     const result = await tool.invoke({ name: 'keyboard' }) as string;
     assert.ok(result.includes('Lookup error'));
   });
 
   it('should list all entities when no filters given', async () => {
-    const tool = createKnowledgeEntityLookupTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeEntityLookupTool('catalog',mockSqliteStore());
     const result = await tool.invoke({}) as string;
     assert.ok(result.includes('Found 6'));
     assert.ok(result.includes('Ergonomic'));

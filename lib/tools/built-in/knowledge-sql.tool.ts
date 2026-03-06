@@ -15,7 +15,7 @@ export function createKnowledgeSqlTool(
 ): StructuredTool {
   const dbSource = config.source as DatabaseSourceConfig;
   const dbType = getDatabaseType(dbSource.connectionString);
-  const exampleQueries = buildSqlExamples(dbSource, dbType);
+  const tableSchema = extractTableSchema(dbSource, dbType);
 
   return tool(
     async ({ query, limit }) => {
@@ -47,23 +47,10 @@ export function createKnowledgeSqlTool(
     },
     {
       name: `knowledge_sql_${name}`,
-      description: `Run a readonly SQL query against the "${name}" source database (${dbType}).
-
-SOURCE QUERY (shows available tables/columns):
-${dbSource.query.trim()}
-
-Content column: ${dbSource.contentColumn}
-${dbSource.metadataColumns ? `Metadata columns: ${dbSource.metadataColumns.join(', ')}` : ''}
-
-EXAMPLE QUERIES:
-${exampleQueries}
-
-RESTRICTIONS: Only SELECT queries allowed. No INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT, or REVOKE.
-
-TIPS: Use this when you need precise filtering, aggregation, or joins that semantic search can't provide. The source query above shows the tables and columns available.`,
+      description: `Run a readonly SELECT query against "${name}" database (${dbType}). ${tableSchema} Only SELECT allowed.`,
       schema: z.object({
-        query: z.string().describe('A readonly SQL SELECT query'),
-        limit: z.number().optional().describe('Max rows to return (default 25, max 100). Ignored if query already has LIMIT.'),
+        query: z.string().describe(`A readonly ${dbType} SELECT query`),
+        limit: z.number().optional().describe('Max rows (default 25, max 100)'),
       }),
     }
   );
@@ -120,33 +107,84 @@ function executeSqliteReadonly(db: DatabaseSync, query: string): string {
   return JSON.stringify(rows, null, 2);
 }
 
-function buildSqlExamples(dbSource: DatabaseSourceConfig, dbType: string): string {
-  // Parse table names from the original query
-  const tableMatch = dbSource.query.match(/FROM\s+"?(\w+)"?/i);
-  const tableName = tableMatch ? tableMatch[1] : 'table';
+/**
+ * Extract a compact "Table(col1, col2, ...)" schema from the source query.
+ * Parses FROM/JOIN clauses for table names and SELECT for column names.
+ */
+function extractTableSchema(dbSource: DatabaseSourceConfig, dbType: string): string {
+  const query = dbSource.query;
 
-  const contentCol = dbSource.contentColumn;
-  const metaCols = dbSource.metadataColumns ?? [];
-
-  const examples: string[] = [];
-
-  // Count query
-  examples.push(`- SELECT COUNT(*) FROM "${tableName}"`);
-
-  // Simple select with content
-  if (metaCols.length > 0) {
-    const selectCols = metaCols.slice(0, 3).map((c) => `"${c}"`).join(', ');
-    examples.push(`- SELECT ${selectCols} FROM "${tableName}" LIMIT 10`);
+  // Extract table names with aliases from FROM and JOIN clauses
+  const tablePattern = /(?:FROM|JOIN)\s+"?(\w+)"?(?:\s+(?:AS\s+)?(\w+))?/gi;
+  const tables = new Map<string, string>(); // alias/name -> table name
+  let match;
+  while ((match = tablePattern.exec(query)) !== null) {
+    const tableName = match[1]!;
+    const alias = match[2] ?? tableName;
+    tables.set(alias.toLowerCase(), tableName);
   }
 
-  // Content search — SQLite and MySQL don't support ILIKE
-  const likeOp = dbType === 'postgresql' ? 'ILIKE' : 'LIKE';
-  examples.push(`- SELECT "${contentCol}" FROM "${tableName}" WHERE "${contentCol}" ${likeOp} '%keyword%' LIMIT 10`);
+  if (tables.size === 0) return '';
 
-  // Aggregate if there's a useful column
-  if (metaCols.length > 1) {
-    examples.push(`- SELECT "${metaCols[0]}", COUNT(*) as cnt FROM "${tableName}" GROUP BY "${metaCols[0]}" ORDER BY cnt DESC LIMIT 10`);
+  // Extract column references from SELECT clause(s)
+  // Map columns to their table by alias prefix (e.g., "t.Name" -> Track)
+  const columnsByTable = new Map<string, Set<string>>();
+  for (const table of tables.values()) {
+    columnsByTable.set(table, new Set());
   }
 
-  return examples.join('\n');
+  // Match "alias.column AS label" or "alias.column"
+  const colPattern = /(\w+)\.(\w+)(?:\s+AS\s+(\w+))?/gi;
+  while ((match = colPattern.exec(query)) !== null) {
+    const alias = match[1]!.toLowerCase();
+    const col = match[2]!;
+    const table = tables.get(alias);
+    if (table && col !== '*') {
+      columnsByTable.get(table)!.add(col);
+    }
+  }
+
+  const parts: string[] = [];
+  for (const [table, cols] of columnsByTable) {
+    if (cols.size > 0) {
+      parts.push(`${table}(${[...cols].join(', ')})`);
+    } else {
+      parts.push(table);
+    }
+  }
+
+  const schema = `Tables: ${parts.join(', ')}.`;
+  const example = buildExampleQuery(columnsByTable, dbType);
+  return example ? `${schema} ${example}` : schema;
 }
+
+/**
+ * Build a compact example SELECT from the first two tables,
+ * joining on a shared column name, using dialect-appropriate syntax.
+ */
+function buildExampleQuery(columnsByTable: Map<string, Set<string>>, dbType: string): string {
+  const entries = [...columnsByTable.entries()];
+  if (entries.length === 0) return '';
+
+  const q = dbType === 'mysql' ? (s: string) => `\`${s}\`` : (s: string) => s;
+
+  const [t1, cols1] = entries[0]!;
+  const a1 = t1[0]!.toLowerCase();
+
+  if (entries.length < 2 || cols1.size === 0) {
+    const col = cols1.size > 0 ? [...cols1][0]! : '*';
+    return `e.g. SELECT ${q(col)} FROM ${q(t1)}`;
+  }
+
+  const [t2, cols2] = entries[1]!;
+  const a2 = t2[0]!.toLowerCase() === a1 ? t2.substring(0, 2).toLowerCase() : t2[0]!.toLowerCase();
+
+  // Find a shared column for the JOIN condition
+  const shared = [...cols1].find(c => cols2.has(c)) ?? [...cols2].find(c => c.toLowerCase().endsWith('id'));
+  const joinCol = shared ?? 'id';
+
+  const selectCol = [...cols1].find(c => !c.toLowerCase().endsWith('id')) ?? [...cols1][0] ?? '*';
+
+  return `e.g. SELECT ${a1}.${q(selectCol)} FROM ${q(t1)} ${a1} JOIN ${q(t2)} ${a2} ON ${a1}.${q(joinCol)} = ${a2}.${q(joinCol)}`;
+}
+

@@ -1,21 +1,15 @@
 {
+  "version": "1.0",
   "models": {
     "default": {
-      "provider": "openai",
-      "baseUrl": "http://host.docker.internal:1234/v1",
-      "apiKey": "${OPENAI_API_KEY}",
-      "model": "default",
-      "temperature": 0.6,
-      "maxTokens": 4096
+      "provider": "local",
+      "model": "Qwen3.5-9B-Q4_K_M"
     }
   },
   "embeddings": {
     "default": {
-      "provider": "openai",
-      "baseUrl": "http://host.docker.internal:1234/v1",
-      "apiKey": "${OPENAI_API_KEY}",
-      "model": "text-embedding-nomic-embed-text-v1.5",
-      "eosToken": " "
+      "provider": "local",
+      "model": "nomic-embed-text-v1.5.Q4_K_M"
     }
   }
 }

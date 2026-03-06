@@ -30,8 +30,8 @@ export function createKnowledgeTools(
 
   // 2. Graph tools — if entities exist in the SQLite store
   if (sqliteStore && sqliteStore.getEntityCount() > 0) {
-    tools.push(createKnowledgeTraverseTool(name, config, sqliteStore));
-    tools.push(createKnowledgeEntityLookupTool(name, config, sqliteStore));
+    tools.push(createKnowledgeTraverseTool(name, sqliteStore));
+    tools.push(createKnowledgeEntityLookupTool(name, sqliteStore));
     tools.push(createKnowledgeGraphSchemaTool(name, config, sqliteStore));
   }
 

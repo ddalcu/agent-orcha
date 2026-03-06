@@ -263,6 +263,76 @@ export class ApiService {
         return new EventSource(`/api/tasks/${id}/stream`);
     }
 
+    // Local LLM
+    async getLocalLlmStatus() {
+        const res = await this._fetch('/api/local-llm/status');
+        return res.json();
+    }
+
+    async getLocalLlmModels() {
+        const res = await this._fetch('/api/local-llm/models');
+        return res.json();
+    }
+
+    async activateLocalModel(id, { setAsDefault = false } = {}) {
+        const res = await this._fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setAsDefault }),
+        });
+        return res.json();
+    }
+
+    async deleteLocalModel(id) {
+        const res = await this._fetch(`/api/local-llm/models/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+        });
+        return res.json();
+    }
+
+    browseHuggingFace(query, limit = 10) {
+        return this._fetch(`/api/local-llm/browse?q=${encodeURIComponent(query)}&limit=${limit}`)
+            .then(r => r.json());
+    }
+
+    downloadLocalModel(repo, fileName) {
+        return new EventSource(`/api/local-llm/models/download?repo=${encodeURIComponent(repo)}&fileName=${encodeURIComponent(fileName)}`);
+    }
+
+    async getActiveDownloads() {
+        const res = await this._fetch('/api/local-llm/models/downloads');
+        return res.json();
+    }
+
+    async getInterruptedDownloads() {
+        const res = await this._fetch('/api/local-llm/models/interrupted');
+        return res.json();
+    }
+
+    async deleteInterruptedDownload(fileName) {
+        const res = await this._fetch(`/api/local-llm/models/interrupted/${encodeURIComponent(fileName)}`, {
+            method: 'DELETE',
+        });
+        return res.json();
+    }
+
+    async activateLocalEmbedding(id) {
+        const res = await this._fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-embedding`, {
+            method: 'POST',
+        });
+        return res.json();
+    }
+
+    async stopLocalLlm() {
+        const res = await this._fetch('/api/local-llm/stop', { method: 'POST' });
+        return res.json();
+    }
+
+    async stopLocalEmbedding() {
+        const res = await this._fetch('/api/local-llm/stop-embedding', { method: 'POST' });
+        return res.json();
+    }
+
     async getGraphConfig() {
         const res = await this._fetch('/api/graph/config');
         return res.json();

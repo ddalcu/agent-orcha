@@ -128,3 +128,7 @@ Schema documentation lives in multiple files. When changing schemas (agents, kno
 - `lib/knowledge/types.ts` (or equivalent) — The Zod schema is the source of truth
 
 When adding, removing, or renaming templates (agents, skills, knowledge, functions, workflows), update `docs/hub-registry.json` to stay in sync.
+
+### Debugging
+
+When analyzing chat history or debugging tool calls, fetch `http://localhost:3000/api/tasks` to inspect task events, tool invocations, and model responses.

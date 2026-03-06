@@ -83,7 +83,7 @@ export class ReactWorkflowExecutor {
       logger.info(`[ReactWorkflow] Total tools available: ${allTools.length}`);
 
       // 4. Get LLM
-      const llm = LLMFactory.create(definition.graph.model);
+      const llm = await LLMFactory.create(definition.graph.model);
 
       // 5. Execute the ReAct loop
       const goal = this.interpolateGoal(definition.prompt.goal, input);
@@ -178,7 +178,7 @@ export class ReactWorkflowExecutor {
       const allTools = [...tools, ...agentTools];
 
       // 2. Get LLM
-      const llm = LLMFactory.create(definition.graph.model);
+      const llm = await LLMFactory.create(definition.graph.model);
 
       // 3. Load saved thread state and append the user's answer
       const savedMessages = this.threadStates.get(threadId) ?? [];

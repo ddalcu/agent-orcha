@@ -70,26 +70,6 @@ const RELATIONSHIPS: RelationshipRow[] = [
   },
 ];
 
-function catalogConfig() {
-  return {
-    name: 'catalog',
-    description: 'Product catalog with categories and brands',
-    graph: {
-      directMapping: {
-        entities: [
-          { type: 'Product', idColumn: 'id', nameColumn: 'name', properties: ['sku', 'price'] },
-          { type: 'Category', idColumn: 'category_id', nameColumn: 'category_name', properties: ['slug'] },
-          { type: 'Brand', idColumn: 'brand_id', nameColumn: 'brand_name', properties: ['country'] },
-        ],
-        relationships: [
-          { type: 'BELONGS_TO', source: 'Product', target: 'Category', sourceIdColumn: 'id', targetIdColumn: 'category_id' },
-          { type: 'MADE_BY', source: 'Product', target: 'Brand', sourceIdColumn: 'id', targetIdColumn: 'brand_id' },
-        ],
-      },
-    },
-  } as any;
-}
-
 function mockSqliteStore(overrides: Record<string, any> = {}) {
   return {
     getAllEntities: () => ENTITIES,
@@ -102,15 +82,14 @@ function mockSqliteStore(overrides: Record<string, any> = {}) {
 }
 
 describe('createKnowledgeTraverseTool', () => {
-  it('should create a tool with correct name and schema info in description', () => {
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), mockSqliteStore());
+  it('should create a tool with correct name', () => {
+    const tool = createKnowledgeTraverseTool('catalog',mockSqliteStore());
     assert.equal(tool.name, 'knowledge_traverse_catalog');
-    assert.ok(tool.description.includes('Product'));
-    assert.ok(tool.description.includes('BELONGS_TO'));
+    assert.ok(tool.description.includes('catalog'));
   });
 
   it('should require entityName or entityId', async () => {
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeTraverseTool('catalog',mockSqliteStore());
     const result = await tool.invoke({}) as string;
     assert.ok(result.includes('Provide either'));
   });
@@ -122,7 +101,7 @@ describe('createKnowledgeTraverseTool', () => {
         relationships: [RELATIONSHIPS[0]!, RELATIONSHIPS[2]!], // BELONGS_TO, MADE_BY
       }),
     });
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeTraverseTool('catalog',store);
     const result = await tool.invoke({ entityId: 'product::1' }) as string;
 
     assert.ok(result.includes('Ergonomic Wireless Keyboard'));
@@ -140,14 +119,14 @@ describe('createKnowledgeTraverseTool', () => {
         relationships: [RELATIONSHIPS[0]!],
       }),
     });
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeTraverseTool('catalog',store);
     const result = await tool.invoke({ entityName: 'ergonomic' }) as string;
     assert.ok(result.includes('Peripherals'));
     assert.ok(result.includes('BELONGS_TO'));
   });
 
   it('should return not-found for unknown entity name', async () => {
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), mockSqliteStore());
+    const tool = createKnowledgeTraverseTool('catalog',mockSqliteStore());
     const result = await tool.invoke({ entityName: 'nonexistent-gadget' }) as string;
     assert.ok(result.includes('No entity found'));
     assert.ok(result.includes('nonexistent-gadget'));
@@ -157,7 +136,7 @@ describe('createKnowledgeTraverseTool', () => {
     const store = mockSqliteStore({
       getNeighborhood: () => ({ entities: [], relationships: [] }),
     });
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeTraverseTool('catalog',store);
     const result = await tool.invoke({ entityId: 'brand::999' }) as string;
     assert.ok(result.includes('No neighbors'));
   });
@@ -169,7 +148,7 @@ describe('createKnowledgeTraverseTool', () => {
         relationships: RELATIONSHIPS,
       }),
     });
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeTraverseTool('catalog',store);
     const result = await tool.invoke({ entityId: 'category::10' }) as string;
     assert.ok(result.includes('[Product] (2)'));
     assert.ok(result.includes('[Category] (1)'));
@@ -184,7 +163,7 @@ describe('createKnowledgeTraverseTool', () => {
         return { entities: [ENTITIES[0]!], relationships: [] };
       },
     });
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeTraverseTool('catalog',store);
 
     await tool.invoke({ entityId: 'product::1', depth: 2 });
     assert.equal(receivedDepth, 2);
@@ -200,7 +179,7 @@ describe('createKnowledgeTraverseTool', () => {
     const store = mockSqliteStore({
       getNeighborhood: () => { throw new Error('SQLite disk I/O error'); },
     });
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeTraverseTool('catalog',store);
     const result = await tool.invoke({ entityId: 'product::1' }) as string;
     assert.ok(result.includes('Traversal error'));
     assert.ok(result.includes('SQLite disk I/O error'));
@@ -210,7 +189,7 @@ describe('createKnowledgeTraverseTool', () => {
     const store = mockSqliteStore({
       getAllEntities: () => { throw new Error('Table locked'); },
     });
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeTraverseTool('catalog',store);
     const result = await tool.invoke({ entityName: 'keyboard' }) as string;
     assert.ok(result.includes('Error searching'));
   });
@@ -223,7 +202,7 @@ describe('createKnowledgeTraverseTool', () => {
         return { entities: [ENTITIES[0]!], relationships: [] };
       },
     });
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeTraverseTool('catalog',store);
     await tool.invoke({ entityId: 'product::1', entityName: 'something-else' });
     assert.equal(receivedId, 'product::1');
   });
@@ -240,7 +219,7 @@ describe('createKnowledgeTraverseTool', () => {
     const store = mockSqliteStore({
       getNeighborhood: () => ({ entities: manyEntities, relationships: [] }),
     });
-    const tool = createKnowledgeTraverseTool('catalog', catalogConfig(), store);
+    const tool = createKnowledgeTraverseTool('catalog',store);
     const result = await tool.invoke({ entityId: 'category::10' }) as string;
     assert.ok(result.includes('truncated from 60'));
     assert.ok(result.includes('50 nodes'));

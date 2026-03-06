@@ -5,6 +5,7 @@ import type { ChatModel } from '../types/llm-types.ts';
 import { getModelConfig, resolveApiKey, type ModelConfig } from './llm-config.ts';
 import { resolveAgentLLMRef, type AgentLLMRef } from './types.ts';
 import { detectProvider, type LLMProvider } from './provider-detector.ts';
+import { llamaEngine } from '../local-llm/llama-provider.ts';
 import { logger } from '../logger.ts';
 
 export class LLMFactory {
@@ -14,7 +15,7 @@ export class LLMFactory {
    * Create an LLM instance from a config name (defined in llm.json)
    * @param ref - Config name as string, or object with name and optional temperature override
    */
-  static create(ref: AgentLLMRef = 'default'): ChatModel {
+  static async create(ref: AgentLLMRef = 'default'): Promise<ChatModel> {
     const { name, temperature: tempOverride } = resolveAgentLLMRef(ref);
     const config = getModelConfig(name);
     const provider = detectProvider(config);
@@ -26,6 +27,11 @@ export class LLMFactory {
     const cached = this.instances.get(key);
     if (cached) {
       return cached;
+    }
+
+    // Auto-start local llama server if needed (skip if user provides their own baseUrl)
+    if (provider === 'local' && !config.baseUrl) {
+      await llamaEngine.ensureRunning(config.model);
     }
 
     logger.info(`[LLMFactory] Creating LLM: ${name} (provider: ${provider}, model: ${config.model}, temp: ${temperature ?? 'default'})`);
@@ -42,7 +48,7 @@ export class LLMFactory {
         llm = this.createAnthropic(config, temperature);
         break;
       case 'local':
-        llm = this.createLocal(config, temperature, 'local');
+        llm = this.createOpenAI(config, temperature, 'local');
         break;
       default:
         throw new Error(`Unsupported provider: ${provider}`);
@@ -54,12 +60,13 @@ export class LLMFactory {
 
   private static createOpenAI(config: ModelConfig, temperature?: number, provider: LLMProvider = 'openai'): ChatModel {
     const apiKey = resolveApiKey(provider, config.apiKey);
+    const baseURL = config.baseUrl ?? (provider === 'local' ? 'http://127.0.0.1:9990/v1' : undefined);
     return new OpenAIChatModel({
       modelName: config.model,
       apiKey,
       maxTokens: config.maxTokens,
       streamUsage: true,
-      baseURL: config.baseUrl,
+      baseURL,
       provider: provider as 'openai' | 'local',
       ...(temperature !== undefined ? { temperature } : {}),
     });
@@ -85,10 +92,6 @@ export class LLMFactory {
       thinkingBudget: config.thinkingBudget,
       ...(temperature !== undefined ? { temperature } : {}),
     });
-  }
-
-  private static createLocal(config: ModelConfig, temperature?: number, provider: LLMProvider = 'local'): ChatModel {
-    return this.createOpenAI(config, temperature, provider);
   }
 
   private static getCacheKey(name: string, temperature: number): string {

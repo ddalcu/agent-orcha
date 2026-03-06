@@ -15,7 +15,7 @@ export class OpenAIEmbeddingsProvider implements Embeddings {
 
   constructor(options: OpenAIEmbeddingsOptions) {
     this.client = new OpenAI({
-      apiKey: options.apiKey,
+      apiKey: options.apiKey ?? process.env.OPENAI_API_KEY ?? 'not-set',
       ...(options.baseURL ? { baseURL: options.baseURL } : {}),
     });
     this.modelName = options.modelName;

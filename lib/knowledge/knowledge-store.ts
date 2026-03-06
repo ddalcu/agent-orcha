@@ -12,6 +12,7 @@ import { OpenAIEmbeddingsProvider } from '../llm/providers/openai-embeddings.ts'
 import { GeminiEmbeddingsProvider } from '../llm/providers/gemini-embeddings.ts';
 import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.ts';
 import { detectProvider } from '../llm/provider-detector.ts';
+import { llamaEmbeddingEngine } from '../local-llm/llama-provider.ts';
 import { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
 import cron from 'node-cron';
 import { substituteEnvVars } from '../utils/env-substitution.ts';
@@ -237,7 +238,7 @@ export class KnowledgeStore {
 
     try {
       // 1. Create embeddings and test to get dimensions
-      const embeddings = KnowledgeStore.createEmbeddings(config.embedding);
+      const embeddings = await KnowledgeStore.createEmbeddings(config.embedding);
       const testEmbedding = await embeddings.embedQuery('dimension test');
       const dimensions = testEmbedding.length;
       logger.info(`Embedding dimensions: ${dimensions}`);
@@ -568,12 +569,17 @@ export class KnowledgeStore {
 
   // --- Static Helpers (reused from old KnowledgeStoreFactory) ---
 
-  static createEmbeddings(configName: string): Embeddings {
+  static async createEmbeddings(configName: string): Promise<Embeddings> {
     const embeddingConfig = getEmbeddingConfig(configName);
-    const provider = detectProvider(embeddingConfig);
     const eosToken = embeddingConfig.eosToken;
 
+    const provider = detectProvider(embeddingConfig);
     logger.info(`Embedding model: ${embeddingConfig.model} (provider: ${provider})${embeddingConfig.baseUrl ? `, URL: ${embeddingConfig.baseUrl}` : ''}`);
+
+    // Auto-start local embedding server if needed (skip if user provides their own baseUrl)
+    if (provider === 'local' && !embeddingConfig.baseUrl) {
+      await llamaEmbeddingEngine.ensureRunning(embeddingConfig.model);
+    }
 
     let baseEmbeddings: Embeddings;
 
@@ -589,10 +595,11 @@ export class KnowledgeStore {
       case 'anthropic':
       default: {
         const apiKey = resolveApiKey(provider, embeddingConfig.apiKey);
+        const baseURL = embeddingConfig.baseUrl ?? (provider === 'local' ? 'http://127.0.0.1:9991/v1' : undefined);
         baseEmbeddings = new OpenAIEmbeddingsProvider({
           modelName: embeddingConfig.model,
           apiKey,
-          baseURL: embeddingConfig.baseUrl,
+          baseURL,
           dimensions: embeddingConfig.dimensions,
         });
         break;

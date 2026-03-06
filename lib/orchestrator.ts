@@ -28,6 +28,7 @@ import { createBrowserTools } from './sandbox/sandbox-browser.ts';
 import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
 import { substituteEnvVars } from './utils/env-substitution.ts';
+import { llamaEngine, llamaEmbeddingEngine } from './local-llm/llama-provider.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
 import type { IntegrationAccessor } from './integrations/types.ts';
@@ -117,6 +118,10 @@ export class Orchestrator {
     // Load LLM config first - required for agents and embeddings
     logger.info('[Orchestrator] Loading LLM config...');
     await loadLLMConfig(this.config.llmConfigPath);
+
+    // Set base dir for local llama servers (needed before knowledge stores auto-start them)
+    llamaEngine.setBaseDir(this.config.workspaceRoot);
+    llamaEmbeddingEngine.setBaseDir(this.config.workspaceRoot);
 
     await this.loadMCPConfig();
     await this.mcpClient.initialize();
@@ -406,6 +411,10 @@ export class Orchestrator {
 
   get workspaceRoot(): string {
     return this.config.workspaceRoot;
+  }
+
+  get llmConfigPath(): string {
+    return this.config.llmConfigPath;
   }
 
   get memory(): MemoryAccessor {

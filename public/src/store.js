@@ -2,7 +2,7 @@
 class Store extends EventTarget {
     constructor() {
         super();
-        const validTabs = ['agents', 'workflows', 'knowledge', 'mcp', 'skills', 'monitor', 'ide'];
+        const validTabs = ['agents', 'workflows', 'knowledge', 'graph', 'mcp', 'skills', 'monitor', 'llm', 'ide'];
         const hashTab = window.location.hash.replace('#', '');
         const initialTab = validTabs.includes(hashTab) ? hashTab : 'agents';
 

@@ -106,11 +106,9 @@ export function createKnowledgeGraphSchemaTool(
     },
     {
       name: `knowledge_graph_schema_${name}`,
-      description: `Discover the schema of the "${name}" knowledge graph — entity types, relationship types, property names, counts, and database table definitions. Use this FIRST when exploring an unfamiliar graph to understand its structure before running queries.
-
-TIPS: Call with includeExamples=true to see sample entities of each type. Use the entity types and relationship types from the output to write precise traversal queries.`,
+      description: `Get the schema of "${name}" graph: entity types, relationship types, properties, and counts. Call this first to understand available types before using lookup or traverse.`,
       schema: z.object({
-        includeExamples: z.boolean().optional().describe('Include 2-3 example entities per type (default: false)'),
+        includeExamples: z.boolean().optional().describe('Show 2-3 example entities per type'),
       }),
     }
   );

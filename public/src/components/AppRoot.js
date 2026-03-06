@@ -10,6 +10,7 @@ import './McpView.js';
 import './SkillsView.js';
 import './MonitorView.js';
 import './IdeView.js';
+import './LocalLlmView.js';
 
 export class AppRoot extends Component {
     postRender() {
@@ -184,6 +185,7 @@ export class AppRoot extends Component {
             case 'mcp': el = document.createElement('mcp-view'); break;
             case 'skills': el = document.createElement('skills-view'); break;
             case 'monitor': el = document.createElement('monitor-view'); break;
+            case 'llm': el = document.createElement('local-llm-view'); break;
             case 'ide': el = document.createElement('ide-view'); break;
             default: el = document.createElement('agents-view'); break;
         }

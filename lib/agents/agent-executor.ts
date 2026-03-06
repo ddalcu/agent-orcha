@@ -67,7 +67,7 @@ export class AgentExecutor {
       };
     }
 
-    let llm = LLMFactory.create(augmentedDefinition.llm);
+    let llm = await LLMFactory.create(augmentedDefinition.llm);
 
     // Wrap LLM with structured output if configured
     llm = StructuredOutputWrapper.wrapLLM(llm, augmentedDefinition.output);

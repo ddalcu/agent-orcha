@@ -6,7 +6,7 @@ import type { KnowledgeStoreInstance } from '../../knowledge/types.ts';
 export function createKnowledgeSearchTool(name: string, store: KnowledgeStoreInstance): StructuredTool {
   return tool(
     async ({ query, k }) => {
-      const results = await store.search(query, k);
+      const results = await store.search(query, Math.min(k ?? 4, 20));
 
       if (results.length === 0) {
         return 'No relevant documents found.';
@@ -24,10 +24,10 @@ export function createKnowledgeSearchTool(name: string, store: KnowledgeStoreIns
     },
     {
       name: `knowledge_search_${name}`,
-      description: `Search the "${name}" knowledge store for relevant documents. ${store.config.description ?? ''} IMPORTANT: Use descriptive, complete queries (at least 10-15 words) for best results. Examples: "list of items with details and specifications", "how to resolve common problems", "information about specific topics or concepts".`,
+      description: `Semantic search over "${name}". ${store.config.description ?? ''} Use descriptive queries (10+ words) for best results.`,
       schema: z.object({
-        query: z.string().describe('A descriptive search query (use at least 10-15 words for best results). Examples: "list of items with details", "how to perform a task", "information about a topic"'),
-        k: z.number().optional().describe('Number of results to return (default: 4)'),
+        query: z.string().describe('Descriptive search query (10+ words for best results)'),
+        k: z.number().optional().describe('Number of results (default 4, max 20)'),
       }),
     }
   );

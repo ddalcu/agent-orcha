@@ -50,6 +50,7 @@ export interface StreamEvent {
 }
 
 const MAX_NO_TOOL_RETRIES = 3;
+const MAX_SAME_TOOL_REPEATS = 3;
 
 /**
  * Single source of truth for the ReAct loop.
@@ -65,6 +66,7 @@ async function* runLoop(
   let noToolStreak = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  const toolCallCounts = new Map<string, number>(); // "toolName:argsHash" → count
 
   for (let i = 0; i < maxIterations; i++) {
     if (options?.signal?.aborted) {
@@ -164,6 +166,26 @@ async function* runLoop(
     }
 
     noToolStreak = 0;
+
+    // Detect repeated identical tool calls (same tool + same args)
+    let loopDetected = false;
+    for (const tc of accumulatedToolCalls) {
+      const key = `${tc.name}:${JSON.stringify(tc.args)}`;
+      const count = (toolCallCounts.get(key) ?? 0) + 1;
+      toolCallCounts.set(key, count);
+      if (count >= MAX_SAME_TOOL_REPEATS) {
+        logger.warn(`[ReactLoop] iteration ${i + 1} — tool "${tc.name}" called ${count} times with same args, breaking loop`);
+        loopDetected = true;
+      }
+    }
+    if (loopDetected) {
+      allMessages.push(toolMessage(
+        'You have already called this tool multiple times with the same arguments. Use the results you already have to answer the user.',
+        accumulatedToolCalls[0]!.id,
+        accumulatedToolCalls[0]!.name,
+      ));
+      continue;
+    }
 
     // Execute tool calls in parallel
     if (options?.signal?.aborted) {

@@ -6,6 +6,8 @@ export {
   listModelConfigs,
   listEmbeddingConfigs,
   isLLMConfigLoaded,
+  getLLMConfig,
+  saveLLMConfig,
   resolveApiKey,
 } from './llm-config.ts';
 export type { ModelConfig, EmbeddingModelConfig, LLMJsonConfig } from './llm-config.ts';
