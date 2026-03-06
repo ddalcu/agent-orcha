@@ -287,6 +287,20 @@ export class ModelManager {
     const model = await this.getModel(id);
     if (!model) throw new Error(`Model "${id}" not found`);
 
+    // Find and delete associated mmproj files from the same repo
+    if (model.repo) {
+      const entries = await fs.readdir(this.modelsDir);
+      for (const entry of entries) {
+        if (!entry.toLowerCase().includes('mmproj') || !entry.endsWith('.gguf')) continue;
+        const meta = await this.readMeta(entry);
+        if (meta?.repo === model.repo) {
+          await fs.unlink(path.join(this.modelsDir, entry)).catch(() => {});
+          await fs.unlink(this.metaPath(entry)).catch(() => {});
+          logger.info(`[ModelManager] Deleted associated mmproj: ${entry}`);
+        }
+      }
+    }
+
     await fs.unlink(model.filePath);
     try {
       await fs.unlink(this.metaPath(model.fileName));
