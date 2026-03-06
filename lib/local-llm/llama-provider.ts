@@ -1,6 +1,7 @@
 import { LlamaServerProcess } from './llama-server-process.ts';
 import { ModelManager } from './model-manager.ts';
 import { readGGUFModelInfo, calculateOptimalContextSize, kvCacheBytesPerToken } from './gguf-reader.ts';
+import { detectGpu, type GpuInfo } from './binary-manager.ts';
 import { logger } from '../logger.ts';
 
 // ─── Singleton Server Instances ─────────────────────────────────────────────
@@ -44,7 +45,13 @@ export const llamaEngine = {
     }
 
     this._detectedContextSize = contextSize ?? null;
-    await chatServer.start({ modelPath, contextSize });
+    const gpu = detectGpu();
+    const isGpu = gpu.accel !== 'none';
+    await chatServer.start({
+      modelPath,
+      contextSize,
+      ...(isGpu ? { batchSize: 4096, ubatchSize: 1024 } : {}),
+    });
   },
 
   async unload(): Promise<void> {
@@ -63,13 +70,14 @@ export const llamaEngine = {
     await this.load(filePath, contextSize);
   },
 
-  getStatus(): { running: boolean; activeModel: string | null; port: number | null; contextSize: number | null; memoryEstimate: { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null } {
+  getStatus(): { running: boolean; activeModel: string | null; port: number | null; contextSize: number | null; memoryEstimate: { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null; gpu: GpuInfo } {
     return {
       running: chatServer?.running ?? false,
       activeModel: chatServer?.modelPath ?? null,
       port: chatServer?.port ?? null,
       contextSize: this._detectedContextSize,
       memoryEstimate: this._memoryEstimate,
+      gpu: detectGpu(),
     };
   },
 

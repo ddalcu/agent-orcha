@@ -10,6 +10,9 @@ export interface ServerOptions {
   gpuLayers?: number;
   contextSize?: number;
   flashAttn?: boolean;
+  threads?: number;
+  batchSize?: number;
+  ubatchSize?: number;
 }
 
 const HEALTH_POLL_MS = 500;
@@ -61,6 +64,9 @@ export class LlamaServerProcess {
 
     if (options.contextSize) args.push('--ctx-size', String(options.contextSize));
     if (options.flashAttn !== false) args.push('--flash-attn', 'on');
+    if (options.threads) args.push('--threads', String(options.threads));
+    if (options.batchSize) args.push('--batch-size', String(options.batchSize));
+    if (options.ubatchSize) args.push('--ubatch-size', String(options.ubatchSize));
     if (options.embedding || this.isEmbedding) args.push('--embedding');
 
     logger.info(`[LlamaServer] Starting: ${binaryPath} ${args.join(' ')}`);
