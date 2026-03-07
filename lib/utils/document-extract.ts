@@ -64,7 +64,16 @@ export async function extractDocumentText(
   if (mediaType === 'application/pdf') {
     try {
       // @ts-ignore - pdf-parse is an optional runtime dependency
-      const pdfParse = (await import('pdf-parse')).default;
+      const mod = await import('pdf-parse');
+      if (mod.PDFParse) {
+        // pdf-parse v3+ class-based API
+        const parser = new mod.PDFParse({ data: buffer });
+        await parser.load();
+        const result = await parser.getText();
+        return { text: result.text || '(No text content found in PDF)', format: 'pdf' };
+      }
+      // pdf-parse v1/v2 function-based API
+      const pdfParse = typeof mod.default === 'function' ? mod.default : mod;
       const data = await pdfParse(buffer);
       return { text: data.text, format: 'pdf' };
     } catch (err: any) {
