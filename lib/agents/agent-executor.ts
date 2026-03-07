@@ -13,6 +13,7 @@ import { createMemorySaveTool } from '../tools/built-in/memory-save.tool.ts';
 import { createIntegrationTools } from '../tools/built-in/integration-tools.ts';
 import { StructuredOutputWrapper } from './structured-output-wrapper.ts';
 import { logLLMCallStart, logLLMCallEnd } from '../llm/llm-call-logger.ts';
+import { extractDocumentText } from '../utils/document-extract.ts';
 import { logger } from '../logger.ts';
 
 function isAbortError(err: unknown): boolean {
@@ -148,7 +149,7 @@ export class AgentExecutor {
       });
 
       const userText = this.formatUserMessage(definition, input);
-      const userContent = this.buildUserContent(userText, input);
+      const userContent = await this.buildUserContent(userText, input);
       const messages = this.buildMessagesWithHistory(userContent, sessionId);
 
       const caller = `Agent: ${definition.name}`;
@@ -271,7 +272,7 @@ export class AgentExecutor {
     sessionId?: string
   ): Promise<AgentResult> {
     const userText = this.formatUserMessage(definition, input);
-    const userContent = this.buildUserContent(userText, input);
+    const userContent = await this.buildUserContent(userText, input);
 
     // Build messages with history for session-based conversations
     const messageHistory = sessionId ? this.conversationStore.getMessages(sessionId) : [];
@@ -355,15 +356,25 @@ export class AgentExecutor {
       .join('\n');
   }
 
-  private buildUserContent(text: string, input: Record<string, unknown>): MessageContent {
+  private async buildUserContent(text: string, input: Record<string, unknown>): Promise<MessageContent> {
     const attachments = input.attachments;
     if (!Array.isArray(attachments) || attachments.length === 0) return text;
 
     const parts: ContentPart[] = [];
     if (text) parts.push({ type: 'text', text });
     for (const att of attachments) {
-      if (att && typeof att.data === 'string' && typeof att.mediaType === 'string') {
+      if (!att || typeof att.data !== 'string' || typeof att.mediaType !== 'string') continue;
+
+      if (att.mediaType.startsWith('image/')) {
         parts.push({ type: 'image', data: att.data, mediaType: att.mediaType });
+      } else {
+        try {
+          const doc = await extractDocumentText(att.data, att.mediaType, att.name);
+          const label = att.name ? `[File: ${att.name}]` : `[Attached ${doc.format} document]`;
+          parts.push({ type: 'text', text: `${label}\n${doc.text}` });
+        } catch (err: any) {
+          parts.push({ type: 'text', text: `[Failed to extract ${att.name ?? 'attachment'}: ${err.message}]` });
+        }
       }
     }
     return parts.length > 0 ? parts : text;
@@ -385,7 +396,7 @@ export class AgentExecutor {
       });
 
       const userText = this.formatUserMessage(definition, actualInput);
-      const userContent = this.buildUserContent(userText, actualInput);
+      const userContent = await this.buildUserContent(userText, actualInput);
       const messages = this.buildMessagesWithHistory(userContent, sessionId);
 
       const caller = `Agent: ${definition.name}`;
@@ -507,7 +518,7 @@ export class AgentExecutor {
       }
     } else {
       const userText = this.formatUserMessage(definition, actualInput);
-      const userContent = this.buildUserContent(userText, actualInput);
+      const userContent = await this.buildUserContent(userText, actualInput);
 
       // Build messages with history for session-based conversations
       const messageHistory = sessionId ? this.conversationStore.getMessages(sessionId) : [];

@@ -152,7 +152,7 @@ class StandaloneChat extends HTMLElement {
                 <div class="p-3 pt-0">
                     <div id="attachmentPreview" class="hidden flex flex-wrap gap-2 px-2 pb-2"></div>
                     <div class="relative bg-dark-surface border border-dark-border/60 rounded-2xl focus-within:border-gray-500 transition-colors">
-                        <input type="file" id="fileInput" multiple accept="image/*,.pdf" class="hidden">
+                        <input type="file" id="fileInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.go,.rs,.rb,.php,.sql,.sh,.log,.ini,.toml,.env" class="hidden">
                         <textarea id="chatInput" rows="1"
                             class="w-full bg-transparent pl-11 pr-14 py-3 text-gray-100 placeholder-gray-500 resize-none focus:outline-none max-h-[200px]"
                             placeholder="Type a message..."></textarea>
