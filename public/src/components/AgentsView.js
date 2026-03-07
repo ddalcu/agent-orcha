@@ -2289,7 +2289,7 @@ export class AgentsView extends Component {
                     <div class="chat-input-area">
                         <div id="attachmentPreview" class="attachment-preview"></div>
                         <div class="chat-input-wrap">
-                            <input type="file" id="fileInput" multiple accept="image/*,.pdf" class="hidden">
+                            <input type="file" id="fileInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.go,.rs,.rb,.php,.sql,.sh,.log,.ini,.toml,.env" class="hidden">
                             <textarea id="chatInput" rows="1" readonly
                                 placeholder="Ask anything"></textarea>
 
