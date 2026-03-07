@@ -33,6 +33,7 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   const fastify = Fastify({
     logger: getPinoConfig(),
     disableRequestLogging: true,
+    bodyLimit: 50 * 1024 * 1024, // 50 MB for file attachments
   });
 
   await fastify.register(cors, {
