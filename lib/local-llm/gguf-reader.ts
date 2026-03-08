@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { readFileSync } from 'fs';
 import * as os from 'os';
 import { logger } from '../logger.ts';
 
@@ -100,8 +101,29 @@ export function kvCacheBytesPerToken(info: GGUFModelInfo): number {
  * Calculates optimal context size based on available system RAM.
  * Accounts for model weights, KV cache, and OS overhead.
  */
+/**
+ * Returns effective total memory, respecting container cgroup limits.
+ * os.totalmem() returns host RAM even inside Docker, so we check cgroup first.
+ */
+function getEffectiveMemory(): number {
+  const hostRam = os.totalmem();
+  if (process.platform !== 'linux') return hostRam;
+  try {
+    // cgroup v2
+    const raw = readFileSync('/sys/fs/cgroup/memory.max', 'utf-8').trim();
+    if (raw !== 'max') return Math.min(Number(raw), hostRam);
+  } catch { /* not cgroup v2 */ }
+  try {
+    // cgroup v1
+    const raw = readFileSync('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').trim();
+    const limit = Number(raw);
+    if (limit > 0 && limit < hostRam) return limit;
+  } catch { /* not cgroup v1 */ }
+  return hostRam;
+}
+
 export function calculateOptimalContextSize(info: GGUFModelInfo): number {
-  const totalRam = os.totalmem();
+  const totalRam = getEffectiveMemory();
   const availableForModel = totalRam - OS_RESERVED_BYTES;
   const memAfterWeights = availableForModel - info.fileSizeBytes;
 

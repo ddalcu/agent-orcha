@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { seaBootstrap, isSea } from '../../lib/sea/bootstrap.ts';
+seaBootstrap();
+
 const args = process.argv.slice(2);
 const command = args[0];
 
@@ -46,9 +49,18 @@ async function main(): Promise<void> {
       case 'help':
       case '--help':
       case '-h':
-      case undefined:
         showHelp();
         break;
+      case undefined: {
+        // SEA binary with no args → start server directly
+        if (isSea()) {
+          const { startCommand } = await import('./commands/start.ts');
+          await startCommand([]);
+        } else {
+          showHelp();
+        }
+        break;
+      }
       default:
         console.error(`Unknown command: ${command}`);
         console.error('Run "npx agent-orcha --help" for usage information.');

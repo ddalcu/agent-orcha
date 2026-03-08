@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process';
 import * as net from 'net';
+import * as path from 'path';
 import { logger } from '../logger.ts';
 import { getBinaryPath } from './binary-manager.ts';
 
@@ -73,24 +74,30 @@ export class LlamaServerProcess {
 
     logger.info(`[LlamaServer] Starting: ${binaryPath} ${args.join(' ')}`);
 
-    this.proc = spawn(binaryPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const binDir = path.dirname(binaryPath);
+    this.proc = spawn(binaryPath, args, {
+      stdio: ['ignore', 'ignore', 'pipe'],
+      env: { ...process.env, LD_LIBRARY_PATH: `${binDir}:${process.env.LD_LIBRARY_PATH ?? ''}` },
+    });
 
-    // Buffer stderr so we can log it if the process crashes
+    // Buffer stderr so we can surface it when the process crashes
     const stderrChunks: Buffer[] = [];
     this.proc.stderr?.on('data', (data: Buffer) => { stderrChunks.push(data); });
 
     this.proc.on('exit', (code, signal) => {
-      if (code && code !== 0) {
-        const stderr = Buffer.concat(stderrChunks).toString().trim();
-        logger.error(`[LlamaServer] Process crashed (code=${code})${stderr ? `:\n${stderr}` : ''}`);
-      }
       this._running = false;
       this._ready = false;
       this.proc = null;
     });
 
     this._running = true;
-    await this.waitForReady();
+    try {
+      await this.waitForReady();
+    } catch (err) {
+      const stderr = Buffer.concat(stderrChunks).toString().trim();
+      if (stderr) logger.error(`[LlamaServer] stderr:\n${stderr}`);
+      throw err;
+    }
     this._ready = true;
 
     logger.info(`[LlamaServer] Ready on port ${this._port}`);

@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { isSea, extractTemplates as extractSeaTemplates } from '../../../lib/sea/bootstrap.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -106,7 +107,11 @@ export async function initCommand(args: string[]): Promise<void> {
 
   // Copy templates
   try {
-    await copyTemplates(targetDir);
+    if (isSea()) {
+      extractSeaTemplates(targetDir);
+    } else {
+      await copyTemplates(targetDir);
+    }
   } catch (error) {
     console.error('Error copying templates:', error);
     process.exit(1);

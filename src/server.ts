@@ -1,9 +1,11 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import type { Orchestrator } from '../lib/index.ts';
+import { isSea, getPublicDir } from '../lib/sea/bootstrap.ts';
 import { TriggerManager } from '../lib/triggers/trigger-manager.ts';
 import { agentsRoutes } from './routes/agents.route.ts';
 import { workflowsRoutes } from './routes/workflows.route.ts';
@@ -18,10 +20,21 @@ import { tasksRoutes } from './routes/tasks.route.ts';
 import { chatRoutes } from './routes/chat.route.ts';
 import { vncRoutes } from './routes/vnc.route.ts';
 import { localLlmRoutes } from './routes/local-llm.route.ts';
+import { logsRoutes } from './routes/logs.route.ts';
 import { getPinoConfig } from '../lib/logger.ts';
 import { authPlugin } from './middleware/auth.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function getVersion(): string {
+  if (isSea()) {
+    try {
+      return (process as any).getBuiltinModule?.('node:sea')?.getAsset('version', 'utf8')?.trim() || '0.0.0';
+    } catch { return '0.0.0'; }
+  }
+  return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')).version;
+}
+const PKG_VERSION = getVersion();
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -41,15 +54,19 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
 
   await fastify.register(authPlugin);
 
+  const publicDir = isSea()
+    ? getPublicDir()
+    : path.join(__dirname, '..', 'public');
+
   await fastify.register(fastifyStatic, {
-    root: path.join(__dirname, '..', 'public'),
+    root: publicDir,
     prefix: '/',
   });
 
   fastify.decorate('orchestrator', orchestrator);
 
   fastify.get('/health', async () => {
-    return { status: 'ok', timestamp: new Date().toISOString() };
+    return { status: 'ok', version: PKG_VERSION, timestamp: new Date().toISOString() };
   });
 
   await fastify.register(agentsRoutes, { prefix: '/api/agents' });
@@ -63,6 +80,7 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   await fastify.register(graphRoutes, { prefix: '/api/graph' });
   await fastify.register(tasksRoutes, { prefix: '/api/tasks' });
   await fastify.register(localLlmRoutes, { prefix: '/api/local-llm' });
+  await fastify.register(logsRoutes, { prefix: '/api/logs' });
   await fastify.register(chatRoutes);
   await fastify.register(vncRoutes);
 

@@ -6,7 +6,7 @@ import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
 import { logger } from '../logger.ts';
 
-type Platform = 'macos-arm64' | 'macos-x64' | 'win-x64' | 'linux-x64';
+type Platform = 'macos-arm64' | 'macos-x64' | 'win-x64' | 'linux-x64' | 'linux-arm64';
 
 export interface GpuInfo {
   accel: 'none' | 'cuda-12.4' | 'cuda-13.1' | 'vulkan';
@@ -116,7 +116,7 @@ function detectPlatform(): Platform {
 
   if (plat === 'darwin') return arch === 'arm64' ? 'macos-arm64' : 'macos-x64';
   if (plat === 'win32') return 'win-x64';
-  if (plat === 'linux') return 'linux-x64';
+  if (plat === 'linux') return arch === 'arm64' ? 'linux-arm64' : 'linux-x64';
   throw new Error(`Unsupported platform: ${plat}-${arch}`);
 }
 
@@ -124,6 +124,8 @@ function getAssetPatterns(platform: Platform, gpu: GpuInfo): AssetPatterns {
   switch (platform) {
     case 'macos-arm64': return { main: 'bin-macos-arm64' };
     case 'macos-x64': return { main: 'bin-macos-x64' };
+    case 'linux-arm64':
+      throw new Error('Local LLM is not available on ARM64 Linux (no official llama.cpp builds). Use native macOS for Metal GPU support, or x86_64 Linux with --gpus all for NVIDIA.');
     case 'linux-x64': {
       if (gpu.accel === 'vulkan') return { main: 'bin-ubuntu-vulkan-x64' };
       return { main: 'bin-ubuntu-x64' };
@@ -272,9 +274,9 @@ async function downloadBinary(destDir: string, platform: Platform, gpu: GpuInfo)
 
   const patterns = getAssetPatterns(platform, gpu);
 
-  // Find main binary asset (exclude cudart runtime packages)
+  // Find main binary asset (exclude cudart runtime packages and NPU-specific builds)
   const mainAsset = release.assets?.find((a: any) =>
-    a.name.includes(patterns.main) && !a.name.startsWith('cudart')
+    a.name.includes(patterns.main) && !a.name.startsWith('cudart') && !a.name.includes('aclgraph')
   );
   if (!mainAsset) throw new Error(`No llama-server binary found for platform: ${platform}`);
 
@@ -297,13 +299,21 @@ async function downloadBinary(destDir: string, platform: Platform, gpu: GpuInfo)
     }
   }
 
-  // Create short symlinks for versioned shared libs (e.g. libmtmd.0.0.8209.dylib -> libmtmd.0.dylib)
+  // Create short symlinks for versioned shared libs
+  // macOS: libmtmd.0.0.8219.dylib -> libmtmd.0.dylib
+  // Linux: libmtmd.so.0.0.8219    -> libmtmd.so.0
   const destEntries = await fs.readdir(destDir);
   for (const name of destEntries) {
-    const match = name.match(/^(lib[\w-]+\.\d+)\.\d+\.\d+\.(dylib|so)$/);
-    if (!match) continue;
-    const shortName = `${match[1]}.${match[2]}`;
-    if (shortName === name) continue;
+    let shortName: string | null = null;
+    const macMatch = name.match(/^(lib[\w-]+\.\d+)\.\d+\.\d+\.(dylib|so)$/);
+    if (macMatch) {
+      shortName = `${macMatch[1]}.${macMatch[2]}`;
+    }
+    const linuxMatch = name.match(/^(lib[\w-]+\.so\.\d+)\.\d+\.\d+$/);
+    if (linuxMatch) {
+      shortName = linuxMatch[1];
+    }
+    if (!shortName || shortName === name) continue;
     const linkPath = path.join(destDir, shortName);
     if (!existsSync(linkPath)) {
       await fs.symlink(name, linkPath);

@@ -63,6 +63,8 @@ export const llamaEngine = {
       modelPath,
       contextSize,
       mmproj: mmproj ?? undefined,
+      gpuLayers: isGpu ? -1 : 0,
+      flashAttn: isGpu,
       ...(isGpu ? { batchSize: 4096, ubatchSize: 1024 } : {}),
     });
   },

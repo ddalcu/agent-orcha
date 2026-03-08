@@ -333,6 +333,10 @@ export class ApiService {
         return res.json();
     }
 
+    streamLogs() {
+        return new EventSource('/api/logs/stream');
+    }
+
     async getGraphConfig() {
         const res = await this._fetch('/api/graph/config');
         return res.json();

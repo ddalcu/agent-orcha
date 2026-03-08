@@ -457,6 +457,8 @@ export class AgentExecutor {
             };
           } else if (event.event === 'on_react_iteration') {
             yield { type: 'react_iteration', ...event.data };
+          } else if (event.event === 'on_loop_stopped') {
+            yield { type: 'warning', message: event.data.reason };
           }
         }
       } catch (streamError) {

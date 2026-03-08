@@ -185,6 +185,10 @@ async function* runLoop(
       noToolStreak++;
       if (noToolStreak >= MAX_NO_TOOL_RETRIES) {
         logger.warn(`[ReactLoop] iteration ${i + 1} — repeated loop detections (${noToolStreak}), stopping`);
+        yield {
+          event: 'on_loop_stopped',
+          data: { reason: 'The model kept repeating the same tool calls and was stopped. Consider using a more capable model for this task.' },
+        };
         break;
       }
       continue;

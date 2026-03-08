@@ -43,6 +43,11 @@ const REASONING_NAME_PATTERNS = [
 // Qwen3+ has built-in thinking mode (enable_thinking), including Qwen3.5
 const REASONING_TAG_PATTERNS = [/qwen3/i];
 
+const RECOMMENDED_MODELS = [
+    { repo: 'unsloth/Qwen3.5-9B-GGUF', file: 'Qwen3.5-9B-Q4_K_M.gguf', label: 'Qwen3.5-9B-Q4_K_M', desc: 'Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.', size: '~5.3 GB', icon: 'fa-comments', color: 'amber' },
+    { repo: 'nomic-ai/nomic-embed-text-v1.5-GGUF', file: 'nomic-embed-text-v1.5.Q4_K_M.gguf', label: 'nomic-embed-text-v1.5-Q4_K_M', desc: 'Embedding model for knowledge stores. Required for local RAG pipelines.', size: '~80 MB', icon: 'fa-vector-square', color: 'blue' },
+];
+
 function detectCapabilities(result) {
     const { tags, pipelineTag, modelName, repoId } = result;
     const name = `${repoId} ${modelName}`;
@@ -238,6 +243,7 @@ export class LocalLlmView extends Component {
         try {
             this.models = await api.getLocalLlmModels();
             this.renderModels();
+            this.renderRecommendations();
         } catch (e) {
             console.error('Failed to load local models:', e);
         }
@@ -342,53 +348,11 @@ export class LocalLlmView extends Component {
 
         if (!this.models.length) {
             container.innerHTML = `
-                <div class="col-span-full space-y-6">
-                    <div class="text-gray-500 text-center py-8">
-                        <i class="fas fa-box-open text-4xl mb-4 block text-gray-600"></i>
-                        <p class="text-lg mb-2">No models downloaded</p>
-                        <p class="text-sm mb-6">Search HuggingFace below, or start with these recommended models:</p>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="recommendedModels">
-                        <div class="bg-dark-surface border border-amber-500/30 rounded-lg p-4">
-                            <div class="flex items-center gap-2 mb-2">
-                                <i class="fas fa-comments text-amber-400 text-sm"></i>
-                                <span class="font-medium text-gray-200 text-sm">Qwen3.5-9B-Q4_K_M</span>
-                            </div>
-                            <p class="text-xs text-gray-500 mb-3">Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.</p>
-                            <div class="flex items-center justify-between">
-                                <span class="text-xs text-gray-600">~5.3 GB</span>
-                                <button class="rec-download-btn px-3 py-1.5 text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded transition-colors"
-                                    data-repo="unsloth/Qwen3.5-9B-GGUF" data-file="Qwen3.5-9B-Q4_K_M.gguf">
-                                    <i class="fas fa-download mr-1"></i>Download
-                                </button>
-                            </div>
-                        </div>
-                        <div class="bg-dark-surface border border-blue-500/30 rounded-lg p-4">
-                            <div class="flex items-center gap-2 mb-2">
-                                <i class="fas fa-vector-square text-blue-400 text-sm"></i>
-                                <span class="font-medium text-gray-200 text-sm">nomic-embed-text-v1.5-Q4_K_M</span>
-                            </div>
-                            <p class="text-xs text-gray-500 mb-3">Embedding model for knowledge stores. Required for local RAG pipelines.</p>
-                            <div class="flex items-center justify-between">
-                                <span class="text-xs text-gray-600">~80 MB</span>
-                                <button class="rec-download-btn px-3 py-1.5 text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded transition-colors"
-                                    data-repo="nomic-ai/nomic-embed-text-v1.5-GGUF" data-file="nomic-embed-text-v1.5.Q4_K_M.gguf">
-                                    <i class="fas fa-download mr-1"></i>Download
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                <div class="col-span-full text-gray-500 text-center py-8">
+                    <i class="fas fa-box-open text-4xl mb-4 block text-gray-600"></i>
+                    <p class="text-lg mb-2">No models downloaded</p>
+                    <p class="text-sm">Search HuggingFace below, or download a recommended model</p>
                 </div>`;
-            container.querySelectorAll('.rec-download-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const repo = btn.dataset.repo;
-                    const fileName = btn.dataset.file;
-                    btn.disabled = true;
-                    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Downloading...';
-                    this.downloadModel(repo, fileName, null);
-                    this.startDownloadPolling();
-                });
-            });
             return;
         }
 
@@ -465,6 +429,52 @@ export class LocalLlmView extends Component {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.deleteModel(btn.dataset.id);
+            });
+        });
+    }
+
+    renderRecommendations() {
+        const container = this.querySelector('#recommendedSection');
+        if (!container) return;
+
+        const pending = RECOMMENDED_MODELS.filter(r => !this.isModelDownloaded(r.repo, r.file));
+        if (!pending.length) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = `
+            <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Recommended Models</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                ${pending.map(r => {
+                    const downloadId = `${r.repo}/${r.file}`;
+                    const isDownloading = this.activeDownloads.has(downloadId);
+                    return `
+                    <div class="bg-dark-surface border border-${r.color}-500/30 rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <i class="fas ${r.icon} text-${r.color}-400 text-sm"></i>
+                            <span class="font-medium text-gray-200 text-sm">${escapeHtml(r.label)}</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mb-3">${escapeHtml(r.desc)}</p>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-gray-600">${r.size}</span>
+                            <button class="rec-download-btn px-3 py-1.5 text-xs font-medium bg-${r.color}-500/20 hover:bg-${r.color}-500/30 text-${r.color}-400 rounded transition-colors"
+                                data-repo="${escapeHtml(r.repo)}" data-file="${escapeHtml(r.file)}" ${isDownloading ? 'disabled' : ''}>
+                                ${isDownloading
+                                    ? '<i class="fas fa-spinner fa-spin mr-1"></i>Downloading...'
+                                    : '<i class="fas fa-download mr-1"></i>Download'}
+                            </button>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>`;
+
+        container.querySelectorAll('.rec-download-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Downloading...';
+                this.downloadModel(btn.dataset.repo, btn.dataset.file, null);
+                this.startDownloadPolling();
             });
         });
     }
@@ -821,6 +831,9 @@ export class LocalLlmView extends Component {
                         <div class="text-gray-500 text-center py-8 col-span-full">Loading...</div>
                     </div>
                 </div>
+
+                <!-- Recommended Models (shown when not all are downloaded) -->
+                <div id="recommendedSection"></div>
 
                 <!-- HuggingFace Browser -->
                 <div class="border-t border-dark-border pt-6">

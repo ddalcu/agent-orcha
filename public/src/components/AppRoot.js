@@ -11,10 +11,12 @@ import './SkillsView.js';
 import './MonitorView.js';
 import './IdeView.js';
 import './LocalLlmView.js';
+import './LogViewer.js';
 
 export class AppRoot extends Component {
     postRender() {
         this._checkAuth();
+        this._loadVersion();
 
         window.addEventListener('auth:required', () => this._showLogin());
 
@@ -215,6 +217,15 @@ export class AppRoot extends Component {
         });
     }
 
+    async _loadVersion() {
+        try {
+            const res = await fetch('/health');
+            const data = await res.json();
+            const el = this.querySelector('#app-version');
+            if (el && data.version) el.textContent = `AgentOrcha v${data.version}`;
+        } catch { /* ignore */ }
+    }
+
     switchTab(tabId) {
         const container = this.querySelector('#tabContent');
         if (!container) return;
@@ -242,22 +253,20 @@ export class AppRoot extends Component {
 
     template() {
         return `
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-screen flex flex-col">
-                <div class="hidden sm:block mb-4 flex-shrink-0">
-                    <div id="app-header" class="flex items-center justify-between">
-                        <div>
-                            <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                                Agent Orcha
-                            </h1>
-                        </div>
-                        <div id="header-actions" class="flex items-center gap-3"></div>
-                    </div>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 h-screen flex flex-col">
+                <div class="flex items-center gap-3 flex-shrink-0 mb-4">
+                    <nav-bar class="flex-1"></nav-bar>
+                    <div id="header-actions" class="flex items-center gap-3"></div>
                 </div>
-
-                <nav-bar class="flex-shrink-0"></nav-bar>
 
                 <div id="tabContent" class="flex-1 min-h-0 relative">
                     <!-- Dynamic Content -->
+                </div>
+
+                <log-viewer class="flex-shrink-0"></log-viewer>
+
+                <div class="flex-shrink-0 py-3 text-center">
+                    <span id="app-version" class="text-xs text-gray-600">AgentOrcha</span>
                 </div>
             </div>
         `;

@@ -52,6 +52,25 @@ function isBlockedHost(hostname: string): string | null {
   return null;
 }
 
+const BINARY_TYPE_PREFIXES = ['image/', 'audio/', 'video/', 'font/'];
+const BINARY_TYPES = new Set([
+  'application/pdf',
+  'application/zip',
+  'application/gzip',
+  'application/x-tar',
+  'application/x-7z-compressed',
+  'application/x-rar-compressed',
+  'application/octet-stream',
+  'application/wasm',
+  'application/protobuf',
+]);
+
+function isBinaryContentType(contentType: string): boolean {
+  const mimeType = contentType.split(';')[0]!.trim().toLowerCase();
+  if (BINARY_TYPES.has(mimeType)) return true;
+  return BINARY_TYPE_PREFIXES.some(prefix => mimeType.startsWith(prefix));
+}
+
 export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool {
   return tool(
     async ({ url, raw }) => {
@@ -82,7 +101,16 @@ export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool
         });
         clearTimeout(timer);
 
-        logger.info(`[web_fetch] ${response.status} ${response.url} (${response.headers.get('content-type') ?? 'unknown'})`);
+        const contentType = response.headers.get('content-type') ?? '';
+        logger.info(`[web_fetch] ${response.status} ${response.url} (${contentType || 'unknown'})`);
+
+        if (isBinaryContentType(contentType)) {
+          return JSON.stringify({
+            error: `Cannot fetch binary content (${contentType.split(';')[0]}). Try a different source that provides text or HTML content.`,
+            url: response.url,
+            status: response.status,
+          });
+        }
 
         const body = await response.text();
 
@@ -96,7 +124,6 @@ export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool
           });
         }
 
-        const contentType = response.headers.get('content-type') ?? '';
         if (!contentType.includes('html')) {
           const truncated = body.length > config.maxOutputChars;
           return JSON.stringify({

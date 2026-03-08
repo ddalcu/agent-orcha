@@ -570,6 +570,12 @@ class StandaloneChat extends HTMLElement {
             errorDiv.textContent = `Error: ${event.error}`;
             contentDiv.appendChild(errorDiv);
             container.scrollTop = container.scrollHeight;
+        } else if (event.type === 'warning') {
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'text-yellow-400 text-sm mt-2';
+            warningDiv.textContent = event.message;
+            contentDiv.appendChild(warningDiv);
+            container.scrollTop = container.scrollHeight;
         } else if (event.type === 'usage') {
             this.streamUsageData = {
                 input_tokens: event.input_tokens || 0,
