@@ -8,6 +8,7 @@ import {
   LLMFactory,
 } from '../../lib/llm/index.ts';
 import { detectProvider } from '../../lib/llm/provider-detector.ts';
+import { getBinaryVersion, isSystemBinary, updateBinary, checkForUpdate } from '../../lib/local-llm/binary-manager.ts';
 import { logger } from '../../lib/logger.ts';
 
 export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
@@ -31,6 +32,9 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       systemRamBytes: os.totalmem(),
       freeRamBytes: os.freemem(),
       defaultProvider,
+      platform: process.platform,
+      llamaVersion: getBinaryVersion(workspaceRoot),
+      binarySource: isSystemBinary() ? 'system' : 'managed',
     };
   });
 
@@ -245,5 +249,21 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/stop-embedding', async () => {
     await llamaEmbeddingEngine.unload();
     return { ok: true };
+  });
+
+  // GET /check-update — compare local build with latest GitHub release
+  fastify.get('/check-update', async () => {
+    return checkForUpdate(workspaceRoot);
+  });
+
+  // POST /update-binary — pull latest llama-server from GitHub
+  fastify.post('/update-binary', async (_request, reply) => {
+    if (isSystemBinary()) {
+      return reply.status(400).send({ error: 'llama-server is system-installed. Update it via your package manager.' });
+    }
+    if (llamaEngine.getStatus().running) await llamaEngine.unload();
+    if (llamaEmbeddingEngine.getStatus().running) await llamaEmbeddingEngine.unload();
+    await updateBinary(workspaceRoot);
+    return { ok: true, version: getBinaryVersion(workspaceRoot) };
   });
 };

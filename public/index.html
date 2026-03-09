@@ -373,6 +373,76 @@
     .tools-popover-item:hover {
       background: #334155;
     }
+
+    /* ===== Sidebar Styles ===== */
+
+    /* Per-tab color vars */
+    .tab-btn[data-color="blue"]   { --tab-color: #60a5fa; }
+    .tab-btn[data-color="purple"] { --tab-color: #a78bfa; }
+    .tab-btn[data-color="orange"] { --tab-color: #fb923c; }
+    .tab-btn[data-color="pink"]   { --tab-color: #f472b6; }
+    .tab-btn[data-color="cyan"]   { --tab-color: #22d3ee; }
+    .tab-btn[data-color="indigo"] { --tab-color: #818cf8; }
+    .tab-btn[data-color="amber"]  { --tab-color: #fbbf24; }
+    .tab-btn[data-color="green"]  { --tab-color: #4ade80; }
+
+    #app-sidebar {
+      background: #1e293b;
+      border-right: 1px solid #334155;
+    }
+    #app-sidebar .sidebar-brand {
+      border-bottom: 1px solid #334155;
+    }
+    #app-sidebar .sidebar-footer {
+      border-top: 1px solid #334155;
+    }
+    #app-sidebar #app-version {
+      color: rgba(255, 255, 255, 0.25);
+    }
+    #app-sidebar nav {
+      padding: 4px 8px;
+    }
+    #app-sidebar .tab-btn {
+      color: #94a3b8;
+      border-radius: 6px;
+      margin: 2px 0;
+    }
+    #app-sidebar .tab-btn:hover {
+      color: #cbd5e1;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    #app-sidebar .tab-btn.active {
+      color: var(--tab-color);
+      background: color-mix(in srgb, var(--tab-color) 12%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--tab-color) 18%, transparent);
+    }
+
+    /* Mobile sidebar */
+    #sidebar-backdrop {
+      display: none;
+    }
+    @media (max-width: 767px) {
+      #app-sidebar {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        z-index: 40;
+      }
+      #app-sidebar.open {
+        display: flex;
+        animation: slideInLeft 0.2s ease-out;
+      }
+      #sidebar-backdrop.open {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        background: rgba(0, 0, 0, 0.5);
+        animation: fadeIn 0.15s ease-out;
+      }
+    }
   </style>
 </head>
 

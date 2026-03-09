@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'child_process';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync } from 'fs';
 import * as net from 'net';
 import * as path from 'path';
 import { logger } from '../logger.ts';
@@ -15,10 +16,67 @@ export interface ServerOptions {
   threads?: number;
   batchSize?: number;
   ubatchSize?: number;
+  cacheTypeK?: string;
+  cacheTypeV?: string;
+  mlock?: boolean;
 }
 
 const HEALTH_POLL_MS = 500;
 const STARTUP_TIMEOUT_MS = 120_000;
+
+// ─── PID file management ──────────────────────────────────────────────────────
+
+function pidDir(baseDir: string): string {
+  return path.join(baseDir, '.llama-server', 'pids');
+}
+
+function pidFilePath(baseDir: string, role: string): string {
+  return path.join(pidDir(baseDir), `${role}.json`);
+}
+
+function writePidFile(baseDir: string, role: string, info: { pid: number; port: number; model: string }): void {
+  const dir = pidDir(baseDir);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(pidFilePath(baseDir, role), JSON.stringify(info));
+}
+
+function removePidFile(baseDir: string, role: string): void {
+  try { unlinkSync(pidFilePath(baseDir, role)); } catch { /* already gone */ }
+}
+
+function isProcessAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+/**
+ * Kill any orphaned llama-server processes from a previous run.
+ * Call this once at startup before launching new servers.
+ */
+export function killOrphanedServers(baseDir: string): void {
+  const dir = pidDir(baseDir);
+  if (!existsSync(dir)) return;
+
+  let files: string[];
+  try { files = readdirSync(dir); } catch { return; }
+
+  for (const file of files) {
+    if (!file.endsWith('.json')) continue;
+    try {
+      const info = JSON.parse(readFileSync(path.join(dir, file), 'utf-8'));
+      if (info.pid && isProcessAlive(info.pid)) {
+        logger.warn(`[LlamaServer] Killing orphaned llama-server (PID ${info.pid}, port ${info.port})`);
+        try { process.kill(info.pid, 'SIGTERM'); } catch { /* already dead */ }
+        // Give it a moment, then force kill
+        setTimeout(() => {
+          try { if (isProcessAlive(info.pid)) process.kill(info.pid, 'SIGKILL'); } catch { /* gone */ }
+        }, 3000);
+      }
+      unlinkSync(path.join(dir, file));
+    } catch { /* corrupt pid file, remove it */
+      try { unlinkSync(path.join(dir, file)); } catch { /* ignore */ }
+    }
+  }
+}
 
 async function findFreePort(start: number): Promise<number> {
   return new Promise((resolve) => {
@@ -39,10 +97,12 @@ export class LlamaServerProcess {
   private _ready = false;
   private baseDir: string;
   private isEmbedding: boolean;
+  private role: string;
 
   constructor(baseDir: string, isEmbedding = false) {
     this.baseDir = baseDir;
     this.isEmbedding = isEmbedding;
+    this.role = isEmbedding ? 'embedding' : 'chat';
   }
 
   get port() { return this._port; }
@@ -70,6 +130,9 @@ export class LlamaServerProcess {
     if (options.threads) args.push('--threads', String(options.threads));
     if (options.batchSize) args.push('--batch-size', String(options.batchSize));
     if (options.ubatchSize) args.push('--ubatch-size', String(options.ubatchSize));
+    if (options.cacheTypeK) args.push('--cache-type-k', options.cacheTypeK);
+    if (options.cacheTypeV) args.push('--cache-type-v', options.cacheTypeV);
+    if (options.mlock) args.push('--mlock');
     if (options.embedding || this.isEmbedding) args.push('--embedding');
 
     logger.info(`[LlamaServer] Starting: ${binaryPath} ${args.join(' ')}`);
@@ -84,10 +147,11 @@ export class LlamaServerProcess {
     const stderrChunks: Buffer[] = [];
     this.proc.stderr?.on('data', (data: Buffer) => { stderrChunks.push(data); });
 
-    this.proc.on('exit', (code, signal) => {
+    this.proc.on('exit', () => {
       this._running = false;
       this._ready = false;
       this.proc = null;
+      removePidFile(this.baseDir, this.role);
     });
 
     this._running = true;
@@ -99,6 +163,7 @@ export class LlamaServerProcess {
       throw err;
     }
     this._ready = true;
+    writePidFile(this.baseDir, this.role, { pid: this.proc!.pid!, port: this._port, model: this._modelPath });
 
     logger.info(`[LlamaServer] Ready on port ${this._port}`);
   }

@@ -11,7 +11,7 @@ loader:
 
 splitter:
   type: recursive
-  chunkSize: 1000
+  chunkSize: 500
   chunkOverlap: 200
 
 embedding: default

@@ -59,6 +59,7 @@ export const llamaEngine = {
     this._detectedContextSize = contextSize ?? null;
     const gpu = detectGpu();
     const isGpu = gpu.accel !== 'none';
+    const isMetal = gpu.accel === 'metal';
     await chatServer.start({
       modelPath,
       contextSize,
@@ -66,6 +67,7 @@ export const llamaEngine = {
       gpuLayers: isGpu ? -1 : 0,
       flashAttn: isGpu,
       ...(isGpu ? { batchSize: 4096, ubatchSize: 1024 } : {}),
+      ...(isMetal ? { cacheTypeK: 'q8_0', cacheTypeV: 'q8_0', mlock: true } : {}),
     });
   },
 

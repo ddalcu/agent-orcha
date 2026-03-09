@@ -85,13 +85,13 @@ describe('binary-manager', () => {
 
   describe('getAssetPatterns — macOS', () => {
     it('arm64 → macos-arm64 binary', () => {
-      const p = _getAssetPatterns('macos-arm64', gpu('none'));
+      const p = _getAssetPatterns('macos-arm64', gpu('metal'));
       assert.equal(p.main, 'bin-macos-arm64');
       assert.equal(p.cudart, undefined);
     });
 
     it('x64 → macos-x64 binary', () => {
-      const p = _getAssetPatterns('macos-x64', gpu('none'));
+      const p = _getAssetPatterns('macos-x64', gpu('metal'));
       assert.equal(p.main, 'bin-macos-x64');
       assert.equal(p.cudart, undefined);
     });
@@ -181,13 +181,13 @@ describe('binary-manager', () => {
     });
 
     it('macOS arm64 matches exactly one release', () => {
-      const p = _getAssetPatterns('macos-arm64', gpu('none'));
+      const p = _getAssetPatterns('macos-arm64', gpu('metal'));
       const match = findAsset(p.main);
       assert.equal(match, 'llama-b8215-bin-macos-arm64.tar.gz');
     });
 
     it('macOS x64 matches exactly one release', () => {
-      const p = _getAssetPatterns('macos-x64', gpu('none'));
+      const p = _getAssetPatterns('macos-x64', gpu('metal'));
       const match = findAsset(p.main);
       assert.equal(match, 'llama-b8215-bin-macos-x64.tar.gz');
     });
@@ -221,11 +221,11 @@ describe('binary-manager', () => {
     });
 
     it('macOS arm64 always → macos-arm64', () => {
-      assert.equal(_getBinaryDirName('macos-arm64', gpu('none')), 'macos-arm64');
+      assert.equal(_getBinaryDirName('macos-arm64', gpu('metal')), 'macos-arm64');
     });
 
     it('macOS x64 always → macos-x64', () => {
-      assert.equal(_getBinaryDirName('macos-x64', gpu('none')), 'macos-x64');
+      assert.equal(_getBinaryDirName('macos-x64', gpu('metal')), 'macos-x64');
     });
 
     it('different GPU accel types produce different directories (no collisions)', () => {
@@ -244,7 +244,7 @@ describe('binary-manager', () => {
   describe('cudart bundling', () => {
     it('only CUDA builds include cudart pattern', () => {
       const platforms: _Platform[] = ['win-x64', 'linux-x64', 'macos-arm64', 'macos-x64'];
-      const accels: GpuInfo['accel'][] = ['none', 'vulkan', 'cuda-12.4', 'cuda-13.1'];
+      const accels: GpuInfo['accel'][] = ['none', 'metal', 'vulkan', 'cuda-12.4', 'cuda-13.1'];
 
       for (const platform of platforms) {
         for (const accel of accels) {
@@ -268,7 +268,7 @@ describe('binary-manager', () => {
 
     it('returns a valid GpuInfo shape', () => {
       const info = detectGpu();
-      assert.ok(['none', 'cuda-12.4', 'cuda-13.1', 'vulkan'].includes(info.accel));
+      assert.ok(['none', 'metal', 'cuda-12.4', 'cuda-13.1', 'vulkan'].includes(info.accel));
       assert.ok(typeof info.name === 'string' || info.name === undefined);
     });
 
@@ -286,10 +286,10 @@ describe('binary-manager', () => {
       assert.deepEqual(first, second);
     });
 
-    it('on macOS returns accel: none (Metal is built-in)', () => {
+    it('on macOS returns accel: metal', () => {
       if (process.platform !== 'darwin') return;
       const info = detectGpu();
-      assert.equal(info.accel, 'none');
+      assert.equal(info.accel, 'metal');
     });
   });
 });

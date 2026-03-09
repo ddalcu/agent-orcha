@@ -11,7 +11,6 @@ export class NavBar extends Component {
             { id: 'knowledge', label: 'Knowledge', icon: 'fa-brain', color: 'orange' },
             { id: 'graph', label: 'Graph', icon: 'fa-network-wired', color: 'pink' },
             { id: 'mcp', label: 'MCP', icon: 'fa-server', color: 'cyan' },
-            { id: 'skills', label: 'Skills', icon: 'fa-wand-magic-sparkles', color: 'teal' },
             { id: 'monitor', label: 'Monitor', icon: 'fa-tasks', color: 'indigo' },
             { id: 'llm', label: 'LLM', icon: 'fa-microchip', color: 'amber' },
             { id: 'ide', label: 'IDE', icon: 'fa-code', color: 'green' }
@@ -28,41 +27,32 @@ export class NavBar extends Component {
             });
         });
 
-        // Sync visual state when tab changes externally (browser back/forward)
         store.addEventListener('state-change', (e) => {
             if (e.detail.key === 'activeTab') {
                 this.updateActiveState(e.detail.value);
             }
         });
 
-        // Initialize state
         this.updateActiveState(store.get('activeTab'));
     }
 
     updateActiveState(activeId) {
         this.querySelectorAll('.tab-btn').forEach(btn => {
-            const tabId = btn.dataset.tab;
-            const color = btn.dataset.color;
-            const isActive = tabId === activeId;
-
-            if (isActive) {
-                btn.classList.add(`border-${color}-500`, `text-${color}-400`);
-                btn.classList.remove('border-transparent', 'text-gray-400', 'hover:text-gray-300');
-            } else {
-                btn.classList.remove(`border-${color}-500`, `text-${color}-400`);
-                btn.classList.add('border-transparent', 'text-gray-400', 'hover:text-gray-300');
-            }
+            btn.classList.toggle('active', btn.dataset.tab === activeId);
         });
     }
 
     template() {
         return `
-            <div class="border-b border-dark-border mb-6">
-                <nav class="flex space-x-8 overflow-x-auto">
+            <div class="flex flex-col h-full">
+                <div class="sidebar-brand px-3 py-4">
+                    <span class="text-sm font-semibold text-gray-200 tracking-wide">Agent Orcha</span>
+                </div>
+                <nav class="flex-1 overflow-y-auto py-1">
                     ${this.tabs.map(tab => `
-                        <button class="tab-btn group flex items-center gap-2 border-b-2 border-transparent text-gray-400 hover:text-gray-300 pb-3 px-1 font-medium transition-colors"
+                        <button class="tab-btn group flex items-center gap-2.5 w-full px-3 py-2 text-xs font-medium transition-all duration-200"
                             data-tab="${tab.id}" data-color="${tab.color}">
-                            <i class="fas ${tab.icon} text-sm group-hover:scale-110 transition-transform"></i>
+                            <i class="fas ${tab.icon} text-xs w-4 text-center transition-transform group-hover:scale-110"></i>
                             <span>${tab.label}</span>
                         </button>
                     `).join('')}

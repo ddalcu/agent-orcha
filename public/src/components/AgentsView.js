@@ -2,6 +2,7 @@
 import { Component } from '../utils/Component.js';
 import { api } from '../services/ApiService.js';
 import { sessionStore } from '../services/SessionStore.js';
+import { streamManager } from '../services/StreamManager.js';
 import { store } from '../store.js';
 import { markdownRenderer } from '../utils/markdown.js';
 
@@ -14,6 +15,7 @@ export class AgentsView extends Component {
         this.streamTimerInterval = null;
         this.streamUsageData = null;
         this.pendingAttachments = [];
+        this._streamUnsubscribe = null;
     }
 
     async connectedCallback() {
@@ -23,11 +25,15 @@ export class AgentsView extends Component {
     }
 
     disconnectedCallback() {
-        this.stopStreamTimer();
-        if (this.currentAbortController) {
-            this.currentAbortController.abort();
-            this.currentAbortController = null;
+        if (this._streamUnsubscribe) {
+            this._streamUnsubscribe();
+            this._streamUnsubscribe = null;
         }
+        if (this.streamTimerInterval) {
+            clearInterval(this.streamTimerInterval);
+            this.streamTimerInterval = null;
+        }
+        this.currentAbortController = null;
     }
 
     formatElapsedTime(ms) {
@@ -46,11 +52,14 @@ export class AgentsView extends Component {
     cancelCurrentStream() {
         if (this.currentAbortController) {
             this.currentAbortController.abort();
+        } else {
+            const activeId = sessionStore.getActiveId();
+            if (activeId) streamManager.cancel(activeId);
         }
     }
 
-    startStreamTimer(responseId) {
-        this.streamStartTime = Date.now();
+    startStreamTimer(responseId, startTime) {
+        this.streamStartTime = startTime || Date.now();
         this.streamTimerInterval = setInterval(() => {
             const elapsed = Date.now() - this.streamStartTime;
             const bubble = this.querySelector(`#${responseId}`);
@@ -224,11 +233,17 @@ export class AgentsView extends Component {
     }
 
     switchToSession(sessionId) {
-        // Abort any running stream
-        if (this.currentAbortController) {
-            this.currentAbortController.abort();
-            this.currentAbortController = null;
+        // Detach from current stream rendering (don't abort — let it continue in background)
+        if (this._streamUnsubscribe) {
+            this._streamUnsubscribe();
+            this._streamUnsubscribe = null;
         }
+        if (this.streamTimerInterval) {
+            clearInterval(this.streamTimerInterval);
+            this.streamTimerInterval = null;
+        }
+        this.streamStartTime = null;
+        this.currentAbortController = null;
         this.isLoading = false;
 
         const session = sessionStore.get(sessionId);
@@ -255,6 +270,12 @@ export class AgentsView extends Component {
         this.restoreMessages(session);
         this.updateChatHeader(session);
         this.renderSessionList();
+
+        // Reconnect to active stream if one exists for this session
+        if (streamManager.isActive(sessionId)) {
+            this._reconnectToStream(sessionId);
+        }
+
         this.updateUiState();
 
         // Close sidebar on mobile after selecting
@@ -285,7 +306,7 @@ export class AgentsView extends Component {
             if (msg.role === 'user') {
                 this.appendMessage('user', msg.content);
             } else {
-                this.appendRestoredAssistantMessage(msg.content);
+                this.appendRestoredAssistantMessage(msg.content, msg.meta);
             }
         }
 
@@ -300,7 +321,7 @@ export class AgentsView extends Component {
         }
     }
 
-    appendRestoredAssistantMessage(content) {
+    appendRestoredAssistantMessage(content, meta) {
         const container = this.querySelector('#chatMessages');
         const div = document.createElement('div');
         div.className = 'response-wrapper';
@@ -310,15 +331,81 @@ export class AgentsView extends Component {
         bubble.innerHTML = `
             <div class="response-bubble-inner max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-3 text-gray-100 text-[15px] leading-relaxed relative group">
                 <div class="response-content markdown-content"></div>
+                <div class="tool-invocations flex flex-wrap gap-1.5 mt-2"></div>
             </div>
         `;
 
         const contentDiv = bubble.querySelector('.response-content');
-        const rendered = markdownRenderer.render(content);
-        contentDiv.innerHTML = rendered;
-        markdownRenderer.highlightCode(contentDiv);
+        if (content) {
+            const rendered = markdownRenderer.render(content);
+            contentDiv.innerHTML = rendered;
+            markdownRenderer.highlightCode(contentDiv);
+        }
+
+        // Render persisted thinking/tool pills
+        if (meta) {
+            const toolsDiv = bubble.querySelector('.tool-invocations');
+
+            if (meta.thinking) {
+                for (const thinkingContent of meta.thinking) {
+                    this._createThinkingPill(toolsDiv, thinkingContent);
+                }
+            }
+
+            if (meta.tools) {
+                for (const t of meta.tools) {
+                    if (t.output !== undefined) {
+                        this._createToolPill(toolsDiv, t.runId, t.tool, t.input, t.output);
+                    }
+                }
+            }
+
+            // Hide empty tool-invocations div
+            if (!toolsDiv.children.length) {
+                toolsDiv.classList.add('hidden');
+            }
+        } else {
+            bubble.querySelector('.tool-invocations').classList.add('hidden');
+        }
 
         div.appendChild(bubble);
+
+        if (meta?.stats) {
+            const s = meta.stats;
+            const prefix = s.estimated ? '~' : '';
+            const tps = s.elapsed > 0 ? (s.outputTokens / (s.elapsed / 1000)).toFixed(1) : '0';
+            const statsBar = document.createElement('div');
+            statsBar.className = 'stream-stats-bar flex items-center gap-3 mt-1.5 ml-1 text-xs text-gray-500';
+            statsBar.innerHTML = `
+                <span class="flex items-center gap-1">
+                    <i class="far fa-clock"></i>
+                    <span>${this.formatElapsedTime(s.elapsed)}</span>
+                </span>
+                <span class="text-dark-border">|</span>
+                <span class="flex items-center gap-1">
+                    <i class="fas fa-arrow-up text-[9px]"></i>
+                    <span>${prefix}${s.inputTokens} input</span>
+                </span>
+                <span class="text-dark-border">|</span>
+                <span class="flex items-center gap-1">
+                    <i class="fas fa-arrow-down text-[9px]"></i>
+                    <span>${prefix}${s.outputTokens} output</span>
+                </span>
+                <span class="text-dark-border">|</span>
+                <span class="flex items-center gap-1">
+                    <i class="fas fa-bolt text-[9px]"></i>
+                    <span>${prefix}${tps} tok/s</span>
+                </span>
+            `;
+            if (s.cancelled) {
+                const badge = document.createElement('span');
+                badge.className = 'text-xs text-amber-400 font-medium ml-2';
+                badge.textContent = 'Cancelled';
+                statsBar.appendChild(badge);
+            }
+            div.appendChild(statsBar);
+        }
+
         container.appendChild(div);
         container.scrollTop = container.scrollHeight;
     }
@@ -606,10 +693,8 @@ export class AgentsView extends Component {
 
         if ((!message && !hasAttachments) || !selected || this.isLoading || !activeId) return;
 
-        // Capture attachments before clearing
         const attachments = hasAttachments ? [...this.pendingAttachments] : null;
 
-        // Add user message (with optional attachment thumbnails)
         this.appendMessage('user', message || '(attached files)', { attachments });
         sessionStore.addMessage(activeId, 'user', message || '(attached files)');
         input.value = '';
@@ -622,139 +707,177 @@ export class AgentsView extends Component {
         const responseId = 'response-' + Date.now();
         this.createResponseBubble(responseId);
 
-        this.currentAbortController = new AbortController();
+        const abortController = new AbortController();
+        this.currentAbortController = abortController;
         this.streamUsageData = null;
         this.startStreamTimer(responseId);
 
-        let finalContent = '';
-        let wasCancelled = false;
-
         try {
+            let response;
             if (selectionType === 'agent') {
-                finalContent = await this.sendAgentMessage(agent, message, responseId, attachments);
-            } else if (selectionType === 'llm') {
-                finalContent = await this.sendLlmMessage(llm, message, responseId, attachments);
-            }
-        } catch (e) {
-            if (e.name === 'AbortError') {
-                wasCancelled = true;
+                const inputVars = agent.inputVariables || ['message'];
+                const inputObj = {};
+                inputObj[inputVars[0] || 'message'] = message;
+                if (attachments) inputObj.attachments = attachments;
+                response = await api.streamAgent(agent.name, inputObj, activeId, { signal: abortController.signal });
             } else {
+                response = await api.streamLLM(llm.name, message, activeId, attachments, { signal: abortController.signal });
+            }
+
+            streamManager.start(activeId, {
+                response,
+                abortController,
+                streamType: selectionType === 'agent' ? 'agent' : 'llm',
+                inputMessage: message,
+                responseId,
+            });
+
+            this._attachToStream(activeId, responseId);
+        } catch (e) {
+            const wasCancelled = e.name === 'AbortError';
+            if (!wasCancelled) {
                 this.updateResponseError(responseId, `Error: ${e.message}`);
             }
-        } finally {
-            this.stopStreamTimer(responseId, message, finalContent, wasCancelled);
+            this.stopStreamTimer(responseId, message, '', wasCancelled);
             this.currentAbortController = null;
             this.isLoading = false;
             this.updateUiState();
-            input.focus();
         }
 
-        // Persist assistant response
-        if (finalContent) {
-            sessionStore.addMessage(activeId, 'assistant', finalContent);
-        }
-
-        // Re-render sidebar (title/ordering may have changed)
         this.renderSessionList();
     }
 
-    async sendAgentMessage(agent, message, responseId, attachments) {
-        const inputVars = agent.inputVariables || ['message'];
-        const inputObj = {};
-        inputObj[inputVars[0] || 'message'] = message;
-        if (attachments) {
-            inputObj.attachments = attachments;
-        }
+    _attachToStream(sessionId, responseId, initialThinkingState) {
+        const state = streamManager.getState(sessionId);
+        if (!state) return;
 
-        const activeId = sessionStore.getActiveId();
-        const res = await api.streamAgent(agent.name, inputObj, activeId, { signal: this.currentAbortController?.signal });
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-
-        const bubble = this.querySelector(`#${responseId}`);
-        const contentDiv = bubble.querySelector('.response-content');
-        const container = this.querySelector('#chatMessages');
-        const thinkingState = {
+        const thinkingState = initialThinkingState || {
             inThinking: false,
             thinkingSections: [],
-            currentSection: null
+            currentSection: null,
+            thinkingContent: '',
+            thinkingPill: null,
         };
 
-        let currentContent = '';
-        let buffer = '';
-        let hasToolCalls = false;
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-            buffer += chunk;
-
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-                if (line.trim() === '') continue;
-
-                if (line.startsWith('data: ')) {
-                    const data = line.slice(6);
-                    if (data === '[DONE]') continue;
-
-                    try {
-                        const event = JSON.parse(data);
-
-                        // Handle server-side errors
-                        if (event.error) {
-                            this.updateResponseError(responseId, `Error: ${event.error}`);
-                            return currentContent;
-                        }
-
-                        if (event.type === 'content') {
-                            currentContent += event.content;
-                        }
-                        if (event.type === 'tool_start' || event.type === 'tool_end') {
-                            hasToolCalls = true;
-                        }
-                        this.handleStreamEvent(event, responseId, currentContent, thinkingState);
-                    } catch (e) {
-                        console.error('Error parsing stream event', e, data);
-                    }
+        // For LLM streams, remove loading dots immediately
+        if (state.streamType === 'llm') {
+            const bubble = this.querySelector(`#${responseId}`);
+            if (bubble) {
+                const contentDiv = bubble.querySelector('.response-content');
+                const loadingDots = contentDiv?.querySelector('.loading-dots');
+                if (loadingDots) {
+                    loadingDots.remove();
+                    bubble.querySelector('.response-bubble-inner')?.classList.remove('py-4');
+                    bubble.querySelector('.response-bubble-inner')?.classList.add('py-3');
+                    contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+                    contentDiv.innerHTML = '';
                 }
             }
         }
 
-        // Finalize any remaining thinking pill
-        const toolsDiv = bubble.querySelector('.tool-invocations');
-        this.finalizeThinkingPill(toolsDiv, thinkingState);
+        let hasToolCalls = false;
 
-        // If tools were called but no text content was produced, clear loading state
-        if (hasToolCalls && !currentContent.trim()) {
-            const loadingDots = contentDiv.querySelector('.loading-dots');
-            if (loadingDots) {
-                loadingDots.remove();
-                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
-                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
-                contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
-                contentDiv.innerHTML = '';
+        this._streamUnsubscribe = streamManager.subscribe(sessionId, (event) => {
+            if (event.type === '_stream_end') {
+                this.streamUsageData = state.usageData;
+                const wasCancelled = event.status === 'cancelled';
+
+                if (state.streamType === 'agent') {
+                    const bubble = this.querySelector(`#${responseId}`);
+                    if (bubble) {
+                        const toolsDiv = bubble.querySelector('.tool-invocations');
+                        this.finalizeThinkingPill(toolsDiv, thinkingState);
+                    }
+                    if (hasToolCalls && !state.content.trim()) {
+                        const bubble = this.querySelector(`#${responseId}`);
+                        if (bubble) {
+                            const contentDiv = bubble.querySelector('.response-content');
+                            const loadingDots = contentDiv?.querySelector('.loading-dots');
+                            if (loadingDots) {
+                                loadingDots.remove();
+                                bubble.querySelector('.response-bubble-inner')?.classList.remove('py-4');
+                                bubble.querySelector('.response-bubble-inner')?.classList.add('py-3');
+                                contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+                                contentDiv.innerHTML = '';
+                            }
+                        }
+                    }
+                }
+
+                this.stopStreamTimer(responseId, state.inputMessage, state.content, wasCancelled);
+                this.currentAbortController = null;
+                this.isLoading = false;
+                this.updateUiState();
+                this.renderSessionList();
+                this._streamUnsubscribe = null;
+
+                const input = this.querySelector('#chatInput');
+                if (input) input.focus();
+                return;
             }
-        }
 
-        return currentContent;
+            if (state.streamType === 'agent') {
+                if (event.type === 'tool_start' || event.type === 'tool_end') hasToolCalls = true;
+                this.handleStreamEvent(event, responseId, state.content, thinkingState);
+            } else {
+                if (event.type === 'usage') {
+                    this.streamUsageData = state.usageData;
+                    return;
+                }
+                if (event.error) {
+                    this.updateResponseError(responseId, `Error: ${event.error}`);
+                    return;
+                }
+                if (event.content) {
+                    const bubble = this.querySelector(`#${responseId}`);
+                    if (bubble) {
+                        const contentDiv = bubble.querySelector('.response-content');
+                        const container = this.querySelector('#chatMessages');
+                        this.renderLlmContentStreaming(contentDiv, state.content, responseId, thinkingState);
+                        if (container) container.scrollTop = container.scrollHeight;
+                    }
+                }
+            }
+        });
     }
 
-    async sendLlmMessage(llm, message, responseId, attachments) {
-        const activeId = sessionStore.getActiveId();
-        const res = await api.streamLLM(llm.name, message, activeId, attachments, { signal: this.currentAbortController?.signal });
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
+    _reconnectToStream(sessionId) {
+        const state = streamManager.getState(sessionId);
+        if (!state || state.status !== 'streaming') return false;
 
+        this.createResponseBubble(state.responseId);
+        const snapshotState = this._renderStreamSnapshot(state.responseId, state);
+
+        const thinkingState = {
+            inThinking: false,
+            thinkingSections: [],
+            currentSection: null,
+            thinkingContent: snapshotState.thinkingContent || '',
+            thinkingPill: snapshotState.thinkingPill || null,
+        };
+
+        this.streamUsageData = state.usageData;
+        this.startStreamTimer(state.responseId, state.startTime);
+
+        this.isLoading = true;
+        this.currentAbortController = state.abortController;
+        this.updateUiState();
+
+        this._attachToStream(sessionId, state.responseId, thinkingState);
+        return true;
+    }
+
+    _renderStreamSnapshot(responseId, state) {
         const bubble = this.querySelector(`#${responseId}`);
-        const contentDiv = bubble.querySelector('.response-content');
-        const loadingDots = contentDiv.querySelector('.loading-dots');
-        const container = this.querySelector('#chatMessages');
+        if (!bubble) return {};
 
-        if (loadingDots) {
+        const contentDiv = bubble.querySelector('.response-content');
+        const toolsDiv = bubble.querySelector('.tool-invocations');
+
+        const hasVisualContent = state.content ||
+            state.events.some(e => e.type === 'thinking' || e.type === 'tool_start' || e.type === 'content');
+        const loadingDots = contentDiv.querySelector('.loading-dots');
+        if (loadingDots && hasVisualContent) {
             loadingDots.remove();
             bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
             bubble.querySelector('.response-bubble-inner').classList.add('py-3');
@@ -762,64 +885,193 @@ export class AgentsView extends Component {
             contentDiv.innerHTML = '';
         }
 
-        let buffer = '';
-        let fullContent = '';
-        const thinkingState = {
-            inThinking: false,
-            thinkingSections: [],
-            currentSection: null
-        };
+        let activeThinkingPill = null;
+        let activeThinkingContent = '';
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+        if (state.streamType === 'agent') {
+            const tools = new Map();
+            const completedThinking = [];
+            let currentThinking = '';
+            let lastWasThinking = false;
+            let lastReactIteration = null;
 
-            const chunk = decoder.decode(value, { stream: true });
-            buffer += chunk;
-
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-                if (line.trim() === '') continue;
-
-                if (line.startsWith('data: ')) {
-                    const data = line.slice(6);
-
-                    if (data === '[DONE]') continue;
-
-                    try {
-                        const parsed = JSON.parse(data);
-
-                        if (parsed.error) {
-                            this.updateResponseError(responseId, `Error: ${parsed.error}`);
-                            return fullContent;
-                        }
-
-                        if (parsed.type === 'usage') {
-                            this.streamUsageData = {
-                                input_tokens: parsed.input_tokens || 0,
-                                output_tokens: parsed.output_tokens || 0,
-                                total_tokens: parsed.total_tokens || 0,
-                            };
-                            continue;
-                        }
-
-                        const text = parsed.content || '';
-
-                        if (text) {
-                            fullContent += text;
-                            this.renderLlmContentStreaming(contentDiv, fullContent, responseId, thinkingState);
-                            container.scrollTop = container.scrollHeight;
-                        }
-                    } catch (e) {
-                        console.error('Error parsing stream chunk:', e, data);
+            for (const event of state.events) {
+                if (event.type === 'thinking') {
+                    currentThinking += event.content;
+                    lastWasThinking = true;
+                } else {
+                    if (lastWasThinking && currentThinking) {
+                        completedThinking.push(currentThinking);
+                        currentThinking = '';
                     }
+                    lastWasThinking = false;
+                }
+
+                if (event.type === 'tool_start') {
+                    tools.set(event.runId, { tool: event.tool, input: event.input, done: false });
+                }
+                if (event.type === 'tool_end') {
+                    const t = tools.get(event.runId);
+                    if (t) { t.output = event.output; t.done = true; }
+                }
+                if (event.type === 'react_iteration') {
+                    lastReactIteration = event;
+                }
+            }
+
+            for (const content of completedThinking) {
+                this._createThinkingPill(toolsDiv, content);
+            }
+
+            if (lastWasThinking && currentThinking) {
+                const pill = document.createElement('div');
+                pill.className = 'thinking-pill tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-purple-400 font-mono';
+                pill.innerHTML = '<i class="fas fa-brain animate-pulse text-[10px]"></i><span>Thinking...</span>';
+                toolsDiv.appendChild(pill);
+                activeThinkingPill = pill;
+                activeThinkingContent = currentThinking;
+            }
+
+            for (const [runId, t] of tools) {
+                if (t.done) {
+                    this._createToolPill(toolsDiv, runId, t.tool, t.input, t.output);
+                } else {
+                    const toolEl = document.createElement('div');
+                    toolEl.id = `tool-${runId}`;
+                    toolEl.className = 'tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-gray-400 font-mono';
+                    toolEl.dataset.toolInput = typeof t.input === 'string' ? t.input : JSON.stringify(t.input, null, 2);
+                    toolEl.innerHTML = `<i class="fas fa-circle-notch animate-spin text-blue-400 text-[10px]"></i><span>${this.escapeHtml(t.tool)}</span>`;
+                    toolsDiv.appendChild(toolEl);
+                }
+            }
+
+            if (lastReactIteration) {
+                const wrapper = bubble.closest('.response-wrapper');
+                const statusText = wrapper?.querySelector('.stream-status-text');
+                if (statusText) {
+                    const contextKB = (lastReactIteration.contextChars / 1024).toFixed(1);
+                    statusText.textContent = `Iteration ${lastReactIteration.iteration} · ${contextKB} KB context`;
                 }
             }
         }
 
-        return fullContent;
+        if (state.content) {
+            const div = document.createElement('div');
+            div.className = 'content-text markdown-content';
+            div.innerHTML = markdownRenderer.render(state.content);
+            markdownRenderer.highlightCode(div);
+            contentDiv.appendChild(div);
+        }
+
+        const container = this.querySelector('#chatMessages');
+        if (container) container.scrollTop = container.scrollHeight;
+
+        return { thinkingPill: activeThinkingPill, thinkingContent: activeThinkingContent };
+    }
+
+    _createThinkingPill(toolsDiv, content) {
+        const pill = document.createElement('div');
+        pill.className = 'thinking-pill tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
+
+        const pillContent = document.createElement('span');
+        pillContent.className = 'inline-flex items-center gap-1.5';
+        pillContent.innerHTML = '<i class="fas fa-brain text-purple-400 text-[10px]"></i><span>Thinking</span>';
+        pill.appendChild(pillContent);
+
+        const popover = document.createElement('div');
+        popover.className = 'hidden fixed z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw] p-3';
+
+        const popoverContent = document.createElement('div');
+        popoverContent.className = 'text-xs text-gray-400 max-h-64 overflow-y-auto markdown-content custom-scrollbar';
+        popoverContent.innerHTML = markdownRenderer.render(content);
+        markdownRenderer.highlightCode(popoverContent);
+        popover.appendChild(popoverContent);
+        pill.appendChild(popover);
+
+        pill.addEventListener('mouseenter', () => {
+            popover.classList.remove('hidden');
+            const pillRect = pill.getBoundingClientRect();
+            popover.style.bottom = (window.innerHeight - pillRect.top + 4) + 'px';
+            popover.style.top = 'auto';
+            if (pillRect.left + 400 > window.innerWidth - 16) {
+                popover.style.left = Math.max(8, pillRect.right - 400) + 'px';
+            } else {
+                popover.style.left = pillRect.left + 'px';
+            }
+            popover.style.right = 'auto';
+        });
+        pill.addEventListener('mouseleave', () => popover.classList.add('hidden'));
+
+        toolsDiv.appendChild(pill);
+    }
+
+    _createToolPill(toolsDiv, runId, toolName, input, output) {
+        const container = this.querySelector('#chatMessages');
+        const toolInput = typeof input === 'string' ? input : JSON.stringify(input, null, 2);
+        const toolOutput = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
+
+        const toolEl = document.createElement('div');
+        toolEl.id = `tool-${runId}`;
+        toolEl.className = 'tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
+
+        const pillContent = document.createElement('span');
+        pillContent.className = 'inline-flex items-center gap-1.5';
+        pillContent.innerHTML = `<i class="fas fa-check text-green-500 text-[10px]"></i><span>${this.escapeHtml(toolName)}</span>`;
+        toolEl.appendChild(pillContent);
+
+        const details = document.createElement('div');
+        details.className = 'tool-invocation-details hidden absolute bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
+
+        if (toolInput) {
+            const inputSection = document.createElement('div');
+            inputSection.className = 'p-3 border-b border-dark-border/50';
+            inputSection.innerHTML = '<div class="text-xs font-semibold text-gray-400 mb-1">Input</div>';
+            const inputPre = document.createElement('pre');
+            inputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar';
+            inputPre.textContent = toolInput;
+            inputSection.appendChild(inputPre);
+            details.appendChild(inputSection);
+        }
+
+        const outputSection = document.createElement('div');
+        outputSection.className = 'p-3';
+        outputSection.innerHTML = '<div class="text-xs font-semibold text-gray-400 mb-1">Output</div>';
+        const outputPre = document.createElement('pre');
+        outputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar';
+        outputPre.textContent = toolOutput;
+        outputSection.appendChild(outputPre);
+        details.appendChild(outputSection);
+
+        toolEl.appendChild(details);
+
+        toolEl.addEventListener('click', (e) => {
+            if (details.contains(e.target)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            toolsDiv.querySelectorAll('.tool-invocation-details:not(.hidden)').forEach(d => {
+                if (d !== details) d.classList.add('hidden');
+            });
+            const wasHidden = details.classList.contains('hidden');
+            details.classList.toggle('hidden');
+            if (wasHidden && container) {
+                const pillRect = toolEl.getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+                const spaceRight = containerRect.right - pillRect.left;
+                if (spaceRight < 420) {
+                    details.style.right = '0';
+                    details.style.left = 'auto';
+                } else {
+                    details.style.left = '0';
+                    details.style.right = 'auto';
+                }
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!toolEl.contains(e.target)) details.classList.add('hidden');
+        }, { capture: true });
+
+        toolsDiv.appendChild(toolEl);
     }
 
     renderLlmContentStreaming(contentDiv, fullContent, responseId, state) {

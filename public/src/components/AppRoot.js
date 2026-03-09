@@ -7,7 +7,6 @@ import './WorkflowsView.js';
 import './KnowledgeView.js';
 import './GraphView.js';
 import './McpView.js';
-import './SkillsView.js';
 import './MonitorView.js';
 import './IdeView.js';
 import './LocalLlmView.js';
@@ -20,9 +19,13 @@ export class AppRoot extends Component {
 
         window.addEventListener('auth:required', () => this._showLogin());
 
+        this.querySelector('#hamburger-btn').addEventListener('click', () => this._toggleSidebar());
+        this.querySelector('#sidebar-backdrop').addEventListener('click', () => this._toggleSidebar(true));
+
         store.addEventListener('state-change', (e) => {
             if (e.detail.key === 'activeTab') {
                 this.switchTab(e.detail.value);
+                this._toggleSidebar(true);
             }
         });
 
@@ -238,7 +241,6 @@ export class AppRoot extends Component {
             case 'knowledge': el = document.createElement('knowledge-view'); break;
             case 'graph': el = document.createElement('graph-view'); break;
             case 'mcp': el = document.createElement('mcp-view'); break;
-            case 'skills': el = document.createElement('skills-view'); break;
             case 'monitor': el = document.createElement('monitor-view'); break;
             case 'llm': el = document.createElement('local-llm-view'); break;
             case 'ide': el = document.createElement('ide-view'); break;
@@ -251,22 +253,36 @@ export class AppRoot extends Component {
         container.appendChild(el);
     }
 
+    _toggleSidebar(forceClose) {
+        const sidebar = this.querySelector('#app-sidebar');
+        const backdrop = this.querySelector('#sidebar-backdrop');
+        const open = forceClose ? false : !sidebar.classList.contains('open');
+        sidebar.classList.toggle('open', open);
+        backdrop.classList.toggle('open', open);
+    }
+
     template() {
         return `
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 h-screen flex flex-col">
-                <div class="flex items-center gap-3 flex-shrink-0 mb-4">
-                    <nav-bar class="flex-1"></nav-bar>
-                    <div id="header-actions" class="flex items-center gap-3"></div>
+            <div class="h-screen flex">
+                <div id="sidebar-backdrop"></div>
+                <div id="app-sidebar" class="flex-shrink-0 flex flex-col h-full w-40 relative">
+                    <nav-bar class="flex-1 min-h-0"></nav-bar>
+                    <div class="sidebar-footer px-3 py-2">
+                        <div id="header-actions" class="flex items-center gap-2"></div>
+                        <span id="app-version" class="text-[10px] block mt-1">AgentOrcha</span>
+                    </div>
                 </div>
-
-                <div id="tabContent" class="flex-1 min-h-0 relative">
-                    <!-- Dynamic Content -->
-                </div>
-
-                <log-viewer class="flex-shrink-0"></log-viewer>
-
-                <div class="flex-shrink-0 py-3 text-center">
-                    <span id="app-version" class="text-xs text-gray-600">AgentOrcha</span>
+                <div class="flex-1 flex flex-col min-w-0">
+                    <div class="md:hidden flex items-center px-4 py-2 border-b border-dark-border flex-shrink-0">
+                        <button id="hamburger-btn" class="text-gray-400 hover:text-white transition-colors">
+                            <i class="fas fa-bars text-lg"></i>
+                        </button>
+                        <span class="text-sm font-semibold text-gray-200 ml-3">Agent Orcha</span>
+                    </div>
+                    <div id="tabContent" class="flex-1 min-h-0 relative px-4 md:px-6 py-4">
+                        <!-- Dynamic Content -->
+                    </div>
+                    <log-viewer class="flex-shrink-0"></log-viewer>
                 </div>
             </div>
         `;

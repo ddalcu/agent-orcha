@@ -333,6 +333,16 @@ export class ApiService {
         return res.json();
     }
 
+    async checkLlamaUpdate() {
+        const res = await this._fetch('/api/local-llm/check-update');
+        return res.json();
+    }
+
+    async updateLlamaBinary() {
+        const res = await this._fetch('/api/local-llm/update-binary', { method: 'POST' });
+        return res.json();
+    }
+
     streamLogs() {
         return new EventSource('/api/logs/stream');
     }

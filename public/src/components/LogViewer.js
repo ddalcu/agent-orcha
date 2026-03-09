@@ -20,8 +20,8 @@ export class LogViewer extends Component {
         this._lineCount = 0;
 
         this.querySelector('#log-toggle').addEventListener('click', () => this._toggle());
-        this.querySelector('#log-clear').addEventListener('click', () => this._clear());
-        this.querySelector('#log-autoscroll').addEventListener('click', () => this._toggleAutoScroll());
+        this.querySelector('#log-clear').addEventListener('click', (e) => { e.stopPropagation(); this._clear(); });
+        this.querySelector('#log-autoscroll').addEventListener('click', (e) => { e.stopPropagation(); this._toggleAutoScroll(); });
 
         const body = this.querySelector('#log-body');
         body.addEventListener('scroll', () => {
@@ -104,17 +104,12 @@ export class LogViewer extends Component {
             body.scrollTop = body.scrollHeight;
         }
 
-        // Update line count badge
-        const badge = this.querySelector('#log-count');
-        if (badge) badge.textContent = this._lineCount;
     }
 
     _clear() {
         const body = this.querySelector('#log-body');
         if (body) body.innerHTML = '';
         this._lineCount = 0;
-        const badge = this.querySelector('#log-count');
-        if (badge) badge.textContent = '0';
     }
 
     _toggleAutoScroll() {
@@ -141,7 +136,6 @@ export class LogViewer extends Component {
                         <i id="log-chevron" class="fas fa-chevron-up log-chevron"></i>
                         <i class="fas fa-terminal log-terminal-icon"></i>
                         <span class="log-title">Console</span>
-                        <span id="log-count" class="log-badge">0</span>
                     </div>
                     <div class="log-header-right">
                         <button id="log-autoscroll" class="log-btn log-autoscroll-active" title="Auto-scroll">
@@ -193,16 +187,6 @@ export class LogViewer extends Component {
 
                 .log-terminal-icon { font-size: 11px; color: #89b4fa; }
                 .log-title { font-size: 12px; color: #a6adc8; font-weight: 500; }
-
-                .log-badge {
-                    font-size: 10px;
-                    color: #6c7086;
-                    background: #1e1e2e;
-                    border: 1px solid #313244;
-                    border-radius: 8px;
-                    padding: 0 6px;
-                    line-height: 16px;
-                }
 
                 .log-btn {
                     background: none;

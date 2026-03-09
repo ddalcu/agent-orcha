@@ -30,6 +30,7 @@ import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
 import { substituteEnvVars } from './utils/env-substitution.ts';
 import { llamaEngine, llamaEmbeddingEngine } from './local-llm/llama-provider.ts';
+import { killOrphanedServers } from './local-llm/llama-server-process.ts';
 import { ModelManager } from './local-llm/model-manager.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
@@ -121,7 +122,8 @@ export class Orchestrator {
     logger.info('[Orchestrator] Loading LLM config...');
     await loadLLMConfig(this.config.llmConfigPath);
 
-    // Set base dir for local llama servers (needed before knowledge stores auto-start them)
+    // Kill any orphaned llama-server processes from a previous run, then set base dir
+    killOrphanedServers(this.config.workspaceRoot);
     llamaEngine.setBaseDir(this.config.workspaceRoot);
     llamaEmbeddingEngine.setBaseDir(this.config.workspaceRoot);
 
@@ -843,6 +845,10 @@ export class Orchestrator {
   }
 
   async close(): Promise<void> {
+    // Stop llama-server processes before anything else
+    await llamaEngine.unload();
+    await llamaEmbeddingEngine.unload();
+
     if (this.triggerManager) {
       this.triggerManager.close();
     }

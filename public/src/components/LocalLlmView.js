@@ -93,6 +93,7 @@ export class LocalLlmView extends Component {
         this.activeDownloads = new Map(); // EventSource connections (UI only)
         this.downloadPollTimer = null;
         this.systemRamBytes = 0;
+        this.updateInfo = null;
     }
 
     async connectedCallback() {
@@ -233,6 +234,9 @@ export class LocalLlmView extends Component {
         try {
             this.status = await api.getLocalLlmStatus();
             this.systemRamBytes = this.status.systemRamBytes || 0;
+            if (this.status.binarySource === 'managed') {
+                this.updateInfo = await api.checkLlamaUpdate();
+            }
             this.renderStatus();
         } catch (e) {
             console.error('Failed to load local LLM status:', e);
@@ -254,10 +258,53 @@ export class LocalLlmView extends Component {
         if (!container || !this.status) return;
 
         const { running, activeModel, embedding } = this.status;
+        const version = this.status.llamaVersion;
+        const gpuName = this.status.gpu?.name;
+        const gpuAccel = this.status.gpu?.accel || 'none';
+        const hasUpdate = this.updateInfo?.available === true;
+        const daysLabel = hasUpdate && this.updateInfo.daysNewer != null
+            ? (this.updateInfo.daysNewer === 0 ? 'today' : `${this.updateInfo.daysNewer}d ago`)
+            : '';
 
-        let html = '';
+        const accelLabels = { 'none': 'CPU', 'metal': 'Metal', 'vulkan': 'Vulkan', 'cuda-12.4': 'CUDA 12.4', 'cuda-13.1': 'CUDA 13.1' };
+        const runtimeLabel = gpuName
+            ? `${gpuName} (${accelLabels[gpuAccel] || gpuAccel})`
+            : (accelLabels[gpuAccel] || gpuAccel);
 
-        // Chat model status
+        // --- Server header ---
+        let html = `<div class="border border-dark-border rounded-lg overflow-hidden">`;
+
+        // Server info header
+        html += `
+            <div class="bg-dark-surface px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-server text-amber-400 text-xs"></i>
+                    <span class="text-sm font-semibold text-gray-200">llama-server</span>
+                    ${version ? `<span class="text-xs text-gray-500 font-mono">b${escapeHtml(version.match(/^(\d+)/)?.[1] || version)}</span>` : ''}
+                </div>
+                ${hasUpdate ? `
+                    <button id="updateBinaryBtn" class="px-2.5 py-1 text-[11px] font-medium bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 rounded transition-colors flex-shrink-0" title="Latest: ${escapeHtml(this.updateInfo.latestTag || '')}">
+                        <i class="fas fa-arrows-rotate mr-1"></i>Update${daysLabel ? ` <span class="text-indigo-500/70">(${daysLabel})</span>` : ''}
+                    </button>` : ''}
+            </div>`;
+
+        // Server details row
+        html += `
+            <div class="bg-dark-surface/50 px-4 py-2 border-t border-dark-border/50 flex items-center gap-4 text-[11px] text-gray-500 flex-wrap">
+                <span title="Runtime"><i class="fas fa-bolt mr-1 text-amber-500/50"></i>${escapeHtml(runtimeLabel)}</span>
+                <span title="Server type"><i class="fas fa-comments mr-1 text-amber-500/50"></i>Chat Completions</span>
+                ${running && this.status.port ? `
+                    <span class="flex items-center gap-1.5" title="OpenAI-compatible API endpoint">
+                        <i class="fas fa-link mr-0.5 text-amber-500/50"></i>
+                        <code class="font-mono text-gray-400">http://127.0.0.1:${this.status.port}/v1</code>
+                        <button class="copy-url-btn text-gray-600 hover:text-gray-300 transition-colors" data-url="http://127.0.0.1:${this.status.port}/v1" title="Copy URL">
+                            <i class="fas fa-copy text-[10px]"></i>
+                        </button>
+                    </span>` : `<span><i class="fas fa-link mr-0.5 text-amber-500/50"></i><span class="text-gray-600">Not running</span></span>`}
+            </div>`;
+
+        // --- Chat model (child) ---
+        html += `<div class="border-t border-dark-border">`;
         if (running) {
             const modelName = activeModel ? activeModel.split('/').pop() : 'Unknown';
             const mem = this.status.memoryEstimate;
@@ -267,7 +314,7 @@ export class LocalLlmView extends Component {
             const memBarColor = memPct > 80 ? 'bg-red-500' : memPct > 60 ? 'bg-amber-500' : 'bg-green-500';
 
             html += `
-                <div class="bg-dark-surface border border-dark-border rounded-lg px-4 py-3 space-y-2">
+                <div class="px-4 py-3 space-y-2">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3">
                             <span class="relative flex h-2.5 w-2.5">
@@ -277,7 +324,6 @@ export class LocalLlmView extends Component {
                             <span class="text-sm text-gray-200">Chat Model</span>
                             <span class="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono">${escapeHtml(modelName)}</span>
                             ${ctxSize ? `<span class="text-xs text-gray-500">${(ctxSize / 1024).toFixed(0)}K ctx</span>` : ''}
-                            ${this.status.port ? `<span class="text-xs text-gray-500">port ${this.status.port}</span>` : ''}
                         </div>
                         <button id="stopBtn" class="px-3 py-1.5 text-xs font-medium bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-colors">
                             <i class="fas fa-stop mr-1"></i>Stop
@@ -301,9 +347,9 @@ export class LocalLlmView extends Component {
             const lastModel = this.status.lastActiveModel;
             const lastModelName = lastModel ? this.models.find(m => m.id === lastModel) : null;
             html += `
-                <div class="flex items-center justify-between bg-dark-surface border border-dark-border rounded-lg px-4 py-3">
+                <div class="flex items-center justify-between px-4 py-3">
                     <div class="flex items-center gap-3">
-                        <span class="inline-flex h-2.5 w-2.5 rounded-full bg-gray-500"></span>
+                        <span class="inline-flex h-2.5 w-2.5 rounded-full bg-gray-600"></span>
                         <span class="text-sm text-gray-400">Chat Model</span>
                         ${lastModelName
                             ? `<span class="text-xs text-gray-600">${escapeHtml(lastModelName.fileName)}</span>`
@@ -316,30 +362,62 @@ export class LocalLlmView extends Component {
                         : ''}
                 </div>`;
         }
+        html += `</div>`;
 
-        // Embedding model status
+        // --- Embedding model (child) ---
         if (embedding?.running) {
             const embName = embedding.activeModel ? embedding.activeModel.split('/').pop() : 'Unknown';
             html += `
-                <div class="flex items-center justify-between bg-dark-surface border border-dark-border rounded-lg px-4 py-3 mt-2">
-                    <div class="flex items-center gap-3">
-                        <span class="relative flex h-2.5 w-2.5">
-                            <span class="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75 animate-ping"></span>
-                            <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-blue-400"></span>
-                        </span>
-                        <span class="text-sm text-gray-200">Embedding Model</span>
-                        <span class="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono">${escapeHtml(embName)}</span>
+                <div class="border-t border-dark-border">
+                    <div class="flex items-center justify-between px-4 py-3">
+                        <div class="flex items-center gap-3">
+                            <span class="relative flex h-2.5 w-2.5">
+                                <span class="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75 animate-ping"></span>
+                                <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-blue-400"></span>
+                            </span>
+                            <span class="text-sm text-gray-200">Embedding Model</span>
+                            <span class="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono">${escapeHtml(embName)}</span>
+                        </div>
+                        <button id="stopEmbBtn" class="px-3 py-1.5 text-xs font-medium bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-colors">
+                            <i class="fas fa-stop mr-1"></i>Stop
+                        </button>
                     </div>
-                    <button id="stopEmbBtn" class="px-3 py-1.5 text-xs font-medium bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-colors">
-                        <i class="fas fa-stop mr-1"></i>Stop
-                    </button>
                 </div>`;
         }
+
+        html += `</div>`; // close outer container
 
         container.innerHTML = html;
         this.querySelector('#stopBtn')?.addEventListener('click', () => this.stopServer());
         this.querySelector('#stopEmbBtn')?.addEventListener('click', () => this.stopEmbedding());
         this.querySelector('#startLastBtn')?.addEventListener('click', (e) => this.activateModel(e.currentTarget.dataset.id));
+        this.querySelector('.copy-url-btn')?.addEventListener('click', (e) => {
+            navigator.clipboard.writeText(e.currentTarget.dataset.url);
+            const icon = e.currentTarget.querySelector('i');
+            icon.className = 'fas fa-check text-[10px] text-green-400';
+            setTimeout(() => { icon.className = 'fas fa-copy text-[10px]'; }, 1500);
+        });
+        this.querySelector('#updateBinaryBtn')?.addEventListener('click', () => this.updateBinary());
+    }
+
+    async updateBinary() {
+        const btn = this.querySelector('#updateBinaryBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Updating...';
+        }
+        try {
+            await api.updateLlamaBinary();
+            this.updateInfo = null;
+            await this.refresh();
+        } catch (e) {
+            console.error('Failed to update llama-server:', e);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-exclamation-circle mr-1 text-red-400"></i>Failed';
+                setTimeout(() => { btn.innerHTML = '<i class="fas fa-arrows-rotate mr-1"></i>Update'; }, 3000);
+            }
+        }
     }
 
     renderModels() {
@@ -487,11 +565,17 @@ export class LocalLlmView extends Component {
             ? true
             : confirm('Set this model as the default LLM?\n\nYes = replaces "default" in llm.json (existing default is preserved as "default_old")\nNo = saves as "local-llama" instead');
 
-        const btn = this.querySelector(`.activate-btn[data-id="${id}"]`);
-        const card = btn?.closest('[data-model-id]');
-        if (btn) {
-            btn.disabled = true;
-            btn.innerHTML = '<span class="inline-block w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin"></span> Loading...';
+        const gridBtn = this.querySelector(`.activate-btn[data-id="${id}"]`);
+        const startBtn = this.querySelector('#startLastBtn');
+        const card = gridBtn?.closest('[data-model-id]');
+        const spinnerHtml = '<span class="inline-block w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin"></span>';
+        if (gridBtn) {
+            gridBtn.disabled = true;
+            gridBtn.innerHTML = `${spinnerHtml} Starting...`;
+        }
+        if (startBtn) {
+            startBtn.disabled = true;
+            startBtn.innerHTML = `${spinnerHtml} Starting...`;
         }
         // Clear any previous error
         card?.querySelector('.activate-error')?.remove();
@@ -504,9 +588,13 @@ export class LocalLlmView extends Component {
             await this.refresh();
         } catch (e) {
             console.error('Failed to activate model:', e);
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-play mr-1"></i>Activate';
+            if (gridBtn) {
+                gridBtn.disabled = false;
+                gridBtn.innerHTML = '<i class="fas fa-play mr-1"></i>Activate';
+            }
+            if (startBtn) {
+                startBtn.disabled = false;
+                startBtn.innerHTML = '<i class="fas fa-play mr-1"></i>Start';
             }
             if (card) {
                 const errorEl = document.createElement('div');

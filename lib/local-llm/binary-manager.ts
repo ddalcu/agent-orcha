@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createWriteStream, existsSync } from 'fs';
@@ -9,7 +9,7 @@ import { logger } from '../logger.ts';
 type Platform = 'macos-arm64' | 'macos-x64' | 'win-x64' | 'linux-x64' | 'linux-arm64';
 
 export interface GpuInfo {
-  accel: 'none' | 'cuda-12.4' | 'cuda-13.1' | 'vulkan';
+  accel: 'none' | 'metal' | 'cuda-12.4' | 'cuda-13.1' | 'vulkan';
   name?: string;
 }
 
@@ -28,13 +28,13 @@ let cachedGpu: GpuInfo | null = null;
  * - NVIDIA on Windows: CUDA (13.1 or 12.4 based on driver), Vulkan fallback for old drivers
  * - NVIDIA on Linux: Vulkan (llama.cpp doesn't ship Linux CUDA builds)
  * - AMD/Intel on Windows or Linux: Vulkan (universal GPU backend)
- * - macOS: 'none' (Metal is built into the macOS binary)
+ * - macOS: 'metal' (Metal is built into the macOS binary, but we tag it for runtime flag selection)
  */
 export function detectGpu(): GpuInfo {
   if (cachedGpu) return cachedGpu;
 
   if (process.platform === 'darwin') {
-    cachedGpu = { accel: 'none' };
+    cachedGpu = { accel: 'metal' };
     return cachedGpu;
   }
 
@@ -329,6 +329,109 @@ async function downloadBinary(destDir: string, platform: Platform, gpu: GpuInfo)
   }
 
   logger.info(`[BinaryManager] llama-server ready at ${path.join(destDir, BINARY_NAME)}`);
+}
+
+/**
+ * Get the version string from the local llama-server binary without triggering a download.
+ * llama-server outputs version to stderr (mixed with GPU init logs), so we capture both streams.
+ */
+export function getBinaryVersion(baseDir: string): string | null {
+  function parseVersion(binPath: string): string | null {
+    try {
+      const result = spawnSync(binPath, ['--version'], { timeout: 5000, encoding: 'utf-8' });
+      const output = (result.stdout || '') + '\n' + (result.stderr || '');
+      const match = output.match(/version:\s*(.+)/i);
+      return match ? match[1]!.trim() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Check system PATH first
+  try {
+    const cmd = process.platform === 'win32' ? 'where' : 'which';
+    const sysPath = execFileSync(cmd, ['llama-server'], { encoding: 'utf-8', timeout: 3000 }).trim().split('\n')[0]!;
+    if (sysPath) return parseVersion(sysPath);
+  } catch { /* not on PATH */ }
+
+  // Check local binary
+  const platform = detectPlatform();
+  const gpu = detectGpu();
+  const binPath = path.join(baseDir, '.llama-server', getBinaryDirName(platform, gpu), BINARY_NAME);
+  if (!existsSync(binPath)) return null;
+
+  return parseVersion(binPath);
+}
+
+/**
+ * Check if llama-server is a system install (on PATH) vs managed by us.
+ */
+export function isSystemBinary(): boolean {
+  try {
+    const cmd = process.platform === 'win32' ? 'where' : 'which';
+    execFileSync(cmd, ['llama-server'], { encoding: 'utf-8', timeout: 3000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Delete the current managed binary and re-download the latest release from GitHub.
+ */
+export async function updateBinary(baseDir: string): Promise<void> {
+  const platform = detectPlatform();
+  const gpu = detectGpu();
+  const dirName = getBinaryDirName(platform, gpu);
+  const binDir = path.join(baseDir, '.llama-server', dirName);
+  await fs.rm(binDir, { recursive: true, force: true });
+  await downloadBinary(binDir, platform, gpu);
+}
+
+export interface UpdateInfo {
+  available: boolean;
+  currentBuild: number | null;
+  latestBuild: number | null;
+  latestTag: string | null;
+  publishedAt: string | null;
+  daysNewer: number | null;
+}
+
+/**
+ * Check if a newer llama-server release is available on GitHub.
+ * Parses the local build number from version string (e.g., "8234 (abc123)")
+ * and compares with the latest GitHub release tag (e.g., "b8300").
+ */
+export async function checkForUpdate(baseDir: string): Promise<UpdateInfo> {
+  const version = getBinaryVersion(baseDir);
+  const currentBuild = version ? parseInt(version.match(/^(\d+)/)?.[1] || '', 10) || null : null;
+
+  try {
+    const res = await fetch(RELEASES_API);
+    if (!res.ok) return { available: false, currentBuild, latestBuild: null, latestTag: null, publishedAt: null, daysNewer: null };
+
+    const release: any = await res.json();
+    const tag = release.tag_name; // e.g., "b8300"
+    const latestBuild = parseInt(tag?.replace(/^b/, '') || '', 10) || null;
+    const publishedAt = release.published_at || null;
+
+    let daysNewer: number | null = null;
+    if (publishedAt && currentBuild && latestBuild && latestBuild > currentBuild) {
+      daysNewer = Math.max(0, Math.floor((Date.now() - new Date(publishedAt).getTime()) / 86_400_000));
+    }
+
+    return {
+      available: !!(currentBuild && latestBuild && latestBuild > currentBuild),
+      currentBuild,
+      latestBuild,
+      latestTag: tag || null,
+      publishedAt,
+      daysNewer,
+    };
+  } catch (err) {
+    logger.warn('[BinaryManager] Failed to check for updates:', err);
+    return { available: false, currentBuild, latestBuild: null, latestTag: null, publishedAt: null, daysNewer: null };
+  }
 }
 
 // Exported for testing — not part of the public API
