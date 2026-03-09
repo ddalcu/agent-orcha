@@ -73,7 +73,12 @@ export class LlamaServerProcess {
 
     logger.info(`[LlamaServer] Starting: ${binaryPath} ${args.join(' ')}`);
 
-    this.proc = spawn(binaryPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    // Force CUDA to use the discrete NVIDIA GPU on multi-GPU systems (e.g. laptops
+    // with both an Intel iGPU and an NVIDIA dGPU). Without this, Windows may route
+    // the process to the integrated GPU despite having a CUDA build.
+    const env = { ...process.env, CUDA_VISIBLE_DEVICES: '0' };
+
+    this.proc = spawn(binaryPath, args, { stdio: ['ignore', 'ignore', 'pipe'], env });
 
     // Buffer stderr so we can log it if the process crashes
     const stderrChunks: Buffer[] = [];
