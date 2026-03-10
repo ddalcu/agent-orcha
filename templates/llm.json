@@ -3,8 +3,7 @@
   "models": {
     "default": {
       "provider": "local",
-      "model": "Qwen3.5-9B-Q4_K_M",
-      "contextSize": 8192
+      "model": "Qwen3.5-9B-Q4_K_M"
     }
   },
   "embeddings": {
