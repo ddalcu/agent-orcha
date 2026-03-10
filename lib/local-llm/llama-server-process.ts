@@ -14,6 +14,7 @@ export interface ServerOptions {
   threads?: number;
   batchSize?: number;
   ubatchSize?: number;
+  parallel?: number;
 }
 
 const HEALTH_POLL_MS = 500;
@@ -69,6 +70,7 @@ export class LlamaServerProcess {
     if (options.threads) args.push('--threads', String(options.threads));
     if (options.batchSize) args.push('--batch-size', String(options.batchSize));
     if (options.ubatchSize) args.push('--ubatch-size', String(options.ubatchSize));
+    if (options.parallel !== undefined) args.push('--parallel', String(options.parallel));
     if (options.embedding || this.isEmbedding) args.push('--embedding');
 
     logger.info(`[LlamaServer] Starting: ${binaryPath} ${args.join(' ')}`);
@@ -80,9 +82,16 @@ export class LlamaServerProcess {
 
     this.proc = spawn(binaryPath, args, { stdio: ['ignore', 'ignore', 'pipe'], env });
 
-    // Buffer stderr so we can log it if the process crashes
+    // Buffer stderr and forward to logger so GPU offload info is visible
     const stderrChunks: Buffer[] = [];
-    this.proc.stderr?.on('data', (data: Buffer) => { stderrChunks.push(data); });
+    this.proc.stderr?.on('data', (data: Buffer) => {
+      stderrChunks.push(data);
+      const lines = data.toString().split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed) logger.debug(`[llama-server] ${trimmed}`);
+      }
+    });
 
     this.proc.on('exit', (code, signal) => {
       if (code && code !== 0) {

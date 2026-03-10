@@ -86,6 +86,25 @@ function detectNvidia(): { name?: string; cudaVersion: number } | null {
   }
 }
 
+/**
+ * Query total VRAM in bytes for the first NVIDIA GPU via nvidia-smi.
+ * Returns null on macOS (unified memory — caller should use os.totalmem() instead)
+ * or if nvidia-smi is unavailable.
+ */
+export function detectVramBytes(): number | null {
+  if (process.platform === 'darwin') return null;
+  try {
+    const output = execFileSync(
+      'nvidia-smi',
+      ['--query-gpu=memory.total', '--format=csv,noheader,nounits'],
+      { encoding: 'utf-8', timeout: 5_000 },
+    ).trim().split('\n')[0];
+    const mb = parseInt(output ?? '', 10);
+    if (!isNaN(mb) && mb > 0) return mb * 1024 * 1024;
+  } catch { /* nvidia-smi unavailable */ }
+  return null;
+}
+
 function detectAnyGpu(): string | null {
   try {
     if (process.platform === 'win32') {

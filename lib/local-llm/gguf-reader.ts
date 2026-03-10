@@ -5,6 +5,7 @@ import { logger } from '../logger.ts';
 const GGUF_MAGIC = 0x46554747; // "GGUF" in little-endian
 const METADATA_BUFFER_SIZE = 1024 * 1024; // 1MB covers metadata for all models
 const OS_RESERVED_BYTES = 4 * 1024 * 1024 * 1024; // Reserve 4GB for OS + apps
+const VRAM_RESERVED_BYTES = 768 * 1024 * 1024; // Reserve 768MB for display driver, batch buffers, overhead
 
 export interface GGUFModelInfo {
   contextLength: number;
@@ -97,12 +98,17 @@ export function kvCacheBytesPerToken(info: GGUFModelInfo): number {
 }
 
 /**
- * Calculates optimal context size based on available system RAM.
- * Accounts for model weights, KV cache, and OS overhead.
+ * Calculates optimal context size based on available memory.
+ * On macOS (unified memory) or CPU-only systems, uses system RAM.
+ * On discrete GPU systems, uses vramBytes so the KV cache stays in VRAM
+ * and avoids expensive CPU fallback.
  */
-export function calculateOptimalContextSize(info: GGUFModelInfo): number {
-  const totalRam = os.totalmem();
-  const availableForModel = totalRam - OS_RESERVED_BYTES;
+export function calculateOptimalContextSize(info: GGUFModelInfo, vramBytes?: number | null): number {
+  // Use VRAM budget on discrete GPU systems; fall back to system RAM otherwise
+  // (macOS unified memory, CPU-only, or when VRAM detection fails).
+  const memoryPool = vramBytes ?? os.totalmem();
+  const reserved = vramBytes ? VRAM_RESERVED_BYTES : OS_RESERVED_BYTES;
+  const availableForModel = memoryPool - reserved;
   const memAfterWeights = availableForModel - info.fileSizeBytes;
 
   if (memAfterWeights <= 0) {
@@ -111,15 +117,16 @@ export function calculateOptimalContextSize(info: GGUFModelInfo): number {
   }
 
   const bytesPerToken = kvCacheBytesPerToken(info);
-  const maxCtxByRam = Math.floor(memAfterWeights / bytesPerToken);
+  const maxCtxByMem = Math.floor(memAfterWeights / bytesPerToken);
   const nativeCtx = info.contextLength;
   const maxNative = Math.floor(nativeCtx * 0.8);
 
-  const optimal = Math.min(maxCtxByRam, maxNative);
+  const optimal = Math.min(maxCtxByMem, maxNative);
   // Floor to nearest 1024 for cleanliness, minimum 2048
   const result = Math.max(2048, Math.floor(optimal / 1024) * 1024);
 
-  logger.info(`[GGUFReader] RAM: ${(totalRam / 1024 / 1024 / 1024).toFixed(0)}GB total, ${(memAfterWeights / 1024 / 1024 / 1024).toFixed(1)}GB available for KV | KV/token: ${bytesPerToken} bytes | max by RAM: ${maxCtxByRam} | max by model (80%): ${maxNative} | optimal: ${result}`);
+  const poolLabel = vramBytes ? 'VRAM' : 'RAM';
+  logger.info(`[GGUFReader] ${poolLabel}: ${(memoryPool / 1024 / 1024 / 1024).toFixed(0)}GB total, ${(memAfterWeights / 1024 / 1024 / 1024).toFixed(1)}GB available for KV | KV/token: ${bytesPerToken} bytes | max by ${poolLabel}: ${maxCtxByMem} | max by model (80%): ${maxNative} | optimal: ${result}`);
   return result;
 }
 

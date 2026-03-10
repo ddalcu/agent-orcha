@@ -256,8 +256,11 @@ export class LocalLlmView extends Component {
             const modelName = activeModel ? activeModel.split('/').pop() : 'Unknown';
             const mem = this.status.memoryEstimate;
             const totalRam = this.status.systemRamBytes;
+            const vram = this.status.vramBytes;
+            const memPool = vram ?? totalRam;
+            const memPoolLabel = vram ? 'VRAM' : 'System RAM';
             const ctxSize = this.status.contextSize;
-            const memPct = mem && totalRam ? Math.round((mem.totalBytes / totalRam) * 100) : null;
+            const memPct = mem && memPool ? Math.round((mem.totalBytes / memPool) * 100) : null;
             const memBarColor = memPct > 80 ? 'bg-red-500' : memPct > 60 ? 'bg-amber-500' : 'bg-green-500';
 
             html += `
@@ -287,7 +290,7 @@ export class LocalLlmView extends Component {
                         <div class="flex items-center gap-3 text-xs text-gray-500 flex-shrink-0">
                             <span title="Model weights"><i class="fas fa-cube mr-0.5"></i>${formatBytes(mem.modelBytes)}</span>
                             <span title="KV cache"><i class="fas fa-memory mr-0.5"></i>${formatBytes(mem.kvCacheBytes)}</span>
-                            <span title="Total estimated / System RAM">${formatBytes(mem.totalBytes)} / ${formatBytes(totalRam)}</span>
+                            <span title="Total estimated / ${memPoolLabel}">${formatBytes(mem.totalBytes)} / ${formatBytes(memPool)}</span>
                         </div>
                     </div>` : ''}
                 </div>`;

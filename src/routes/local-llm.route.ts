@@ -8,6 +8,7 @@ import {
   LLMFactory,
 } from '../../lib/llm/index.ts';
 import { detectProvider } from '../../lib/llm/provider-detector.ts';
+import { detectVramBytes } from '../../lib/local-llm/binary-manager.ts';
 import { logger } from '../../lib/logger.ts';
 
 export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
@@ -30,6 +31,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       embedding: embeddingStatus,
       systemRamBytes: os.totalmem(),
       freeRamBytes: os.freemem(),
+      vramBytes: status.gpu.accel !== 'none' ? detectVramBytes() : null,
       defaultProvider,
     };
   });

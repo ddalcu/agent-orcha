@@ -1,8 +1,9 @@
 import * as path from 'path';
+import { stat } from 'fs/promises';
 import { LlamaServerProcess } from './llama-server-process.ts';
 import { ModelManager } from './model-manager.ts';
 import { readGGUFModelInfo, calculateOptimalContextSize, kvCacheBytesPerToken } from './gguf-reader.ts';
-import { detectGpu, type GpuInfo } from './binary-manager.ts';
+import { detectGpu, detectVramBytes, type GpuInfo } from './binary-manager.ts';
 import { logger } from '../logger.ts';
 
 // ─── Singleton Server Instances ─────────────────────────────────────────────
@@ -30,10 +31,25 @@ export const llamaEngine = {
     if (!chatServer) chatServer = new LlamaServerProcess(this._baseDir);
     if (chatServer.running && chatServer.modelPath === modelPath) return;
 
-    // Calculate optimal context size from GGUF metadata + available RAM
+    // Auto-detect multimodal projector (mmproj) for vision support
+    const modelFileName = path.basename(modelPath);
+    const manager = new ModelManager(this._baseDir);
+    const mmproj = await manager.findMmprojForModel(modelFileName);
+    this._supportsVision = !!mmproj;
+
+    // Calculate optimal context size from GGUF metadata + available memory.
+    // Subtract mmproj VRAM usage so the KV cache budget accounts for it.
     const modelInfo = await readGGUFModelInfo(modelPath);
+    const gpu = detectGpu();
     if (!contextSize && modelInfo) {
-      contextSize = calculateOptimalContextSize(modelInfo);
+      let vramBytes = gpu.accel !== 'none' ? detectVramBytes() : null;
+      if (vramBytes && mmproj) {
+        try {
+          const mmprojStat = await stat(mmproj);
+          vramBytes = Math.max(0, vramBytes - mmprojStat.size);
+        } catch { /* mmproj stat failed — ignore */ }
+      }
+      contextSize = calculateOptimalContextSize(modelInfo, vramBytes);
     }
 
     // Estimate memory usage for status reporting
@@ -46,24 +62,17 @@ export const llamaEngine = {
       };
     }
 
-    // Auto-detect multimodal projector (mmproj) for vision support
-    const modelFileName = path.basename(modelPath);
-    const manager = new ModelManager(this._baseDir);
-    const mmproj = await manager.findMmprojForModel(modelFileName);
-    this._supportsVision = !!mmproj;
-
     if (mmproj) {
       logger.info(`[LlamaEngine] Vision enabled with mmproj: ${path.basename(mmproj)}`);
     }
 
     this._detectedContextSize = contextSize ?? null;
-    const gpu = detectGpu();
     const isGpu = gpu.accel !== 'none';
     await chatServer.start({
       modelPath,
       contextSize,
       mmproj: mmproj ?? undefined,
-      ...(isGpu ? { batchSize: 4096, ubatchSize: 1024 } : {}),
+      ...(isGpu ? { batchSize: 2048, ubatchSize: 512, parallel: 1 } : {}),
     });
   },
 
