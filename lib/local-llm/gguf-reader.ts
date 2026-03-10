@@ -5,7 +5,8 @@ import { logger } from '../logger.ts';
 const GGUF_MAGIC = 0x46554747; // "GGUF" in little-endian
 const METADATA_BUFFER_SIZE = 1024 * 1024; // 1MB covers metadata for all models
 const OS_RESERVED_BYTES = 4 * 1024 * 1024 * 1024; // Reserve 4GB for OS + apps
-const VRAM_RESERVED_BYTES = 768 * 1024 * 1024; // Reserve 768MB for display driver, batch buffers, overhead
+// Reserve for: display driver/framebuffer (~300MB) + CUDA compute buffer (~500MB) + misc overhead
+const VRAM_RESERVED_BYTES = 1280 * 1024 * 1024;
 
 export interface GGUFModelInfo {
   contextLength: number;
@@ -14,6 +15,12 @@ export interface GGUFModelInfo {
   headCount: number;
   headCountKv: number;
   fileSizeBytes: number;
+  /** Every Nth layer is a full attention layer; 0 means all layers are attention (pure transformer). */
+  fullAttentionInterval: number;
+  /** SSM recurrent state size (d_state). 0 for pure attention models. */
+  ssmStateSize: number;
+  /** SSM inner dimension (d_inner). 0 for pure attention models. */
+  ssmInnerSize: number;
 }
 
 /**
@@ -38,8 +45,17 @@ export async function readGGUFModelInfo(modelPath: string): Promise<GGUFModelInf
     const kvCount = Number(buf.readBigUInt64LE(16));
     let pos = 24;
 
-    const info: Partial<GGUFModelInfo> = { fileSizeBytes: stat.size };
-    const needed = new Set(['context_length', 'block_count', 'embedding_length', 'attention.head_count', 'attention.head_count_kv']);
+    const info: Partial<GGUFModelInfo> = {
+      fileSizeBytes: stat.size,
+      fullAttentionInterval: 0,
+      ssmStateSize: 0,
+      ssmInnerSize: 0,
+    };
+    const needed = new Set([
+      'context_length', 'block_count', 'embedding_length',
+      'attention.head_count', 'attention.head_count_kv',
+      'full_attention_interval', 'ssm.state_size', 'ssm.inner_size',
+    ]);
 
     for (let i = 0; i < kvCount && pos < bytesRead - 12 && needed.size > 0; i++) {
       if (pos + 8 > bytesRead) break;
@@ -69,6 +85,15 @@ export async function readGGUFModelInfo(modelPath: string): Promise<GGUFModelInf
       } else if (key.endsWith('.attention.head_count')) {
         info.headCount = readScalar(buf, pos, vtype) ?? 0;
         needed.delete('attention.head_count');
+      } else if (key.endsWith('.full_attention_interval')) {
+        info.fullAttentionInterval = readScalar(buf, pos, vtype) ?? 0;
+        needed.delete('full_attention_interval');
+      } else if (key.endsWith('.ssm.state_size')) {
+        info.ssmStateSize = readScalar(buf, pos, vtype) ?? 0;
+        needed.delete('ssm.state_size');
+      } else if (key.endsWith('.ssm.inner_size')) {
+        info.ssmInnerSize = readScalar(buf, pos, vtype) ?? 0;
+        needed.delete('ssm.inner_size');
       }
 
       pos = skipValue(buf, pos, vtype, bytesRead);
@@ -78,7 +103,9 @@ export async function readGGUFModelInfo(modelPath: string): Promise<GGUFModelInf
     if (!info.contextLength) return null;
 
     const result = info as GGUFModelInfo;
-    logger.info(`[GGUFReader] ${modelPath.split('/').pop()}: ctx=${result.contextLength} layers=${result.blockCount} embd=${result.embeddingLength} heads=${result.headCount} kv_heads=${result.headCountKv} size=${(result.fileSizeBytes / 1024 / 1024 / 1024).toFixed(1)}GB`);
+    const isHybrid = result.fullAttentionInterval > 0;
+    const attnLayers = isHybrid ? Math.ceil(result.blockCount / result.fullAttentionInterval) : result.blockCount;
+    logger.info(`[GGUFReader] ${modelPath.split('/').pop()}: ctx=${result.contextLength} layers=${result.blockCount} attn_layers=${attnLayers} embd=${result.embeddingLength} heads=${result.headCount} kv_heads=${result.headCountKv} size=${(result.fileSizeBytes / 1024 / 1024 / 1024).toFixed(1)}GB${isHybrid ? ` hybrid(interval=${result.fullAttentionInterval})` : ''}`);
     return result;
   } catch (err) {
     logger.warn(`[GGUFReader] Failed to read GGUF metadata: ${err}`);
@@ -90,11 +117,30 @@ export async function readGGUFModelInfo(modelPath: string): Promise<GGUFModelInf
 
 /**
  * Estimates KV cache bytes per token for a model.
- * KV cache = 2 (K+V) * n_layers * n_kv_heads * head_dim * 2 bytes (f16)
+ * For hybrid SSM+Attention models, only attention layers have a KV cache that
+ * scales with context length. SSM layers use a fixed-size recurrent state instead.
+ * KV cache = 2 (K+V) * n_attn_layers * n_kv_heads * head_dim * 2 bytes (f16)
  */
 export function kvCacheBytesPerToken(info: GGUFModelInfo): number {
   const headDim = info.embeddingLength / info.headCount;
-  return 2 * info.blockCount * info.headCountKv * headDim * 2;
+  const attnLayers = info.fullAttentionInterval > 0
+    ? Math.ceil(info.blockCount / info.fullAttentionInterval)
+    : info.blockCount;
+  return 2 * attnLayers * info.headCountKv * headDim * 2;
+}
+
+/**
+ * Estimates fixed VRAM for SSM recurrent state buffers (context-independent).
+ * R (conv state) + S (recurrent state) per SSM layer.
+ * Returns 0 for pure attention models.
+ */
+export function rsFixedBytes(info: GGUFModelInfo): number {
+  if (info.fullAttentionInterval === 0 || !info.ssmStateSize || !info.ssmInnerSize) return 0;
+  const ssmLayers = info.blockCount - Math.ceil(info.blockCount / info.fullAttentionInterval);
+  // S (f32): ssm_d_state * ssm_d_inner * 4 bytes * ssm_layers
+  const sBytes = info.ssmStateSize * info.ssmInnerSize * 4 * ssmLayers;
+  // R (conv state) is small (~5% of S), add a small buffer
+  return Math.round(sBytes * 1.05);
 }
 
 /**
@@ -116,8 +162,12 @@ export function calculateOptimalContextSize(info: GGUFModelInfo, vramBytes?: num
     return 2048;
   }
 
+  // Subtract fixed RS buffer cost (SSM recurrent state — context-independent)
+  const rsBytes = rsFixedBytes(info);
+  const memForKv = memAfterWeights - rsBytes;
+
   const bytesPerToken = kvCacheBytesPerToken(info);
-  const maxCtxByMem = Math.floor(memAfterWeights / bytesPerToken);
+  const maxCtxByMem = Math.floor(memForKv / bytesPerToken);
   const nativeCtx = info.contextLength;
   const maxNative = Math.floor(nativeCtx * 0.8);
 
@@ -126,7 +176,7 @@ export function calculateOptimalContextSize(info: GGUFModelInfo, vramBytes?: num
   const result = Math.max(2048, Math.floor(optimal / 1024) * 1024);
 
   const poolLabel = vramBytes ? 'VRAM' : 'RAM';
-  logger.info(`[GGUFReader] ${poolLabel}: ${(memoryPool / 1024 / 1024 / 1024).toFixed(0)}GB total, ${(memAfterWeights / 1024 / 1024 / 1024).toFixed(1)}GB available for KV | KV/token: ${bytesPerToken} bytes | max by ${poolLabel}: ${maxCtxByMem} | max by model (80%): ${maxNative} | optimal: ${result}`);
+  logger.info(`[GGUFReader] ${poolLabel}: ${(memoryPool / 1024 / 1024 / 1024).toFixed(0)}GB total, ${(memForKv / 1024 / 1024 / 1024).toFixed(1)}GB for KV | KV/token: ${bytesPerToken} bytes | RS fixed: ${(rsBytes / 1024 / 1024).toFixed(0)}MB | max by ${poolLabel}: ${maxCtxByMem} | max by model (80%): ${maxNative} | optimal: ${result}`);
   return result;
 }
 
