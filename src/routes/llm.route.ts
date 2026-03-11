@@ -12,6 +12,7 @@ import { ModelManager } from '../../lib/local-llm/index.ts';
 import { humanMessage, aiMessage } from '../../lib/types/llm-types.ts';
 import type { MessageContent, ContentPart } from '../../lib/types/llm-types.ts';
 import { logger } from '../../lib/logger.ts';
+import { extractDocumentText } from '../../lib/utils/document-extract.ts';
 
 const PROVIDER_ENV_VARS: Record<string, string> = {
   openai: 'OPENAI_API_KEY',
@@ -32,6 +33,7 @@ interface LLMParams {
 interface Attachment {
   data: string;
   mediaType: string;
+  name?: string;
 }
 
 interface ChatBody {
@@ -40,14 +42,24 @@ interface ChatBody {
   attachments?: Attachment[];
 }
 
-function buildUserContent(text: string, attachments?: Attachment[]): MessageContent {
+async function buildUserContent(text: string, attachments?: Attachment[]): Promise<MessageContent> {
   if (!Array.isArray(attachments) || attachments.length === 0) return text;
 
   const parts: ContentPart[] = [];
   if (text) parts.push({ type: 'text', text });
   for (const att of attachments) {
-    if (att && typeof att.data === 'string' && typeof att.mediaType === 'string') {
+    if (!att || typeof att.data !== 'string' || typeof att.mediaType !== 'string') continue;
+
+    if (att.mediaType.startsWith('image/')) {
       parts.push({ type: 'image', data: att.data, mediaType: att.mediaType });
+    } else {
+      try {
+        const doc = await extractDocumentText(att.data, att.mediaType, att.name);
+        const label = att.name ? `[File: ${att.name}]` : `[Attached ${doc.format} document]`;
+        parts.push({ type: 'text', text: `${label}\n${doc.text}` });
+      } catch (err: any) {
+        parts.push({ type: 'text', text: `[Failed to extract ${att.name ?? 'attachment'}: ${err.message}]` });
+      }
     }
   }
   return parts.length > 0 ? parts : text;
@@ -257,7 +269,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         const store = fastify.orchestrator.memory.getStore();
         const history = sessionId ? store.getMessages(sessionId) : [];
-        const userContent = buildUserContent(message, attachments);
+        const userContent = await buildUserContent(message, attachments);
         const messages = [...history, humanMessage(userContent)];
 
         const llm = await LLMFactory.create(name);
@@ -330,7 +342,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         const store = fastify.orchestrator.memory.getStore();
         const history = sessionId ? store.getMessages(sessionId) : [];
-        const userContent = buildUserContent(message, attachments);
+        const userContent = await buildUserContent(message, attachments);
         const messages = [...history, humanMessage(userContent)];
 
         // Store text-only user message (no base64 in memory)
