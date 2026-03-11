@@ -26,9 +26,11 @@ export const llamaEngine = {
   _memoryEstimate: null as { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null,
   _supportsVision: false,
 
-  async load(modelPath: string, contextSize?: number): Promise<void> {
+  async load(modelPath: string, opts?: { contextSize?: number; reasoningBudget?: number }): Promise<void> {
     if (!chatServer) chatServer = new LlamaServerProcess(this._baseDir);
     if (chatServer.running && chatServer.modelPath === modelPath) return;
+
+    let contextSize = opts?.contextSize;
 
     // Calculate optimal context size from GGUF metadata + available RAM
     const modelInfo = await readGGUFModelInfo(modelPath);
@@ -68,6 +70,7 @@ export const llamaEngine = {
       flashAttn: isGpu,
       ...(isGpu ? { batchSize: 4096, ubatchSize: 1024 } : {}),
       ...(isMetal ? { cacheTypeK: 'q8_0', cacheTypeV: 'q8_0', mlock: true } : {}),
+      ...(opts?.reasoningBudget !== undefined ? { reasoningBudget: opts.reasoningBudget } : {}),
     });
   },
 
@@ -75,16 +78,16 @@ export const llamaEngine = {
     if (chatServer) await chatServer.stop();
   },
 
-  async swap(modelPath: string, contextSize?: number): Promise<void> {
+  async swap(modelPath: string, opts?: { contextSize?: number; reasoningBudget?: number }): Promise<void> {
     await this.unload();
-    await this.load(modelPath, contextSize);
+    await this.load(modelPath, opts);
   },
 
-  async ensureRunning(modelName: string, contextSize?: number): Promise<void> {
+  async ensureRunning(modelName: string, opts?: { contextSize?: number; reasoningBudget?: number }): Promise<void> {
     if (chatServer?.running) return;
     logger.info(`[LlamaEngine] Auto-starting chat model: ${modelName}`);
     const filePath = await resolveModelPath(this._baseDir, modelName);
-    await this.load(filePath, contextSize);
+    await this.load(filePath, opts);
   },
 
   getStatus(): { running: boolean; activeModel: string | null; port: number | null; contextSize: number | null; memoryEstimate: { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null; gpu: GpuInfo; supportsVision: boolean } {

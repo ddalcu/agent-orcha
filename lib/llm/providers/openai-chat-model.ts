@@ -84,7 +84,7 @@ function parseToolArgs(raw: string | undefined): Record<string, unknown> {
       return JSON.parse(raw.replace(/'/g, '"'));
     } catch {
       logger.warn(`[OpenAI] Failed to parse tool args: ${raw.slice(0, 200)}`);
-      return {};
+      return { _parseError: `Could not parse your tool arguments as JSON. Raw text: ${raw.slice(0, 300)}` };
     }
   }
 }

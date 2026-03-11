@@ -106,7 +106,13 @@ async function main(): Promise<void> {
     }
   }
 
+  let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
+    if (shuttingDown) {
+      logger.info('\nForce exit');
+      process.exit(1);
+    }
+    shuttingDown = true;
     logger.info('\nShutting down...');
     await server.close();
     await orchestrator.close();

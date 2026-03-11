@@ -19,6 +19,7 @@ export interface ServerOptions {
   cacheTypeK?: string;
   cacheTypeV?: string;
   mlock?: boolean;
+  reasoningBudget?: number;
 }
 
 const HEALTH_POLL_MS = 500;
@@ -122,6 +123,7 @@ export class LlamaServerProcess {
       '--port', String(this._port),
       '--host', '127.0.0.1',
       '--n-gpu-layers', String(options.gpuLayers ?? -1),
+      '--parallel', '1',
     ];
 
     if (options.mmproj) args.push('--mmproj', options.mmproj);
@@ -133,6 +135,10 @@ export class LlamaServerProcess {
     if (options.cacheTypeK) args.push('--cache-type-k', options.cacheTypeK);
     if (options.cacheTypeV) args.push('--cache-type-v', options.cacheTypeV);
     if (options.mlock) args.push('--mlock');
+    if (options.reasoningBudget !== undefined) {
+      args.push('--reasoning-format', 'deepseek');
+      args.push('--reasoning-budget', String(options.reasoningBudget));
+    }
     if (options.embedding || this.isEmbedding) args.push('--embedding');
 
     logger.info(`[LlamaServer] Starting: ${binaryPath} ${args.join(' ')}`);

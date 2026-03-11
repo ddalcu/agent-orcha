@@ -127,8 +127,14 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(404).send({ error: 'Model not found' });
       }
 
+      // Read existing config for contextSize and reasoningBudget
+      const currentDefault = getLLMConfig()?.models['default'];
+
       try {
-        await llamaEngine.swap(model.filePath);
+        await llamaEngine.swap(model.filePath, {
+          ...(currentDefault?.contextSize !== undefined ? { contextSize: currentDefault.contextSize } : {}),
+          ...(currentDefault?.reasoningBudget !== undefined ? { reasoningBudget: currentDefault.reasoningBudget } : {}),
+        });
       } catch (err: any) {
         logger.error('[LocalLLM] Failed to load model:', err);
         return reply.status(500).send({ error: `Failed to load: ${err.message}` });
@@ -140,6 +146,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         provider: 'local' as const,
         model: model.fileName.replace(/\.gguf$/i, ''),
         ...(detectedCtx ? { contextSize: detectedCtx } : {}),
+        reasoningBudget: currentDefault?.reasoningBudget ?? 0,
       };
 
       // Update llm.json

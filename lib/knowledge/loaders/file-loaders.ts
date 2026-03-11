@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { PDFParse } from 'pdf-parse';
 import type { Document } from '../../types/llm-types.ts';
 
 // --- Reusable content parsers (used by both file loaders and WebLoader) ---
@@ -144,7 +145,6 @@ export class CSVLoader {
 
 /**
  * PDF file loader. Uses pdf-parse for extraction.
- * pdf-parse must be installed separately: npm install pdf-parse
  */
 export class PDFLoader {
   private filePath: string;
@@ -153,26 +153,24 @@ export class PDFLoader {
   }
 
   async load(): Promise<Document[]> {
-    let pdfParse: any;
-    try {
-      // @ts-ignore - pdf-parse is an optional runtime dependency
-      pdfParse = (await import('pdf-parse')).default;
-    } catch {
-      throw new Error(
-        'pdf-parse is required for PDF loading. Install it with: npm install pdf-parse'
-      );
+    const buffer = await fs.readFile(this.filePath);
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    const doc = await parser.load();
+
+    const pages: string[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const result = await parser.getText({ pageNumber: i });
+      // getText returns { pages: [{ text }] }
+      const pageText = (result as any)?.pages?.map((p: any) => p.text).join('\n') ?? '';
+      pages.push(pageText);
     }
 
-    const buffer = await fs.readFile(this.filePath);
-    const data = await pdfParse(buffer);
-
-    return [({
-      pageContent: data.text,
+    return [{
+      pageContent: pages.join('\n'),
       metadata: {
         source: this.filePath,
-        pdf_pages: data.numpages,
-        pdf_info: data.info,
+        pdf_pages: doc.numPages,
       },
-    })];
+    }];
   }
 }

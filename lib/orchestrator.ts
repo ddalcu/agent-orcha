@@ -828,6 +828,69 @@ export class Orchestrator {
     );
   }
 
+  async *streamResumeReactWorkflow(
+    name: string,
+    threadId: string,
+    answer: string
+  ): AsyncGenerator<{ type: 'status' | 'result'; data: unknown }, void, unknown> {
+    this.ensureInitialized();
+
+    const definition = this.workflowLoader.get(name);
+    if (!definition) {
+      throw new Error(`Workflow not found: ${name}`);
+    }
+
+    if (definition.type !== 'react') {
+      throw new Error(`Workflow "${name}" is not a ReAct workflow`);
+    }
+
+    const statusQueue: Array<{ type: 'status' | 'result'; data: unknown }> = [];
+    let resolveNext: ((value: void) => void) | null = null;
+    let isComplete = false;
+
+    const onStatus = (status: import('./workflows/types.ts').WorkflowStatus) => {
+      statusQueue.push({ type: 'status', data: status });
+      if (resolveNext) {
+        resolveNext();
+        resolveNext = null;
+      }
+    };
+
+    const executionPromise = this.reactWorkflowExecutor
+      .resumeWithAnswer(definition as ReactWorkflowDefinition, threadId, answer, onStatus)
+      .then((result) => {
+        isComplete = true;
+        statusQueue.push({ type: 'result', data: result });
+        if (resolveNext) {
+          resolveNext();
+          resolveNext = null;
+        }
+      })
+      .catch((error) => {
+        isComplete = true;
+        statusQueue.push({
+          type: 'result',
+          data: { error: error instanceof Error ? error.message : String(error) },
+        });
+        if (resolveNext) {
+          resolveNext();
+          resolveNext = null;
+        }
+      });
+
+    while (!isComplete || statusQueue.length > 0) {
+      if (statusQueue.length > 0) {
+        yield statusQueue.shift()!;
+      } else {
+        await new Promise<void>((resolve) => {
+          resolveNext = resolve;
+        });
+      }
+    }
+
+    await executionPromise;
+  }
+
   /**
    * Gets all active interrupts for a workflow.
    */

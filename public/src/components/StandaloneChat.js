@@ -17,7 +17,7 @@ class StandaloneChat extends HTMLElement {
         this.agentName = parts[parts.length - 1] || '';
 
         if (!this.agentName) {
-            this.innerHTML = '<div class="flex items-center justify-center h-screen text-gray-400">Invalid agent URL</div>';
+            this.innerHTML = '<div class="auth-overlay"><span class="text-secondary">Invalid agent URL</span></div>';
             return;
         }
 
@@ -43,7 +43,7 @@ class StandaloneChat extends HTMLElement {
         try {
             const res = await fetch(`/api/chat/${this.agentName}/config`);
             if (!res.ok) {
-                this.innerHTML = '<div class="flex items-center justify-center h-screen text-gray-400">Agent not found or not published</div>';
+                this.innerHTML = '<div class="auth-overlay"><span class="text-secondary">Agent not found or not published</span></div>';
                 return;
             }
             this.agentConfig = await res.json();
@@ -55,7 +55,7 @@ class StandaloneChat extends HTMLElement {
                 this.renderChat();
             }
         } catch {
-            this.innerHTML = '<div class="flex items-center justify-center h-screen text-gray-400">Failed to load agent</div>';
+            this.innerHTML = '<div class="auth-overlay"><span class="text-secondary">Failed to load agent</span></div>';
         }
     }
 
@@ -63,21 +63,19 @@ class StandaloneChat extends HTMLElement {
 
     renderPasswordOverlay() {
         this.innerHTML = `
-            <div class="flex items-center justify-center h-screen">
-                <div class="bg-dark-surface border border-dark-border rounded-2xl p-8 w-[380px] max-w-[90vw] fade-in">
+            <div class="auth-overlay">
+                <div class="auth-card">
                     <div class="text-center mb-6">
-                        <i class="fas fa-lock text-2xl text-gray-500 mb-3"></i>
-                        <h2 class="text-lg font-semibold text-gray-100">${this.escapeHtml(this.agentConfig.name)}</h2>
-                        <p class="text-sm text-gray-400 mt-1">This agent requires a password</p>
+                        <i class="fas fa-lock text-2xl text-muted mb-3"></i>
+                        <h2 class="text-lg font-semibold text-primary">${this.escapeHtml(this.agentConfig.name)}</h2>
+                        <p class="text-sm text-secondary mt-1">This agent requires a password</p>
                     </div>
-                    <div id="authError" class="hidden text-sm text-red-400 text-center mb-3"></div>
+                    <div id="authError" class="hidden text-sm text-red text-center mb-3"></div>
                     <div class="relative">
-                        <input id="passwordInput" type="password"
-                            class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-500 transition-colors"
+                        <input id="passwordInput" type="password" class="input w-full"
                             placeholder="Enter password">
                     </div>
-                    <button id="authBtn"
-                        class="w-full mt-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white py-3 rounded-xl font-medium transition-all">
+                    <button id="authBtn" class="btn btn-accent w-full mt-4">
                         Continue
                     </button>
                 </div>
@@ -129,43 +127,39 @@ class StandaloneChat extends HTMLElement {
 
     renderChat() {
         const desc = this.agentConfig.description
-            ? `<p class="text-xs text-gray-500 truncate">${this.escapeHtml(this.agentConfig.description)}</p>`
+            ? `<p class="text-xs text-muted truncate">${this.escapeHtml(this.agentConfig.description)}</p>`
             : '';
 
         this.innerHTML = `
-            <div class="flex flex-col h-screen max-w-4xl mx-auto">
+            <div class="standalone-shell">
                 <!-- Header -->
-                <div class="flex-shrink-0 flex items-center gap-3 px-5 py-4 border-b border-dark-border/40">
-                    <i class="fas fa-robot text-blue-400"></i>
+                <div class="standalone-header">
+                    <i class="fas fa-robot text-accent"></i>
                     <div class="min-w-0">
-                        <h1 class="text-sm font-semibold text-gray-100">${this.escapeHtml(this.agentConfig.name)}</h1>
+                        <h1 class="text-sm font-semibold text-primary">${this.escapeHtml(this.agentConfig.name)}</h1>
                         ${desc}
                     </div>
                 </div>
 
                 <!-- Messages -->
-                <div id="chatMessages" class="flex-1 overflow-y-auto space-y-4 p-4 pr-2 pb-6">
+                <div id="chatMessages" class="chat-messages custom-scrollbar">
                     ${this.renderSampleQuestions()}
                 </div>
 
                 <!-- Input -->
-                <div class="p-3 pt-0">
-                    <div id="attachmentPreview" class="hidden flex flex-wrap gap-2 px-2 pb-2"></div>
-                    <div class="relative bg-dark-surface border border-dark-border/60 rounded-2xl focus-within:border-gray-500 transition-colors">
+                <div class="chat-input-area">
+                    <div id="attachmentPreview" class="attachment-preview"></div>
+                    <div class="chat-input-wrap">
                         <input type="file" id="fileInput" multiple accept="image/*,.pdf" class="hidden">
                         <textarea id="chatInput" rows="1"
-                            class="w-full bg-transparent pl-11 pr-14 py-3 text-gray-100 placeholder-gray-500 resize-none focus:outline-none max-h-[200px]"
                             placeholder="Type a message..."></textarea>
-                        <div class="absolute bottom-2 left-2 flex items-center">
-                            <button id="attachBtn" type="button"
-                                class="text-gray-500 hover:text-gray-300 p-1.5 rounded-lg hover:bg-dark-hover transition-colors"
-                                title="Attach files">
+                        <div class="chat-input-actions left">
+                            <button id="attachBtn" type="button" class="attach-btn" title="Attach files">
                                 <i class="fas fa-plus text-sm"></i>
                             </button>
                         </div>
-                        <div class="absolute bottom-2 right-2 flex items-center gap-2">
-                            <button id="sendBtn"
-                                class="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-all shadow-lg shadow-blue-900/20">
+                        <div class="chat-input-actions right">
+                            <button id="sendBtn" class="send-btn">
                                 <i class="fas fa-paper-plane text-sm"></i>
                             </button>
                         </div>
@@ -182,13 +176,13 @@ class StandaloneChat extends HTMLElement {
         if (!questions || questions.length === 0) return '';
 
         const chips = questions.map(q =>
-            `<button class="sample-question-chip bg-dark-surface border border-dark-border/60 hover:border-gray-500 text-gray-300 text-sm px-4 py-2 rounded-2xl transition-colors text-left">${this.escapeHtml(q)}</button>`
+            `<button class="sample-question-chip">${this.escapeHtml(q)}</button>`
         ).join('');
 
         return `
-            <div id="sampleQuestions" class="flex-1 flex flex-col items-center justify-center gap-4">
-                <p class="text-gray-500 text-sm">Try asking</p>
-                <div class="flex flex-wrap justify-center gap-2 max-w-2xl px-4">${chips}</div>
+            <div id="sampleQuestions" class="welcome-container">
+                <p class="text-muted text-sm">Try asking</p>
+                <div class="sample-questions-wrap">${chips}</div>
             </div>
         `;
     }
@@ -268,22 +262,22 @@ class StandaloneChat extends HTMLElement {
         if (!preview) return;
 
         if (this.pendingAttachments.length === 0) {
-            preview.classList.add('hidden');
+            preview.classList.remove('visible');
             preview.innerHTML = '';
             return;
         }
 
-        preview.classList.remove('hidden');
+        preview.classList.add('visible');
         preview.innerHTML = this.pendingAttachments.map((att, i) => {
             const isImage = att.mediaType.startsWith('image/');
             const thumb = isImage
-                ? `<img src="data:${att.mediaType};base64,${att.data}" class="w-10 h-10 object-cover rounded">`
-                : `<i class="fas fa-file text-gray-400 text-lg"></i>`;
+                ? `<img src="data:${att.mediaType};base64,${att.data}">`
+                : `<i class="fas fa-file text-secondary text-lg"></i>`;
             return `
-                <div class="attachment-pill flex items-center gap-2 bg-dark-bg/60 border border-dark-border/50 rounded-lg px-2 py-1.5 text-xs text-gray-400">
+                <div class="attachment-pill">
                     ${thumb}
-                    <span class="max-w-[120px] truncate">${this.escapeHtml(att.name)}</span>
-                    <button class="attachment-remove text-gray-500 hover:text-gray-300 ml-1" data-index="${i}">
+                    <span class="truncate attachment-name">${this.escapeHtml(att.name)}</span>
+                    <button class="attachment-remove" data-index="${i}">
                         <i class="fas fa-xmark text-xs"></i>
                     </button>
                 </div>
@@ -424,8 +418,7 @@ class StandaloneChat extends HTMLElement {
             const loadingDots = contentDiv.querySelector('.loading-dots');
             if (loadingDots) {
                 loadingDots.remove();
-                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
-                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
+                bubble.querySelector('.response-bubble-inner').classList.remove('loading');
                 contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
                 contentDiv.innerHTML = '';
             }
@@ -451,8 +444,7 @@ class StandaloneChat extends HTMLElement {
             this.finalizeThinkingPill(toolsDiv, thinkingState);
             if (loadingDots) {
                 loadingDots.remove();
-                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
-                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
+                bubble.querySelector('.response-bubble-inner').classList.remove('loading');
                 contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
                 contentDiv.innerHTML = '';
             }
@@ -463,10 +455,10 @@ class StandaloneChat extends HTMLElement {
             const toolId = `tool-${event.runId}`;
             const toolEl = document.createElement('div');
             toolEl.id = toolId;
-            toolEl.className = 'tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-gray-400 font-mono';
+            toolEl.className = 'tool-pill';
             toolEl.dataset.toolInput = typeof event.input === 'string' ? event.input : JSON.stringify(event.input, null, 2);
             toolEl.innerHTML = `
-                <i class="fas fa-circle-notch animate-spin text-blue-400 text-[10px]"></i>
+                <i class="fas fa-circle-notch animate-spin text-blue text-2xs"></i>
                 <span>${this.escapeHtml(event.tool)}</span>
             `;
             toolsDiv.appendChild(toolEl);
@@ -478,36 +470,36 @@ class StandaloneChat extends HTMLElement {
                 const toolInput = toolEl.dataset.toolInput || '';
                 const toolOutput = typeof event.output === 'string' ? event.output : JSON.stringify(event.output, null, 2);
 
-                toolEl.className = 'tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
+                toolEl.className = 'tool-pill done';
                 toolEl.innerHTML = '';
 
                 const pillContent = document.createElement('span');
-                pillContent.className = 'inline-flex items-center gap-1.5';
+                pillContent.className = 'inline-flex items-center gap-1';
                 pillContent.innerHTML = `
-                    <i class="fas fa-check text-green-500 text-[10px]"></i>
+                    <i class="fas fa-check text-green text-2xs"></i>
                     <span>${this.escapeHtml(event.tool)}</span>
                 `;
                 toolEl.appendChild(pillContent);
 
                 const details = document.createElement('div');
-                details.className = 'tool-invocation-details hidden absolute bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
+                details.className = 'tool-invocation-details';
 
                 if (toolInput) {
                     const inputSection = document.createElement('div');
-                    inputSection.className = 'p-3 border-b border-dark-border/50';
-                    inputSection.innerHTML = '<div class="text-xs font-semibold text-gray-400 mb-1">Input</div>';
+                    inputSection.className = 'tool-detail-section';
+                    inputSection.innerHTML = '<h4>Input</h4>';
                     const inputPre = document.createElement('pre');
-                    inputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all';
+                    inputPre.className = 'tool-detail-pre custom-scrollbar';
                     inputPre.textContent = toolInput;
                     inputSection.appendChild(inputPre);
                     details.appendChild(inputSection);
                 }
 
                 const outputSection = document.createElement('div');
-                outputSection.className = 'p-3';
-                outputSection.innerHTML = '<div class="text-xs font-semibold text-gray-400 mb-1">Output</div>';
+                outputSection.className = 'tool-detail-section';
+                outputSection.innerHTML = '<h4>Output</h4>';
                 const outputPre = document.createElement('pre');
-                outputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all';
+                outputPre.className = 'tool-detail-pre custom-scrollbar';
                 outputPre.textContent = toolOutput;
                 outputSection.appendChild(outputPre);
                 details.appendChild(outputSection);
@@ -518,11 +510,11 @@ class StandaloneChat extends HTMLElement {
                     if (details.contains(e.target)) return;
                     e.preventDefault();
                     e.stopPropagation();
-                    toolsDiv.querySelectorAll('.tool-invocation-details:not(.hidden)').forEach(d => {
-                        if (d !== details) d.classList.add('hidden');
+                    toolsDiv.querySelectorAll('.tool-invocation-details.visible').forEach(d => {
+                        if (d !== details) d.classList.remove('visible');
                     });
-                    const wasHidden = details.classList.contains('hidden');
-                    details.classList.toggle('hidden');
+                    const wasHidden = !details.classList.contains('visible');
+                    details.classList.toggle('visible');
                     if (wasHidden) {
                         const pillRect = toolEl.getBoundingClientRect();
                         const containerRect = container.getBoundingClientRect();
@@ -538,22 +530,21 @@ class StandaloneChat extends HTMLElement {
                 });
 
                 document.addEventListener('click', (e) => {
-                    if (!toolEl.contains(e.target)) details.classList.add('hidden');
+                    if (!toolEl.contains(e.target)) details.classList.remove('visible');
                 }, { capture: true });
                 container.scrollTop = container.scrollHeight;
             }
         } else if (event.type === 'result') {
             if (loadingDots) {
                 loadingDots.remove();
-                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
-                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
+                bubble.querySelector('.response-bubble-inner').classList.remove('loading');
                 contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
                 contentDiv.innerHTML = '';
             }
             const resultContainer = document.createElement('div');
-            resultContainer.className = 'bg-dark-bg/50 border border-dark-border rounded-lg p-4';
+            resultContainer.className = 'panel';
             const resultPre = document.createElement('pre');
-            resultPre.className = 'text-sm text-gray-300 font-mono whitespace-pre-wrap overflow-x-auto';
+            resultPre.className = 'text-sm text-primary font-mono whitespace-pre-wrap overflow-x-auto';
             resultPre.textContent = JSON.stringify(event.output, null, 2);
             resultContainer.appendChild(resultPre);
             contentDiv.appendChild(resultContainer);
@@ -561,18 +552,17 @@ class StandaloneChat extends HTMLElement {
         } else if (event.type === 'error') {
             if (loadingDots) {
                 loadingDots.remove();
-                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
-                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
+                bubble.querySelector('.response-bubble-inner').classList.remove('loading');
                 contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
             }
             const errorDiv = document.createElement('div');
-            errorDiv.className = 'text-red-400 text-sm mt-2';
+            errorDiv.className = 'text-red text-sm';
             errorDiv.textContent = `Error: ${event.error}`;
             contentDiv.appendChild(errorDiv);
             container.scrollTop = container.scrollHeight;
         } else if (event.type === 'warning') {
             const warningDiv = document.createElement('div');
-            warningDiv.className = 'text-yellow-400 text-sm mt-2';
+            warningDiv.className = 'text-yellow text-sm';
             warningDiv.textContent = event.message;
             contentDiv.appendChild(warningDiv);
             container.scrollTop = container.scrollHeight;
@@ -616,9 +606,9 @@ class StandaloneChat extends HTMLElement {
 
         if (!thinkingState.thinkingPill) {
             const pill = document.createElement('div');
-            pill.className = 'thinking-pill tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-purple-400 font-mono';
+            pill.className = 'tool-pill thinking';
             pill.innerHTML = `
-                <i class="fas fa-brain animate-pulse text-[10px]"></i>
+                <i class="fas fa-brain animate-pulse text-2xs"></i>
                 <span>Thinking...</span>
             `;
             toolsDiv.appendChild(pill);
@@ -635,29 +625,29 @@ class StandaloneChat extends HTMLElement {
         thinkingState.thinkingPill = null;
         thinkingState.thinkingContent = '';
 
-        pill.className = 'thinking-pill tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
+        pill.className = 'tool-pill done thinking';
         pill.innerHTML = '';
 
         const pillContent = document.createElement('span');
-        pillContent.className = 'inline-flex items-center gap-1.5';
+        pillContent.className = 'inline-flex items-center gap-1';
         pillContent.innerHTML = `
-            <i class="fas fa-brain text-purple-400 text-[10px]"></i>
+            <i class="fas fa-brain text-purple text-2xs"></i>
             <span>Thinking</span>
         `;
         pill.appendChild(pillContent);
 
         const popover = document.createElement('div');
-        popover.className = 'hidden fixed z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw] p-3';
+        popover.className = 'tool-invocation-details fixed';
 
         const popoverContent = document.createElement('div');
-        popoverContent.className = 'text-xs text-gray-400 max-h-64 overflow-y-auto markdown-content custom-scrollbar';
+        popoverContent.className = 'tool-detail-pre markdown-content custom-scrollbar';
         popoverContent.innerHTML = this.renderMarkdown(content);
         this.highlightCode(popoverContent);
         popover.appendChild(popoverContent);
         pill.appendChild(popover);
 
         pill.addEventListener('mouseenter', () => {
-            popover.classList.remove('hidden');
+            popover.classList.add('visible');
             const pillRect = pill.getBoundingClientRect();
             popover.style.bottom = (window.innerHeight - pillRect.top + 4) + 'px';
             popover.style.top = 'auto';
@@ -668,7 +658,7 @@ class StandaloneChat extends HTMLElement {
             }
             popover.style.right = 'auto';
         });
-        pill.addEventListener('mouseleave', () => popover.classList.add('hidden'));
+        pill.addEventListener('mouseleave', () => popover.classList.remove('visible'));
     }
 
     // --- Bubble rendering ---
@@ -682,18 +672,18 @@ class StandaloneChat extends HTMLElement {
         if (attachments && attachments.length > 0) {
             const thumbs = attachments.map(att => {
                 if (att.mediaType.startsWith('image/')) {
-                    return `<img src="data:${att.mediaType};base64,${att.data}" class="w-16 h-16 object-cover rounded-lg border border-dark-border/50">`;
+                    return `<img src="data:${att.mediaType};base64,${att.data}" class="attachment-thumb">`;
                 }
-                return `<div class="flex items-center gap-1.5 bg-dark-bg/60 border border-dark-border/50 rounded-lg px-2 py-1.5 text-xs text-gray-400">
+                return `<div class="attachment-pill">
                     <i class="fas fa-file"></i>
-                    <span class="max-w-[100px] truncate">${this.escapeHtml(att.name)}</span>
+                    <span class="truncate attachment-name">${this.escapeHtml(att.name)}</span>
                 </div>`;
             }).join('');
             attachmentHtml = `<div class="flex flex-wrap gap-2 mb-2">${thumbs}</div>`;
         }
 
         div.innerHTML = `
-            <div class="max-w-4xl bg-dark-surface border border-transparent rounded-3xl px-5 py-3 text-gray-100 text-[15px] leading-relaxed">
+            <div class="user-bubble">
                 ${attachmentHtml}
                 <div class="whitespace-pre-wrap">${this.escapeHtml(content)}</div>
             </div>
@@ -712,29 +702,27 @@ class StandaloneChat extends HTMLElement {
         div.id = id;
         div.className = 'flex justify-start';
         div.innerHTML = `
-            <div class="response-bubble-inner max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-4 text-gray-100 text-[15px] leading-relaxed relative group">
+            <div class="response-bubble-inner loading group">
                 <div class="response-content whitespace-pre-wrap flex items-center">
-                    <div class="loading-dots flex gap-1">
-                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-200"></div>
-                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-400"></div>
+                    <div class="loading-dots">
+                        <div></div>
+                        <div></div>
+                        <div></div>
                     </div>
                 </div>
-                <div class="tool-invocations flex flex-wrap gap-1.5 mt-2"></div>
+                <div class="tool-invocations"></div>
             </div>
         `;
 
         wrapper.appendChild(div);
 
         const statusBar = document.createElement('div');
-        statusBar.className = 'stream-status-bar flex items-center gap-2 mt-1.5 ml-1 text-xs text-gray-400';
+        statusBar.className = 'stream-status-bar';
         statusBar.innerHTML = `
-            <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse-dot"></div>
+            <div class="status-dot-pulse"></div>
             <span class="stream-status-text">Generating...</span>
-            <span class="stream-elapsed text-gray-500">0.0s</span>
-            <button class="stream-cancel-btn ml-auto text-gray-500 hover:text-gray-300 text-xs px-2 py-0.5 rounded border border-dark-border hover:border-gray-500 transition-colors">
-                Stop
-            </button>
+            <span class="stream-elapsed text-muted">0.0s</span>
+            <button class="stream-cancel-btn">Stop</button>
         `;
         wrapper.appendChild(statusBar);
 
@@ -743,15 +731,15 @@ class StandaloneChat extends HTMLElement {
         });
 
         const statsBar = document.createElement('div');
-        statsBar.className = 'stream-stats-bar hidden flex items-center gap-3 mt-1.5 ml-1 text-xs text-gray-500';
+        statsBar.className = 'stream-stats-bar';
         statsBar.innerHTML = `
             <span class="flex items-center gap-1"><i class="far fa-clock"></i><span class="stats-elapsed"></span></span>
-            <span class="text-dark-border">|</span>
-            <span class="flex items-center gap-1"><i class="fas fa-arrow-up text-[9px]"></i><span class="stats-input-tokens"></span></span>
-            <span class="text-dark-border">|</span>
-            <span class="flex items-center gap-1"><i class="fas fa-arrow-down text-[9px]"></i><span class="stats-output-tokens"></span></span>
-            <span class="text-dark-border">|</span>
-            <span class="flex items-center gap-1"><i class="fas fa-bolt text-[9px]"></i><span class="stats-tps"></span></span>
+            <span class="divider">|</span>
+            <span class="flex items-center gap-1"><i class="fas fa-arrow-up text-2xs"></i><span class="stats-input-tokens"></span></span>
+            <span class="divider">|</span>
+            <span class="flex items-center gap-1"><i class="fas fa-arrow-down text-2xs"></i><span class="stats-output-tokens"></span></span>
+            <span class="divider">|</span>
+            <span class="flex items-center gap-1"><i class="fas fa-bolt text-2xs"></i><span class="stats-tps"></span></span>
         `;
         wrapper.appendChild(statsBar);
 
@@ -762,7 +750,7 @@ class StandaloneChat extends HTMLElement {
     updateResponseError(id, errorMsg) {
         const bubble = this.querySelector(`#${id}`);
         if (bubble) {
-            bubble.querySelector('.response-content').innerHTML = `<span class="text-red-400">${this.escapeHtml(errorMsg)}</span>`;
+            bubble.querySelector('.response-content').innerHTML = `<span class="text-red">${this.escapeHtml(errorMsg)}</span>`;
         }
     }
 
@@ -808,7 +796,7 @@ class StandaloneChat extends HTMLElement {
         const statusBar = wrapper.querySelector('.stream-status-bar');
         const statsBar = wrapper.querySelector('.stream-stats-bar');
 
-        if (statusBar) statusBar.classList.add('hidden');
+        if (statusBar) statusBar.remove();
 
         if (statsBar) {
             const elapsedEl = statsBar.querySelector('.stats-elapsed');
@@ -835,12 +823,12 @@ class StandaloneChat extends HTMLElement {
 
             if (wasCancelled) {
                 const badge = document.createElement('span');
-                badge.className = 'text-xs text-amber-400 font-medium ml-2';
+                badge.className = 'badge badge-amber';
                 badge.textContent = 'Cancelled';
                 statsBar.appendChild(badge);
             }
 
-            statsBar.classList.remove('hidden');
+            statsBar.classList.add('visible');
         }
     }
 

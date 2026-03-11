@@ -6,8 +6,7 @@ export class MarkdownRenderer {
     // Configure marked for streaming-friendly rendering
     if (typeof marked !== 'undefined') {
       const renderer = new marked.Renderer();
-      renderer.link = ({ href, title, tokens }) => {
-        const text = this.#parseInlineTokens(tokens);
+      renderer.link = (href, title, text) => {
         const titleAttr = title ? ` title="${title}"` : '';
         return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
       };
@@ -22,11 +21,6 @@ export class MarkdownRenderer {
       });
     }
 
-  }
-
-  #parseInlineTokens(tokens) {
-    if (!tokens) return '';
-    return tokens.map(t => t.raw || t.text || '').join('');
   }
 
   /**

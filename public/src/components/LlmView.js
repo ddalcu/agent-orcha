@@ -27,9 +27,9 @@ export class LlmView extends Component {
                 if (selected) {
                     info.classList.remove('hidden');
                     info.innerHTML = `
-                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                            <div><span class="text-gray-400">Model:</span> <span class="text-gray-200 ml-2">${selected.model}</span></div>
-                            <div><span class="text-gray-400">Base URL:</span> <span class="text-gray-200 ml-2">${selected.baseUrl || 'Default'}</span></div>
+                         <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div><span class="text-secondary">Model:</span> <span class="text-primary ml-2">${selected.model}</span></div>
+                            <div><span class="text-secondary">Base URL:</span> <span class="text-primary ml-2">${selected.baseUrl || 'Default'}</span></div>
                         </div>
                     `;
                     this.updateButtons(false);
@@ -78,11 +78,11 @@ export class LlmView extends Component {
             }
         } catch (e) {
             outputEl.textContent = 'Error: ' + e.message;
-            outputEl.classList.add('text-red-400');
+            outputEl.classList.add('text-red');
         } finally {
             this.isLoading = false;
             this.updateButtons(false);
-            outputEl.classList.remove('text-red-400');
+            outputEl.classList.remove('text-red');
         }
     }
 
@@ -93,31 +93,27 @@ export class LlmView extends Component {
 
     template() {
         return `
-            <div class="space-y-6 h-full overflow-y-auto pb-8 custom-scrollbar">
+            <div class="space-y-6 h-full overflow-y-auto pb-6">
                 <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2">Select LLM</label>
-                    <select id="llmSelect" class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-2.5 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500"></select>
+                    <label class="block text-sm font-medium text-primary mb-2">Select LLM</label>
+                    <select id="llmSelect" class="select"></select>
                 </div>
 
-                <div id="llmInfo" class="bg-dark-surface/50 border border-dark-border rounded-lg p-4 hidden"></div>
+                <div id="llmInfo" class="panel-dim hidden"></div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2">Message</label>
-                    <textarea id="llmInput" rows="5" class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-3 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+                    <label class="block text-sm font-medium text-primary mb-2">Message</label>
+                    <textarea id="llmInput" rows="5" class="textarea"></textarea>
                 </div>
 
                 <div class="flex gap-3">
-                    <button id="runLlm" disabled class="bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
-                        Send Message
-                    </button>
-                    <button id="streamLlm" disabled class="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
-                        Stream
-                    </button>
+                    <button id="runLlm" disabled class="btn btn-accent">Send Message</button>
+                    <button id="streamLlm" disabled class="btn btn-accent">Stream</button>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2">Output</label>
-                    <div id="llmOutput" class="bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[200px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto"></div>
+                    <label class="block text-sm font-medium text-primary mb-2">Output</label>
+                    <div id="llmOutput" class="llm-output"></div>
                 </div>
             </div>
         `;

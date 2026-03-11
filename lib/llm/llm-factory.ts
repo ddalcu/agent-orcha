@@ -31,7 +31,10 @@ export class LLMFactory {
 
     // Auto-start local llama server if needed (skip if user provides their own baseUrl)
     if (provider === 'local' && !config.baseUrl) {
-      await llamaEngine.ensureRunning(config.model, config.contextSize);
+      await llamaEngine.ensureRunning(config.model, {
+        contextSize: config.contextSize,
+        reasoningBudget: config.reasoningBudget,
+      });
 
       // Persist auto-detected contextSize to llm.json
       if (!config.contextSize) {
@@ -78,7 +81,7 @@ export class LLMFactory {
     return new OpenAIChatModel({
       modelName: config.model,
       apiKey,
-      maxTokens: config.maxTokens,
+      maxTokens: config.maxTokens ?? (provider === 'local' ? 4096 : undefined),
       streamUsage: true,
       baseURL,
       provider: provider as 'openai' | 'local',

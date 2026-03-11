@@ -3,12 +3,12 @@ import { Component } from '../utils/Component.js';
 import { api } from '../services/ApiService.js';
 
 const TOOL_PREFIXES = {
-    'mcp':       'bg-blue-900/50 text-blue-300 border-blue-700/50',
-    'knowledge': 'bg-purple-900/50 text-purple-300 border-purple-700/50',
-    'function':  'bg-yellow-900/50 text-yellow-300 border-yellow-700/50',
-    'builtin':   'bg-green-900/50 text-green-300 border-green-700/50',
-    'sandbox':   'bg-orange-900/50 text-orange-300 border-orange-700/50',
-    'workspace': 'bg-gray-800 text-gray-400 border-gray-700',
+    'mcp':       'tool-chip-mcp',
+    'knowledge': 'tool-chip-knowledge',
+    'function':  'tool-chip-function',
+    'builtin':   'tool-chip-builtin',
+    'sandbox':   'tool-chip-sandbox',
+    'workspace': 'tool-chip-workspace',
 };
 
 export class AgentComposer extends Component {
@@ -97,69 +97,69 @@ export class AgentComposer extends Component {
         const toolChips = tools.map(t => {
             const prefix = t.split(':')[0];
             const cls = TOOL_PREFIXES[prefix] || TOOL_PREFIXES['workspace'];
-            return `<span class="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded border ${cls}">
-                ${this._esc(t)}<button class="remove-tool-btn hover:text-white ml-0.5" data-tool="${this._esc(t)}">&times;</button>
+            return `<span class="tool-chip ${cls}">
+                ${this._esc(t)}<button class="remove-tool-btn composer-remove-btn ml-1" data-tool="${this._esc(t)}">&times;</button>
             </span>`;
         }).join('');
 
         const varChips = vars.map(v =>
-            `<span class="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700/50">
-                ${this._esc(v)}<button class="remove-var-btn hover:text-white ml-0.5" data-var="${this._esc(v)}">&times;</button>
+            `<span class="var-chip">
+                ${this._esc(v)}<button class="remove-var-btn composer-remove-btn ml-1" data-var="${this._esc(v)}">&times;</button>
             </span>`
         ).join('');
 
         const questionRows = questions.map((q, i) =>
             `<div class="flex gap-2">
                 <input type="text" data-field="sampleQuestions.${i}" value="${this._esc(q)}"
-                       class="composer-input flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:border-gray-500" />
-                <button class="remove-question-btn text-gray-500 hover:text-red-400 text-xs px-1" data-q-idx="${i}"><i class="fas fa-trash"></i></button>
+                       class="composer-input composer-input-field flex-1" />
+                <button class="remove-question-btn composer-remove-btn px-1" data-q-idx="${i}"><i class="fas fa-trash"></i></button>
             </div>`
         ).join('');
 
         return `
             <!-- Identity & LLM -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Identity</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="composer-section space-y-3">
+                    <h3 class="section-title">Identity</h3>
                     <div>
-                        <label class="text-xs text-gray-500 block mb-1">Name</label>
+                        <label class="composer-label">Name</label>
                         <input type="text" data-field="name" value="${this._esc(d.name || '')}"
-                               class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:border-gray-500" />
+                               class="composer-input composer-input-field" />
                     </div>
                     <div>
-                        <label class="text-xs text-gray-500 block mb-1">Description</label>
+                        <label class="composer-label">Description</label>
                         <input type="text" data-field="description" value="${this._esc(d.description || '')}"
-                               class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:border-gray-500" />
+                               class="composer-input composer-input-field" />
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="text-xs text-gray-500 block mb-1">Version</label>
+                            <label class="composer-label">Version</label>
                             <input type="text" data-field="version" value="${this._esc(d.version || '1.0.0')}"
-                                   class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:border-gray-500" />
+                                   class="composer-input composer-input-field" />
                         </div>
                         <div>
-                            <label class="text-xs text-gray-500 block mb-1">Max Iterations</label>
+                            <label class="composer-label">Max Iterations</label>
                             <input type="number" data-field="maxIterations" value="${d.maxIterations || ''}" min="1" placeholder="Default"
-                                   class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:border-gray-500" />
+                                   class="composer-input composer-input-field" />
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">LLM</h3>
+                <div class="composer-section space-y-3">
+                    <h3 class="section-title">LLM</h3>
                     <div>
-                        <label class="text-xs text-gray-500 block mb-1">Model</label>
+                        <label class="composer-label">Model</label>
                         <select data-field="llm.name"
-                                class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:border-gray-500">
+                                class="composer-input composer-input-field">
                             <option value="default" ${llmName === 'default' ? 'selected' : ''}>default</option>
                             ${llmOptions}
                         </select>
                     </div>
                     <div>
-                        <label class="text-xs text-gray-500 block mb-1">Temperature <span class="text-gray-600 font-mono" data-temp-display>${temp !== undefined ? temp : '—'}</span></label>
+                        <label class="composer-label">Temperature <span class="text-muted font-mono" data-temp-display>${temp !== undefined ? temp : '—'}</span></label>
                         <input type="range" data-field="llm.temperature" min="0" max="2" step="0.1" value="${temp !== undefined ? temp : 0.7}"
-                               class="w-full accent-gray-500" />
-                        <div class="flex justify-between text-xs text-gray-600 mt-0.5">
+                               class="w-full" />
+                        <div class="flex justify-between text-xs text-muted mt-1">
                             <span>0 Precise</span>
                             <span>2 Creative</span>
                         </div>
@@ -168,146 +168,146 @@ export class AgentComposer extends Component {
             </div>
 
             <!-- Prompt -->
-            <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
-                <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">System Prompt</h3>
+            <div class="composer-section space-y-3">
+                <h3 class="section-title">System Prompt</h3>
                 <textarea data-field="prompt.system" rows="10"
-                          class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-gray-500 font-mono resize-y">${this._esc(prompt.system || '')}</textarea>
+                          class="composer-input composer-input-field font-mono resize-y">${this._esc(prompt.system || '')}</textarea>
                 <div>
-                    <label class="text-xs text-gray-500 block mb-1">Input Variables</label>
-                    <div class="flex flex-wrap gap-1.5 mb-2">${varChips}</div>
+                    <label class="composer-label">Input Variables</label>
+                    <div class="flex flex-wrap gap-1 mb-2">${varChips}</div>
                     <div class="flex gap-2">
                         <input type="text" id="newVarInput" placeholder="Add variable..."
-                               class="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-1.5 text-sm text-gray-100 outline-none focus:border-gray-500" />
-                        <button id="addVarBtn" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg transition-colors">Add</button>
+                               class="composer-input-field flex-1" />
+                        <button id="addVarBtn" class="btn btn-sm bg-surface">Add</button>
                     </div>
                 </div>
             </div>
 
             <!-- Tools & Skills -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Tools</h3>
-                    <div class="flex flex-wrap gap-1.5">${toolChips || '<span class="text-xs text-gray-600">No tools added</span>'}</div>
-                    <button id="addToolBtn" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="composer-section space-y-3">
+                    <h3 class="section-title">Tools</h3>
+                    <div class="flex flex-wrap gap-1">${toolChips || '<span class="text-xs text-muted">No tools added</span>'}</div>
+                    <button id="addToolBtn" class="composer-add-btn">
                         <i class="fas fa-plus mr-1"></i> Add tool
                     </button>
                     <div id="toolPicker" class="hidden"></div>
                 </div>
 
-                <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Skills</h3>
+                <div class="composer-section space-y-3">
+                    <h3 class="section-title">Skills</h3>
                     <div class="flex gap-3">
-                        <label class="inline-flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
-                            <input type="radio" name="skillsMode" value="none" ${!skills ? 'checked' : ''} class="accent-gray-500 skills-mode-radio" /> None
+                        <label class="inline-flex items-center gap-1 text-xs text-secondary cursor-pointer">
+                            <input type="radio" name="skillsMode" value="none" ${!skills ? 'checked' : ''} class="skills-mode-radio" /> None
                         </label>
-                        <label class="inline-flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
-                            <input type="radio" name="skillsMode" value="all" ${isAllSkills ? 'checked' : ''} class="accent-gray-500 skills-mode-radio" /> All
+                        <label class="inline-flex items-center gap-1 text-xs text-secondary cursor-pointer">
+                            <input type="radio" name="skillsMode" value="all" ${isAllSkills ? 'checked' : ''} class="skills-mode-radio" /> All
                         </label>
-                        <label class="inline-flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
-                            <input type="radio" name="skillsMode" value="specific" ${(Array.isArray(skills) && !isAllSkills) ? 'checked' : ''} class="accent-gray-500 skills-mode-radio" /> Specific
+                        <label class="inline-flex items-center gap-1 text-xs text-secondary cursor-pointer">
+                            <input type="radio" name="skillsMode" value="specific" ${(Array.isArray(skills) && !isAllSkills) ? 'checked' : ''} class="skills-mode-radio" /> Specific
                         </label>
                     </div>
                     <div id="skillsList" class="${(Array.isArray(skills) && !isAllSkills) ? '' : 'hidden'} space-y-1">
                         ${this._skills.map(s => {
                             const name = typeof s === 'string' ? s : s.name;
                             const checked = selectedSkills.includes(name);
-                            return `<label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300">
-                                <input type="checkbox" value="${this._esc(name)}" ${checked ? 'checked' : ''} class="accent-gray-500 skill-checkbox" /> ${this._esc(name)}
+                            return `<label class="flex items-center gap-2 text-xs text-secondary cursor-pointer">
+                                <input type="checkbox" value="${this._esc(name)}" ${checked ? 'checked' : ''} class="skill-checkbox" /> ${this._esc(name)}
                             </label>`;
                         }).join('')}
-                        ${this._skills.length === 0 ? '<span class="text-xs text-gray-600">No skills loaded</span>' : ''}
+                        ${this._skills.length === 0 ? '<span class="text-xs text-muted">No skills loaded</span>' : ''}
                     </div>
                 </div>
             </div>
 
             <!-- Memory, Output, Publish -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Memory</h3>
-                    <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-                        <input type="checkbox" data-field="memory.enabled" ${memEnabled ? 'checked' : ''} class="accent-gray-500 composer-input" />
+            <div class="grid grid-cols-3 gap-4">
+                <div class="composer-section space-y-3">
+                    <h3 class="section-title">Memory</h3>
+                    <label class="flex items-center gap-2 text-xs text-secondary cursor-pointer">
+                        <input type="checkbox" data-field="memory.enabled" ${memEnabled ? 'checked' : ''} class="composer-input" />
                         Enable persistent memory
                     </label>
                     <div id="memoryFields" class="${memEnabled ? '' : 'hidden'}">
-                        <label class="text-xs text-gray-500 block mb-1">Max Lines</label>
+                        <label class="composer-label">Max Lines</label>
                         <input type="number" data-field="memory.maxLines" value="${memMaxLines}" min="1" placeholder="100"
-                               class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:border-gray-500" />
+                               class="composer-input composer-input-field" />
                     </div>
                 </div>
 
-                <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Output</h3>
+                <div class="composer-section space-y-3">
+                    <h3 class="section-title">Output</h3>
                     <div>
-                        <label class="text-xs text-gray-500 block mb-1">Format</label>
+                        <label class="composer-label">Format</label>
                         <select data-field="output.format"
-                                class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:border-gray-500">
+                                class="composer-input composer-input-field">
                             <option value="text" ${outFmt === 'text' ? 'selected' : ''}>text</option>
                             <option value="structured" ${outFmt === 'structured' ? 'selected' : ''}>structured</option>
                         </select>
                     </div>
                     <div id="outputSchemaField" class="${outFmt === 'structured' ? '' : 'hidden'}">
-                        <label class="text-xs text-gray-500 block mb-1">Schema (JSON)</label>
+                        <label class="composer-label">Schema (JSON)</label>
                         <textarea data-field="output.schema" rows="4"
-                                  class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-xs text-gray-200 outline-none focus:border-gray-500 font-mono resize-y">${this._esc(outSchema)}</textarea>
-                        <div id="outputSchemaError" class="hidden text-xs text-red-400 mt-1"></div>
+                                  class="composer-input composer-input-field text-xs font-mono resize-y">${this._esc(outSchema)}</textarea>
+                        <div id="outputSchemaError" class="hidden text-xs text-red mt-1"></div>
                     </div>
                 </div>
 
-                <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Publish</h3>
-                    <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-                        <input type="checkbox" data-field="publish.enabled" ${pubEnabled ? 'checked' : ''} class="accent-gray-500 composer-input" />
+                <div class="composer-section space-y-3">
+                    <h3 class="section-title">Publish</h3>
+                    <label class="flex items-center gap-2 text-xs text-secondary cursor-pointer">
+                        <input type="checkbox" data-field="publish.enabled" ${pubEnabled ? 'checked' : ''} class="composer-input" />
                         Standalone chat page
                     </label>
                     <div id="publishFields" class="${pubEnabled ? '' : 'hidden'}">
-                        <label class="text-xs text-gray-500 block mb-1">Password</label>
+                        <label class="composer-label">Password</label>
                         <input type="text" data-field="publish.password" value="${this._esc(pubPassword)}" placeholder="Optional"
-                               class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:border-gray-500" />
+                               class="composer-input composer-input-field" />
                     </div>
                 </div>
             </div>
 
             <!-- Integrations -->
-            <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
+            <div class="composer-section space-y-3">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Integrations</h3>
+                    <h3 class="section-title">Integrations</h3>
                     <div class="flex gap-1">
-                        <button class="add-integration-btn text-xs text-gray-500 hover:text-gray-300 transition-colors" data-integ-type="collabnook"><i class="fas fa-plus mr-1"></i>Collabnook</button>
-                        <button class="add-integration-btn text-xs text-gray-500 hover:text-gray-300 transition-colors ml-3" data-integ-type="email"><i class="fas fa-plus mr-1"></i>Email</button>
+                        <button class="add-integration-btn composer-add-btn" data-integ-type="collabnook"><i class="fas fa-plus mr-1"></i>Collabnook</button>
+                        <button class="add-integration-btn composer-add-btn ml-3" data-integ-type="email"><i class="fas fa-plus mr-1"></i>Email</button>
                     </div>
                 </div>
                 ${this._renderIntegrations()}
             </div>
 
             <!-- Triggers -->
-            <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
+            <div class="composer-section space-y-3">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Triggers</h3>
+                    <h3 class="section-title">Triggers</h3>
                     <div class="flex gap-1">
-                        <button class="add-trigger-btn text-xs text-gray-500 hover:text-gray-300 transition-colors" data-trigger-type="cron"><i class="fas fa-plus mr-1"></i>Cron</button>
-                        <button class="add-trigger-btn text-xs text-gray-500 hover:text-gray-300 transition-colors ml-3" data-trigger-type="webhook"><i class="fas fa-plus mr-1"></i>Webhook</button>
+                        <button class="add-trigger-btn composer-add-btn" data-trigger-type="cron"><i class="fas fa-plus mr-1"></i>Cron</button>
+                        <button class="add-trigger-btn composer-add-btn ml-3" data-trigger-type="webhook"><i class="fas fa-plus mr-1"></i>Webhook</button>
                     </div>
                 </div>
                 ${this._renderTriggers()}
             </div>
 
             <!-- Sample Questions & Metadata -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sample Questions</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="composer-section space-y-3">
+                    <h3 class="section-title">Sample Questions</h3>
                     <div class="space-y-2">
-                        ${questionRows || '<span class="text-xs text-gray-600">No sample questions</span>'}
+                        ${questionRows || '<span class="text-xs text-muted">No sample questions</span>'}
                     </div>
-                    <button id="addQuestionBtn" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                    <button id="addQuestionBtn" class="composer-add-btn">
                         <i class="fas fa-plus mr-1"></i> Add question
                     </button>
                 </div>
 
-                <div class="bg-dark-surface border border-dark-border rounded-lg p-4 space-y-3">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Metadata</h3>
+                <div class="composer-section space-y-3">
+                    <h3 class="section-title">Metadata</h3>
                     <textarea data-field="metadata" rows="6"
-                              class="composer-input w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-xs text-gray-200 outline-none focus:border-gray-500 font-mono resize-y">${this._esc(meta)}</textarea>
-                    <div id="metadataError" class="hidden text-xs text-red-400 mt-1"></div>
+                              class="composer-input composer-input-field text-xs font-mono resize-y">${this._esc(meta)}</textarea>
+                    <div id="metadataError" class="hidden text-xs text-red mt-1"></div>
                 </div>
             </div>
         `;
@@ -316,16 +316,16 @@ export class AgentComposer extends Component {
     // ── Integrations sub-cards ──
     _renderIntegrations() {
         const integrations = this._data.integrations || [];
-        if (!integrations.length) return '<div class="text-xs text-gray-600">No integrations configured</div>';
+        if (!integrations.length) return '<div class="text-xs text-muted">No integrations</div>';
         return integrations.map((integ, i) => integ.type === 'email' ? this._renderEmailCard(integ, i) : this._renderCollabnookCard(integ, i)).join('');
     }
 
     _renderCollabnookCard(integ, idx) {
         return `
-            <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3" data-integ-idx="${idx}">
+            <div class="composer-sub-card" data-integ-idx="${idx}">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-medium text-gray-400"><i class="fas fa-comments mr-1"></i>Collabnook</span>
-                    <button class="remove-integration-btn text-xs text-gray-500 hover:text-red-400" data-integ-idx="${idx}"><i class="fas fa-trash"></i></button>
+                    <span class="text-xs font-medium text-secondary"><i class="fas fa-comments mr-1"></i>Collabnook</span>
+                    <button class="remove-integration-btn composer-remove-btn" data-integ-idx="${idx}"><i class="fas fa-trash"></i></button>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     ${this._field(`integrations.${idx}.url`, 'URL', integ.url)}
@@ -339,10 +339,10 @@ export class AgentComposer extends Component {
     _renderEmailCard(integ, idx) {
         const imap = integ.imap || {}, smtp = integ.smtp || {}, auth = integ.auth || {};
         return `
-            <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3" data-integ-idx="${idx}">
+            <div class="composer-sub-card" data-integ-idx="${idx}">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-medium text-gray-400"><i class="fas fa-envelope mr-1"></i>Email</span>
-                    <button class="remove-integration-btn text-xs text-gray-500 hover:text-red-400" data-integ-idx="${idx}"><i class="fas fa-trash"></i></button>
+                    <span class="text-xs font-medium text-secondary"><i class="fas fa-envelope mr-1"></i>Email</span>
+                    <button class="remove-integration-btn composer-remove-btn" data-integ-idx="${idx}"><i class="fas fa-trash"></i></button>
                 </div>
                 <div class="grid grid-cols-3 gap-2 mb-2">
                     ${this._field(`integrations.${idx}.imap.host`, 'IMAP Host', imap.host)}
@@ -371,39 +371,39 @@ export class AgentComposer extends Component {
         const inputVars = this._data.prompt?.inputVariables || [];
         const primaryVar = inputVars[0] || 'query';
 
-        if (!triggers.length) return '<div class="text-xs text-gray-600">No triggers configured</div>';
+        if (!triggers.length) return '<div class="text-xs text-muted">No triggers</div>';
         return triggers.map((trig, i) => {
             const isCron = trig.type === 'cron' || trig.schedule;
             const inputVal = (typeof trig.input === 'object' && trig.input) ? (trig.input[primaryVar] || '') : '';
             return `
-                <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3" data-trigger-idx="${i}">
+                <div class="composer-sub-card" data-trigger-idx="${i}">
                     <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-medium text-gray-400"><i class="fas ${isCron ? 'fa-clock' : 'fa-link'} mr-1"></i>${isCron ? 'Cron' : 'Webhook'}</span>
-                        <button class="remove-trigger-btn text-xs text-gray-500 hover:text-red-400" data-trigger-idx="${i}"><i class="fas fa-trash"></i></button>
+                        <span class="text-xs font-medium text-secondary"><i class="fas ${isCron ? 'fa-clock' : 'fa-link'} mr-1"></i>${isCron ? 'Cron' : 'Webhook'}</span>
+                        <button class="remove-trigger-btn composer-remove-btn" data-trigger-idx="${i}"><i class="fas fa-trash"></i></button>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                         ${isCron
                             ? `<div>
-                                <label class="text-xs text-gray-500 block mb-0.5">Schedule</label>
+                                <label class="composer-label">Schedule</label>
                                 <input type="text" data-field="triggers.${i}.schedule" value="${this._esc(trig.schedule || '')}" placeholder="*/5 * * * *"
-                                       class="composer-input w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-xs text-gray-100 outline-none" />
+                                       class="composer-input composer-input-sm" />
                                 <div class="flex flex-wrap gap-1 mt-1">
-                                    <button class="cron-preset-btn px-1.5 py-0.5 text-[10px] text-gray-500 bg-dark-bg border border-dark-border rounded hover:text-gray-300 hover:border-gray-500 transition-colors" data-preset="* * * * *" data-trigger-idx="${i}">1min</button>
-                                    <button class="cron-preset-btn px-1.5 py-0.5 text-[10px] text-gray-500 bg-dark-bg border border-dark-border rounded hover:text-gray-300 hover:border-gray-500 transition-colors" data-preset="*/5 * * * *" data-trigger-idx="${i}">5min</button>
-                                    <button class="cron-preset-btn px-1.5 py-0.5 text-[10px] text-gray-500 bg-dark-bg border border-dark-border rounded hover:text-gray-300 hover:border-gray-500 transition-colors" data-preset="*/15 * * * *" data-trigger-idx="${i}">15min</button>
-                                    <button class="cron-preset-btn px-1.5 py-0.5 text-[10px] text-gray-500 bg-dark-bg border border-dark-border rounded hover:text-gray-300 hover:border-gray-500 transition-colors" data-preset="0 * * * *" data-trigger-idx="${i}">hourly</button>
-                                    <button class="cron-preset-btn px-1.5 py-0.5 text-[10px] text-gray-500 bg-dark-bg border border-dark-border rounded hover:text-gray-300 hover:border-gray-500 transition-colors" data-preset="0 */6 * * *" data-trigger-idx="${i}">6hr</button>
-                                    <button class="cron-preset-btn px-1.5 py-0.5 text-[10px] text-gray-500 bg-dark-bg border border-dark-border rounded hover:text-gray-300 hover:border-gray-500 transition-colors" data-preset="0 0 * * *" data-trigger-idx="${i}">daily</button>
-                                    <button class="cron-preset-btn px-1.5 py-0.5 text-[10px] text-gray-500 bg-dark-bg border border-dark-border rounded hover:text-gray-300 hover:border-gray-500 transition-colors" data-preset="0 0 * * 1" data-trigger-idx="${i}">weekly</button>
-                                    <button class="cron-preset-btn px-1.5 py-0.5 text-[10px] text-gray-500 bg-dark-bg border border-dark-border rounded hover:text-gray-300 hover:border-gray-500 transition-colors" data-preset="0 0 1 * *" data-trigger-idx="${i}">monthly</button>
+                                    <button class="cron-preset-btn" data-preset="* * * * *" data-trigger-idx="${i}">1min</button>
+                                    <button class="cron-preset-btn" data-preset="*/5 * * * *" data-trigger-idx="${i}">5min</button>
+                                    <button class="cron-preset-btn" data-preset="*/15 * * * *" data-trigger-idx="${i}">15min</button>
+                                    <button class="cron-preset-btn" data-preset="0 * * * *" data-trigger-idx="${i}">hourly</button>
+                                    <button class="cron-preset-btn" data-preset="0 */6 * * *" data-trigger-idx="${i}">6hr</button>
+                                    <button class="cron-preset-btn" data-preset="0 0 * * *" data-trigger-idx="${i}">daily</button>
+                                    <button class="cron-preset-btn" data-preset="0 0 * * 1" data-trigger-idx="${i}">weekly</button>
+                                    <button class="cron-preset-btn" data-preset="0 0 1 * *" data-trigger-idx="${i}">monthly</button>
                                 </div>
                               </div>`
                             : this._field(`triggers.${i}.path`, 'Path', trig.path, '/webhook/my-hook')
                         }
                         <div>
-                            <label class="text-xs text-gray-500 block mb-0.5">Prompt <span class="text-gray-600 font-mono">(${this._esc(primaryVar)})</span></label>
+                            <label class="composer-label">Prompt <span class="text-muted font-mono">(${this._esc(primaryVar)})</span></label>
                             <input type="text" data-field="triggers.${i}.inputVar" value="${this._esc(inputVal)}" placeholder="e.g. Generate the daily report"
-                                   class="composer-input w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-xs text-gray-100 outline-none" />
+                                   class="composer-input composer-input-sm" />
                         </div>
                     </div>
                 </div>`;
@@ -413,23 +413,23 @@ export class AgentComposer extends Component {
     // ── Shared field helpers ──
     _field(dataField, label, value, placeholder) {
         return `<div>
-            <label class="text-xs text-gray-500 block mb-0.5">${label}</label>
+            <label class="composer-label">${label}</label>
             <input type="text" data-field="${dataField}" value="${this._esc(value || '')}" ${placeholder ? `placeholder="${placeholder}"` : ''}
-                   class="composer-input w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-xs text-gray-100 outline-none" />
+                   class="composer-input composer-input-sm" />
         </div>`;
     }
     _fieldNum(dataField, label, value) {
         return `<div>
-            <label class="text-xs text-gray-500 block mb-0.5">${label}</label>
+            <label class="composer-label">${label}</label>
             <input type="number" data-field="${dataField}" value="${value || ''}"
-                   class="composer-input w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-xs text-gray-100 outline-none" />
+                   class="composer-input composer-input-sm" />
         </div>`;
     }
     _fieldSelect(dataField, label, value) {
         return `<div>
-            <label class="text-xs text-gray-500 block mb-0.5">${label}</label>
+            <label class="composer-label">${label}</label>
             <select data-field="${dataField}"
-                    class="composer-input w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-xs text-gray-100 outline-none">
+                    class="composer-input composer-input-sm">
                 <option value="false" ${!value ? 'selected' : ''}>false</option>
                 <option value="true" ${value ? 'selected' : ''}>true</option>
             </select>
@@ -451,27 +451,27 @@ export class AgentComposer extends Component {
         const filtered = active.items.filter(v => !search || v.toLowerCase().includes(search));
 
         return `
-            <div class="bg-dark-bg border border-dark-border rounded-lg mt-2">
-                <div class="flex border-b border-dark-border">
-                    ${tabs.map(t => `<button class="tool-picker-tab flex-1 px-2 py-1.5 text-xs ${t.id === this._toolPickerTab ? 'text-gray-200 bg-dark-surface' : 'text-gray-600 hover:text-gray-400'}" data-tab="${t.id}">${t.label}</button>`).join('')}
+            <div class="tool-picker-inline">
+                <div class="tool-picker-inline-tabs">
+                    ${tabs.map(t => `<button class="tool-picker-inline-tab ${t.id === this._toolPickerTab ? 'active' : ''} tool-picker-tab" data-tab="${t.id}">${t.label}</button>`).join('')}
                 </div>
                 <div class="p-2">
                     <input type="text" id="toolPickerSearch" placeholder="Filter..." value="${this._esc(this._toolPickerSearch)}"
-                           class="w-full bg-dark-surface border border-dark-border rounded px-2 py-1 text-xs text-gray-100 outline-none mb-2" />
-                    <div class="max-h-36 overflow-y-auto space-y-0.5">
-                        ${filtered.length === 0 ? '<div class="text-xs text-gray-600 p-2 text-center">No items</div>' : ''}
+                           class="composer-input-sm mb-2" />
+                    <div class="tool-picker-list">
+                        ${filtered.length === 0 ? '<div class="text-xs text-muted p-2 text-center">No items</div>' : ''}
                         ${filtered.map(item => {
                             const added = existing.has(item);
-                            return `<div class="flex items-center justify-between px-2 py-1 rounded text-xs ${added ? 'text-gray-600' : 'text-gray-400 hover:bg-dark-surface cursor-pointer'}"
+                            return `<div class="tool-picker-item ${added ? 'added' : 'available'}"
                                          ${!added ? `data-add-tool="${this._esc(item)}"` : ''}>
                                 <span>${this._esc(item.split(':')[1] || item)}</span>
-                                ${added ? '<i class="fas fa-check text-green-500 text-[10px]"></i>' : '<i class="fas fa-plus text-gray-600 text-[10px]"></i>'}
+                                ${added ? '<i class="fas fa-check text-green text-2xs"></i>' : '<i class="fas fa-plus text-muted text-2xs"></i>'}
                             </div>`;
                         }).join('')}
                     </div>
                 </div>
-                <div class="border-t border-dark-border px-2 py-1 flex justify-end">
-                    <button id="closeToolPicker" class="text-xs text-gray-600 hover:text-gray-400">Close</button>
+                <div class="border-t px-2 py-1 flex justify-end">
+                    <button id="closeToolPicker" class="composer-add-btn">Close</button>
                 </div>
             </div>`;
     }
@@ -529,9 +529,9 @@ export class AgentComposer extends Component {
         if (!field || !error) return;
         field.addEventListener('blur', () => {
             const val = field.value.trim();
-            if (!val) { error.classList.add('hidden'); field.classList.remove('border-red-500'); return; }
-            try { JSON.parse(val); error.classList.add('hidden'); field.classList.remove('border-red-500'); }
-            catch (e) { error.textContent = e.message; error.classList.remove('hidden'); field.classList.add('border-red-500'); }
+            if (!val) { error.classList.add('hidden'); field.classList.remove('error'); return; }
+            try { JSON.parse(val); error.classList.add('hidden'); field.classList.remove('error'); }
+            catch (e) { error.textContent = e.message; error.classList.remove('hidden'); field.classList.add('error'); }
         });
     }
 

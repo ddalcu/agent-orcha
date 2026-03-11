@@ -1,0 +1,20 @@
+name: patient-records
+description: Healthcare customer records from deidentified patient PDFs
+
+source:
+  type: directory
+  path: knowledge/pdf-patients
+  pattern: "**/*.pdf"
+
+loader:
+  type: pdf
+
+splitter:
+  type: recursive
+  chunkSize: 1000
+  chunkOverlap: 200
+
+embedding: default
+
+search:
+  defaultK: 5

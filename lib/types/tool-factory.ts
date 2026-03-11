@@ -16,8 +16,17 @@ export function tool<T extends z.ZodObject<any>>(
     description: config.description,
     schema: config.schema,
     invoke: async (rawInput: Record<string, unknown>) => {
-      const parsed = config.schema.parse(rawInput);
-      return fn(parsed);
+      const result = config.schema.safeParse(rawInput);
+      if (!result.success) {
+        const fields = result.error.issues.map((i: z.ZodIssue) => `${i.path.join('.')}: ${i.message}`).join(', ');
+        const provided = Object.keys(rawInput);
+        throw new Error(
+          `Invalid args for ${config.name}: ${fields}. ` +
+          `You provided: ${provided.length ? provided.join(', ') : '(empty)'}. ` +
+          'Please include all required fields.'
+        );
+      }
+      return fn(result.data);
     },
   };
 }

@@ -1,0 +1,48 @@
+name: team-chat
+description: ReAct workflow that delegates tasks to specialized agents for collaborative problem-solving
+version: "1.0.0"
+type: react
+chatOutputFormat: text
+
+input:
+  schema:
+    topic:
+      type: string
+      required: true
+      description: The task or question to solve
+
+prompt:
+  system: |
+    You are a coordinator that delegates tasks to specialized agents.
+
+    Your role:
+    1. Understand the user's request
+    2. Identify which agents are best suited for each part of the task
+    3. Delegate to agents and combine their responses
+    4. Present a unified, coherent answer
+
+    If you need clarification from the user, use the ask_user tool.
+  goal: "Coordinate agents to answer: {{input.topic}}"
+
+graph:
+  model: default
+  executionMode: react
+  tools:
+    mode: include
+    sources: [builtin]
+    include: [ask_user]
+  agents:
+    mode: all
+  maxIterations: 100
+  timeout: 300000
+
+output:
+  result: "{{state.messages[-1].content}}"
+
+config:
+  onError: stop
+
+sampleQuestions:
+  - "Have the chatbot write a welcome message and the architect review it"
+  - "Ask each agent to introduce themselves and their capabilities"
+  - "Get a security assessment from the network security agent"

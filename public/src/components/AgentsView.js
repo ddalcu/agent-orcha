@@ -3,8 +3,12 @@ import { Component } from '../utils/Component.js';
 import { api } from '../services/ApiService.js';
 import { sessionStore } from '../services/SessionStore.js';
 import { streamManager } from '../services/StreamManager.js';
+import { escapeHtml as sharedEscapeHtml } from '../utils/card.js';
 import { store } from '../store.js';
 import { markdownRenderer } from '../utils/markdown.js';
+
+// Survives component remount (tab navigation) but not page refresh
+const workflowTasks = new Map();
 
 export class AgentsView extends Component {
     constructor() {
@@ -20,7 +24,7 @@ export class AgentsView extends Component {
 
     async connectedCallback() {
         super.connectedCallback();
-        await Promise.all([this.loadAgents(), this.loadLLMs()]);
+        await Promise.all([this.loadAgents(), this.loadLLMs(), this.loadWorkflows()]);
         this.restoreActiveSession();
     }
 
@@ -34,6 +38,8 @@ export class AgentsView extends Component {
             this.streamTimerInterval = null;
         }
         this.currentAbortController = null;
+        // Workflow streams continue via AbortController — no cleanup needed on tab switch
+        // (state is preserved in the module-level workflowTasks map)
     }
 
     formatElapsedTime(ms) {
@@ -52,10 +58,16 @@ export class AgentsView extends Component {
     cancelCurrentStream() {
         if (this.currentAbortController) {
             this.currentAbortController.abort();
-        } else {
-            const activeId = sessionStore.getActiveId();
-            if (activeId) streamManager.cancel(activeId);
+            return;
         }
+        const activeId = sessionStore.getActiveId();
+        if (!activeId) return;
+        const wfState = workflowTasks.get(activeId);
+        if (wfState?.abortController) {
+            wfState.abortController.abort();
+            return;
+        }
+        streamManager.cancel(activeId);
     }
 
     startStreamTimer(responseId, startTime) {
@@ -87,7 +99,7 @@ export class AgentsView extends Component {
         const statusBar = wrapper.querySelector('.stream-status-bar');
         const statsBar = wrapper.querySelector('.stream-stats-bar');
 
-        if (statusBar) statusBar.classList.add('hidden');
+        if (statusBar) statusBar.remove();
 
         if (statsBar) {
             const elapsedEl = statsBar.querySelector('.stats-elapsed');
@@ -116,12 +128,12 @@ export class AgentsView extends Component {
 
             if (wasCancelled) {
                 const cancelBadge = document.createElement('span');
-                cancelBadge.className = 'text-xs text-amber-400 font-medium ml-2';
+                cancelBadge.className = 'badge badge-amber';
                 cancelBadge.textContent = 'Cancelled';
                 statsBar.appendChild(cancelBadge);
             }
 
-            statsBar.classList.remove('hidden');
+            statsBar.classList.add('visible');
         }
     }
 
@@ -144,6 +156,16 @@ export class AgentsView extends Component {
         }
     }
 
+    async loadWorkflows() {
+        try {
+            const workflows = await api.getWorkflows();
+            workflows.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            store.set('workflows', workflows);
+        } catch (e) {
+            console.error('Failed to load workflows', e);
+        }
+    }
+
     // --- Sidebar toggle (mobile) ---
 
     _isMobile() {
@@ -156,13 +178,11 @@ export class AgentsView extends Component {
         if (!sidebar || !backdrop) return;
 
         if (show) {
-            sidebar.classList.remove('hidden');
-            sidebar.classList.add('flex', 'sidebar-open');
-            backdrop.classList.remove('hidden');
+            sidebar.classList.add('open');
+            backdrop.classList.add('visible');
         } else {
-            sidebar.classList.add('hidden');
-            sidebar.classList.remove('flex', 'sidebar-open');
-            backdrop.classList.add('hidden');
+            sidebar.classList.remove('open');
+            backdrop.classList.remove('visible');
         }
     }
 
@@ -186,30 +206,34 @@ export class AgentsView extends Component {
         const activeId = sessionStore.getActiveId();
 
         if (sessions.length === 0) {
-            list.innerHTML = '<div class="text-gray-500 text-sm text-center py-8">No conversations yet</div>';
+            list.innerHTML = '<div class="text-muted text-sm text-center py-8">No conversations yet</div>';
             return;
         }
 
         list.innerHTML = sessions.map(s => {
             const isActive = s.id === activeId;
-            const isAgent = s.agentType === 'agent';
-            const displayName = isAgent ? (s.agentName || 'Agent') : (s.llmName || 'LLM');
-            const icon = isAgent ? 'fa-robot' : 'fa-microchip';
-
-            const activeClasses = isActive
-                ? 'bg-dark-hover/80 border-l-2 border-l-blue-500'
-                : 'hover:bg-dark-hover/40 border-l-2 border-l-transparent';
+            let displayName, icon;
+            if (s.agentType === 'workflow') {
+                displayName = s.workflowName || 'Workflow';
+                icon = 'fa-project-diagram';
+            } else if (s.agentType === 'agent') {
+                displayName = s.agentName || 'Agent';
+                icon = 'fa-robot';
+            } else {
+                displayName = s.llmName || 'LLM';
+                icon = 'fa-microchip';
+            }
 
             return `
-                <div data-session-id="${s.id}" class="session-item group flex items-start gap-2 px-3 py-2.5 cursor-pointer rounded-lg mb-0.5 transition-colors ${activeClasses}">
+                <div data-session-id="${s.id}" class="session-item${isActive ? ' active' : ''}">
                     <div class="flex-1 min-w-0">
-                        <div class="text-sm ${isActive ? 'text-gray-100' : 'text-gray-300'} truncate">${this.escapeHtml(s.title)}</div>
-                        <div class="flex items-center gap-1.5 mt-0.5 text-xs text-gray-500">
-                            <i class="fas ${icon} text-[10px]"></i>
+                        <div class="text-sm text-primary truncate">${this.escapeHtml(s.title)}</div>
+                        <div class="flex items-center gap-1 mt-1 text-xs text-muted">
+                            <i class="fas ${icon} text-2xs"></i>
                             <span class="truncate">${this.escapeHtml(displayName)}</span>
                         </div>
                     </div>
-                    <button data-delete-id="${s.id}" class="session-delete-btn flex-shrink-0 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 mt-0.5" title="Delete">
+                    <button data-delete-id="${s.id}" class="session-delete-btn" title="Delete">
                         <i class="fas fa-xmark text-xs"></i>
                     </button>
                 </div>
@@ -255,15 +279,24 @@ export class AgentsView extends Component {
         const agents = store.get('agents') || [];
         const llms = store.get('llms') || [];
 
-        if (session.agentType === 'agent') {
+        if (session.agentType === 'workflow') {
+            const workflows = store.get('workflows') || [];
+            const wf = workflows.find(w => w.name === session.workflowName);
+            store.set('selectedWorkflow', wf || null);
+            store.set('selectedAgent', null);
+            store.set('selectedLlm', null);
+            store.set('selectionType', 'workflow');
+        } else if (session.agentType === 'agent') {
             const agent = agents.find(a => a.name === session.agentName);
             store.set('selectedAgent', agent || null);
             store.set('selectedLlm', null);
+            store.set('selectedWorkflow', null);
             store.set('selectionType', 'agent');
         } else {
             const llm = llms.find(l => l.name === session.llmName);
             store.set('selectedLlm', llm || null);
             store.set('selectedAgent', null);
+            store.set('selectedWorkflow', null);
             store.set('selectionType', 'llm');
         }
 
@@ -272,7 +305,10 @@ export class AgentsView extends Component {
         this.renderSessionList();
 
         // Reconnect to active stream if one exists for this session
-        if (streamManager.isActive(sessionId)) {
+        const wfState = workflowTasks.get(sessionId);
+        if (wfState && wfState.status !== 'done') {
+            this._reconnectWorkflowStream(sessionId);
+        } else if (streamManager.isActive(sessionId)) {
             this._reconnectToStream(sessionId);
         }
 
@@ -329,9 +365,9 @@ export class AgentsView extends Component {
         const bubble = document.createElement('div');
         bubble.className = 'flex justify-start';
         bubble.innerHTML = `
-            <div class="response-bubble-inner max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-3 text-gray-100 text-[15px] leading-relaxed relative group">
+            <div class="response-bubble-inner group">
                 <div class="response-content markdown-content"></div>
-                <div class="tool-invocations flex flex-wrap gap-1.5 mt-2"></div>
+                <div class="tool-invocations"></div>
             </div>
         `;
 
@@ -375,31 +411,31 @@ export class AgentsView extends Component {
             const prefix = s.estimated ? '~' : '';
             const tps = s.elapsed > 0 ? (s.outputTokens / (s.elapsed / 1000)).toFixed(1) : '0';
             const statsBar = document.createElement('div');
-            statsBar.className = 'stream-stats-bar flex items-center gap-3 mt-1.5 ml-1 text-xs text-gray-500';
+            statsBar.className = 'stream-stats-bar visible';
             statsBar.innerHTML = `
                 <span class="flex items-center gap-1">
                     <i class="far fa-clock"></i>
                     <span>${this.formatElapsedTime(s.elapsed)}</span>
                 </span>
-                <span class="text-dark-border">|</span>
+                <span class="divider">|</span>
                 <span class="flex items-center gap-1">
-                    <i class="fas fa-arrow-up text-[9px]"></i>
+                    <i class="fas fa-arrow-up text-2xs"></i>
                     <span>${prefix}${s.inputTokens} input</span>
                 </span>
-                <span class="text-dark-border">|</span>
+                <span class="divider">|</span>
                 <span class="flex items-center gap-1">
-                    <i class="fas fa-arrow-down text-[9px]"></i>
+                    <i class="fas fa-arrow-down text-2xs"></i>
                     <span>${prefix}${s.outputTokens} output</span>
                 </span>
-                <span class="text-dark-border">|</span>
+                <span class="divider">|</span>
                 <span class="flex items-center gap-1">
-                    <i class="fas fa-bolt text-[9px]"></i>
+                    <i class="fas fa-bolt text-2xs"></i>
                     <span>${prefix}${tps} tok/s</span>
                 </span>
             `;
             if (s.cancelled) {
                 const badge = document.createElement('span');
-                badge.className = 'text-xs text-amber-400 font-medium ml-2';
+                badge.className = 'badge badge-amber';
                 badge.textContent = 'Cancelled';
                 statsBar.appendChild(badge);
             }
@@ -416,49 +452,63 @@ export class AgentsView extends Component {
         if (existing) existing.remove();
 
         const agents = store.get('agents') || [];
+        const workflows = store.get('workflows') || [];
         const llms = store.get('llms') || [];
 
         const overlay = document.createElement('div');
         overlay.id = 'newSessionModal';
-        overlay.className = 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/70';
+        overlay.className = 'modal-backdrop';
 
         let itemsHtml = '';
 
         if (agents.length > 0) {
-            itemsHtml += '<div class="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Agents</div>';
+            itemsHtml += '<div class="modal-section-label">Agents</div>';
             itemsHtml += agents.map(a => `
-                <button data-type="agent" data-name="${this.escapeHtml(a.name)}" class="modal-pick-item w-full text-left px-4 py-3 hover:bg-dark-hover cursor-pointer transition-colors border-b border-dark-border/50 flex items-center gap-3">
-                    <i class="fas fa-robot text-blue-400 text-sm"></i>
+                <button data-type="agent" data-name="${this.escapeHtml(a.name)}" class="modal-pick-item">
+                    <i class="fas fa-robot text-blue text-sm"></i>
                     <div class="flex-1 min-w-0">
-                        <div class="text-sm font-medium text-gray-200">${this.escapeHtml(a.name)}</div>
-                        <div class="text-xs text-gray-500 truncate">${this.escapeHtml(a.description || '')}</div>
+                        <div class="text-sm font-medium text-primary">${this.escapeHtml(a.name)}</div>
+                        <div class="text-xs text-muted truncate">${this.escapeHtml(a.description || '')}</div>
+                    </div>
+                </button>
+            `).join('');
+        }
+
+        if (workflows.length > 0) {
+            itemsHtml += '<div class="modal-section-label">Workflows</div>';
+            itemsHtml += workflows.map(w => `
+                <button data-type="workflow" data-name="${this.escapeHtml(w.name)}" class="modal-pick-item">
+                    <i class="fas fa-project-diagram text-orange text-sm"></i>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium text-primary">${this.escapeHtml(w.name)}</div>
+                        <div class="text-xs text-muted truncate">${this.escapeHtml(w.description || '')}</div>
                     </div>
                 </button>
             `).join('');
         }
 
         if (llms.length > 0) {
-            itemsHtml += '<div class="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">LLMs</div>';
+            itemsHtml += '<div class="modal-section-label">LLMs</div>';
             itemsHtml += llms.map(l => `
-                <button data-type="llm" data-name="${this.escapeHtml(l.name)}" class="modal-pick-item w-full text-left px-4 py-3 hover:bg-dark-hover cursor-pointer transition-colors border-b border-dark-border/50 flex items-center gap-3">
-                    <i class="fas fa-microchip text-purple-400 text-sm"></i>
+                <button data-type="llm" data-name="${this.escapeHtml(l.name)}" class="modal-pick-item">
+                    <i class="fas fa-microchip text-purple text-sm"></i>
                     <div class="flex-1 min-w-0">
-                        <div class="text-sm font-medium text-gray-200">${this.escapeHtml(l.name)}</div>
-                        <div class="text-xs text-gray-500 truncate">${this.escapeHtml(l.model || '')}</div>
+                        <div class="text-sm font-medium text-primary">${this.escapeHtml(l.name)}</div>
+                        <div class="text-xs text-muted truncate">${this.escapeHtml(l.model || '')}</div>
                     </div>
                 </button>
             `).join('');
         }
 
         if (!itemsHtml) {
-            itemsHtml = '<div class="text-gray-500 text-sm text-center py-8">No agents or LLMs available</div>';
+            itemsHtml = '<div class="text-muted text-sm text-center py-8">No agents, workflows or LLMs available</div>';
         }
 
         overlay.innerHTML = `
-            <div class="modal-content bg-dark-surface border border-dark-border rounded-2xl shadow-2xl w-[420px] max-w-[90vw] max-h-[70vh] flex flex-col overflow-hidden">
-                <div class="flex items-center justify-between px-5 py-4 border-b border-dark-border">
-                    <h3 class="text-lg font-semibold text-gray-100">New conversation</h3>
-                    <button id="closeNewSessionModal" class="text-gray-400 hover:text-gray-200 transition-colors p-1">
+            <div class="modal-content modal-content-sm">
+                <div class="modal-header">
+                    <h3 class="text-lg font-semibold text-primary">New conversation</h3>
+                    <button id="closeNewSessionModal" class="modal-close-btn">
                         <i class="fas fa-xmark"></i>
                     </button>
                 </div>
@@ -486,12 +536,94 @@ export class AgentsView extends Component {
                 const session = sessionStore.create({
                     agentName: type === 'agent' ? name : null,
                     agentType: type,
-                    llmName: type === 'llm' ? name : null
+                    llmName: type === 'llm' ? name : null,
+                    workflowName: type === 'workflow' ? name : null
                 });
 
                 overlay.remove();
                 this.switchToSession(session.id);
             });
+        });
+    }
+
+    showNewAgentModal() {
+        const existing = document.querySelector('#newAgentModal');
+        if (existing) existing.remove();
+
+        const agents = store.get('agents') || [];
+        const hasArchitect = agents.some(a => a.name === 'architect');
+
+        const overlay = document.createElement('div');
+        overlay.id = 'newAgentModal';
+        overlay.className = 'modal-backdrop';
+
+        overlay.innerHTML = `
+            <div class="modal-content modal-content-sm">
+                <div class="modal-header">
+                    <h3 class="text-lg font-semibold text-primary">Create a new agent</h3>
+                    <button id="closeNewAgentModal" class="modal-close-btn">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="p-4 flex flex-col gap-3">
+                    ${hasArchitect ? `
+                    <button id="agentViaArchitect" class="new-agent-option">
+                        <div class="new-agent-option-icon bg-blue">
+                            <i class="fas fa-comments"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-primary">Chat with Architect</div>
+                            <div class="text-xs text-muted">Describe what you need and the Architect agent will build it for you</div>
+                        </div>
+                        <i class="fas fa-chevron-right text-xs text-muted"></i>
+                    </button>
+                    ` : ''}
+                    <button id="agentViaIde" class="new-agent-option">
+                        <div class="new-agent-option-icon bg-green">
+                            <i class="fas fa-code"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-primary">Create in IDE</div>
+                            <div class="text-xs text-muted">Open the IDE editor with a blank agent template</div>
+                        </div>
+                        <i class="fas fa-chevron-right text-xs text-muted"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.remove();
+        });
+
+        overlay.querySelector('#closeNewAgentModal').addEventListener('click', () => overlay.remove());
+
+        if (hasArchitect) {
+            overlay.querySelector('#agentViaArchitect').addEventListener('click', () => {
+                overlay.remove();
+                const session = sessionStore.create({
+                    agentName: 'architect',
+                    agentType: 'agent',
+                    llmName: null,
+                    workflowName: null,
+                });
+                this.switchToSession(session.id);
+            });
+        }
+
+        overlay.querySelector('#agentViaIde').addEventListener('click', () => {
+            overlay.remove();
+            store.set('activeTab', 'ide');
+            window.location.hash = 'ide';
+            // Wait for IDE to mount, then trigger the new agent dialog
+            setTimeout(() => {
+                const ide = document.querySelector('ide-view');
+                if (ide && ide._selectResourceType) {
+                    ide._selectResourceType('agent');
+                }
+            }, 200);
         });
     }
 
@@ -518,8 +650,8 @@ export class AgentsView extends Component {
         if (container) {
             container.innerHTML = `
                 <div class="flex-1 flex items-center justify-center h-full">
-                    <div class="text-center text-gray-500">
-                        <i class="fas fa-comments text-4xl mb-4 text-gray-600"></i>
+                    <div class="text-center text-muted">
+                        <i class="fas fa-comments text-4xl mb-4 text-muted"></i>
                         <p class="text-lg">Start a new conversation</p>
                         <p class="text-sm mt-1">Click "New chat" to begin</p>
                     </div>
@@ -545,15 +677,28 @@ export class AgentsView extends Component {
         if (!header) return;
 
         if (!session) {
-            header.innerHTML = '<span class="text-gray-500">No conversation selected</span>';
+            header.innerHTML = '<span class="text-muted">No conversation selected</span>';
             return;
         }
 
+        let name, badgeText, badgeVariant, icon;
+        if (session.agentType === 'workflow') {
+            name = session.workflowName || 'Workflow';
+            badgeText = 'Workflow';
+            badgeVariant = 'badge-orange';
+            icon = 'fa-project-diagram';
+        } else if (session.agentType === 'agent') {
+            name = session.agentName || 'Agent';
+            badgeText = 'Agent';
+            badgeVariant = 'badge-blue';
+            icon = 'fa-robot';
+        } else {
+            name = session.llmName || 'LLM';
+            badgeText = 'LLM';
+            badgeVariant = 'badge-purple';
+            icon = 'fa-microchip';
+        }
         const isAgent = session.agentType === 'agent';
-        const name = isAgent ? (session.agentName || 'Agent') : (session.llmName || 'LLM');
-        const badgeText = isAgent ? 'Agent' : 'LLM';
-        const badgeColor = isAgent ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400';
-        const icon = isAgent ? 'fa-robot' : 'fa-microchip';
 
         let extraBadges = '';
         if (isAgent) {
@@ -562,12 +707,12 @@ export class AgentsView extends Component {
             if (agent) {
                 if (agent.publish?.enabled) {
                     const chatUrl = `/chat/${encodeURIComponent(agent.name)}`;
-                    extraBadges += `<a href="${chatUrl}" target="_blank" class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors no-underline" title="Open published chat"><i class="fas fa-globe text-[10px]"></i> Published</a>`;
+                    extraBadges += `<a href="${chatUrl}" target="_blank" class="badge badge-pill badge-green no-underline" title="Open published chat"><i class="fas fa-globe text-2xs"></i> Published</a>`;
                 }
 
                 const hasMemory = agent.memory === true || (agent.memory && agent.memory.enabled);
                 if (hasMemory) {
-                    extraBadges += `<span class="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400" title="Persistent memory enabled"><i class="fas fa-brain text-[10px]"></i> Memory</span>`;
+                    extraBadges += `<span class="badge badge-pill badge-amber" title="Persistent memory enabled"><i class="fas fa-brain text-2xs"></i> Memory</span>`;
                 }
 
                 if (agent.tools?.length) {
@@ -575,7 +720,7 @@ export class AgentsView extends Component {
                     const toolListHtml = toolNames.map(t => `<div class="tools-popover-item">${this.escapeHtml(t)}</div>`).join('');
                     extraBadges += `
                         <span class="tools-badge-wrapper">
-                            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400 cursor-default"><i class="fas fa-wrench text-[10px]"></i> ${toolNames.length} tool${toolNames.length !== 1 ? 's' : ''}</span>
+                            <span class="badge badge-pill badge-gray"><i class="fas fa-wrench text-2xs"></i> ${toolNames.length} tool${toolNames.length !== 1 ? 's' : ''}</span>
                             <div class="tools-popover">${toolListHtml}</div>
                         </span>`;
                 }
@@ -584,9 +729,9 @@ export class AgentsView extends Component {
 
         header.innerHTML = `
             <div class="flex items-center gap-2 flex-wrap">
-                <i class="fas ${icon} text-sm text-gray-400"></i>
-                <span class="font-medium text-gray-200">${this.escapeHtml(name)}</span>
-                <span class="text-xs px-2 py-0.5 rounded-full ${badgeColor}">${badgeText}</span>
+                <i class="fas ${icon} text-sm text-secondary"></i>
+                <span class="font-medium text-primary">${this.escapeHtml(name)}</span>
+                <span class="badge badge-pill ${badgeVariant}">${badgeText}</span>
                 ${extraBadges}
             </div>
         `;
@@ -642,22 +787,22 @@ export class AgentsView extends Component {
         if (!preview) return;
 
         if (this.pendingAttachments.length === 0) {
-            preview.classList.add('hidden');
+            preview.classList.remove('visible');
             preview.innerHTML = '';
             return;
         }
 
-        preview.classList.remove('hidden');
+        preview.classList.add('visible');
         preview.innerHTML = this.pendingAttachments.map((att, i) => {
             const isImage = att.mediaType.startsWith('image/');
             const thumb = isImage
-                ? `<img src="data:${att.mediaType};base64,${att.data}" class="w-10 h-10 object-cover rounded">`
-                : `<i class="fas fa-file text-gray-400 text-lg"></i>`;
+                ? `<img src="data:${att.mediaType};base64,${att.data}">`
+                : `<i class="fas fa-file text-secondary text-lg"></i>`;
             return `
-                <div class="attachment-pill flex items-center gap-2 bg-dark-bg/60 border border-dark-border/50 rounded-lg px-2 py-1.5 text-xs text-gray-400">
+                <div class="attachment-pill">
                     ${thumb}
-                    <span class="max-w-[120px] truncate">${this.escapeHtml(att.name)}</span>
-                    <button class="attachment-remove text-gray-500 hover:text-gray-300 ml-1" data-index="${i}">
+                    <span class="truncate attachment-name">${this.escapeHtml(att.name)}</span>
+                    <button class="attachment-remove" data-index="${i}">
                         <i class="fas fa-xmark text-xs"></i>
                     </button>
                 </div>
@@ -688,10 +833,16 @@ export class AgentsView extends Component {
         const llm = store.get('selectedLlm');
         const activeId = sessionStore.getActiveId();
 
-        const selected = selectionType === 'agent' ? agent : llm;
         const hasAttachments = this.pendingAttachments.length > 0;
+        if ((!message && !hasAttachments) || this.isLoading || !activeId) return;
 
-        if ((!message && !hasAttachments) || !selected || this.isLoading || !activeId) return;
+        // Handle workflow messages (including interrupt responses)
+        if (selectionType === 'workflow') {
+            return this._sendWorkflowMessage(message);
+        }
+
+        const selected = selectionType === 'agent' ? agent : llm;
+        if (!selected) return;
 
         const attachments = hasAttachments ? [...this.pendingAttachments] : null;
 
@@ -759,18 +910,20 @@ export class AgentsView extends Component {
             thinkingPill: null,
         };
 
-        // For LLM streams, remove loading dots immediately
+        // For LLM streams, remove loading dots (skip if reconnecting with no content yet)
         if (state.streamType === 'llm') {
-            const bubble = this.querySelector(`#${responseId}`);
-            if (bubble) {
-                const contentDiv = bubble.querySelector('.response-content');
-                const loadingDots = contentDiv?.querySelector('.loading-dots');
-                if (loadingDots) {
-                    loadingDots.remove();
-                    bubble.querySelector('.response-bubble-inner')?.classList.remove('py-4');
-                    bubble.querySelector('.response-bubble-inner')?.classList.add('py-3');
-                    contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
-                    contentDiv.innerHTML = '';
+            const hasContent = state.content || state.events.length > 0;
+            if (hasContent || !initialThinkingState) {
+                const bubble = this.querySelector(`#${responseId}`);
+                if (bubble) {
+                    const contentDiv = bubble.querySelector('.response-content');
+                    const loadingDots = contentDiv?.querySelector('.loading-dots');
+                    if (loadingDots) {
+                        loadingDots.remove();
+                        bubble.querySelector('.response-bubble-inner')?.classList.remove('loading');
+                        contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+                        contentDiv.innerHTML = '';
+                    }
                 }
             }
         }
@@ -795,8 +948,7 @@ export class AgentsView extends Component {
                             const loadingDots = contentDiv?.querySelector('.loading-dots');
                             if (loadingDots) {
                                 loadingDots.remove();
-                                bubble.querySelector('.response-bubble-inner')?.classList.remove('py-4');
-                                bubble.querySelector('.response-bubble-inner')?.classList.add('py-3');
+                                bubble.querySelector('.response-bubble-inner')?.classList.remove('loading');
                                 contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
                                 contentDiv.innerHTML = '';
                             }
@@ -832,6 +984,13 @@ export class AgentsView extends Component {
                     const bubble = this.querySelector(`#${responseId}`);
                     if (bubble) {
                         const contentDiv = bubble.querySelector('.response-content');
+                        const loadingDots = contentDiv?.querySelector('.loading-dots');
+                        if (loadingDots) {
+                            loadingDots.remove();
+                            bubble.querySelector('.response-bubble-inner')?.classList.remove('loading');
+                            contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+                            contentDiv.innerHTML = '';
+                        }
                         const container = this.querySelector('#chatMessages');
                         this.renderLlmContentStreaming(contentDiv, state.content, responseId, thinkingState);
                         if (container) container.scrollTop = container.scrollHeight;
@@ -879,8 +1038,7 @@ export class AgentsView extends Component {
         const loadingDots = contentDiv.querySelector('.loading-dots');
         if (loadingDots && hasVisualContent) {
             loadingDots.remove();
-            bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
-            bubble.querySelector('.response-bubble-inner').classList.add('py-3');
+            bubble.querySelector('.response-bubble-inner').classList.remove('loading');
             contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
             contentDiv.innerHTML = '';
         }
@@ -925,8 +1083,8 @@ export class AgentsView extends Component {
 
             if (lastWasThinking && currentThinking) {
                 const pill = document.createElement('div');
-                pill.className = 'thinking-pill tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-purple-400 font-mono';
-                pill.innerHTML = '<i class="fas fa-brain animate-pulse text-[10px]"></i><span>Thinking...</span>';
+                pill.className = 'tool-pill thinking';
+                pill.innerHTML = '<i class="fas fa-brain animate-pulse text-2xs"></i><span>Thinking...</span>';
                 toolsDiv.appendChild(pill);
                 activeThinkingPill = pill;
                 activeThinkingContent = currentThinking;
@@ -938,9 +1096,9 @@ export class AgentsView extends Component {
                 } else {
                     const toolEl = document.createElement('div');
                     toolEl.id = `tool-${runId}`;
-                    toolEl.className = 'tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-gray-400 font-mono';
+                    toolEl.className = 'tool-pill';
                     toolEl.dataset.toolInput = typeof t.input === 'string' ? t.input : JSON.stringify(t.input, null, 2);
-                    toolEl.innerHTML = `<i class="fas fa-circle-notch animate-spin text-blue-400 text-[10px]"></i><span>${this.escapeHtml(t.tool)}</span>`;
+                    toolEl.innerHTML = `<i class="fas fa-circle-notch animate-spin text-blue text-2xs"></i><span>${this.escapeHtml(t.tool)}</span>`;
                     toolsDiv.appendChild(toolEl);
                 }
             }
@@ -969,27 +1127,491 @@ export class AgentsView extends Component {
         return { thinkingPill: activeThinkingPill, thinkingContent: activeThinkingContent };
     }
 
+    // --- Workflow chat integration ---
+
+    async _sendWorkflowMessage(message) {
+        const activeId = sessionStore.getActiveId();
+        const wfState = workflowTasks.get(activeId);
+
+        if (wfState?.interruptState) {
+            return this._respondToWorkflowInterrupt(activeId, message);
+        }
+
+        const workflow = store.get('selectedWorkflow');
+        if (!workflow) return;
+
+        const schema = workflow.inputSchema || {};
+        const firstField = Object.keys(schema)[0] || 'input';
+        const inputObj = { [firstField]: message };
+
+        const input = this.querySelector('#chatInput');
+        this.appendMessage('user', message);
+        sessionStore.addMessage(activeId, 'user', message);
+        input.value = '';
+        input.style.height = 'auto';
+        this.clearAttachments();
+
+        const responseId = 'response-' + Date.now();
+        this.createResponseBubble(responseId);
+        this.isLoading = true;
+        this.updateUiState();
+        this.startStreamTimer(responseId);
+
+        const abortController = new AbortController();
+        workflowTasks.set(activeId, {
+            responseId,
+            startTime: Date.now(),
+            chatOutputFormat: workflow.chatOutputFormat || 'json',
+            workflowName: workflow.name,
+            abortController,
+            interruptState: null,
+            status: 'streaming',
+            events: [],
+            inputMessage: message,
+        });
+
+        try {
+            const response = await api.startWorkflowStream(workflow.name, inputObj, abortController.signal);
+            await this._processWorkflowStream(response, activeId, responseId);
+        } catch (e) {
+            if (e.name === 'AbortError') {
+                this._finishWorkflowStream(activeId, responseId, null, null, true);
+            } else {
+                this.updateResponseError(responseId, `Error: ${e.message}`);
+                this.stopStreamTimer(responseId, message, '', false);
+                this.isLoading = false;
+                this.updateUiState();
+            }
+        }
+
+        this.renderSessionList();
+    }
+
+    async _respondToWorkflowInterrupt(sessionId, message) {
+        const wfState = workflowTasks.get(sessionId);
+        if (!wfState?.interruptState) return;
+
+        const { threadId, workflowName } = wfState.interruptState;
+
+        const input = this.querySelector('#chatInput');
+        this.appendMessage('user', message);
+        sessionStore.addMessage(sessionId, 'user', message);
+        input.value = '';
+        input.style.height = 'auto';
+
+        const responseId = 'response-' + Date.now();
+        this.createResponseBubble(responseId);
+
+        const abortController = new AbortController();
+        wfState.responseId = responseId;
+        wfState.interruptState = null;
+        wfState.status = 'streaming';
+        wfState.abortController = abortController;
+
+        this.isLoading = true;
+        this.updateUiState();
+        this.startStreamTimer(responseId);
+
+        try {
+            const response = await api.resumeWorkflowStream(workflowName, threadId, message, abortController.signal);
+            await this._processWorkflowStream(response, sessionId, responseId);
+        } catch (e) {
+            if (e.name === 'AbortError') {
+                this._finishWorkflowStream(sessionId, responseId, null, null, true);
+            } else {
+                this.updateResponseError(responseId, `Error: ${e.message}`);
+                this.stopStreamTimer(responseId, message, '', false);
+                this.isLoading = false;
+                this.updateUiState();
+            }
+        }
+
+        this.renderSessionList();
+    }
+
+    async _processWorkflowStream(response, sessionId, responseId) {
+        if (!response.ok) {
+            const text = await response.text();
+            let msg = `HTTP ${response.status}`;
+            try { msg = JSON.parse(text).error || msg; } catch { /* use status */ }
+            throw new Error(msg);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const payload = line.slice(6).trim();
+                if (payload === '[DONE]') continue;
+
+                try {
+                    const update = JSON.parse(payload);
+                    this._handleWorkflowStreamEvent(update, sessionId, responseId);
+                } catch (e) {
+                    console.error('Workflow stream parse error:', e);
+                }
+            }
+        }
+
+        // Process any remaining buffer
+        if (buffer.startsWith('data: ')) {
+            const payload = buffer.slice(6).trim();
+            if (payload && payload !== '[DONE]') {
+                try {
+                    const update = JSON.parse(payload);
+                    this._handleWorkflowStreamEvent(update, sessionId, responseId);
+                } catch (e) { /* ignore */ }
+            }
+        }
+
+        // If stream ended without a result/error event, treat as error
+        const wfState = workflowTasks.get(sessionId);
+        if (wfState && wfState.status === 'streaming') {
+            this._finishWorkflowStream(sessionId, responseId, null, 'Stream ended unexpectedly', false);
+        }
+    }
+
+    _handleWorkflowStreamEvent(update, sessionId, responseId) {
+        const wfState = workflowTasks.get(sessionId);
+        if (!wfState) return;
+
+        const bubble = this.querySelector(`#${responseId}`);
+
+        if (update.type === 'status' && bubble) {
+            const event = update.data;
+            wfState.events.push(event);
+
+            const toolsDiv = bubble.querySelector('.tool-invocations');
+            this._renderWorkflowEvent(event, toolsDiv, bubble);
+
+            // Handle interrupt — the stream returns a result with interrupted output
+        }
+
+        if (update.type === 'result') {
+            const result = update.data;
+            // Check if it's an interrupt
+            if (result?.output?.interrupted && result?.output?.threadId) {
+                this._handleWorkflowInterrupt(sessionId, responseId, result.output);
+            } else if (result?.error) {
+                this._finishWorkflowStream(sessionId, responseId, null, result.error, false);
+            } else {
+                this._finishWorkflowStream(sessionId, responseId, result, null, false);
+            }
+        }
+
+        if (update.type === 'error') {
+            this._finishWorkflowStream(sessionId, responseId, null, update.error, false);
+        }
+    }
+
+    _renderWorkflowEvent(event, toolsDiv, bubble) {
+        const contentDiv = bubble.querySelector('.response-content');
+
+        if (event.type === 'step_start') {
+            const pill = document.createElement('div');
+            pill.id = `wf-step-${event.stepId}`;
+            pill.className = 'tool-pill';
+            pill.innerHTML = `<i class="fas fa-circle-notch animate-spin text-blue text-2xs"></i><span>${this.escapeHtml(event.stepId)}</span>`;
+            toolsDiv.appendChild(pill);
+        }
+
+        if (event.type === 'step_complete') {
+            const pill = toolsDiv.querySelector(`#wf-step-${event.stepId}`);
+            if (pill) {
+                pill.className = 'tool-pill done';
+                pill.innerHTML = `<i class="fas fa-check text-green text-2xs"></i><span>${this.escapeHtml(event.stepId)}</span>`;
+            }
+        }
+
+        if (event.type === 'step_error') {
+            const pill = toolsDiv.querySelector(`#wf-step-${event.stepId}`);
+            if (pill) {
+                pill.className = 'tool-pill done';
+                pill.innerHTML = `<i class="fas fa-times text-red text-2xs"></i><span>${this.escapeHtml(event.stepId)}</span>`;
+            }
+        }
+
+        if (event.type === 'tool_call') {
+            const toolName = event.message?.replace(/^Calling:?\s*/i, '').split(/\s/)[0] || 'tool';
+            const pill = document.createElement('div');
+            pill.className = 'tool-pill wf-tool-active';
+
+            const pillContent = document.createElement('span');
+            pillContent.className = 'inline-flex items-center gap-1';
+            pillContent.innerHTML = `<i class="fas fa-circle-notch animate-spin text-blue text-2xs"></i><span>${this.escapeHtml(toolName)}</span>`;
+            pill.appendChild(pillContent);
+
+            // Create details panel (populated on tool_result)
+            const details = document.createElement('div');
+            details.className = 'tool-invocation-details';
+            if (event.toolInput) {
+                const inputSection = document.createElement('div');
+                inputSection.className = 'tool-detail-section';
+                inputSection.innerHTML = '<h4>Input</h4>';
+                const inputPre = document.createElement('pre');
+                inputPre.className = 'tool-detail-pre custom-scrollbar';
+                inputPre.textContent = event.toolInput;
+                inputSection.appendChild(inputPre);
+                details.appendChild(inputSection);
+            }
+            pill.appendChild(details);
+            pill.addEventListener('click', (e) => {
+                if (details.contains(e.target)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                toolsDiv.querySelectorAll('.tool-invocation-details.visible').forEach(d => {
+                    if (d !== details) d.classList.remove('visible');
+                });
+                details.classList.toggle('visible');
+            });
+            toolsDiv.appendChild(pill);
+        }
+
+        if (event.type === 'tool_result') {
+            const activePill = toolsDiv.querySelector('.wf-tool-active');
+            if (activePill) {
+                activePill.classList.remove('wf-tool-active');
+                activePill.classList.add('done');
+                const icon = activePill.querySelector('i');
+                if (icon) icon.className = 'fas fa-check text-green text-2xs';
+
+                // Append output to the details panel
+                if (event.toolOutput) {
+                    const details = activePill.querySelector('.tool-invocation-details');
+                    if (details) {
+                        const outputSection = document.createElement('div');
+                        outputSection.className = 'tool-detail-section';
+                        outputSection.innerHTML = '<h4>Output</h4>';
+                        const outputPre = document.createElement('pre');
+                        outputPre.className = 'tool-detail-pre custom-scrollbar';
+                        outputPre.textContent = event.toolOutput;
+                        outputSection.appendChild(outputPre);
+                        details.appendChild(outputSection);
+                    }
+                }
+            }
+        }
+
+        if (event.type === 'tool_discovery') {
+            // Only show the final summary pill (e.g. "35 total tools ready"), skip intermediate progress
+            if (event.message?.includes('total tools')) {
+                const pill = document.createElement('div');
+                pill.className = 'tool-pill done';
+                pill.innerHTML = `<i class="fas fa-plug text-purple text-2xs"></i><span>${this.escapeHtml(event.message)}</span>`;
+                toolsDiv.appendChild(pill);
+            }
+            const wrapper = bubble.closest('.response-wrapper');
+            const statusText = wrapper?.querySelector('.stream-status-text');
+            if (statusText) statusText.textContent = event.message || 'Discovering tools...';
+        }
+
+        if (event.type === 'react_iteration' || event.type === 'workflow_start') {
+            const wrapper = bubble.closest('.response-wrapper');
+            const statusText = wrapper?.querySelector('.stream-status-text');
+            if (statusText) statusText.textContent = event.message || 'Processing...';
+        }
+
+        // Remove loading dots on first meaningful event
+        const loadingDots = contentDiv?.querySelector('.loading-dots');
+        if (loadingDots && (event.type === 'step_start' || event.type === 'workflow_start' || event.type === 'tool_call' || event.type === 'tool_discovery' || event.type === 'react_iteration')) {
+            loadingDots.remove();
+            bubble.querySelector('.response-bubble-inner')?.classList.remove('loading');
+            contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+            contentDiv.innerHTML = '';
+        }
+
+        const container = this.querySelector('#chatMessages');
+        if (container) container.scrollTop = container.scrollHeight;
+    }
+
+    _handleWorkflowInterrupt(sessionId, responseId, interruptData) {
+        const wfState = workflowTasks.get(sessionId);
+        if (!wfState) return;
+
+        const question = interruptData?.question || 'Input required';
+        wfState.interruptState = {
+            question,
+            threadId: interruptData?.threadId,
+            workflowName: wfState.workflowName,
+        };
+
+        const bubble = this.querySelector(`#${responseId}`);
+        if (bubble) {
+            const contentDiv = bubble.querySelector('.response-content');
+            const loadingDots = contentDiv?.querySelector('.loading-dots');
+            if (loadingDots) {
+                loadingDots.remove();
+                bubble.querySelector('.response-bubble-inner')?.classList.remove('loading');
+                contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+                contentDiv.innerHTML = '';
+            }
+
+            const div = document.createElement('div');
+            div.className = 'content-text markdown-content';
+            div.innerHTML = markdownRenderer.render(question);
+            markdownRenderer.highlightCode(div);
+            contentDiv.appendChild(div);
+
+            const wrapper = bubble.closest('.response-wrapper');
+            const statusBar = wrapper?.querySelector('.stream-status-bar');
+            if (statusBar) {
+                const statusText = statusBar.querySelector('.stream-status-text');
+                if (statusText) statusText.textContent = 'Waiting for input...';
+            }
+        }
+
+        sessionStore.addMessage(sessionId, 'assistant', question);
+
+        if (this.streamTimerInterval) {
+            clearInterval(this.streamTimerInterval);
+            this.streamTimerInterval = null;
+        }
+        this.isLoading = false;
+        this.updateUiState();
+
+        const input = this.querySelector('#chatInput');
+        if (input) input.focus();
+    }
+
+    _finishWorkflowStream(sessionId, responseId, result, error, wasCancelled) {
+        const wfState = workflowTasks.get(sessionId);
+        if (!wfState) return;
+
+        wfState.status = 'done';
+        wfState.abortController = null;
+
+        const bubble = this.querySelector(`#${responseId}`);
+        if (bubble) {
+            const contentDiv = bubble.querySelector('.response-content');
+            const loadingDots = contentDiv?.querySelector('.loading-dots');
+            if (loadingDots) {
+                loadingDots.remove();
+                bubble.querySelector('.response-bubble-inner')?.classList.remove('loading');
+                contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+                contentDiv.innerHTML = '';
+            }
+
+            if (error) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'text-red text-sm';
+                errorDiv.textContent = `Error: ${error}`;
+                contentDiv.appendChild(errorDiv);
+            } else if (wasCancelled) {
+                // No output content for cancelled
+            } else if (result?.output) {
+                this._renderWorkflowOutput(contentDiv, result.output, wfState.chatOutputFormat);
+            }
+        }
+
+        let content = '';
+        if (error) {
+            content = `Error: ${error}`;
+        } else if (result?.output) {
+            if (wfState.chatOutputFormat === 'text') {
+                content = Object.values(result.output).join('\n\n');
+            } else {
+                content = '```json\n' + JSON.stringify(result.output, null, 2) + '\n```';
+            }
+        }
+
+        const elapsed = wfState.startTime ? Date.now() - wfState.startTime : 0;
+        const meta = {
+            thinking: [],
+            tools: wfState.events
+                .filter(e => e.type === 'step_complete')
+                .map(e => ({ runId: e.stepId, tool: e.stepId, input: e.agent || '', output: e.message || 'Completed' })),
+            stats: {
+                elapsed,
+                inputTokens: Math.round((wfState.inputMessage || '').length / 4),
+                outputTokens: Math.round(content.length / 4),
+                cancelled: wasCancelled,
+                estimated: true,
+            },
+        };
+        sessionStore.addMessage(sessionId, 'assistant', content, meta);
+
+        this.stopStreamTimer(responseId, wfState.inputMessage || '', content, wasCancelled);
+        this.isLoading = false;
+        this.updateUiState();
+        this.renderSessionList();
+
+        setTimeout(() => workflowTasks.delete(sessionId), 10000);
+
+        const input = this.querySelector('#chatInput');
+        if (input) input.focus();
+    }
+
+    _renderWorkflowOutput(contentDiv, output, format) {
+        const div = document.createElement('div');
+        div.className = 'content-text markdown-content';
+        if (format === 'text') {
+            div.innerHTML = markdownRenderer.render(Object.values(output).join('\n\n'));
+        } else {
+            div.innerHTML = markdownRenderer.render('```json\n' + JSON.stringify(output, null, 2) + '\n```');
+        }
+        markdownRenderer.highlightCode(div);
+        contentDiv.appendChild(div);
+    }
+
+    _reconnectWorkflowStream(sessionId) {
+        const wfState = workflowTasks.get(sessionId);
+        if (!wfState || wfState.status === 'done') return false;
+
+        if (wfState.interruptState) {
+            this.isLoading = false;
+            this.updateUiState();
+            return true;
+        }
+
+        // Re-create the response bubble and replay cached events
+        this.createResponseBubble(wfState.responseId);
+        const bubble = this.querySelector(`#${wfState.responseId}`);
+        if (bubble && wfState.events.length > 0) {
+            const toolsDiv = bubble.querySelector('.tool-invocations');
+            for (const event of wfState.events) {
+                this._renderWorkflowEvent(event, toolsDiv, bubble);
+            }
+        }
+
+        this.startStreamTimer(wfState.responseId, wfState.startTime);
+        this.isLoading = true;
+        this.currentAbortController = null;
+        this.updateUiState();
+
+        return true;
+    }
+
     _createThinkingPill(toolsDiv, content) {
         const pill = document.createElement('div');
-        pill.className = 'thinking-pill tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
+        pill.className = 'tool-pill done thinking';
 
         const pillContent = document.createElement('span');
-        pillContent.className = 'inline-flex items-center gap-1.5';
-        pillContent.innerHTML = '<i class="fas fa-brain text-purple-400 text-[10px]"></i><span>Thinking</span>';
+        pillContent.className = 'inline-flex items-center gap-1';
+        pillContent.innerHTML = '<i class="fas fa-brain text-purple text-2xs"></i><span>Thinking</span>';
         pill.appendChild(pillContent);
 
         const popover = document.createElement('div');
-        popover.className = 'hidden fixed z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw] p-3';
+        popover.className = 'tool-invocation-details fixed';
 
         const popoverContent = document.createElement('div');
-        popoverContent.className = 'text-xs text-gray-400 max-h-64 overflow-y-auto markdown-content custom-scrollbar';
+        popoverContent.className = 'tool-detail-pre markdown-content custom-scrollbar';
         popoverContent.innerHTML = markdownRenderer.render(content);
         markdownRenderer.highlightCode(popoverContent);
         popover.appendChild(popoverContent);
         pill.appendChild(popover);
 
         pill.addEventListener('mouseenter', () => {
-            popover.classList.remove('hidden');
+            popover.classList.add('visible');
             const pillRect = pill.getBoundingClientRect();
             popover.style.bottom = (window.innerHeight - pillRect.top + 4) + 'px';
             popover.style.top = 'auto';
@@ -1000,7 +1622,7 @@ export class AgentsView extends Component {
             }
             popover.style.right = 'auto';
         });
-        pill.addEventListener('mouseleave', () => popover.classList.add('hidden'));
+        pill.addEventListener('mouseleave', () => popover.classList.remove('visible'));
 
         toolsDiv.appendChild(pill);
     }
@@ -1012,32 +1634,32 @@ export class AgentsView extends Component {
 
         const toolEl = document.createElement('div');
         toolEl.id = `tool-${runId}`;
-        toolEl.className = 'tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
+        toolEl.className = 'tool-pill done';
 
         const pillContent = document.createElement('span');
-        pillContent.className = 'inline-flex items-center gap-1.5';
-        pillContent.innerHTML = `<i class="fas fa-check text-green-500 text-[10px]"></i><span>${this.escapeHtml(toolName)}</span>`;
+        pillContent.className = 'inline-flex items-center gap-1';
+        pillContent.innerHTML = `<i class="fas fa-check text-green text-2xs"></i><span>${this.escapeHtml(toolName)}</span>`;
         toolEl.appendChild(pillContent);
 
         const details = document.createElement('div');
-        details.className = 'tool-invocation-details hidden absolute bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
+        details.className = 'tool-invocation-details';
 
         if (toolInput) {
             const inputSection = document.createElement('div');
-            inputSection.className = 'p-3 border-b border-dark-border/50';
-            inputSection.innerHTML = '<div class="text-xs font-semibold text-gray-400 mb-1">Input</div>';
+            inputSection.className = 'tool-detail-section';
+            inputSection.innerHTML = '<h4>Input</h4>';
             const inputPre = document.createElement('pre');
-            inputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar';
+            inputPre.className = 'tool-detail-pre custom-scrollbar';
             inputPre.textContent = toolInput;
             inputSection.appendChild(inputPre);
             details.appendChild(inputSection);
         }
 
         const outputSection = document.createElement('div');
-        outputSection.className = 'p-3';
-        outputSection.innerHTML = '<div class="text-xs font-semibold text-gray-400 mb-1">Output</div>';
+        outputSection.className = 'tool-detail-section';
+        outputSection.innerHTML = '<h4>Output</h4>';
         const outputPre = document.createElement('pre');
-        outputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar';
+        outputPre.className = 'tool-detail-pre custom-scrollbar';
         outputPre.textContent = toolOutput;
         outputSection.appendChild(outputPre);
         details.appendChild(outputSection);
@@ -1048,11 +1670,11 @@ export class AgentsView extends Component {
             if (details.contains(e.target)) return;
             e.preventDefault();
             e.stopPropagation();
-            toolsDiv.querySelectorAll('.tool-invocation-details:not(.hidden)').forEach(d => {
-                if (d !== details) d.classList.add('hidden');
+            toolsDiv.querySelectorAll('.tool-invocation-details.visible').forEach(d => {
+                if (d !== details) d.classList.remove('visible');
             });
-            const wasHidden = details.classList.contains('hidden');
-            details.classList.toggle('hidden');
+            const wasHidden = !details.classList.contains('visible');
+            details.classList.toggle('visible');
             if (wasHidden && container) {
                 const pillRect = toolEl.getBoundingClientRect();
                 const containerRect = container.getBoundingClientRect();
@@ -1068,7 +1690,7 @@ export class AgentsView extends Component {
         });
 
         document.addEventListener('click', (e) => {
-            if (!toolEl.contains(e.target)) details.classList.add('hidden');
+            if (!toolEl.contains(e.target)) details.classList.remove('visible');
         }, { capture: true });
 
         toolsDiv.appendChild(toolEl);
@@ -1098,9 +1720,9 @@ export class AgentsView extends Component {
         // Create pill on first thinking chunk
         if (!thinkingState.thinkingPill) {
             const pill = document.createElement('div');
-            pill.className = 'thinking-pill tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-purple-400 font-mono';
+            pill.className = 'tool-pill thinking';
             pill.innerHTML = `
-                <i class="fas fa-brain animate-pulse text-[10px]"></i>
+                <i class="fas fa-brain animate-pulse text-2xs"></i>
                 <span>Thinking...</span>
             `;
             toolsDiv.appendChild(pill);
@@ -1117,29 +1739,29 @@ export class AgentsView extends Component {
         thinkingState.thinkingPill = null;
         thinkingState.thinkingContent = '';
 
-        pill.className = 'thinking-pill tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
+        pill.className = 'tool-pill done thinking';
         pill.innerHTML = '';
 
         const pillContent = document.createElement('span');
-        pillContent.className = 'inline-flex items-center gap-1.5';
+        pillContent.className = 'inline-flex items-center gap-1';
         pillContent.innerHTML = `
-            <i class="fas fa-brain text-purple-400 text-[10px]"></i>
+            <i class="fas fa-brain text-purple text-2xs"></i>
             <span>Thinking</span>
         `;
         pill.appendChild(pillContent);
 
         const popover = document.createElement('div');
-        popover.className = 'hidden fixed z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw] p-3';
+        popover.className = 'tool-invocation-details fixed';
 
         const popoverContent = document.createElement('div');
-        popoverContent.className = 'text-xs text-gray-400 max-h-64 overflow-y-auto markdown-content custom-scrollbar';
+        popoverContent.className = 'tool-detail-pre markdown-content custom-scrollbar';
         popoverContent.innerHTML = markdownRenderer.render(content);
         markdownRenderer.highlightCode(popoverContent);
         popover.appendChild(popoverContent);
         pill.appendChild(popover);
 
         pill.addEventListener('mouseenter', () => {
-            popover.classList.remove('hidden');
+            popover.classList.add('visible');
             const pillRect = pill.getBoundingClientRect();
             popover.style.bottom = (window.innerHeight - pillRect.top + 4) + 'px';
             popover.style.top = 'auto';
@@ -1150,7 +1772,7 @@ export class AgentsView extends Component {
             }
             popover.style.right = 'auto';
         });
-        pill.addEventListener('mouseleave', () => popover.classList.add('hidden'));
+        pill.addEventListener('mouseleave', () => popover.classList.remove('visible'));
     }
 
     createResponseBubble(id) {
@@ -1162,54 +1784,52 @@ export class AgentsView extends Component {
         div.id = id;
         div.className = 'flex justify-start';
         div.innerHTML = `
-            <div class="response-bubble-inner max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-4 text-gray-100 text-[15px] leading-relaxed relative group">
+            <div class="response-bubble-inner loading group">
                 <div class="response-content whitespace-pre-wrap flex items-center">
-                    <div class="loading-dots flex gap-1">
-                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-200"></div>
-                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-400"></div>
+                    <div class="loading-dots">
+                        <div></div>
+                        <div></div>
+                        <div></div>
                     </div>
                 </div>
-                <div class="tool-invocations flex flex-wrap gap-1.5 mt-2"></div>
+                <div class="tool-invocations"></div>
             </div>
         `;
 
         wrapper.appendChild(div);
 
         const statusBar = document.createElement('div');
-        statusBar.className = 'stream-status-bar flex items-center gap-2 mt-1.5 ml-1 text-xs text-gray-400';
+        statusBar.className = 'stream-status-bar';
         statusBar.innerHTML = `
-            <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse-dot"></div>
+            <div class="status-dot-pulse"></div>
             <span class="stream-status-text">Generating...</span>
-            <span class="stream-elapsed text-gray-500">0.0s</span>
-            <button class="stream-cancel-btn ml-auto text-gray-500 hover:text-gray-300 text-xs px-2 py-0.5 rounded border border-dark-border hover:border-gray-500 transition-colors">
-                Stop
-            </button>
+            <span class="stream-elapsed text-muted">0.0s</span>
+            <button class="stream-cancel-btn">Stop</button>
         `;
         wrapper.appendChild(statusBar);
 
         statusBar.querySelector('.stream-cancel-btn').addEventListener('click', () => this.cancelCurrentStream());
 
         const statsBar = document.createElement('div');
-        statsBar.className = 'stream-stats-bar hidden flex items-center gap-3 mt-1.5 ml-1 text-xs text-gray-500';
+        statsBar.className = 'stream-stats-bar';
         statsBar.innerHTML = `
             <span class="flex items-center gap-1">
                 <i class="far fa-clock"></i>
                 <span class="stats-elapsed"></span>
             </span>
-            <span class="text-dark-border">|</span>
+            <span class="divider">|</span>
             <span class="flex items-center gap-1">
-                <i class="fas fa-arrow-up text-[9px]"></i>
+                <i class="fas fa-arrow-up text-2xs"></i>
                 <span class="stats-input-tokens"></span>
             </span>
-            <span class="text-dark-border">|</span>
+            <span class="divider">|</span>
             <span class="flex items-center gap-1">
-                <i class="fas fa-arrow-down text-[9px]"></i>
+                <i class="fas fa-arrow-down text-2xs"></i>
                 <span class="stats-output-tokens"></span>
             </span>
-            <span class="text-dark-border">|</span>
+            <span class="divider">|</span>
             <span class="flex items-center gap-1">
-                <i class="fas fa-bolt text-[9px]"></i>
+                <i class="fas fa-bolt text-2xs"></i>
                 <span class="stats-tps"></span>
             </span>
         `;
@@ -1235,8 +1855,7 @@ export class AgentsView extends Component {
             this.finalizeThinkingPill(toolsDiv, thinkingState);
             if (loadingDots) {
                 loadingDots.remove();
-                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
-                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
+                bubble.querySelector('.response-bubble-inner').classList.remove('loading');
                 contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
                 contentDiv.innerHTML = '';
             }
@@ -1247,10 +1866,10 @@ export class AgentsView extends Component {
             const toolId = `tool-${event.runId}`;
             const toolEl = document.createElement('div');
             toolEl.id = toolId;
-            toolEl.className = 'tool-pill inline-flex items-center gap-1.5 bg-dark-bg/50 border border-dark-border/60 rounded-full px-2.5 py-1 text-xs text-gray-400 font-mono';
+            toolEl.className = 'tool-pill';
             toolEl.dataset.toolInput = typeof event.input === 'string' ? event.input : JSON.stringify(event.input, null, 2);
             toolEl.innerHTML = `
-                <i class="fas fa-circle-notch animate-spin text-blue-400 text-[10px]"></i>
+                <i class="fas fa-circle-notch animate-spin text-blue text-2xs"></i>
                 <span>${this.escapeHtml(event.tool)}</span>
              `;
             toolsDiv.appendChild(toolEl);
@@ -1263,36 +1882,36 @@ export class AgentsView extends Component {
                 const toolInput = toolEl.dataset.toolInput || '';
                 const toolOutput = typeof event.output === 'string' ? event.output : JSON.stringify(event.output, null, 2);
 
-                toolEl.className = 'tool-pill relative inline-flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-full px-2.5 py-1 text-xs text-gray-500 font-mono cursor-pointer hover:bg-dark-bg/60 hover:border-dark-border transition-colors';
+                toolEl.className = 'tool-pill done';
                 toolEl.innerHTML = '';
 
                 const pillContent = document.createElement('span');
-                pillContent.className = 'inline-flex items-center gap-1.5';
+                pillContent.className = 'inline-flex items-center gap-1';
                 pillContent.innerHTML = `
-                    <i class="fas fa-check text-green-500 text-[10px]"></i>
+                    <i class="fas fa-check text-green text-2xs"></i>
                     <span>${this.escapeHtml(event.tool)}</span>
                 `;
                 toolEl.appendChild(pillContent);
 
                 const details = document.createElement('div');
-                details.className = 'tool-invocation-details hidden absolute bottom-full mb-1 z-50 bg-dark-surface border border-dark-border rounded-lg shadow-xl w-[400px] max-w-[90vw]';
+                details.className = 'tool-invocation-details';
 
                 if (toolInput) {
                     const inputSection = document.createElement('div');
-                    inputSection.className = 'p-3 border-b border-dark-border/50';
-                    inputSection.innerHTML = `<div class="text-xs font-semibold text-gray-400 mb-1">Input</div>`;
+                    inputSection.className = 'tool-detail-section';
+                    inputSection.innerHTML = '<h4>Input</h4>';
                     const inputPre = document.createElement('pre');
-                    inputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar';
+                    inputPre.className = 'tool-detail-pre custom-scrollbar';
                     inputPre.textContent = toolInput;
                     inputSection.appendChild(inputPre);
                     details.appendChild(inputSection);
                 }
 
                 const outputSection = document.createElement('div');
-                outputSection.className = 'p-3';
-                outputSection.innerHTML = `<div class="text-xs font-semibold text-gray-400 mb-1">Output</div>`;
+                outputSection.className = 'tool-detail-section';
+                outputSection.innerHTML = '<h4>Output</h4>';
                 const outputPre = document.createElement('pre');
-                outputPre.className = 'text-xs text-gray-400 bg-dark-bg/60 rounded-md p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar';
+                outputPre.className = 'tool-detail-pre custom-scrollbar';
                 outputPre.textContent = toolOutput;
                 outputSection.appendChild(outputPre);
                 details.appendChild(outputSection);
@@ -1303,11 +1922,11 @@ export class AgentsView extends Component {
                     if (details.contains(e.target)) return;
                     e.preventDefault();
                     e.stopPropagation();
-                    toolsDiv.querySelectorAll('.tool-invocation-details:not(.hidden)').forEach(d => {
-                        if (d !== details) d.classList.add('hidden');
+                    toolsDiv.querySelectorAll('.tool-invocation-details.visible').forEach(d => {
+                        if (d !== details) d.classList.remove('visible');
                     });
-                    const wasHidden = details.classList.contains('hidden');
-                    details.classList.toggle('hidden');
+                    const wasHidden = !details.classList.contains('visible');
+                    details.classList.toggle('visible');
                     if (wasHidden) {
                         const pillRect = toolEl.getBoundingClientRect();
                         const containerRect = container.getBoundingClientRect();
@@ -1324,7 +1943,7 @@ export class AgentsView extends Component {
 
                 const closeHandler = (e) => {
                     if (!toolEl.contains(e.target)) {
-                        details.classList.add('hidden');
+                        details.classList.remove('visible');
                     }
                 };
                 document.addEventListener('click', closeHandler, { capture: true });
@@ -1340,17 +1959,16 @@ export class AgentsView extends Component {
         } else if (event.type === 'result') {
             if (loadingDots) {
                 loadingDots.remove();
-                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
-                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
+                bubble.querySelector('.response-bubble-inner').classList.remove('loading');
                 contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
                 contentDiv.innerHTML = '';
             }
 
             const resultContainer = document.createElement('div');
-            resultContainer.className = 'bg-dark-bg/50 border border-dark-border rounded-lg p-4';
+            resultContainer.className = 'panel';
 
             const resultPre = document.createElement('pre');
-            resultPre.className = 'text-sm text-gray-300 font-mono whitespace-pre-wrap overflow-x-auto';
+            resultPre.className = 'text-sm text-primary font-mono whitespace-pre-wrap overflow-x-auto';
             resultPre.textContent = JSON.stringify(event.output, null, 2);
 
             resultContainer.appendChild(resultPre);
@@ -1360,18 +1978,17 @@ export class AgentsView extends Component {
         } else if (event.type === 'error') {
             if (loadingDots) {
                 loadingDots.remove();
-                bubble.querySelector('.response-bubble-inner').classList.remove('py-4');
-                bubble.querySelector('.response-bubble-inner').classList.add('py-3');
+                bubble.querySelector('.response-bubble-inner').classList.remove('loading');
                 contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
             }
             const errorDiv = document.createElement('div');
-            errorDiv.className = 'text-red-400 text-sm mt-2';
+            errorDiv.className = 'text-red text-sm';
             errorDiv.textContent = `Error: ${event.error}`;
             contentDiv.appendChild(errorDiv);
             container.scrollTop = container.scrollHeight;
         } else if (event.type === 'warning') {
             const warningDiv = document.createElement('div');
-            warningDiv.className = 'text-yellow-400 text-sm mt-2';
+            warningDiv.className = 'text-yellow text-sm';
             warningDiv.textContent = event.message;
             contentDiv.appendChild(warningDiv);
             container.scrollTop = container.scrollHeight;
@@ -1395,7 +2012,7 @@ export class AgentsView extends Component {
         const bubble = this.querySelector(`#${id}`);
         if (bubble) {
             const content = bubble.querySelector('.response-content');
-            content.innerHTML = `<span class="text-red-400">${errorMsg}</span>`;
+            content.innerHTML = `<span class="text-red">${errorMsg}</span>`;
         }
     }
 
@@ -1419,30 +2036,29 @@ export class AgentsView extends Component {
         const div = document.createElement('div');
         div.className = isUser ? 'flex justify-end' : 'flex justify-start';
 
-        const bubbleColor = isUser ? 'bg-dark-surface' : (hasError ? 'bg-red-900/20 border-red-900/30' : 'bg-dark-surface');
-        const textColor = hasError ? 'text-red-300' : 'text-gray-100';
+        const bubbleClass = isUser ? 'user-bubble' : (hasError ? 'response-bubble-inner error' : 'response-bubble-inner');
 
         // Build attachment thumbnails for user messages
         let attachmentHtml = '';
         if (isUser && metadata.attachments && metadata.attachments.length > 0) {
             const thumbs = metadata.attachments.map(att => {
                 if (att.mediaType.startsWith('image/')) {
-                    return `<img src="data:${att.mediaType};base64,${att.data}" class="w-16 h-16 object-cover rounded-lg border border-dark-border/50">`;
+                    return `<img src="data:${att.mediaType};base64,${att.data}" class="attachment-thumb">`;
                 }
-                return `<div class="flex items-center gap-1.5 bg-dark-bg/60 border border-dark-border/50 rounded-lg px-2 py-1.5 text-xs text-gray-400">
+                return `<div class="attachment-pill">
                     <i class="fas fa-file"></i>
-                    <span class="max-w-[100px] truncate">${this.escapeHtml(att.name)}</span>
+                    <span class="truncate attachment-name">${this.escapeHtml(att.name)}</span>
                 </div>`;
             }).join('');
             attachmentHtml = `<div class="flex flex-wrap gap-2 mb-2">${thumbs}</div>`;
         }
 
         div.innerHTML = `
-            <div class="max-w-4xl ${bubbleColor} border ${isUser ? 'border-transparent' : 'border-dark-border'} rounded-3xl px-5 py-3 ${textColor} text-[15px] leading-relaxed relative group">
+            <div class="${bubbleClass} group">
                 ${attachmentHtml}
                 <div class="whitespace-pre-wrap">${this.escapeHtml(content)}</div>
                 ${!isUser && !hasError ? `
-                    <button class="copy-btn absolute -bottom-6 left-0 text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity p-1" title="Copy">
+                    <button class="copy-btn" title="Copy">
                         <i class="far fa-copy"></i>
                     </button>
                 ` : ''}
@@ -1469,11 +2085,11 @@ export class AgentsView extends Component {
         div.id = id;
         div.className = 'flex justify-start';
         div.innerHTML = `
-            <div class="max-w-4xl bg-dark-surface border border-dark-border rounded-3xl px-5 py-4">
-                <div class="flex gap-1">
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-200"></div>
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-400"></div>
+            <div class="response-bubble-inner loading">
+                <div class="loading-dots">
+                    <div></div>
+                    <div></div>
+                    <div></div>
                 </div>
             </div>
         `;
@@ -1488,9 +2104,7 @@ export class AgentsView extends Component {
     }
 
     escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return sharedEscapeHtml(text);
     }
 
     _getRandomWelcomeMessage() {
@@ -1565,15 +2179,16 @@ export class AgentsView extends Component {
 
     _renderSampleQuestionChips() {
         const agent = store.get('selectedAgent');
-        const questions = agent?.sampleQuestions;
+        const workflow = store.get('selectedWorkflow');
+        const questions = agent?.sampleQuestions || workflow?.sampleQuestions;
         if (!questions || questions.length === 0) return '';
 
         const chips = questions.map(q =>
-            `<button class="sample-question-chip bg-dark-surface border border-dark-border/60 hover:border-gray-500 text-gray-300 text-sm px-4 py-2 rounded-2xl transition-colors text-left">${this.escapeHtml(q)}</button>`
+            `<button class="sample-question-chip">${this.escapeHtml(q)}</button>`
         ).join('');
 
         return `
-            <div class="flex flex-wrap justify-center gap-2 max-w-2xl mt-4">${chips}</div>
+            <div class="sample-questions-wrap">${chips}</div>
         `;
     }
 
@@ -1626,6 +2241,9 @@ export class AgentsView extends Component {
         // New chat button
         this.querySelector('#newChatBtn').addEventListener('click', () => this.showNewSessionModal());
 
+        // New agent button
+        this.querySelector('#newAgentBtn').addEventListener('click', () => this.showNewAgentModal());
+
         // Mobile sidebar toggle
         this.querySelector('#sidebarToggleBtn').addEventListener('click', () => this.toggleSidebar(true));
         this.querySelector('#sidebarBackdrop').addEventListener('click', () => this.toggleSidebar(false));
@@ -1633,57 +2251,56 @@ export class AgentsView extends Component {
 
     template() {
         return `
-            <div class="flex h-full relative border border-dark-border rounded-xl overflow-hidden bg-dark-surface/30">
+            <div class="agent-shell">
                 <!-- Mobile sidebar backdrop -->
-                <div id="sidebarBackdrop" class="hidden fixed inset-0 bg-black/50 z-30 md:hidden"></div>
+                <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
 
                 <!-- Sidebar -->
-                <div id="sidebar" class="hidden md:flex w-64 flex-shrink-0 bg-dark-bg md:bg-dark-bg/60 border-r border-dark-border/60 flex-col
-                    fixed md:relative inset-y-0 left-0 z-40 md:z-auto">
-                    <div class="p-3">
-                        <button id="newChatBtn" class="w-full flex items-center justify-center gap-2 px-3 py-2.5 hover:bg-dark-hover rounded-lg text-sm font-medium text-gray-300 transition-colors">
-                            <i class="fas fa-plus text-xs text-blue-400"></i>
+                <div id="sidebar" class="agent-sidebar">
+                    <div class="p-3 flex flex-col gap-2">
+                        <button id="newChatBtn" class="new-chat-btn">
+                            <i class="fas fa-plus text-xs text-accent"></i>
                             <span>New chat</span>
+                        </button>
+                        <button id="newAgentBtn" class="new-chat-btn new-agent-btn">
+                            <i class="fas fa-robot text-xs text-blue"></i>
+                            <span>New agent</span>
                         </button>
                     </div>
                     <div id="sessionList" class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-2"></div>
                 </div>
 
                 <!-- Chat Area -->
-                <div class="flex-1 flex flex-col min-w-0">
+                <div class="chat-area">
                     <!-- Chat Header -->
-                    <div class="flex-shrink-0 flex items-center gap-2 px-3 md:px-5 py-3 border-b border-dark-border/40 text-sm">
-                        <button id="sidebarToggleBtn" class="md:hidden text-gray-400 hover:text-gray-200 p-1 -ml-1">
+                    <div class="chat-header">
+                        <button id="sidebarToggleBtn" class="sidebar-toggle-btn">
                             <i class="fas fa-bars"></i>
                         </button>
                         <div id="chatHeader" class="flex-1 min-w-0">
-                            <span class="text-gray-500">No conversation selected</span>
+                            <span class="text-muted">No conversation selected</span>
                         </div>
                     </div>
 
                     <!-- Chat Messages -->
-                    <div id="chatMessages" class="flex-1 overflow-y-auto space-y-4 p-4 pr-2 pb-6 custom-scrollbar"></div>
+                    <div id="chatMessages" class="chat-messages custom-scrollbar"></div>
 
                     <!-- Input Area -->
-                    <div class="p-3 pt-0">
-                        <div id="attachmentPreview" class="hidden flex flex-wrap gap-2 px-2 pb-2"></div>
-                        <div class="relative bg-dark-surface border border-dark-border/60 rounded-2xl focus-within:border-gray-500 transition-colors">
+                    <div class="chat-input-area">
+                        <div id="attachmentPreview" class="attachment-preview"></div>
+                        <div class="chat-input-wrap">
                             <input type="file" id="fileInput" multiple accept="image/*,.pdf" class="hidden">
                             <textarea id="chatInput" rows="1" readonly
-                                class="w-full bg-transparent pl-11 pr-14 py-3 text-gray-100 placeholder-gray-500 resize-none focus:outline-none max-h-[200px] cursor-pointer"
                                 placeholder="Ask anything"></textarea>
 
-                            <div class="absolute bottom-2 left-2 flex items-center">
-                                <button id="attachBtn" type="button"
-                                    class="text-gray-500 hover:text-gray-300 p-1.5 rounded-lg hover:bg-dark-hover transition-colors"
-                                    title="Attach files">
+                            <div class="chat-input-actions left">
+                                <button id="attachBtn" type="button" class="attach-btn" title="Attach files">
                                     <i class="fas fa-plus text-sm"></i>
                                 </button>
                             </div>
 
-                            <div class="absolute bottom-2 right-2 flex items-center gap-2">
-                                <button id="sendMessageBtn" disabled
-                                    class="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-all shadow-lg shadow-blue-900/20">
+                            <div class="chat-input-actions right">
+                                <button id="sendMessageBtn" disabled class="send-btn">
                                     <i class="fas fa-paper-plane text-sm"></i>
                                 </button>
                             </div>

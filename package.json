@@ -64,6 +64,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.1",
     "openai": "^6.22.0",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.13.2",
     "pino": "^10.2.1",
     "pino-pretty": "^13.1.3",

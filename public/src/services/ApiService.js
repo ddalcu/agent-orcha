@@ -48,11 +48,21 @@ export class ApiService {
         return res.json();
     }
 
-    async startWorkflowStream(name, input) {
+    async startWorkflowStream(name, input, signal) {
         return this._fetch(`/api/workflows/${name}/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input })
+            body: JSON.stringify({ input }),
+            signal,
+        });
+    }
+
+    async resumeWorkflowStream(name, threadId, answer, signal) {
+        return this._fetch(`/api/workflows/${name}/resume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ threadId, answer }),
+            signal,
         });
     }
 
@@ -95,6 +105,36 @@ export class ApiService {
 
     async getLLMs() {
         const res = await this._fetch('/api/llm');
+        return res.json();
+    }
+
+    async getLlmConfig() {
+        const res = await this._fetch('/api/llm/config');
+        return res.json();
+    }
+
+    async saveLlmModel(name, config) {
+        const res = await this._fetch(`/api/llm/config/models/${encodeURIComponent(name)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config),
+        });
+        return res.json();
+    }
+
+    async deleteLlmModel(name) {
+        const res = await this._fetch(`/api/llm/config/models/${encodeURIComponent(name)}`, {
+            method: 'DELETE',
+        });
+        return res.json();
+    }
+
+    async saveLlmEmbedding(name, config) {
+        const res = await this._fetch(`/api/llm/config/embeddings/${encodeURIComponent(name)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config),
+        });
         return res.json();
     }
 

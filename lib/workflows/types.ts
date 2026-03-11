@@ -79,6 +79,10 @@ export const ReactWorkflowSchema = z.object({
   description: z.string().describe('Human-readable description'),
   version: z.string().default('1.0.0'),
   type: z.literal('react'),
+  chatOutputFormat: z
+    .enum(['json', 'text'])
+    .default('json')
+    .describe('How the output is rendered in the chat UI: json (code block) or text (markdown)'),
   input: z.object({
     schema: z.record(InputFieldSchema),
   }),
@@ -90,6 +94,7 @@ export const ReactWorkflowSchema = z.object({
   output: z.record(z.string()),
   config: WorkflowConfigSchema.optional(),
   metadata: z.record(z.unknown()).optional(),
+  sampleQuestions: z.array(z.string()).optional(),
 });
 
 // Step-based workflow (existing)
@@ -98,6 +103,10 @@ export const StepBasedWorkflowSchema = z.object({
   description: z.string().describe('Human-readable description'),
   version: z.string().default('1.0.0'),
   type: z.literal('steps').default('steps'),
+  chatOutputFormat: z
+    .enum(['json', 'text'])
+    .default('json')
+    .describe('How the output is rendered in the chat UI: json (code block) or text (markdown)'),
   input: z.object({
     schema: z.record(InputFieldSchema),
   }),
@@ -105,6 +114,7 @@ export const StepBasedWorkflowSchema = z.object({
   config: WorkflowConfigSchema.optional(),
   output: z.record(z.string()),
   metadata: z.record(z.unknown()).optional(),
+  sampleQuestions: z.array(z.string()).optional(),
 });
 
 // Discriminated union of workflow types
@@ -176,6 +186,8 @@ export interface WorkflowStatus {
   elapsed?: number;
   error?: string;
   interrupt?: WorkflowInterrupt;
+  toolInput?: string;
+  toolOutput?: string;
 }
 
 // Interrupt types for human-in-the-loop

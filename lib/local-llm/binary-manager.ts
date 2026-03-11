@@ -22,6 +22,8 @@ const BINARY_NAME = process.platform === 'win32' ? 'llama-server.exe' : 'llama-s
 const RELEASES_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
 
 let cachedGpu: GpuInfo | null = null;
+let cachedVersion: { baseDir: string; value: string | null } | null = null;
+let cachedIsSystem: boolean | null = null;
 
 /**
  * Detect GPU and select the best acceleration backend.
@@ -336,6 +338,8 @@ async function downloadBinary(destDir: string, platform: Platform, gpu: GpuInfo)
  * llama-server outputs version to stderr (mixed with GPU init logs), so we capture both streams.
  */
 export function getBinaryVersion(baseDir: string): string | null {
+  if (cachedVersion && cachedVersion.baseDir === baseDir) return cachedVersion.value;
+
   function parseVersion(binPath: string): string | null {
     try {
       const result = spawnSync(binPath, ['--version'], { timeout: 5000, encoding: 'utf-8' });
@@ -347,33 +351,42 @@ export function getBinaryVersion(baseDir: string): string | null {
     }
   }
 
+  let version: string | null = null;
+
   // Check system PATH first
   try {
     const cmd = process.platform === 'win32' ? 'where' : 'which';
     const sysPath = execFileSync(cmd, ['llama-server'], { encoding: 'utf-8', timeout: 3000 }).trim().split('\n')[0]!;
-    if (sysPath) return parseVersion(sysPath);
+    if (sysPath) version = parseVersion(sysPath);
   } catch { /* not on PATH */ }
 
-  // Check local binary
-  const platform = detectPlatform();
-  const gpu = detectGpu();
-  const binPath = path.join(baseDir, '.llama-server', getBinaryDirName(platform, gpu), BINARY_NAME);
-  if (!existsSync(binPath)) return null;
+  if (version === null) {
+    // Check local binary
+    const platform = detectPlatform();
+    const gpu = detectGpu();
+    const binPath = path.join(baseDir, '.llama-server', getBinaryDirName(platform, gpu), BINARY_NAME);
+    if (existsSync(binPath)) {
+      version = parseVersion(binPath);
+    }
+  }
 
-  return parseVersion(binPath);
+  cachedVersion = { baseDir, value: version };
+  return version;
 }
 
 /**
  * Check if llama-server is a system install (on PATH) vs managed by us.
  */
 export function isSystemBinary(): boolean {
+  if (cachedIsSystem !== null) return cachedIsSystem;
   try {
     const cmd = process.platform === 'win32' ? 'where' : 'which';
     execFileSync(cmd, ['llama-server'], { encoding: 'utf-8', timeout: 3000 });
-    return true;
+    cachedIsSystem = true;
   } catch {
-    return false;
+    cachedIsSystem = false;
   }
+  return cachedIsSystem;
 }
 
 /**
@@ -386,6 +399,9 @@ export async function updateBinary(baseDir: string): Promise<void> {
   const binDir = path.join(baseDir, '.llama-server', dirName);
   await fs.rm(binDir, { recursive: true, force: true });
   await downloadBinary(binDir, platform, gpu);
+  // Invalidate caches so next call picks up the new binary
+  cachedVersion = null;
+  cachedIsSystem = null;
 }
 
 export interface UpdateInfo {
@@ -437,4 +453,4 @@ export async function checkForUpdate(baseDir: string): Promise<UpdateInfo> {
 // Exported for testing — not part of the public API
 export { getAssetPatterns as _getAssetPatterns, getBinaryDirName as _getBinaryDirName };
 export type { Platform as _Platform };
-export function _resetGpuCache() { cachedGpu = null; }
+export function _resetGpuCache() { cachedGpu = null; cachedVersion = null; cachedIsSystem = null; }

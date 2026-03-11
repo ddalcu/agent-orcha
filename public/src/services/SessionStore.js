@@ -14,13 +14,14 @@ class SessionStore {
         return this.getAll().find(s => s.id === id) || null;
     }
 
-    create({ agentName, agentType, llmName }) {
+    create({ agentName, agentType, llmName, workflowName }) {
         const sessions = this.getAll();
         const session = {
             id: 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
             agentName: agentName || null,
             agentType: agentType || 'agent',
             llmName: llmName || null,
+            workflowName: workflowName || null,
             title: 'New conversation',
             messages: [],
             createdAt: Date.now(),

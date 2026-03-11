@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Release 0.0.8
+
+### Added
+
+- **PDF Knowledge Store Support** — `pdf-parse` added as a production dependency. PDF loader rewritten to use the `PDFParse` class directly (no lazy import), extracting text page-by-page. New template knowledge store: `patient-records` with deidentified healthcare PDFs.
+
+- **LLM Configuration API** — Full CRUD for `llm.json` via REST: `GET /api/llm/config` (with redacted API keys and env var detection), `PUT /api/llm/config/models/:name`, `DELETE /api/llm/config/models/:name`, `PUT /api/llm/config/embeddings/:name`. Enables in-browser LLM management without editing files.
+
+- **LocalLlmView Redesign** — Complete rewrite of the Local LLM management UI. Full model and embedding config editing, API key management with env var detection, model download/delete, llama-server controls, and context size configuration — all from the browser.
+
+- **Reasoning Budget Support** — New `reasoningBudget` field in model config (`llm.json`). Passes `--reasoning-format deepseek` and `--reasoning-budget` flags to llama-server for models with chain-of-thought capabilities (e.g., QwQ, DeepSeek-R1).
+
+- **Workflow Resume Streaming** — `POST /api/workflows/:name/resume` endpoint with SSE streaming for resuming interrupted ReAct workflows. `Orchestrator.streamResumeReactWorkflow()` added to support human-in-the-loop continuation.
+
+- **Workflow Chat Enhancements** — `chatOutputFormat` field (`json` | `text`) on workflow schemas controls how output renders in the chat UI. `sampleQuestions` field added to both step-based and react workflow schemas.  `toolInput` and `toolOutput` fields added to `WorkflowStatus` for richer streaming events.
+
+- **Team Chat Workflow Template** — New `team-chat.workflow.yaml` template: a ReAct coordinator that delegates tasks to specialized agents for collaborative problem-solving.
+
+- **Studio CSS Overhaul** — All inline styles extracted from `index.html` and `chat.html` into a unified `public/styles.css` stylesheet with CSS custom properties. Tailwind CDN removed. Shared `view-panel` class adds consistent borders across Knowledge, MCP, Monitor, and LLM views.
+
+- **Studio Logo** — `public/assets/logo.png` added and integrated into the NavBar.
+
+- **Force Shutdown** — Second Ctrl+C during shutdown now force-exits immediately (both `start.ts` and `src/index.ts`).
+
+### Changed
+
+- **Parallel Tool Execution in React Workflows** — `ReactWorkflowExecutor` now runs all tool calls from a single LLM response concurrently via `Promise.all`, matching the existing behavior in the agent react-loop. All `tool_call` status events are emitted upfront before execution begins.
+
+- **Tool Argument Validation** — `tool()` factory now uses `safeParse` instead of `parse`, returning a descriptive error with field names and what was provided, rather than a raw Zod exception. Helps LLMs self-correct invalid tool calls.
+
+- **Tool Arg Parse Error Feedback** — OpenAI provider's `parseToolArgs()` fallback now returns the raw text in a `_parseError` field instead of an empty object, giving the model a chance to see and fix its malformed JSON.
+
+- **Workspace Write Tool** — Description updated to emphasize that `filePath` and `content` are both required, with an inline example. Reduces tool-call errors from small LLMs.
+
+- **Local LLM Context Sizing** — `calculateOptimalContextSize` now uses 50% of available-after-weights RAM (down from 80% of native context) and applies a 32K hard cap, reducing memory pressure on smaller machines.
+
+- **Local LLM Binary Caching** — `getBinaryVersion()` and `isSystemBinary()` now cache their results, avoiding repeated `which`/`where` and `--version` subprocess calls. Cache invalidated on `updateBinary()`.
+
+- **Local LLM Model Swap** — Activation now reads `contextSize` and `reasoningBudget` from the existing `default` model config in `llm.json` and forwards them to `llamaEngine.swap()`.
+
+- **llama-server `--parallel 1`** — Hardcoded to single-slot mode for predictable memory usage on desktop.
+
+- **LLM Factory Default maxTokens** — Local provider models now default to `maxTokens: 4096` when none is specified, preventing unbounded generation.
+
+- **Research Pipeline Workflow** — Rewritten to search corporate knowledge and publish findings as a live HTML page via the web-engineer agent.
+
+- **Tool Explorer Workflow** — Renamed from `react-research`, agent delegation disabled (`agents.mode: none`), `maxIterations` raised to 100, sample questions added.
+
+- **Web Engineer Agent** — Updated to use `htmlhost_store` tool with explicit `key`/`value` parameters instead of the previous `htmlhost_deploy`.
+
+- **WorkflowsView Removed** — Standalone workflows tab removed from Studio; workflow chat is handled entirely within AgentsView.
+
+- **LogViewer Removed** — `LogViewer.js` component removed.
+
+- **AgentsView** — Expanded with workflow chat integration (start, stream, interrupt/resume), session management improvements, and mobile sidebar support.
+
+- **StandaloneChat** — Now uses shared `styles.css` instead of inline Tailwind styles.
+
+### Dependencies
+
+- **Added:** `pdf-parse`
+
 ## Release 0.0.7
 
 ### Added

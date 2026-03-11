@@ -3,7 +3,6 @@ import { Component } from '../utils/Component.js';
 import { store } from '../store.js';
 import './NavBar.js';
 import './AgentsView.js';
-import './WorkflowsView.js';
 import './KnowledgeView.js';
 import './GraphView.js';
 import './McpView.js';
@@ -67,21 +66,13 @@ export class AppRoot extends Component {
 
         const overlay = document.createElement('div');
         overlay.id = 'auth-overlay';
-        overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70';
+        overlay.className = 'auth-overlay';
         overlay.innerHTML = `
-            <div class="bg-[#1e1e2e] border border-[#313244] rounded-lg shadow-xl w-full max-w-sm mx-4 p-6">
-                <h2 class="text-xl font-semibold text-gray-100 mb-4">
-                    <i class="fas fa-lock mr-2 text-blue-400"></i>Authentication Required
-                </h2>
-                <div id="auth-error" class="hidden text-red-400 text-sm mb-3"></div>
-                <input id="auth-password" type="password" placeholder="Password"
-                    class="w-full bg-[#11111b] border border-[#313244] rounded px-3 py-2 text-gray-100
-                           focus:outline-none focus:border-blue-500 mb-4" />
-                <button id="auth-submit"
-                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4
-                           rounded transition-colors">
-                    Sign In
-                </button>
+            <div class="auth-card">
+                <h2><i class="fas fa-lock text-accent"></i> Authentication Required</h2>
+                <div id="auth-error" class="auth-error"></div>
+                <input id="auth-password" type="password" placeholder="Password" class="input" />
+                <button id="auth-submit" class="btn btn-accent w-full">Sign In</button>
             </div>
         `;
         this.appendChild(overlay);
@@ -110,13 +101,13 @@ export class AppRoot extends Component {
                     this.switchTab(store.get('activeTab'));
                 } else {
                     errorDiv.textContent = 'Invalid password';
-                    errorDiv.classList.remove('hidden');
+                    errorDiv.classList.add('visible');
                     passwordInput.value = '';
                     passwordInput.focus();
                 }
             } catch {
                 errorDiv.textContent = 'Connection error';
-                errorDiv.classList.remove('hidden');
+                errorDiv.classList.add('visible');
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Sign In';
@@ -150,7 +141,7 @@ export class AppRoot extends Component {
 
         const btn = document.createElement('button');
         btn.id = 'vnc-desktop-btn';
-        btn.className = 'text-gray-400 hover:text-white transition-colors';
+        btn.className = 'btn-ghost';
         btn.title = 'View Browser Desktop';
         btn.innerHTML = '<i class="fas fa-desktop"></i>';
         btn.addEventListener('click', () => {
@@ -166,7 +157,7 @@ export class AppRoot extends Component {
 
         const btn = document.createElement('button');
         btn.id = 'auth-logout-btn';
-        btn.className = 'text-gray-400 hover:text-white transition-colors';
+        btn.className = 'btn-ghost';
         btn.title = 'Logout';
         btn.innerHTML = '<i class="fas fa-right-from-bracket"></i>';
         btn.addEventListener('click', async () => {
@@ -189,25 +180,24 @@ export class AppRoot extends Component {
         if (this.querySelector('#llm-setup-overlay')) return;
 
         const issueList = (issues || [])
-            .map(i => `<li class="flex items-start gap-2"><i class="fas fa-circle text-[5px] text-amber-400 mt-1.5 flex-shrink-0"></i><span>${i}</span></li>`)
+            .map(i => `<li class="flex items-start gap-2"><i class="fas fa-circle text-2xs text-accent flex-shrink-0 mt-1"></i><span>${i}</span></li>`)
             .join('');
 
         const overlay = document.createElement('div');
         overlay.id = 'llm-setup-overlay';
-        overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70';
+        overlay.className = 'auth-overlay';
         overlay.innerHTML = `
-            <div class="bg-[#1e1e2e] border border-[#313244] rounded-lg shadow-xl w-full max-w-md mx-4 p-8 text-center">
-                <div class="w-14 h-14 rounded-full bg-amber-500/15 flex items-center justify-center mx-auto mb-5">
-                    <i class="fas fa-microchip text-2xl text-amber-400"></i>
+            <div class="llm-setup-modal">
+                <div class="llm-setup-icon">
+                    <i class="fas fa-microchip text-2xl text-accent"></i>
                 </div>
-                <h2 class="text-xl font-semibold text-gray-100 mb-2">LLM Setup Required</h2>
-                <p class="text-sm text-gray-400 mb-4">
-                    Your models aren't ready yet. Head to the <strong class="text-gray-200">LLM</strong> tab to get started.
+                <h2 class="text-xl font-semibold text-primary mb-2">LLM Setup Required</h2>
+                <p class="text-sm text-secondary mb-4">
+                    Your models aren't ready yet. Head to the <strong class="text-primary">LLM</strong> tab to get started.
                 </p>
-                ${issueList ? `<ul class="text-xs text-gray-500 text-left space-y-1 mb-6 bg-[#11111b] rounded-lg p-3">${issueList}</ul>` : ''}
-                <button id="llm-setup-go"
-                    class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors">
-                    <i class="fas fa-arrow-right mr-2"></i>Go to LLM
+                ${issueList ? `<ul class="text-xs text-muted text-left space-y-1 panel-sm mb-6">${issueList}</ul>` : ''}
+                <button id="llm-setup-go" class="btn btn-accent w-full">
+                    <i class="fas fa-arrow-right"></i> Go to LLM
                 </button>
             </div>
         `;
@@ -237,7 +227,6 @@ export class AppRoot extends Component {
         let el;
         switch (tabId) {
             case 'agents': el = document.createElement('agents-view'); break;
-            case 'workflows': el = document.createElement('workflows-view'); break;
             case 'knowledge': el = document.createElement('knowledge-view'); break;
             case 'graph': el = document.createElement('graph-view'); break;
             case 'mcp': el = document.createElement('mcp-view'); break;
@@ -263,23 +252,24 @@ export class AppRoot extends Component {
 
     template() {
         return `
-            <div class="h-screen flex">
+            <div class="app-shell">
                 <div id="sidebar-backdrop"></div>
-                <div id="app-sidebar" class="flex-shrink-0 flex flex-col h-full w-40 relative">
+                <div id="app-sidebar">
                     <nav-bar class="flex-1 min-h-0"></nav-bar>
-                    <div class="sidebar-footer px-3 py-2">
+                    <div class="sidebar-footer">
                         <div id="header-actions" class="flex items-center gap-2"></div>
-                        <span id="app-version" class="text-[10px] block mt-1">AgentOrcha</span>
+                        <span id="app-version">AgentOrcha</span>
                     </div>
                 </div>
-                <div class="flex-1 flex flex-col min-w-0">
-                    <div class="md:hidden flex items-center px-4 py-2 border-b border-dark-border flex-shrink-0">
-                        <button id="hamburger-btn" class="text-gray-400 hover:text-white transition-colors">
+                <div class="app-main">
+                    <div class="app-mobile-header">
+                        <button id="hamburger-btn" class="btn-ghost">
                             <i class="fas fa-bars text-lg"></i>
                         </button>
-                        <span class="text-sm font-semibold text-gray-200 ml-3">Agent Orcha</span>
+                        <img src="/assets/logo.png" alt="Agent Orcha" class="mobile-logo">
+                        <span class="text-sm font-semibold text-primary ml-2">Agent Orcha</span>
                     </div>
-                    <div id="tabContent" class="flex-1 min-h-0 relative px-4 md:px-6 py-4">
+                    <div id="tabContent" class="app-content">
                         <!-- Dynamic Content -->
                     </div>
                     <log-viewer class="flex-shrink-0"></log-viewer>

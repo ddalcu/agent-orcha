@@ -1,10 +1,29 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { LLMFactory, listModelConfigs, getModelConfig, listEmbeddingConfigs, getEmbeddingConfig, resolveApiKey } from '../../lib/llm/index.ts';
+import {
+  LLMFactory,
+  listModelConfigs, getModelConfig,
+  listEmbeddingConfigs, getEmbeddingConfig,
+  resolveApiKey,
+  getLLMConfig, saveLLMConfig,
+} from '../../lib/llm/index.ts';
+import { ModelConfigSchema, EmbeddingModelConfigSchema } from '../../lib/llm/llm-config.ts';
 import { detectProvider } from '../../lib/llm/provider-detector.ts';
 import { ModelManager } from '../../lib/local-llm/index.ts';
 import { humanMessage, aiMessage } from '../../lib/types/llm-types.ts';
 import type { MessageContent, ContentPart } from '../../lib/types/llm-types.ts';
 import { logger } from '../../lib/logger.ts';
+
+const PROVIDER_ENV_VARS: Record<string, string> = {
+  openai: 'OPENAI_API_KEY',
+  gemini: 'GOOGLE_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  local: 'OPENAI_API_KEY',
+};
+
+function redactKey(key?: string): string | undefined {
+  if (!key) return undefined;
+  return key.length > 4 ? `••••${key.slice(-4)}` : '••••';
+}
 
 interface LLMParams {
   name: string;
@@ -51,6 +70,126 @@ async function checkConfigReady(
 
 export const llmRoutes: FastifyPluginAsync = async (fastify) => {
   const manager = new ModelManager(fastify.orchestrator.workspaceRoot);
+  const llmJsonPath = fastify.orchestrator.llmConfigPath;
+
+  // GET /config — full llm.json with redacted API keys + env var info
+  fastify.get('/config', async () => {
+    const config = getLLMConfig();
+    if (!config) return { version: '1.0', models: {}, embeddings: {} };
+
+    const models: Record<string, any> = {};
+    for (const [name, m] of Object.entries(config.models)) {
+      const provider = detectProvider(m);
+      const envVar = PROVIDER_ENV_VARS[provider];
+      models[name] = {
+        ...m,
+        apiKey: redactKey(m.apiKey),
+        _provider: provider,
+        _hasEnvKey: !!(envVar && process.env[envVar]),
+        _envVar: envVar,
+      };
+    }
+
+    const embeddings: Record<string, any> = {};
+    for (const [name, e] of Object.entries(config.embeddings)) {
+      embeddings[name] = {
+        ...e,
+        apiKey: redactKey(e.apiKey),
+      };
+    }
+
+    return { version: config.version, models, embeddings };
+  });
+
+  // PUT /config/models/:name — upsert a model config entry
+  fastify.put<{ Params: { name: string }; Body: any }>(
+    '/config/models/:name',
+    async (request) => {
+      const config = getLLMConfig();
+      if (!config) throw new Error('No llm.json loaded');
+
+      const { name } = request.params;
+      const body = { ...request.body };
+
+      // Strip internal fields
+      delete body._provider;
+      delete body._hasEnvKey;
+      delete body._envVar;
+
+      // Preserve existing API key if redacted or empty
+      const existing = config.models[name];
+      if (!body.apiKey || body.apiKey.startsWith('••••')) {
+        if (existing?.apiKey) {
+          body.apiKey = existing.apiKey;
+        } else {
+          delete body.apiKey;
+        }
+      }
+
+      // Remove empty optional fields
+      if (!body.baseUrl) delete body.baseUrl;
+      if (body.temperature == null) delete body.temperature;
+      if (body.maxTokens == null) delete body.maxTokens;
+      if (body.thinkingBudget == null) delete body.thinkingBudget;
+      if (body.reasoningBudget == null) delete body.reasoningBudget;
+      if (body.contextSize == null) delete body.contextSize;
+
+      config.models[name] = ModelConfigSchema.parse(body);
+      await saveLLMConfig(llmJsonPath, config);
+      LLMFactory.clearCache();
+
+      return { ok: true };
+    },
+  );
+
+  // DELETE /config/models/:name — delete a model config entry
+  fastify.delete<{ Params: { name: string } }>(
+    '/config/models/:name',
+    async (request, reply) => {
+      const config = getLLMConfig();
+      if (!config) throw new Error('No llm.json loaded');
+
+      const { name } = request.params;
+      if (name === 'default') {
+        return reply.status(400).send({ error: 'Cannot delete the default model config' });
+      }
+
+      delete config.models[name];
+      await saveLLMConfig(llmJsonPath, config);
+      LLMFactory.clearCache();
+
+      return { ok: true };
+    },
+  );
+
+  // PUT /config/embeddings/:name — upsert an embedding config entry
+  fastify.put<{ Params: { name: string }; Body: any }>(
+    '/config/embeddings/:name',
+    async (request) => {
+      const config = getLLMConfig();
+      if (!config) throw new Error('No llm.json loaded');
+
+      const { name } = request.params;
+      const body = { ...request.body };
+
+      const existing = config.embeddings[name];
+      if (!body.apiKey || body.apiKey.startsWith('••••')) {
+        if (existing?.apiKey) {
+          body.apiKey = existing.apiKey;
+        } else {
+          delete body.apiKey;
+        }
+      }
+
+      if (!body.baseUrl) delete body.baseUrl;
+      if (body.dimensions == null) delete body.dimensions;
+
+      config.embeddings[name] = EmbeddingModelConfigSchema.parse(body);
+      await saveLLMConfig(llmJsonPath, config);
+
+      return { ok: true };
+    },
+  );
 
   // GET /readiness — check if default model + embedding are usable
   fastify.get('/readiness', async () => {

@@ -6,14 +6,13 @@ export class NavBar extends Component {
     constructor() {
         super();
         this.tabs = [
-            { id: 'agents', label: 'Agents', icon: 'fa-robot', color: 'blue' },
-            { id: 'workflows', label: 'Workflows', icon: 'fa-project-diagram', color: 'purple' },
-            { id: 'knowledge', label: 'Knowledge', icon: 'fa-brain', color: 'orange' },
-            { id: 'graph', label: 'Graph', icon: 'fa-network-wired', color: 'pink' },
-            { id: 'mcp', label: 'MCP', icon: 'fa-server', color: 'cyan' },
-            { id: 'monitor', label: 'Monitor', icon: 'fa-tasks', color: 'indigo' },
-            { id: 'llm', label: 'LLM', icon: 'fa-microchip', color: 'amber' },
-            { id: 'ide', label: 'IDE', icon: 'fa-code', color: 'green' }
+            { id: 'agents', label: 'Agents', icon: 'fa-robot' },
+            { id: 'knowledge', label: 'Knowledge', icon: 'fa-brain' },
+            { id: 'graph', label: 'Graph', icon: 'fa-network-wired' },
+            { id: 'mcp', label: 'MCP', icon: 'fa-server' },
+            { id: 'monitor', label: 'Monitor', icon: 'fa-tasks' },
+            { id: 'llm', label: 'LLM', icon: 'fa-microchip' },
+            { id: 'ide', label: 'IDE', icon: 'fa-code' }
         ];
     }
 
@@ -45,14 +44,14 @@ export class NavBar extends Component {
     template() {
         return `
             <div class="flex flex-col h-full">
-                <div class="sidebar-brand px-3 py-4">
-                    <span class="text-sm font-semibold text-gray-200 tracking-wide">Agent Orcha</span>
+                <div class="sidebar-brand">
+                    <img src="/assets/logo.png" alt="Agent Orcha" class="sidebar-logo">
+                    <span>Agent Orcha</span>
                 </div>
-                <nav class="flex-1 overflow-y-auto py-1">
+                <nav class="flex-1 overflow-y-auto">
                     ${this.tabs.map(tab => `
-                        <button class="tab-btn group flex items-center gap-2.5 w-full px-3 py-2 text-xs font-medium transition-all duration-200"
-                            data-tab="${tab.id}" data-color="${tab.color}">
-                            <i class="fas ${tab.icon} text-xs w-4 text-center transition-transform group-hover:scale-110"></i>
+                        <button class="tab-btn" data-tab="${tab.id}">
+                            <i class="fas ${tab.icon} tab-icon"></i>
                             <span>${tab.label}</span>
                         </button>
                     `).join('')}

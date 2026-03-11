@@ -133,15 +133,17 @@ export function calculateOptimalContextSize(info: GGUFModelInfo): number {
   }
 
   const bytesPerToken = kvCacheBytesPerToken(info);
-  const maxCtxByRam = Math.floor(memAfterWeights / bytesPerToken);
+  // Use at most 50% of available-after-weights for KV cache — leave headroom for runtime allocations
+  const maxCtxByRam = Math.floor((memAfterWeights * 0.5) / bytesPerToken);
+  // Hard cap: 32K tokens is practical for local models, avoids memory pressure on small machines
+  const MAX_CONTEXT_CAP = 32768;
   const nativeCtx = info.contextLength;
-  const maxNative = Math.floor(nativeCtx * 0.8);
 
-  const optimal = Math.min(maxCtxByRam, maxNative);
+  const optimal = Math.min(maxCtxByRam, nativeCtx, MAX_CONTEXT_CAP);
   // Floor to nearest 1024 for cleanliness, minimum 2048
   const result = Math.max(2048, Math.floor(optimal / 1024) * 1024);
 
-  logger.info(`[GGUFReader] RAM: ${(totalRam / 1024 / 1024 / 1024).toFixed(0)}GB total, ${(memAfterWeights / 1024 / 1024 / 1024).toFixed(1)}GB available for KV | KV/token: ${bytesPerToken} bytes | max by RAM: ${maxCtxByRam} | max by model (80%): ${maxNative} | optimal: ${result}`);
+  logger.info(`[GGUFReader] RAM: ${(totalRam / 1024 / 1024 / 1024).toFixed(0)}GB total, ${(memAfterWeights / 1024 / 1024 / 1024).toFixed(1)}GB available for KV | KV/token: ${bytesPerToken} bytes | max by RAM: ${maxCtxByRam} | native: ${nativeCtx} | cap: ${MAX_CONTEXT_CAP} | optimal: ${result}`);
   return result;
 }
 
