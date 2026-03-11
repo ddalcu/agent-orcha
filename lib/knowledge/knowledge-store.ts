@@ -738,6 +738,14 @@ export class KnowledgeStore {
       hashes['web:url'] = crypto.createHash('sha256').update(config.source.url).digest('hex');
     }
 
+    // Include loader/splitter config so changes trigger re-indexing
+    const configSig = JSON.stringify({
+      loader: config.loader,
+      splitter: config.splitter,
+      selector: config.source.type === 'web' ? config.source.selector : undefined,
+    });
+    hashes['_config'] = crypto.createHash('sha256').update(configSig).digest('hex');
+
     return hashes;
   }
 }

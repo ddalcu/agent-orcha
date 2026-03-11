@@ -16,7 +16,11 @@ const PROVIDER_ENV_VARS: Record<LLMProvider, string> = {
  * Priority: explicit apiKey in config > provider-specific env var.
  */
 export function resolveApiKey(provider: LLMProvider, apiKey?: string): string | undefined {
-  if (apiKey) return apiKey;
+  if (apiKey) {
+    const resolved = substituteEnvVars(apiKey);
+    if (resolved !== apiKey) return resolved || undefined;
+    return apiKey;
+  }
   const envVar = PROVIDER_ENV_VARS[provider];
   return process.env[envVar];
 }

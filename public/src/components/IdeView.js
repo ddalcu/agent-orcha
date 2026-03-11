@@ -608,7 +608,7 @@ export class IdeView extends Component {
             const data = await api.readFile(filePath);
             this.currentFile = { path: data.path, content: data.content };
             this.isDirty = false;
-            this._viewMode = 'source';
+            this._viewMode = isAgentFile(filePath) ? 'visual' : 'source';
             this._renderEditor();
             this._renderTree();
             this._updateModeToggle();

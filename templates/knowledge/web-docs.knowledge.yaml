@@ -7,11 +7,11 @@ source:
   selector: ".mw-parser-output"
 
 loader:
-  type: text
+  type: html
 
 splitter:
   type: recursive
-  chunkSize: 500
+  chunkSize: 1000
   chunkOverlap: 200
 
 embedding: default

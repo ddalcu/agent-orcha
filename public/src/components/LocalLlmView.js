@@ -710,14 +710,15 @@ export class LocalLlmView extends Component {
 
         const currentModel = modelEntry?.model || models[0] || '';
         const hasEnvKey = modelEntry?._hasEnvKey || false;
-        const hasConfigKey = modelEntry?.apiKey && !modelEntry.apiKey.startsWith('••••') ? false : !!modelEntry?.apiKey;
+        const isEnvRef = modelEntry?.apiKey && /^\$\{.+\}$/.test(modelEntry.apiKey);
+        const hasConfigKey = isEnvRef ? false : (modelEntry?.apiKey && !modelEntry.apiKey.startsWith('••••') ? false : !!modelEntry?.apiKey);
         const envVarName = PROVIDER_ENV_NAMES[provider] || '';
 
         // Key status
         let keyStatusHtml = '';
         if (hasConfigKey) {
             keyStatusHtml = `<span class="llm-key-status llm-key-status-set"><i class="fas fa-check"></i>Set in config</span>`;
-        } else if (hasEnvKey) {
+        } else if (isEnvRef || hasEnvKey) {
             keyStatusHtml = `<span class="llm-key-status llm-key-status-env"><i class="fas fa-leaf"></i>Using ${envVarName}</span>`;
         } else {
             keyStatusHtml = `<span class="llm-key-status llm-key-status-missing"><i class="fas fa-exclamation-triangle"></i>Not configured</span>`;
@@ -872,7 +873,7 @@ export class LocalLlmView extends Component {
             const model = modelSelect?.value || modelCustom?.value?.trim();
             if (!model) throw new Error('Please select or enter a model name');
 
-            const apiKey = this.querySelector('#cloudApiKey')?.value?.trim() || undefined;
+            const apiKey = this.querySelector('#cloudApiKey')?.value?.trim() || (PROVIDER_ENV_NAMES[provider] ? `\${${PROVIDER_ENV_NAMES[provider]}}` : undefined);
             const temp = this.querySelector('#cloudTemp')?.value;
             const maxTokens = this.querySelector('#cloudMaxTokens')?.value;
             const baseUrl = this.querySelector('#cloudBaseUrl')?.value?.trim() || undefined;
@@ -888,12 +889,22 @@ export class LocalLlmView extends Component {
                 ...(thinkingBudget !== '' && thinkingBudget != null ? { thinkingBudget: parseInt(thinkingBudget) } : {}),
             };
 
-            // Determine entry name: if this provider is already default, update default; otherwise create a named entry
-            const defaultModel = this.llmConfig?.models?.default;
-            const isDefault = defaultModel?._provider === provider;
-            const entryName = isDefault ? 'default' : provider;
+            // Always set as default; backup old default under its provider name
+            const oldDefault = this.llmConfig?.models?.default;
+            if (oldDefault && oldDefault._provider !== provider) {
+                await api.saveLlmModel(oldDefault._provider || 'local', {
+                    provider: oldDefault.provider || oldDefault._provider,
+                    model: oldDefault.model,
+                    ...(oldDefault.apiKey ? { apiKey: oldDefault.apiKey } : {}),
+                    ...(oldDefault.baseUrl ? { baseUrl: oldDefault.baseUrl } : {}),
+                    ...(oldDefault.temperature != null ? { temperature: oldDefault.temperature } : {}),
+                    ...(oldDefault.maxTokens != null ? { maxTokens: oldDefault.maxTokens } : {}),
+                    ...(oldDefault.contextSize != null ? { contextSize: oldDefault.contextSize } : {}),
+                    ...(oldDefault.reasoningBudget != null ? { reasoningBudget: oldDefault.reasoningBudget } : {}),
+                });
+            }
 
-            await api.saveLlmModel(entryName, config);
+            await api.saveLlmModel('default', config);
 
             // Save embedding config if applicable
             const embSelect = this.querySelector('#cloudEmbModel');
@@ -904,6 +915,7 @@ export class LocalLlmView extends Component {
                     provider,
                     model: embModel,
                     ...(apiKey ? { apiKey } : {}),
+                    ...(baseUrl ? { baseUrl } : {}),
                 });
             }
 
@@ -929,16 +941,16 @@ export class LocalLlmView extends Component {
             const model = modelSelect?.value || modelCustom?.value?.trim();
             if (!model) throw new Error('Please select or enter a model name first');
 
-            const apiKey = this.querySelector('#cloudApiKey')?.value?.trim() || undefined;
+            const apiKey = this.querySelector('#cloudApiKey')?.value?.trim() || (PROVIDER_ENV_NAMES[provider] ? `\${${PROVIDER_ENV_NAMES[provider]}}` : undefined);
             const temp = this.querySelector('#cloudTemp')?.value;
             const maxTokens = this.querySelector('#cloudMaxTokens')?.value;
             const baseUrl = this.querySelector('#cloudBaseUrl')?.value?.trim() || undefined;
             const thinkingBudget = this.querySelector('#cloudThinkingBudget')?.value;
 
-            // Save old default as backup if it's a different provider
+            // Save old default under its provider name
             const oldDefault = this.llmConfig?.models?.default;
             if (oldDefault && oldDefault._provider !== provider) {
-                await api.saveLlmModel('default_old', {
+                await api.saveLlmModel(oldDefault._provider || 'local', {
                     provider: oldDefault.provider || oldDefault._provider,
                     model: oldDefault.model,
                     ...(oldDefault.apiKey ? { apiKey: oldDefault.apiKey } : {}),
@@ -1104,12 +1116,7 @@ export class LocalLlmView extends Component {
     }
 
     async activateModel(id) {
-        const cloudProviders = ['openai', 'anthropic', 'gemini'];
-        const isCloudDefault = cloudProviders.includes(this.status?.defaultProvider);
-        // Non-cloud default (e.g. local) → silently replace. Cloud provider → ask first.
-        const setAsDefault = !isCloudDefault
-            ? true
-            : confirm('Set this model as the default LLM?\n\nYes = replaces "default" in llm.json (existing default is preserved as "default_old")\nNo = saves as "local-llama" instead');
+        const setAsDefault = true;
 
         const gridBtn = this.querySelector(`.activate-btn[data-id="${id}"]`);
         const startBtn = this.querySelector('#startLastBtn');

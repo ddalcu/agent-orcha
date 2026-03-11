@@ -1438,6 +1438,7 @@ export class AgentsView extends Component {
         const wfState = workflowTasks.get(sessionId);
         if (!wfState) return;
 
+        wfState.status = 'interrupted';
         const question = interruptData?.question || 'Input required';
         wfState.interruptState = {
             question,
@@ -2257,17 +2258,19 @@ export class AgentsView extends Component {
 
                 <!-- Sidebar -->
                 <div id="sidebar" class="agent-sidebar">
-                    <div class="p-3 flex flex-col gap-2">
+                    <div class="p-3">
                         <button id="newChatBtn" class="new-chat-btn">
                             <i class="fas fa-plus text-xs text-accent"></i>
                             <span>New chat</span>
                         </button>
-                        <button id="newAgentBtn" class="new-chat-btn new-agent-btn">
+                    </div>
+                    <div id="sessionList" class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-2"></div>
+                    <div class="px-3 sidebar-bottom-action">
+                        <button id="newAgentBtn" class="sidebar-secondary-btn">
                             <i class="fas fa-robot text-xs text-blue"></i>
                             <span>New agent</span>
                         </button>
                     </div>
-                    <div id="sessionList" class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-2"></div>
                 </div>
 
                 <!-- Chat Area -->

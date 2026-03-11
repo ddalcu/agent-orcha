@@ -23,6 +23,7 @@ const PROVIDER_ENV_VARS: Record<string, string> = {
 
 function redactKey(key?: string): string | undefined {
   if (!key) return undefined;
+  if (/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(key)) return key;
   return key.length > 4 ? `••••${key.slice(-4)}` : '••••';
 }
 
@@ -217,6 +218,8 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
     if (listEmbeddingConfigs().includes('default')) {
       const result = await checkConfigReady(getEmbeddingConfig('default'), manager);
       if (!result.ready) issues.push(`Embedding: ${result.reason}`);
+    } else {
+      issues.push('No default embedding configured');
     }
 
     return { ready: issues.length === 0, issues };

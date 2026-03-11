@@ -837,12 +837,24 @@ img { display: block; max-width: 100%; }
   transition: background var(--fast);
 }
 .agent-sidebar .new-chat-btn:hover { background: var(--hover); }
-.agent-sidebar .new-agent-btn {
-  border: 1px dashed var(--border);
+.agent-sidebar .sidebar-bottom-action { padding-bottom: 10px; }
+.agent-sidebar .sidebar-secondary-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1h) var(--sp-2);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  border: 1px dashed var(--border-60);
   background: transparent;
+  transition: background var(--fast), color var(--fast);
 }
-.agent-sidebar .new-agent-btn:hover {
+.agent-sidebar .sidebar-secondary-btn:hover {
   background: var(--hover);
+  color: var(--text-1);
   border-color: var(--text-2);
 }
 
