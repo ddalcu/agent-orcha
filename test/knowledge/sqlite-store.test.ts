@@ -246,4 +246,71 @@ describe('SqliteStore', () => {
     assert.ok(!SqliteStore.validateDimensions(dbPath, 8));
     assert.ok(SqliteStore.validateDimensions('/nonexistent/path.db', 4));
   });
+
+  it('should expose getDbPath', () => {
+    const dbPath = getTestDbPath('dbpath');
+    dbPaths.push(dbPath);
+    const store = new SqliteStore(dbPath, 4);
+    assert.equal(store.getDbPath(), dbPath);
+    store.close();
+  });
+
+  it('should getAllEntities', () => {
+    const dbPath = getTestDbPath('allentities');
+    dbPaths.push(dbPath);
+    const store = new SqliteStore(dbPath, 4);
+
+    store.insertEntities([
+      { id: 'a', type: 'T', name: 'A', description: 'desc-a', properties: {}, sourceChunkIds: [], embedding: [1, 0, 0, 0] },
+      { id: 'b', type: 'T', name: 'B', description: 'desc-b', properties: {}, sourceChunkIds: [], embedding: [0, 1, 0, 0] },
+    ]);
+
+    const all = store.getAllEntities();
+    assert.equal(all.length, 2);
+    assert.ok(all.some(e => e.name === 'A'));
+    assert.ok(all.some(e => e.name === 'B'));
+    store.close();
+  });
+
+  it('should return empty results for search on empty store', () => {
+    const dbPath = getTestDbPath('emptysearch');
+    dbPaths.push(dbPath);
+    const store = new SqliteStore(dbPath, 4);
+
+    const chunks = store.searchChunks([1, 0, 0, 0], 5);
+    assert.deepEqual(chunks, []);
+
+    // Entity search on empty store should also return empty
+    const entities = store.searchEntities([1, 0, 0, 0], 5);
+    assert.deepEqual(entities, []);
+
+    store.close();
+  });
+
+  it('should handle neighborhood for isolated entity (no relationships)', () => {
+    const dbPath = getTestDbPath('isolated');
+    dbPaths.push(dbPath);
+    const store = new SqliteStore(dbPath, 4);
+
+    store.insertEntities([
+      { id: 'lonely', type: 'Node', name: 'Lonely', description: '', properties: {}, sourceChunkIds: [], embedding: [1, 0, 0, 0] },
+    ]);
+
+    const neighborhood = store.getNeighborhood('lonely', 2);
+    assert.equal(neighborhood.entities.length, 1);
+    assert.equal(neighborhood.entities[0]!.name, 'Lonely');
+    assert.equal(neighborhood.relationships.length, 0);
+    store.close();
+  });
+
+  it('should handle neighborhood for nonexistent entity', () => {
+    const dbPath = getTestDbPath('noentity');
+    dbPaths.push(dbPath);
+    const store = new SqliteStore(dbPath, 4);
+
+    const neighborhood = store.getNeighborhood('ghost', 1);
+    assert.equal(neighborhood.entities.length, 0);
+    assert.equal(neighborhood.relationships.length, 0);
+    store.close();
+  });
 });

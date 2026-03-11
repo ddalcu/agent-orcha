@@ -812,4 +812,103 @@ describe('Orchestrator', () => {
     const result = await orch.resumeReactWorkflow('test', 'thread-1', 'yes');
     assert.equal(result.metadata.success, true);
   });
+
+  it('should expose llmConfigPath', () => {
+    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    assert.equal(orch.llmConfigPath, path.join(tempDir, 'llm.json'));
+  });
+
+  it('should stream resume react workflow', async () => {
+    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    (orch as any).initialized = true;
+    (orch as any).workflowLoader = {
+      get: () => ({ name: 'test', type: 'react' }),
+    };
+    (orch as any).reactWorkflowExecutor = {
+      resumeWithAnswer: async (_def: any, _tid: any, _ans: any, onStatus?: Function) => {
+        onStatus?.({ step: 'resumed', status: 'running' });
+        return {
+          output: { result: 'resumed' },
+          metadata: { success: true, duration: 30, stepsExecuted: 1 },
+          stepResults: {},
+        };
+      },
+    };
+
+    const events: any[] = [];
+    for await (const event of orch.streamResumeReactWorkflow('test', 'thread-1', 'yes')) {
+      events.push(event);
+    }
+    assert.ok(events.length >= 2);
+    assert.ok(events.some(e => e.type === 'status'));
+    assert.ok(events.some(e => e.type === 'result'));
+  });
+
+  it('should throw in streamResumeReactWorkflow for unknown workflow', async () => {
+    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    (orch as any).initialized = true;
+    (orch as any).workflowLoader = { get: () => undefined };
+
+    const gen = orch.streamResumeReactWorkflow('nonexistent', 'thread-1', 'yes');
+    await assert.rejects(() => gen.next(), /Workflow not found/);
+  });
+
+  it('should throw in streamResumeReactWorkflow for non-react workflow', async () => {
+    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    (orch as any).initialized = true;
+    (orch as any).workflowLoader = {
+      get: () => ({ name: 'test', type: 'sequential' }),
+    };
+
+    const gen = orch.streamResumeReactWorkflow('test', 'thread-1', 'yes');
+    await assert.rejects(() => gen.next(), /not a ReAct workflow/);
+  });
+
+  it('should handle error in streamResumeReactWorkflow', async () => {
+    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    (orch as any).initialized = true;
+    (orch as any).workflowLoader = {
+      get: () => ({ name: 'test', type: 'react' }),
+    };
+    (orch as any).reactWorkflowExecutor = {
+      resumeWithAnswer: async () => { throw new Error('Resume failed'); },
+    };
+
+    const events: any[] = [];
+    for await (const event of orch.streamResumeReactWorkflow('test', 'thread-1', 'yes')) {
+      events.push(event);
+    }
+    assert.ok(events.some(e => e.type === 'result' && (e.data as any).error === 'Resume failed'));
+  });
+
+  it('should handle reloadFile for mcp.json', async () => {
+    const mcpConfig = { version: '1.0.0', servers: {} };
+    await fs.writeFile(path.join(tempDir, 'mcp.json'), JSON.stringify(mcpConfig));
+
+    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    (orch as any).initialized = true;
+    (orch as any).mcpClient = {
+      close: async () => {},
+      getServerNames: () => [],
+      getToolsByServer: async () => [],
+      getConfiguredServerNames: () => [],
+      initialize: async () => {},
+    };
+    (orch as any).knowledgeStoreManager = { listConfigs: () => [] };
+    (orch as any).functionLoader = { list: () => [], getTool: () => undefined };
+    (orch as any).agentLoader = { list: () => [] };
+    (orch as any).workflowLoader = { list: () => [] };
+    (orch as any).skillLoader = { list: () => [] };
+    (orch as any).sandboxConfig = null;
+    (orch as any).vmExecutor = null;
+
+    const result = await orch.reloadFile('mcp.json');
+    assert.equal(result, 'mcp');
+  });
+
+  it('should throw ensureInitialized for streamResumeReactWorkflow', async () => {
+    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const gen = orch.streamResumeReactWorkflow('test', 'thread-1', 'yes');
+    await assert.rejects(() => gen.next(), /not initialized/);
+  });
 });

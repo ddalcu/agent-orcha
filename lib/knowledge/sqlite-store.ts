@@ -107,6 +107,11 @@ export class SqliteStore {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS entity_rowid_map (
+        rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_id TEXT NOT NULL UNIQUE
+      );
     `);
 
     // Create vec0 tables only if they don't exist
@@ -227,14 +232,6 @@ export class SqliteStore {
     const commit = this.db.prepare('COMMIT');
     const rollback = this.db.prepare('ROLLBACK');
 
-    // Ensure entity_rowid_map exists for text-id to integer-rowid mapping
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS entity_rowid_map (
-        rowid INTEGER PRIMARY KEY AUTOINCREMENT,
-        entity_id TEXT NOT NULL UNIQUE
-      );
-    `);
-
     const insertMapping = this.db.prepare(
       'INSERT OR IGNORE INTO entity_rowid_map (entity_id) VALUES (?)'
     );
@@ -333,20 +330,26 @@ export class SqliteStore {
 
     const txn = this.db.prepare('BEGIN');
     const commit = this.db.prepare('COMMIT');
+    const rollback = this.db.prepare('ROLLBACK');
 
     txn.run();
-    for (const rel of relationships) {
-      insert.run(
-        rel.id,
-        rel.type,
-        rel.sourceId,
-        rel.targetId,
-        rel.description,
-        rel.weight,
-        JSON.stringify(rel.properties)
-      );
+    try {
+      for (const rel of relationships) {
+        insert.run(
+          rel.id,
+          rel.type,
+          rel.sourceId,
+          rel.targetId,
+          rel.description,
+          rel.weight,
+          JSON.stringify(rel.properties)
+        );
+      }
+      commit.run();
+    } catch (err) {
+      rollback.run();
+      throw err;
     }
-    commit.run();
   }
 
   getAllRelationships(): RelationshipRow[] {
