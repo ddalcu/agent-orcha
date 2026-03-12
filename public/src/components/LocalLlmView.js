@@ -78,10 +78,23 @@ const PROVIDER_ENV_NAMES = {
     gemini: 'GOOGLE_API_KEY',
 };
 
-const RECOMMENDED_MODELS = [
-    { repo: 'unsloth/Qwen3.5-9B-GGUF', file: 'Qwen3.5-9B-Q4_K_M.gguf', label: 'Qwen3.5-9B-Q4_K_M', desc: 'Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.', size: '~5.3 GB', icon: 'fa-comments', color: 'amber' },
-    { repo: 'nomic-ai/nomic-embed-text-v1.5-GGUF', file: 'nomic-embed-text-v1.5.Q4_K_M.gguf', label: 'nomic-embed-text-v1.5-Q4_K_M', desc: 'Embedding model for knowledge stores. Required for local RAG pipelines.', size: '~80 MB', icon: 'fa-vector-square', color: 'blue' },
+const RECOMMENDED_MODELS_GGUF = [
+    { repo: 'unsloth/Qwen3.5-9B-GGUF', file: 'Qwen3.5-9B-Q4_K_M.gguf', label: 'Qwen3.5-9B-Q4_K_M', desc: 'Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.', size: '~5.3 GB', icon: 'fa-comments', color: 'amber', type: 'gguf' },
+    { repo: 'nomic-ai/nomic-embed-text-v1.5-GGUF', file: 'nomic-embed-text-v1.5.Q4_K_M.gguf', label: 'nomic-embed-text-v1.5-Q4_K_M', desc: 'Embedding model for knowledge stores. Required for local RAG pipelines.', size: '~80 MB', icon: 'fa-vector-square', color: 'blue', type: 'gguf' },
 ];
+
+const RECOMMENDED_MODELS_MLX = [
+    { repo: 'mlx-community/Qwen3.5-9B-4bit', file: '__mlx_repo__', label: 'Qwen3.5-9B-4bit (MLX)', desc: 'MLX-optimized for Apple Silicon. Recommended for Mac.', size: '~5 GB', icon: 'fa-apple', color: 'amber', type: 'mlx' },
+    { repo: 'mlx-community/all-MiniLM-L6-v2-4bit', file: '__mlx_repo__', label: 'all-MiniLM-L6-v2-4bit (MLX)', desc: 'Fast, lightweight embedding model (22M params, 384 dims). Recommended for local RAG.', size: '~15 MB', icon: 'fa-vector-square', color: 'blue', type: 'mlx' },
+];
+
+function isAppleSilicon(status) {
+    return status?.platform === 'darwin' && status?.arch === 'arm64';
+}
+
+function getRecommendedModels(status) {
+    return isAppleSilicon(status) ? RECOMMENDED_MODELS_MLX : RECOMMENDED_MODELS_GGUF;
+}
 
 function detectCapabilities(result) {
     const { tags, pipelineTag, modelName, repoId } = result;
@@ -129,8 +142,10 @@ export class LocalLlmView extends Component {
         this.downloadPollTimer = null;
         this.systemRamBytes = 0;
         this.updateInfo = null;
+        this.mlxUpdateInfo = null;
         this.activeProvider = 'local';
         this.llmConfig = null;
+        this._browseFormat = 'gguf';
     }
 
     async connectedCallback() {
@@ -283,6 +298,8 @@ export class LocalLlmView extends Component {
             this.models = await api.getLocalLlmModels();
             this.renderModels();
             this.renderRecommendations();
+            // Re-render status since it depends on models for capability detection
+            if (this.status) this.renderStatus();
         } catch (e) {
             console.error('Failed to load local models:', e);
         }
@@ -293,12 +310,18 @@ export class LocalLlmView extends Component {
         if (!container || !this.status) return;
 
         const { running, activeModel, embedding } = this.status;
-        const version = this.status.llamaVersion;
+        const isMlx = this.status.engineType === 'mlx';
+        const version = isMlx ? this.status.mlxVersion : this.status.llamaVersion;
+        const versionLabel = isMlx
+            ? (version ? `v${escapeHtml(version)}` : '')
+            : (version ? `b${escapeHtml(version.match(/^(\d+)/)?.[1] || version)}` : '');
+        const binarySource = isMlx ? this.status.mlxBinarySource : this.status.binarySource;
         const gpuName = this.status.gpu?.name;
         const gpuAccel = this.status.gpu?.accel || 'none';
-        const hasUpdate = this.updateInfo?.available === true;
-        const daysLabel = hasUpdate && this.updateInfo.daysNewer != null
-            ? (this.updateInfo.daysNewer === 0 ? 'today' : `${this.updateInfo.daysNewer}d ago`)
+        const updateInfo = isMlx ? this.mlxUpdateInfo : this.updateInfo;
+        const hasUpdate = updateInfo?.available === true;
+        const daysLabel = hasUpdate && updateInfo.daysNewer != null
+            ? (updateInfo.daysNewer === 0 ? 'today' : `${updateInfo.daysNewer}d ago`)
             : '';
 
         const accelLabels = { 'none': 'CPU', 'metal': 'Metal', 'vulkan': 'Vulkan', 'cuda-12.4': 'CUDA 12.4', 'cuda-13.1': 'CUDA 13.1' };
@@ -314,15 +337,15 @@ export class LocalLlmView extends Component {
             <div class="llm-server-header">
                 <div class="flex items-center gap-2">
                     <i class="fas fa-server text-amber text-xs"></i>
-                    <span class="text-sm font-semibold text-primary">llama-server</span>
-                    ${version ? `<span class="text-xs text-muted font-mono">b${escapeHtml(version.match(/^(\d+)/)?.[1] || version)}</span>` : ''}
+                    <span class="text-sm font-semibold text-primary">${isMlx ? 'mlx-serve' : 'llama-server'}</span>
+                    ${versionLabel ? `<span class="text-xs text-muted font-mono">${versionLabel}</span>` : ''}
                 </div>
-                ${this.status.binarySource === 'managed' ? (
+                ${binarySource === 'managed' ? (
                     hasUpdate ? `
-                    <button id="updateBinaryBtn" class="btn btn-indigo btn-sm flex-shrink-0" title="Latest: ${escapeHtml(this.updateInfo.latestTag || '')}">
+                    <button id="updateBinaryBtn" class="btn btn-indigo btn-sm flex-shrink-0" title="Latest: ${escapeHtml(updateInfo.latestTag || '')}">
                         <i class="fas fa-arrows-rotate mr-1"></i>Update${daysLabel ? ` <span class="text-muted">(${daysLabel})</span>` : ''}
                     </button>`
-                    : !this.updateInfo ? `
+                    : !updateInfo ? `
                     <button id="checkUpdateBtn" class="btn-ghost text-xs flex-shrink-0">
                         <i class="fas fa-arrows-rotate mr-1"></i>Check for updates
                     </button>` : ''
@@ -355,6 +378,10 @@ export class LocalLlmView extends Component {
             const memBarCls = memPct > 80 ? 'llm-mem-red' : memPct > 60 ? 'llm-mem-amber' : 'llm-mem-green';
             const kvPerToken = mem && ctxSize ? mem.kvCacheBytes / ctxSize : 0;
             const currentMaxTokens = this.llmConfig?.models?.default?.maxTokens || 4096;
+            const currentReasoningBudget = this.llmConfig?.models?.default?.reasoningBudget || 0;
+            const activeModelObj = this.models.find(m => m.filePath === activeModel);
+            const modelCaps = activeModelObj ? detectCapabilitiesFromFile(activeModelObj) : { reasoning: false };
+            const thinkingEnabled = currentReasoningBudget > 0;
 
             html += `
                 <div class="llm-section-content space-y-2">
@@ -409,6 +436,29 @@ export class LocalLlmView extends Component {
                                 <span>16K</span>
                             </div>
                         </div>
+                        ${modelCaps.reasoning ? `
+                        <div class="llm-thinking-row">
+                            <div class="flex items-center justify-between">
+                                <label class="llm-slider-label flex items-center gap-2">
+                                    <span><i class="fas fa-brain text-purple mr-1"></i>Thinking</span>
+                                    <span id="thinkingValue" class="font-mono text-xs ${thinkingEnabled ? (currentReasoningBudget > 256 ? 'text-red' : 'text-purple') : 'text-muted'}">${thinkingEnabled ? currentReasoningBudget.toLocaleString() + ' tokens' : 'Off'}</span>
+                                </label>
+                                <label class="llm-toggle">
+                                    <input type="checkbox" id="thinkingToggle" data-orig="${currentReasoningBudget}" ${thinkingEnabled ? 'checked' : ''} />
+                                    <span class="llm-toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div id="thinkingSliderWrap" class="${thinkingEnabled ? '' : 'hidden'}">
+                                <input type="range" id="thinkingSlider" class="llm-range"
+                                    data-orig="${currentReasoningBudget || 128}"
+                                    min="128" max="1024" step="128" value="${currentReasoningBudget || 128}" />
+                                <div class="llm-slider-meta">
+                                    <span>128</span>
+                                    <span class="text-2xs text-muted">Requires server restart</span>
+                                    <span>1K</span>
+                                </div>
+                            </div>
+                        </div>` : ''}
                         <div id="sliderWarning" class="llm-slider-warning hidden"></div>
                         <button id="applySettingsBtn" class="btn btn-accent btn-sm hidden">
                             <i class="fas fa-save mr-1"></i>Apply
@@ -481,10 +531,20 @@ export class LocalLlmView extends Component {
             slider.style.setProperty('--range-fill', `${pos}%`);
         };
 
+        const thinkingToggle = this.querySelector('#thinkingToggle');
+        const thinkingSlider = this.querySelector('#thinkingSlider');
+        const thinkingSliderWrap = this.querySelector('#thinkingSliderWrap');
+
+        const getThinkingBudget = () => {
+            if (!thinkingToggle) return 0;
+            return thinkingToggle.checked ? parseInt(thinkingSlider?.value || '128') : 0;
+        };
+
         const updateApplyVisibility = () => {
             const ctxChanged = ctxSlider && ctxSlider.value !== ctxSlider.dataset.orig;
             const tokChanged = maxTokSlider && maxTokSlider.value !== maxTokSlider.dataset.orig;
-            const changed = ctxChanged || tokChanged;
+            const thinkingChanged = thinkingToggle && String(getThinkingBudget()) !== thinkingToggle.dataset.orig;
+            const changed = ctxChanged || tokChanged || thinkingChanged;
             applyBtn?.classList.toggle('hidden', !changed);
             if (!changed && warningEl) { warningEl.classList.add('hidden'); warningEl.textContent = ''; }
         };
@@ -541,6 +601,44 @@ export class LocalLlmView extends Component {
             maxTokSlider.style.setProperty('--range-fill', `${pos}%`);
             updateApplyVisibility();
         });
+        const thinkingColor = (val) => val > 256 ? 'var(--red-400, #f87171)' : 'var(--purple-400, #a855f7)';
+        const thinkingLabelClass = (val) => val > 256 ? 'font-mono text-xs text-red' : 'font-mono text-xs text-purple';
+
+        thinkingToggle?.addEventListener('change', () => {
+            const on = thinkingToggle.checked;
+            thinkingSliderWrap?.classList.toggle('hidden', !on);
+            const label = this.querySelector('#thinkingValue');
+            if (label) {
+                if (on) {
+                    const val = parseInt(thinkingSlider?.value || '128');
+                    label.textContent = val.toLocaleString() + ' tokens';
+                    label.className = thinkingLabelClass(val);
+                } else {
+                    label.textContent = 'Off';
+                    label.className = 'font-mono text-xs text-muted';
+                }
+            }
+            updateApplyVisibility();
+        });
+        thinkingSlider?.addEventListener('input', () => {
+            const val = parseInt(thinkingSlider.value);
+            const label = this.querySelector('#thinkingValue');
+            if (label) {
+                label.textContent = val.toLocaleString() + ' tokens';
+                label.className = thinkingLabelClass(val);
+            }
+            const pos = ((val - 128) / (1024 - 128)) * 100;
+            thinkingSlider.style.setProperty('--range-color', thinkingColor(val));
+            thinkingSlider.style.setProperty('--range-fill', `${pos}%`);
+            updateApplyVisibility();
+        });
+        // Set initial track fill for thinking slider
+        if (thinkingSlider && thinkingToggle?.checked) {
+            const val = parseInt(thinkingSlider.value);
+            const pos = ((val - 128) / (1024 - 128)) * 100;
+            thinkingSlider.style.setProperty('--range-color', thinkingColor(val));
+            thinkingSlider.style.setProperty('--range-fill', `${pos}%`);
+        }
         applyBtn?.addEventListener('click', () => this.applyModelSettings());
     }
 
@@ -551,7 +649,12 @@ export class LocalLlmView extends Component {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Checking...';
         }
         try {
-            this.updateInfo = await api.checkLlamaUpdate();
+            const isMlx = this.status?.engineType === 'mlx';
+            if (isMlx) {
+                this.mlxUpdateInfo = await api.checkMlxUpdate();
+            } else {
+                this.updateInfo = await api.checkLlamaUpdate();
+            }
             this.renderStatus();
         } catch (e) {
             console.error('Failed to check for updates:', e);
@@ -574,7 +677,14 @@ export class LocalLlmView extends Component {
         const currentCtx = this.status?.contextSize;
         const ctxChanged = newCtx !== currentCtx;
 
-        if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i>${ctxChanged ? 'Restarting...' : 'Saving...'}`; }
+        const thinkingToggle = this.querySelector('#thinkingToggle');
+        const thinkingSlider = this.querySelector('#thinkingSlider');
+        const newReasoningBudget = thinkingToggle ? (thinkingToggle.checked ? parseInt(thinkingSlider?.value || '128') : 0) : undefined;
+        const existingBudget = this.llmConfig?.models?.default?.reasoningBudget || 0;
+        const reasoningChanged = newReasoningBudget !== undefined && newReasoningBudget !== existingBudget;
+        const needsRestart = ctxChanged || reasoningChanged;
+
+        if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i>${needsRestart ? 'Restarting...' : 'Saving...'}`; }
 
         try {
             const existing = this.llmConfig?.models?.default || {};
@@ -583,11 +693,11 @@ export class LocalLlmView extends Component {
                 model: existing.model,
                 contextSize: newCtx,
                 maxTokens: newMaxTokens,
-                ...(existing.reasoningBudget != null ? { reasoningBudget: existing.reasoningBudget } : {}),
+                ...(newReasoningBudget !== undefined ? { reasoningBudget: newReasoningBudget } : existing.reasoningBudget != null ? { reasoningBudget: existing.reasoningBudget } : {}),
                 ...(existing.temperature != null ? { temperature: existing.temperature } : {}),
             });
 
-            if (ctxChanged) {
+            if (needsRestart) {
                 await api.stopLocalLlm();
                 const model = this.models.find(m => this.status?.activeModel === m.filePath);
                 if (model) {
@@ -610,11 +720,17 @@ export class LocalLlmView extends Component {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Updating...';
         }
         try {
-            await api.updateLlamaBinary();
-            this.updateInfo = null;
+            const isMlx = this.status?.engineType === 'mlx';
+            if (isMlx) {
+                await api.updateMlxBinary();
+                this.mlxUpdateInfo = null;
+            } else {
+                await api.updateLlamaBinary();
+                this.updateInfo = null;
+            }
             await this.refresh();
         } catch (e) {
-            console.error('Failed to update llama-server:', e);
+            console.error(`Failed to update ${this.status?.engineType === 'mlx' ? 'mlx-serve' : 'llama-server'}:`, e);
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-exclamation-circle mr-1 text-red"></i>Failed';
@@ -1000,7 +1116,7 @@ export class LocalLlmView extends Component {
         container.innerHTML = this.models.map(model => {
             const isChat = activeModelPath && activeModelPath === model.filePath;
             const isEmb = activeEmbPath && activeEmbPath === model.filePath;
-            const looksLikeEmbedding = /embed/i.test(model.fileName);
+            const looksLikeEmbedding = /embed|MiniLM/i.test(model.fileName);
             const cardCls = isChat ? 'llm-model-card active-chat' : isEmb ? 'llm-model-card active-emb' : 'llm-model-card';
             const caps = looksLikeEmbedding ? null : detectCapabilitiesFromFile(model);
             const badges = caps ? capabilityBadges(caps) : '';
@@ -1013,6 +1129,7 @@ export class LocalLlmView extends Component {
                                 ${isChat ? '<i class="fas fa-circle text-amber text-2xs"></i>' : ''}
                                 ${isEmb ? '<i class="fas fa-circle text-blue text-2xs"></i>' : ''}
                                 <span class="font-medium text-primary text-sm truncate">${escapeHtml(model.fileName)}</span>
+                                <span class="badge badge-${model.type === 'mlx' ? 'green' : 'amber'} text-2xs">${(model.type || 'gguf').toUpperCase()}</span>
                             </div>
                             ${model.repo ? `<div class="text-xs text-muted truncate">${escapeHtml(model.repo)}</div>` : ''}
                             ${badges ? `<div class="flex items-center gap-1 mt-1">${badges}</div>` : ''}
@@ -1073,7 +1190,8 @@ export class LocalLlmView extends Component {
         const container = this.querySelector('#recommendedSection');
         if (!container) return;
 
-        const pending = RECOMMENDED_MODELS.filter(r => !this.isModelDownloaded(r.repo, r.file));
+        const recommended = getRecommendedModels(this.status);
+        const pending = recommended.filter(r => !this.isModelDownloaded(r.repo, r.file));
         if (!pending.length) {
             container.innerHTML = '';
             return;
@@ -1083,19 +1201,20 @@ export class LocalLlmView extends Component {
             <h3 class="section-title mb-3">Recommended Models</h3>
             <div class="llm-rec-grid">
                 ${pending.map(r => {
-                    const downloadId = `${r.repo}/${r.file}`;
+                    const downloadId = r.type === 'mlx' ? `mlx:${r.repo}` : `${r.repo}/${r.file}`;
                     const isDownloading = this.activeDownloads.has(downloadId);
                     return `
                     <div class="llm-rec-card llm-rec-card-${r.color}">
                         <div class="flex items-center gap-2 mb-2">
-                            <i class="fas ${r.icon} text-${r.color} text-sm"></i>
+                            <i class="fa${r.icon === 'fa-apple' ? 'b' : 's'} ${r.icon} text-${r.color} text-sm"></i>
                             <span class="font-medium text-primary text-sm">${escapeHtml(r.label)}</span>
+                            <span class="badge badge-${r.type === 'mlx' ? 'green' : 'amber'} text-2xs">${r.type.toUpperCase()}</span>
                         </div>
                         <p class="text-xs text-muted mb-3">${escapeHtml(r.desc)}</p>
                         <div class="flex items-center justify-between">
                             <span class="text-xs text-muted">${r.size}</span>
                             <button class="rec-download-btn btn btn-${r.color} btn-sm"
-                                data-repo="${escapeHtml(r.repo)}" data-file="${escapeHtml(r.file)}" ${isDownloading ? 'disabled' : ''}>
+                                data-repo="${escapeHtml(r.repo)}" data-file="${escapeHtml(r.file)}" data-type="${r.type}" ${isDownloading ? 'disabled' : ''}>
                                 ${isDownloading
                                     ? '<i class="fas fa-spinner fa-spin mr-1"></i>Downloading...'
                                     : '<i class="fas fa-download mr-1"></i>Download'}
@@ -1109,7 +1228,7 @@ export class LocalLlmView extends Component {
             btn.addEventListener('click', () => {
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Downloading...';
-                this.downloadModel(btn.dataset.repo, btn.dataset.file, null);
+                this.downloadModel(btn.dataset.repo, btn.dataset.file, null, btn.dataset.type);
                 this.startDownloadPolling();
             });
         });
@@ -1234,13 +1353,16 @@ export class LocalLlmView extends Component {
         const query = input?.value?.trim();
         if (!query) return;
 
+        const formatSelect = this.querySelector('#hfFormatSelect');
+        this._browseFormat = formatSelect?.value || 'gguf';
+
         const container = this.querySelector('#hfResults');
         const btn = this.querySelector('#hfSearchBtn');
         container.innerHTML = '<div class="text-muted text-center py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Searching HuggingFace...</div>';
         btn.disabled = true;
 
         try {
-            this.searchResults = await api.browseHuggingFace(query, 10);
+            this.searchResults = await api.browseHuggingFace(query, 10, this._browseFormat);
             this.renderSearchResults();
         } catch (e) {
             container.innerHTML = `<div class="text-red text-center py-4">Error: ${escapeHtml(e.message)}</div>`;
@@ -1299,6 +1421,10 @@ export class LocalLlmView extends Component {
     }
 
     isModelDownloaded(repoId, fileName) {
+        // For MLX repos, match by repo ID (fileName is __mlx_repo__ sentinel)
+        if (fileName === '__mlx_repo__') {
+            return this.models.some(m => m.repo === repoId && m.type === 'mlx');
+        }
         return this.models.some(m => m.repo === repoId && m.fileName === fileName);
     }
 
@@ -1306,15 +1432,18 @@ export class LocalLlmView extends Component {
         const container = this.querySelector('#hfResults');
         if (!container) return;
 
+        const isMlx = this._browseFormat === 'mlx';
+        const emptyLabel = isMlx ? 'MLX' : 'GGUF';
+
         if (!this.searchResults.length) {
-            container.innerHTML = '<div class="text-muted text-center py-8">No GGUF models found for this query.</div>';
+            container.innerHTML = `<div class="text-muted text-center py-8">No ${emptyLabel} models found for this query.</div>`;
             return;
         }
 
-        // Filter out results with no GGUF files
+        // Filter out results with no files
         const resultsWithFiles = this.searchResults.filter(r => r.ggufFiles.length > 0);
         if (!resultsWithFiles.length) {
-            container.innerHTML = '<div class="text-muted text-center py-8">No GGUF files found in the results.</div>';
+            container.innerHTML = `<div class="text-muted text-center py-8">No ${emptyLabel} files found in the results.</div>`;
             return;
         }
 
@@ -1330,6 +1459,33 @@ export class LocalLlmView extends Component {
                 caps.reasoning ? '<i class="fas fa-brain text-purple" title="Reasoning / Thinking"></i>' : '<i class="fas fa-brain text-muted" title="No reasoning"></i>',
             ].join('');
 
+            if (isMlx) {
+                // MLX: single entry per repo, no file select
+                const totalSize = result.ggufFiles[0]?.sizeBytes || 0;
+                const downloaded = this.isModelDownloaded(result.repoId, '__mlx_repo__');
+                const tooLarge = ram > 0 && totalSize > ram;
+
+                return `
+                    <div class="hf-result-row" data-idx="${idx}">
+                        <div class="min-w-0 flex-shrink-0">
+                            <div class="font-medium text-primary text-sm truncate" title="${escapeHtml(result.repoId)}">${escapeHtml(result.modelName)}</div>
+                            <div class="text-xs text-muted truncate">${escapeHtml(result.author)}</div>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs flex-shrink-0">
+                            <span class="text-muted" title="Downloads"><i class="fas fa-download mr-1"></i>${result.downloads?.toLocaleString() ?? 0}</span>
+                            <span class="flex items-center gap-1">${capIcons}</span>
+                        </div>
+                        <span class="text-xs text-muted">${formatBytes(totalSize)}</span>
+                        ${tooLarge ? '<span class="ram-warning ram-warning-badge" title="Exceeds system RAM"><i class="fas fa-memory mr-1"></i>won\'t fit</span>' : ''}
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <button class="download-btn btn btn-sm ${downloaded ? 'btn-green cursor-not-allowed' : 'btn-amber'}" data-idx="${idx}" data-type="mlx" ${downloaded ? 'disabled' : ''}>
+                                ${downloaded ? '<i class="fas fa-check mr-1"></i>Downloaded' : '<i class="fas fa-download mr-1"></i>Download'}
+                            </button>
+                        </div>
+                    </div>`;
+            }
+
+            // GGUF: file select
             const options = result.ggufFiles.map(f =>
                 `<option value="${escapeHtml(f.fileName)}" data-size="${f.sizeBytes}">${escapeHtml(f.fileName)} (${formatBytes(f.sizeBytes)})</option>`
             ).join('');
@@ -1366,7 +1522,7 @@ export class LocalLlmView extends Component {
 
         container.innerHTML = `<div class="space-y-2">${rows}</div>`;
 
-        // Update RAM warning and download button when select changes
+        // Update RAM warning and download button when select changes (GGUF only)
         container.querySelectorAll('.gguf-select').forEach(select => {
             select.addEventListener('change', () => {
                 const idx = parseInt(select.id.replace('gguf-select-', ''));
@@ -1379,21 +1535,27 @@ export class LocalLlmView extends Component {
             btn.addEventListener('click', () => {
                 const idx = parseInt(btn.dataset.idx);
                 const result = this.searchResults[idx];
-                const select = container.querySelector(`#gguf-select-${idx}`);
-                const fileName = select?.value;
-                if (result && fileName) {
-                    this.downloadModel(result.repoId, fileName, idx);
-                    this.startDownloadPolling();
+                const dlType = btn.dataset.type || 'gguf';
+
+                if (dlType === 'mlx') {
+                    this.downloadModel(result.repoId, '__mlx_repo__', idx, 'mlx');
+                } else {
+                    const select = container.querySelector(`#gguf-select-${idx}`);
+                    const fileName = select?.value;
+                    if (result && fileName) {
+                        this.downloadModel(result.repoId, fileName, idx);
+                    }
                 }
+                this.startDownloadPolling();
             });
         });
     }
 
-    downloadModel(repo, fileName, rowIdx) {
-        const downloadId = `${repo}/${fileName}`;
+    downloadModel(repo, fileName, rowIdx, type = 'gguf') {
+        const downloadId = type === 'mlx' ? `mlx:${repo}` : `${repo}/${fileName}`;
         if (this.activeDownloads.has(downloadId)) return;
 
-        const es = api.downloadLocalModel(repo, fileName);
+        const es = api.downloadLocalModel(repo, fileName, type);
         this.activeDownloads.set(downloadId, es);
 
         // Update button state for the search result row (if any)
@@ -1443,6 +1605,13 @@ export class LocalLlmView extends Component {
         this.querySelector('#hfSearchInput')?.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') this.searchHuggingFace();
         });
+
+        // Default to MLX format on Apple Silicon
+        if (isAppleSilicon(this.status)) {
+            const formatSelect = this.querySelector('#hfFormatSelect');
+            if (formatSelect) formatSelect.value = 'mlx';
+            this._browseFormat = 'mlx';
+        }
     }
 
     template() {
@@ -1493,8 +1662,12 @@ export class LocalLlmView extends Component {
                     <div class="border-t pt-4">
                         <h3 class="section-title mb-3">HuggingFace Browser</h3>
                         <div class="flex gap-2 mb-2">
-                            <input id="hfSearchInput" type="text" placeholder="Search GGUF models (e.g. Qwen3, Llama, Phi)..."
+                            <input id="hfSearchInput" type="text" placeholder="Search models (e.g. Qwen3, Llama, Phi)..."
                                 class="input flex-1" />
+                            <select id="hfFormatSelect" class="input" style="width: auto; min-width: 90px;">
+                                <option value="gguf">GGUF</option>
+                                <option value="mlx">MLX</option>
+                            </select>
                             <button id="hfSearchBtn" class="btn btn-accent flex-shrink-0">
                                 <i class="fas fa-search mr-1"></i>Search
                             </button>
@@ -1511,7 +1684,7 @@ export class LocalLlmView extends Component {
                         <div id="hfResults">
                             <div class="text-muted text-center py-8 text-sm">
                                 <i class="fas fa-cube text-2xl mb-3 block text-muted"></i>
-                                Search HuggingFace to find and download GGUF models
+                                Search HuggingFace to find and download models
                             </div>
                         </div>
                     </div>

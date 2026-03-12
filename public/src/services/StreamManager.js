@@ -134,6 +134,8 @@ class StreamManager {
                                     output_tokens: event.output_tokens || 0,
                                     total_tokens: event.total_tokens || 0,
                                 };
+                            } else if (event.type === 'thinking') {
+                                // thinking events are passed through to listeners, not accumulated into content
                             } else if (event.error) {
                                 state.error = event.error;
                             } else if (event.content) {

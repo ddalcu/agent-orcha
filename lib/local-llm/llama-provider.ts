@@ -1,24 +1,39 @@
 import * as path from 'path';
+import { statSync } from 'fs';
 import { LlamaServerProcess } from './llama-server-process.ts';
+import { MlxServerProcess } from './mlx-server-process.ts';
 import { ModelManager } from './model-manager.ts';
 import { readGGUFModelInfo, calculateOptimalContextSize, kvCacheBytesPerToken } from './gguf-reader.ts';
 import { detectGpu, type GpuInfo } from './binary-manager.ts';
 import { logger } from '../logger.ts';
 
+export type EngineType = 'llama' | 'mlx' | null;
+
 // ─── Singleton Server Instances ─────────────────────────────────────────────
 
 let chatServer: LlamaServerProcess | null = null;
+let mlxServer: MlxServerProcess | null = null;
 let embeddingServer: LlamaServerProcess | null = null;
+let mlxEmbeddingServer: MlxServerProcess | null = null;
 
-async function resolveModelPath(baseDir: string, modelName: string): Promise<string> {
+function detectModelType(modelPath: string): 'gguf' | 'mlx' {
+  try {
+    return statSync(modelPath).isDirectory() ? 'mlx' : 'gguf';
+  } catch {
+    return modelPath.endsWith('.gguf') ? 'gguf' : 'mlx';
+  }
+}
+
+async function resolveModelPath(baseDir: string, modelName: string): Promise<{ filePath: string; type: 'gguf' | 'mlx' }> {
   const manager = new ModelManager(baseDir);
-  const filePath = await manager.findModelFile(modelName);
-  if (!filePath) throw new Error(`Local model "${modelName}" not found. Download it first.`);
-  return filePath;
+  const result = await manager.findModelFile(modelName);
+  if (!result) throw new Error(`Local model "${modelName}" not found. Download it first.`);
+  return result;
 }
 
 export const llamaEngine = {
   _baseDir: '',
+  _engineType: null as EngineType,
 
   setBaseDir(dir: string) { this._baseDir = dir; },
 
@@ -27,8 +42,61 @@ export const llamaEngine = {
   _supportsVision: false,
 
   async load(modelPath: string, opts?: { contextSize?: number; reasoningBudget?: number }): Promise<void> {
+    const modelType = detectModelType(modelPath);
+
+    if (modelType === 'mlx') {
+      // MLX path: use MlxServerProcess
+      if (mlxServer?.running && mlxServer.modelPath === modelPath) return;
+      if (!mlxServer) mlxServer = new MlxServerProcess(this._baseDir);
+
+      // Stop llama server if it was running
+      if (chatServer?.running) await chatServer.stop();
+
+      this._memoryEstimate = null;
+      this._supportsVision = false;
+      this._detectedContextSize = opts?.contextSize ?? null;
+      this._engineType = 'mlx';
+
+      await mlxServer.start({ modelPath, contextSize: opts?.contextSize, reasoningBudget: opts?.reasoningBudget });
+
+      // Fetch /props from mlx-serve to get memory usage and context size
+      try {
+        const baseUrl = mlxServer.getBaseUrl();
+        const res = await fetch(`${baseUrl}/props`);
+        if (res.ok) {
+          const props = await res.json() as any;
+          const nCtx = props.default_generation_settings?.n_ctx;
+          if (nCtx && !this._detectedContextSize) {
+            this._detectedContextSize = nCtx;
+          }
+          const ctxSize = this._detectedContextSize ?? nCtx ?? 0;
+          const info = props.model_info;
+          // KV cache: layers × 2(K+V) × kv_heads × head_dim × 2(float16) × ctx
+          const kvCacheBytes = info
+            ? info.num_hidden_layers * 2 * info.num_key_value_heads * info.head_dim * 2 * ctxSize
+            : 0;
+          const modelBytes = props.memory?.active_bytes ?? 0;
+          if (modelBytes || kvCacheBytes) {
+            this._memoryEstimate = {
+              modelBytes,
+              kvCacheBytes,
+              totalBytes: modelBytes + kvCacheBytes,
+            };
+          }
+        }
+      } catch (err) {
+        logger.warn('[LlamaEngine] Failed to fetch MLX /props:', err);
+      }
+
+      return;
+    }
+
+    // GGUF path: existing llama-server behavior
     if (!chatServer) chatServer = new LlamaServerProcess(this._baseDir);
     if (chatServer.running && chatServer.modelPath === modelPath) return;
+
+    // Stop mlx server if it was running
+    if (mlxServer?.running) await mlxServer.stop();
 
     let contextSize = opts?.contextSize;
 
@@ -59,6 +127,7 @@ export const llamaEngine = {
     }
 
     this._detectedContextSize = contextSize ?? null;
+    this._engineType = 'llama';
     const gpu = detectGpu();
     const isGpu = gpu.accel !== 'none';
     const isMetal = gpu.accel === 'metal';
@@ -75,7 +144,12 @@ export const llamaEngine = {
   },
 
   async unload(): Promise<void> {
-    if (chatServer) await chatServer.stop();
+    if (this._engineType === 'mlx' && mlxServer) {
+      await mlxServer.stop();
+    } else if (chatServer) {
+      await chatServer.stop();
+    }
+    this._engineType = null;
   },
 
   async swap(modelPath: string, opts?: { contextSize?: number; reasoningBudget?: number }): Promise<void> {
@@ -84,52 +158,88 @@ export const llamaEngine = {
   },
 
   async ensureRunning(modelName: string, opts?: { contextSize?: number; reasoningBudget?: number }): Promise<void> {
-    if (chatServer?.running) return;
+    if (this._engineType === 'mlx' && mlxServer?.running) return;
+    if (this._engineType === 'llama' && chatServer?.running) return;
     logger.info(`[LlamaEngine] Auto-starting chat model: ${modelName}`);
-    const filePath = await resolveModelPath(this._baseDir, modelName);
+    const { filePath } = await resolveModelPath(this._baseDir, modelName);
     await this.load(filePath, opts);
   },
 
-  getStatus(): { running: boolean; activeModel: string | null; port: number | null; contextSize: number | null; memoryEstimate: { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null; gpu: GpuInfo; supportsVision: boolean } {
+  getStatus(): { running: boolean; activeModel: string | null; port: number | null; contextSize: number | null; memoryEstimate: { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null; gpu: GpuInfo; supportsVision: boolean; engineType: EngineType } {
+    const isRunning = (this._engineType === 'mlx' ? mlxServer?.running : chatServer?.running) ?? false;
+    const activeModel = (this._engineType === 'mlx' ? mlxServer?.modelPath : chatServer?.modelPath) ?? null;
+    const port = (this._engineType === 'mlx' ? mlxServer?.port : chatServer?.port) ?? null;
     return {
-      running: chatServer?.running ?? false,
-      activeModel: chatServer?.modelPath ?? null,
-      port: chatServer?.port ?? null,
+      running: isRunning,
+      activeModel,
+      port,
       contextSize: this._detectedContextSize,
       memoryEstimate: this._memoryEstimate,
       gpu: detectGpu(),
       supportsVision: this._supportsVision,
+      engineType: this._engineType,
     };
   },
 
   getBaseUrl(): string | null {
+    if (this._engineType === 'mlx') {
+      return mlxServer?.ready ? mlxServer.getBaseUrl() : null;
+    }
     return chatServer?.ready ? chatServer.getBaseUrl() : null;
   },
 };
 
 export const llamaEmbeddingEngine = {
   _baseDir: '',
+  _engineType: null as EngineType,
 
   setBaseDir(dir: string) { this._baseDir = dir; },
 
   async load(modelPath: string): Promise<void> {
+    const modelType = detectModelType(modelPath);
+
+    if (modelType === 'mlx') {
+      // MLX embedding model gets its own dedicated server instance
+      if (mlxEmbeddingServer?.running && mlxEmbeddingServer.modelPath === modelPath) return;
+      if (!mlxEmbeddingServer) mlxEmbeddingServer = new MlxServerProcess(this._baseDir, 'embedding');
+
+      this._engineType = 'mlx';
+      await mlxEmbeddingServer.start({ modelPath });
+      logger.info(`[LlamaEngine] MLX embedding server ready on port ${mlxEmbeddingServer.port}`);
+      return;
+    }
+
+    // GGUF path: existing llama-server behavior
+    this._engineType = 'llama';
     if (!embeddingServer) embeddingServer = new LlamaServerProcess(this._baseDir, true);
     if (embeddingServer.running && embeddingServer.modelPath === modelPath) return;
     await embeddingServer.start({ modelPath, embedding: true });
   },
 
   async unload(): Promise<void> {
-    if (embeddingServer) await embeddingServer.stop();
+    if (this._engineType === 'mlx' && mlxEmbeddingServer) {
+      await mlxEmbeddingServer.stop();
+    } else if (embeddingServer) {
+      await embeddingServer.stop();
+    }
+    this._engineType = null;
   },
 
   async ensureRunning(modelName: string): Promise<void> {
-    if (embeddingServer?.running) return;
+    if (this._engineType === 'mlx' && mlxEmbeddingServer?.running) return;
+    if (this._engineType === 'llama' && embeddingServer?.running) return;
     logger.info(`[LlamaEngine] Auto-starting embedding model: ${modelName}`);
-    const filePath = await resolveModelPath(this._baseDir, modelName);
+    const { filePath } = await resolveModelPath(this._baseDir, modelName);
     await this.load(filePath);
   },
 
   getStatus(): { running: boolean; activeModel: string | null } {
+    if (this._engineType === 'mlx') {
+      return {
+        running: mlxEmbeddingServer?.running ?? false,
+        activeModel: mlxEmbeddingServer?.modelPath ?? null,
+      };
+    }
     return {
       running: embeddingServer?.running ?? false,
       activeModel: embeddingServer?.modelPath ?? null,
@@ -137,6 +247,9 @@ export const llamaEmbeddingEngine = {
   },
 
   getBaseUrl(): string | null {
+    if (this._engineType === 'mlx') {
+      return mlxEmbeddingServer?.ready ? mlxEmbeddingServer.getBaseUrl() : null;
+    }
     return embeddingServer?.ready ? embeddingServer.getBaseUrl() : null;
   },
 };

@@ -77,6 +77,7 @@ export class IdeView extends Component {
         this.editor = null;
         this.currentFile = null;
         this.isDirty = false;
+        this._loading = false;
         this.treeData = [];
         this.expandedDirs = new Set();
         this._renamingPath = null;
@@ -608,8 +609,17 @@ export class IdeView extends Component {
             const data = await api.readFile(filePath);
             this.currentFile = { path: data.path, content: data.content };
             this.isDirty = false;
-            this._viewMode = isAgentFile(filePath) ? 'visual' : 'source';
+            // Preserve visual/source choice when switching between agent files
+            if (!isAgentFile(filePath)) {
+                this._viewMode = 'source';
+            } else if (!isAgentFile(this._prevFilePath)) {
+                this._viewMode = 'visual';
+            }
+            this._prevFilePath = filePath;
+            this._loading = true;
             this._renderEditor();
+            this._loading = false;
+            this._updateDirtyState();
             this._renderTree();
             this._updateModeToggle();
         } catch (err) {
@@ -644,6 +654,32 @@ export class IdeView extends Component {
         if (this._viewMode === 'visual') {
             if (editorContainer) editorContainer.classList.add('hidden');
             if (composerContainer) composerContainer.classList.remove('hidden');
+
+            // Parse and load into composer
+            let parsed;
+            try {
+                parsed = jsyaml.load(this.currentFile.content);
+            } catch { parsed = null; }
+
+            if (parsed && typeof parsed === 'object') {
+                let composer = composerContainer.querySelector('agent-composer');
+                if (!composer) {
+                    composer = document.createElement('agent-composer');
+                    composer.classList.add('block', 'h-full');
+                    composerContainer.appendChild(composer);
+                    composer.addEventListener('composer:change', () => {
+                        if (this._loading) return;
+                        if (!this.isDirty) {
+                            this.isDirty = true;
+                            this._updateDirtyState();
+                        }
+                    });
+                }
+                composer.data = parsed;
+            }
+
+            // Also sync Ace so switching to source has current content
+            this._syncAceContent();
             return;
         }
 
@@ -651,7 +687,13 @@ export class IdeView extends Component {
         if (composerContainer) composerContainer.classList.add('hidden');
         if (editorContainer) editorContainer.classList.remove('hidden');
 
-        // Initialize or update Ace
+        this._syncAceContent();
+        this._updateDirtyState();
+        if (this.editor) this.editor.focus();
+    }
+
+    _syncAceContent() {
+        if (!this.currentFile) return;
         const aceEl = this.querySelector('#aceEditor');
         if (!aceEl) return;
 
@@ -665,8 +707,8 @@ export class IdeView extends Component {
                 tabSize: 2,
                 useSoftTabs: true,
             });
-
             this.editor.session.on('change', () => {
+                if (this._loading) return;
                 if (!this.isDirty) {
                     this.isDirty = true;
                     this._updateDirtyState();
@@ -674,16 +716,10 @@ export class IdeView extends Component {
             });
         }
 
-        // Set mode based on file extension
         const ext = getExtension(this.currentFile.path);
         const mode = ACE_MODES[ext] || ACE_MODES.default;
         this.editor.session.setMode(mode);
-
-        // Set content without triggering change event
         this.editor.setValue(this.currentFile.content, -1);
-        this.isDirty = false;
-        this._updateDirtyState();
-        this.editor.focus();
     }
 
     _updateDirtyState() {
@@ -793,6 +829,7 @@ export class IdeView extends Component {
             return;
         }
 
+        const wasDirty = this.isDirty;
         this._viewMode = 'visual';
         this._updateModeToggle();
 
@@ -808,31 +845,36 @@ export class IdeView extends Component {
             composer = document.createElement('agent-composer');
             composer.classList.add('block', 'h-full');
             composerContainer.appendChild(composer);
+            composer.addEventListener('composer:change', () => {
+                if (this._loading) return;
+                if (!this.isDirty) {
+                    this.isDirty = true;
+                    this._updateDirtyState();
+                }
+            });
         }
 
+        this._loading = true;
         composer.data = parsed;
-
-        // Listen for changes
-        composer.addEventListener('composer:change', () => {
-            if (!this.isDirty) {
-                this.isDirty = true;
-                this._updateDirtyState();
-            }
-        });
+        this._loading = false;
+        this.isDirty = wasDirty;
+        this._updateDirtyState();
     }
 
     _switchToSource() {
         if (!this.currentFile) return;
 
+        const wasDirty = this.isDirty;
         const composer = this.querySelector('agent-composer');
         if (composer && this._viewMode === 'visual') {
             const data = composer.getData();
             const yaml = jsyaml.dump(data, { indent: 2, lineWidth: -1, noRefs: true, sortKeys: false });
 
-            // Update Ace content
+            this._loading = true;
             if (this.editor) {
                 this.editor.setValue(yaml, -1);
             }
+            this._loading = false;
             this.currentFile.content = yaml;
         }
 
@@ -843,6 +885,9 @@ export class IdeView extends Component {
         const composerContainer = this.querySelector('#composerContainer');
         if (composerContainer) composerContainer.classList.add('hidden');
         if (editorContainer) editorContainer.classList.remove('hidden');
+
+        this.isDirty = wasDirty;
+        this._updateDirtyState();
 
         if (this.editor) {
             this.editor.resize();

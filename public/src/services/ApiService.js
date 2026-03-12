@@ -330,13 +330,19 @@ export class ApiService {
         return res.json();
     }
 
-    browseHuggingFace(query, limit = 10) {
-        return this._fetch(`/api/local-llm/browse?q=${encodeURIComponent(query)}&limit=${limit}`)
+    browseHuggingFace(query, limit = 10, format = 'gguf') {
+        return this._fetch(`/api/local-llm/browse?q=${encodeURIComponent(query)}&limit=${limit}&format=${format}`)
             .then(r => r.json());
     }
 
-    downloadLocalModel(repo, fileName) {
-        return new EventSource(`/api/local-llm/models/download?repo=${encodeURIComponent(repo)}&fileName=${encodeURIComponent(fileName)}`);
+    downloadLocalModel(repo, fileName, type = 'gguf') {
+        const params = new URLSearchParams({ repo });
+        if (type === 'mlx') {
+            params.set('type', 'mlx');
+        } else {
+            params.set('fileName', fileName);
+        }
+        return new EventSource(`/api/local-llm/models/download?${params.toString()}`);
     }
 
     async getActiveDownloads() {
@@ -380,6 +386,16 @@ export class ApiService {
 
     async updateLlamaBinary() {
         const res = await this._fetch('/api/local-llm/update-binary', { method: 'POST' });
+        return res.json();
+    }
+
+    async checkMlxUpdate() {
+        const res = await this._fetch('/api/local-llm/check-mlx-update');
+        return res.json();
+    }
+
+    async updateMlxBinary() {
+        const res = await this._fetch('/api/local-llm/update-mlx-binary', { method: 'POST' });
         return res.json();
     }
 

@@ -935,12 +935,14 @@ export class AgentsView extends Component {
                 this.streamUsageData = state.usageData;
                 const wasCancelled = event.status === 'cancelled';
 
+                // Finalize any in-progress thinking pill
+                const bubble = this.querySelector(`#${responseId}`);
+                if (bubble) {
+                    const toolsDiv = bubble.querySelector('.tool-invocations');
+                    this.finalizeThinkingPill(toolsDiv, thinkingState);
+                }
+
                 if (state.streamType === 'agent') {
-                    const bubble = this.querySelector(`#${responseId}`);
-                    if (bubble) {
-                        const toolsDiv = bubble.querySelector('.tool-invocations');
-                        this.finalizeThinkingPill(toolsDiv, thinkingState);
-                    }
                     if (hasToolCalls && !state.content.trim()) {
                         const bubble = this.querySelector(`#${responseId}`);
                         if (bubble) {
@@ -980,10 +982,28 @@ export class AgentsView extends Component {
                     this.updateResponseError(responseId, `Error: ${event.error}`);
                     return;
                 }
+                if (event.type === 'thinking') {
+                    const bubble = this.querySelector(`#${responseId}`);
+                    if (bubble) {
+                        const toolsDiv = bubble.querySelector('.tool-invocations');
+                        const container = this.querySelector('#chatMessages');
+                        const loadingDots = bubble.querySelector('.response-content .loading-dots');
+                        if (loadingDots) {
+                            loadingDots.remove();
+                            bubble.querySelector('.response-bubble-inner')?.classList.remove('loading');
+                            const contentDiv = bubble.querySelector('.response-content');
+                            contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
+                            contentDiv.innerHTML = '';
+                        }
+                        this.handleThinkingEvent(event, toolsDiv, thinkingState, container);
+                    }
+                    return;
+                }
                 if (event.content) {
                     const bubble = this.querySelector(`#${responseId}`);
                     if (bubble) {
                         const contentDiv = bubble.querySelector('.response-content');
+                        const toolsDiv = bubble.querySelector('.tool-invocations');
                         const loadingDots = contentDiv?.querySelector('.loading-dots');
                         if (loadingDots) {
                             loadingDots.remove();
@@ -991,6 +1011,7 @@ export class AgentsView extends Component {
                             contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
                             contentDiv.innerHTML = '';
                         }
+                        this.finalizeThinkingPill(toolsDiv, thinkingState);
                         const container = this.querySelector('#chatMessages');
                         this.renderLlmContentStreaming(contentDiv, state.content, responseId, thinkingState);
                         if (container) container.scrollTop = container.scrollHeight;
@@ -1592,7 +1613,36 @@ export class AgentsView extends Component {
         return true;
     }
 
+    _attachClickDetails(pillEl, detailsEl, toolsDiv, container) {
+        pillEl.addEventListener('click', (e) => {
+            if (detailsEl.contains(e.target)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            toolsDiv.querySelectorAll('.tool-invocation-details.visible').forEach(d => {
+                if (d !== detailsEl) d.classList.remove('visible');
+            });
+            const wasHidden = !detailsEl.classList.contains('visible');
+            detailsEl.classList.toggle('visible');
+            if (wasHidden && container) {
+                const pillRect = pillEl.getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+                const spaceRight = containerRect.right - pillRect.left;
+                if (spaceRight < 420) {
+                    detailsEl.style.right = '0';
+                    detailsEl.style.left = 'auto';
+                } else {
+                    detailsEl.style.left = '0';
+                    detailsEl.style.right = 'auto';
+                }
+            }
+        });
+        document.addEventListener('click', (e) => {
+            if (!pillEl.contains(e.target)) detailsEl.classList.remove('visible');
+        }, { capture: true });
+    }
+
     _createThinkingPill(toolsDiv, content) {
+        const container = this.querySelector('#chatMessages');
         const pill = document.createElement('div');
         pill.className = 'tool-pill done thinking';
 
@@ -1601,30 +1651,20 @@ export class AgentsView extends Component {
         pillContent.innerHTML = '<i class="fas fa-brain text-purple text-2xs"></i><span>Thinking</span>';
         pill.appendChild(pillContent);
 
-        const popover = document.createElement('div');
-        popover.className = 'tool-invocation-details fixed';
+        const details = document.createElement('div');
+        details.className = 'tool-invocation-details';
 
-        const popoverContent = document.createElement('div');
-        popoverContent.className = 'tool-detail-pre markdown-content custom-scrollbar';
-        popoverContent.innerHTML = markdownRenderer.render(content);
-        markdownRenderer.highlightCode(popoverContent);
-        popover.appendChild(popoverContent);
-        pill.appendChild(popover);
+        const section = document.createElement('div');
+        section.className = 'tool-detail-section';
+        const pre = document.createElement('div');
+        pre.className = 'tool-detail-pre markdown-content custom-scrollbar';
+        pre.innerHTML = markdownRenderer.render(content);
+        markdownRenderer.highlightCode(pre);
+        section.appendChild(pre);
+        details.appendChild(section);
+        pill.appendChild(details);
 
-        pill.addEventListener('mouseenter', () => {
-            popover.classList.add('visible');
-            const pillRect = pill.getBoundingClientRect();
-            popover.style.bottom = (window.innerHeight - pillRect.top + 4) + 'px';
-            popover.style.top = 'auto';
-            if (pillRect.left + 400 > window.innerWidth - 16) {
-                popover.style.left = Math.max(8, pillRect.right - 400) + 'px';
-            } else {
-                popover.style.left = pillRect.left + 'px';
-            }
-            popover.style.right = 'auto';
-        });
-        pill.addEventListener('mouseleave', () => popover.classList.remove('visible'));
-
+        this._attachClickDetails(pill, details, toolsDiv, container);
         toolsDiv.appendChild(pill);
     }
 
@@ -1667,33 +1707,7 @@ export class AgentsView extends Component {
 
         toolEl.appendChild(details);
 
-        toolEl.addEventListener('click', (e) => {
-            if (details.contains(e.target)) return;
-            e.preventDefault();
-            e.stopPropagation();
-            toolsDiv.querySelectorAll('.tool-invocation-details.visible').forEach(d => {
-                if (d !== details) d.classList.remove('visible');
-            });
-            const wasHidden = !details.classList.contains('visible');
-            details.classList.toggle('visible');
-            if (wasHidden && container) {
-                const pillRect = toolEl.getBoundingClientRect();
-                const containerRect = container.getBoundingClientRect();
-                const spaceRight = containerRect.right - pillRect.left;
-                if (spaceRight < 420) {
-                    details.style.right = '0';
-                    details.style.left = 'auto';
-                } else {
-                    details.style.left = '0';
-                    details.style.right = 'auto';
-                }
-            }
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!toolEl.contains(e.target)) details.classList.remove('visible');
-        }, { capture: true });
-
+        this._attachClickDetails(toolEl, details, toolsDiv, container);
         toolsDiv.appendChild(toolEl);
     }
 
@@ -1733,6 +1747,7 @@ export class AgentsView extends Component {
     }
 
     finalizeThinkingPill(toolsDiv, thinkingState) {
+        const container = this.querySelector('#chatMessages');
         const pill = thinkingState.thinkingPill;
         if (!pill) return;
 
@@ -1745,35 +1760,23 @@ export class AgentsView extends Component {
 
         const pillContent = document.createElement('span');
         pillContent.className = 'inline-flex items-center gap-1';
-        pillContent.innerHTML = `
-            <i class="fas fa-brain text-purple text-2xs"></i>
-            <span>Thinking</span>
-        `;
+        pillContent.innerHTML = '<i class="fas fa-brain text-purple text-2xs"></i><span>Thinking</span>';
         pill.appendChild(pillContent);
 
-        const popover = document.createElement('div');
-        popover.className = 'tool-invocation-details fixed';
+        const details = document.createElement('div');
+        details.className = 'tool-invocation-details';
 
-        const popoverContent = document.createElement('div');
-        popoverContent.className = 'tool-detail-pre markdown-content custom-scrollbar';
-        popoverContent.innerHTML = markdownRenderer.render(content);
-        markdownRenderer.highlightCode(popoverContent);
-        popover.appendChild(popoverContent);
-        pill.appendChild(popover);
+        const section = document.createElement('div');
+        section.className = 'tool-detail-section';
+        const pre = document.createElement('div');
+        pre.className = 'tool-detail-pre markdown-content custom-scrollbar';
+        pre.innerHTML = markdownRenderer.render(content);
+        markdownRenderer.highlightCode(pre);
+        section.appendChild(pre);
+        details.appendChild(section);
+        pill.appendChild(details);
 
-        pill.addEventListener('mouseenter', () => {
-            popover.classList.add('visible');
-            const pillRect = pill.getBoundingClientRect();
-            popover.style.bottom = (window.innerHeight - pillRect.top + 4) + 'px';
-            popover.style.top = 'auto';
-            if (pillRect.left + 400 > window.innerWidth - 16) {
-                popover.style.left = Math.max(8, pillRect.right - 400) + 'px';
-            } else {
-                popover.style.left = pillRect.left + 'px';
-            }
-            popover.style.right = 'auto';
-        });
-        pill.addEventListener('mouseleave', () => popover.classList.remove('visible'));
+        this._attachClickDetails(pill, details, toolsDiv, container);
     }
 
     createResponseBubble(id) {
@@ -1919,35 +1922,7 @@ export class AgentsView extends Component {
 
                 toolEl.appendChild(details);
 
-                toolEl.addEventListener('click', (e) => {
-                    if (details.contains(e.target)) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toolsDiv.querySelectorAll('.tool-invocation-details.visible').forEach(d => {
-                        if (d !== details) d.classList.remove('visible');
-                    });
-                    const wasHidden = !details.classList.contains('visible');
-                    details.classList.toggle('visible');
-                    if (wasHidden) {
-                        const pillRect = toolEl.getBoundingClientRect();
-                        const containerRect = container.getBoundingClientRect();
-                        const spaceRight = containerRect.right - pillRect.left;
-                        if (spaceRight < 420) {
-                            details.style.right = '0';
-                            details.style.left = 'auto';
-                        } else {
-                            details.style.left = '0';
-                            details.style.right = 'auto';
-                        }
-                    }
-                });
-
-                const closeHandler = (e) => {
-                    if (!toolEl.contains(e.target)) {
-                        details.classList.remove('visible');
-                    }
-                };
-                document.addEventListener('click', closeHandler, { capture: true });
+                this._attachClickDetails(toolEl, details, toolsDiv, container);
                 container.scrollTop = container.scrollHeight;
 
                 if (event.tool === 'workspace_write' || event.tool === 'workspace_delete') {

@@ -9,6 +9,7 @@ import {
 } from '../../lib/llm/index.ts';
 import { detectProvider } from '../../lib/llm/provider-detector.ts';
 import { getBinaryVersion, isSystemBinary, updateBinary, checkForUpdate } from '../../lib/local-llm/binary-manager.ts';
+import { getMlxBinaryVersion, isMlxSystemBinary, updateMlxBinary, checkForMlxUpdate } from '../../lib/local-llm/mlx-binary-manager.ts';
 import { logger } from '../../lib/logger.ts';
 
 export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
@@ -33,8 +34,12 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       freeRamBytes: os.freemem(),
       defaultProvider,
       platform: process.platform,
+      arch: process.arch,
       llamaVersion: getBinaryVersion(workspaceRoot),
       binarySource: isSystemBinary() ? 'system' : 'managed',
+      mlxVersion: getMlxBinaryVersion(workspaceRoot),
+      mlxBinarySource: isMlxSystemBinary() ? 'system' : 'managed',
+      engineType: status.engineType,
     };
   });
 
@@ -62,13 +67,16 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // GET /models/download?repo=...&fileName=...  (SSE stream)
-  fastify.get<{ Querystring: { repo: string; fileName: string } }>(
+  // GET /models/download?repo=...&fileName=...&type=gguf|mlx  (SSE stream)
+  fastify.get<{ Querystring: { repo: string; fileName: string; type?: string } }>(
     '/models/download',
     async (request, reply) => {
-      const { repo, fileName } = request.query;
-      if (!repo || !fileName) {
-        return reply.status(400).send({ error: 'repo and fileName are required' });
+      const { repo, fileName, type } = request.query;
+      if (!repo) {
+        return reply.status(400).send({ error: 'repo is required' });
+      }
+      if (type !== 'mlx' && !fileName) {
+        return reply.status(400).send({ error: 'fileName is required for GGUF downloads' });
       }
 
       reply.raw.setHeader('Content-Type', 'text/event-stream');
@@ -79,19 +87,11 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       reply.raw.on('close', () => { clientDisconnected = true; });
 
       try {
-        const model = await manager.downloadModel(
-          repo,
-          fileName,
-          (progress) => {
-            if (!clientDisconnected) {
-              reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
-            }
-          },
-        );
+        let model;
 
-        // Auto-download mmproj for vision models (skip if user downloaded an mmproj directly)
-        if (!clientDisconnected && !fileName.toLowerCase().includes('mmproj')) {
-          const mmproj = await manager.autoDownloadMmproj(
+        if (type === 'mlx') {
+          // MLX: download entire repo
+          model = await manager.downloadMlxModel(
             repo,
             (progress) => {
               if (!clientDisconnected) {
@@ -99,8 +99,31 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
               }
             },
           );
-          if (mmproj && !clientDisconnected) {
-            reply.raw.write(`data: ${JSON.stringify({ type: 'mmproj', model: mmproj })}\n\n`);
+        } else {
+          // GGUF: download single file
+          model = await manager.downloadModel(
+            repo,
+            fileName,
+            (progress) => {
+              if (!clientDisconnected) {
+                reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
+              }
+            },
+          );
+
+          // Auto-download mmproj for vision models (skip if user downloaded an mmproj directly)
+          if (!clientDisconnected && !fileName.toLowerCase().includes('mmproj')) {
+            const mmproj = await manager.autoDownloadMmproj(
+              repo,
+              (progress) => {
+                if (!clientDisconnected) {
+                  reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
+                }
+              },
+            );
+            if (mmproj && !clientDisconnected) {
+              reply.raw.write(`data: ${JSON.stringify({ type: 'mmproj', model: mmproj })}\n\n`);
+            }
           }
         }
 
@@ -142,9 +165,10 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
 
       const setAsDefault = (request.body as any)?.setAsDefault === true;
       const detectedCtx = llamaEngine.getStatus().contextSize;
+      const modelName = model.type === 'mlx' ? model.fileName : model.fileName.replace(/\.gguf$/i, '');
       const localLlamaEntry = {
         provider: 'local' as const,
-        model: model.fileName.replace(/\.gguf$/i, ''),
+        model: modelName,
         ...(detectedCtx ? { contextSize: detectedCtx } : {}),
         reasoningBudget: currentDefault?.reasoningBudget ?? 0,
       };
@@ -196,9 +220,10 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         const config = getLLMConfig();
         if (config) {
+          const embModelName = model.type === 'mlx' ? model.fileName : model.fileName.replace(/\.gguf$/i, '');
           config.embeddings['default'] = {
             provider: 'local' as const,
-            model: model.fileName.replace(/\.gguf$/i, ''),
+            model: embModelName,
           };
           await saveLLMConfig(llmJsonPath, config);
         }
@@ -234,15 +259,16 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // GET /browse?q=...&limit=10
-  fastify.get<{ Querystring: { q: string; limit?: string } }>(
+  // GET /browse?q=...&limit=10&format=gguf|mlx
+  fastify.get<{ Querystring: { q: string; limit?: string; format?: string } }>(
     '/browse',
     async (request, reply) => {
-      const { q, limit } = request.query;
+      const { q, limit, format } = request.query;
       if (!q) {
         return reply.status(400).send({ error: 'q (query) is required' });
       }
-      return manager.browseHuggingFace(q, Number(limit) || 10);
+      const fmt = format === 'mlx' ? 'mlx' : 'gguf';
+      return manager.browseHuggingFace(q, Number(limit) || 10, fmt);
     },
   );
 
@@ -272,5 +298,21 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     if (llamaEmbeddingEngine.getStatus().running) await llamaEmbeddingEngine.unload();
     await updateBinary(workspaceRoot);
     return { ok: true, version: getBinaryVersion(workspaceRoot) };
+  });
+
+  // GET /check-mlx-update — compare local mlx-serve version with latest GitHub release
+  fastify.get('/check-mlx-update', async () => {
+    return checkForMlxUpdate(workspaceRoot);
+  });
+
+  // POST /update-mlx-binary — pull latest mlx-serve from GitHub
+  fastify.post('/update-mlx-binary', async (_request, reply) => {
+    if (isMlxSystemBinary()) {
+      return reply.status(400).send({ error: 'mlx-serve is system-installed. Update it manually.' });
+    }
+    if (llamaEngine.getStatus().running && llamaEngine._engineType === 'mlx') await llamaEngine.unload();
+    if (llamaEmbeddingEngine.getStatus().running && llamaEmbeddingEngine._engineType === 'mlx') await llamaEmbeddingEngine.unload();
+    await updateMlxBinary(workspaceRoot);
+    return { ok: true, version: getMlxBinaryVersion(workspaceRoot) };
   });
 };

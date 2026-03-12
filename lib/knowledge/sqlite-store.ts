@@ -441,6 +441,10 @@ export class SqliteStore {
       CREATE VIRTUAL TABLE entity_vectors USING vec0 (
         embedding float[${this.dimensions}] distance_metric=cosine
       );
+      CREATE TABLE IF NOT EXISTS entity_rowid_map (
+        rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_id TEXT NOT NULL UNIQUE
+      );
     `);
 
     this.setMeta('dimensions', String(this.dimensions));

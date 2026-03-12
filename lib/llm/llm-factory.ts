@@ -76,7 +76,7 @@ export class LLMFactory {
 
   private static createOpenAI(config: ModelConfig, temperature?: number, provider: LLMProvider = 'openai'): ChatModel {
     const apiKey = resolveApiKey(provider, config.apiKey);
-    const baseURL = config.baseUrl ?? (provider === 'local' ? 'http://127.0.0.1:9990/v1' : undefined);
+    const baseURL = config.baseUrl ?? (provider === 'local' ? (llamaEngine.getBaseUrl() ?? 'http://127.0.0.1:9990') + '/v1' : undefined);
     const supportsVision = provider === 'local' ? llamaEngine.getStatus().supportsVision : true;
     return new OpenAIChatModel({
       modelName: config.model,
@@ -86,6 +86,7 @@ export class LLMFactory {
       baseURL,
       provider: provider as 'openai' | 'local',
       supportsVision,
+      ...(provider === 'local' && config.reasoningBudget ? { reasoningBudget: config.reasoningBudget } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
     });
   }

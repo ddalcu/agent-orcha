@@ -364,6 +364,9 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
             accumulated += content;
             reply.raw.write(`data: ${JSON.stringify({ content })}\n\n`);
           }
+          if (chunk.reasoning) {
+            reply.raw.write(`data: ${JSON.stringify({ type: 'thinking', content: chunk.reasoning })}\n\n`);
+          }
         }
 
         if (!abortController.signal.aborted) {

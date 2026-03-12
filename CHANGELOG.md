@@ -29,6 +29,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Force Shutdown** — Second Ctrl+C during shutdown now force-exits immediately (both `start.ts` and `src/index.ts`).
 
+- **MLX-Serve Engine** — Full Apple Silicon local inference backend using `mlx-serve`. Models in MLX format (`.safetensors` directories) run natively on Metal via the MLX framework, alongside the existing llama-server (GGUF) backend.
+  - `MlxServerProcess` (`lib/local-llm/mlx-server-process.ts`) — manages the mlx-serve lifecycle with PID tracking, orphan cleanup, and health polling
+  - `MlxBinaryManager` (`lib/local-llm/mlx-binary-manager.ts`) — auto-downloads signed mlx-serve binaries from GitHub releases (`ddalcu/mlx-serve`), with system PATH detection, version checking, and in-place updates
+  - `llamaEngine` and `llamaEmbeddingEngine` now support dual backends (`engineType: 'llama' | 'mlx'`), auto-detecting model type from filesystem structure
+  - `ModelManager` extended with MLX model discovery, `downloadMlxModel()` (full HuggingFace repo download with progress), and MLX-aware browsing (`browseHuggingFace()` with `format: 'mlx'`)
+  - New API endpoints: `GET /check-mlx-update`, `POST /update-mlx-binary`; download and browse endpoints accept `type=mlx` / `format=mlx` query params
+  - LocalLlmView shows platform-aware recommendations (MLX on Apple Silicon, GGUF otherwise), format selector in HuggingFace browser, and engine-specific version display and update controls
+  - Default template `llm.json` updated to use MLX models (`Qwen3.5-4B-4bit`, `all-MiniLM-L6-v2-4bit`)
+  - New template agent: `mlx-test`
+
+- **Thinking/Reasoning for Local Models** — Local LLM provider now supports `enable_thinking` in OpenAI-compatible API requests when `reasoningBudget > 0`. Thinking content streams as SSE `thinking` events. LocalLlmView adds a thinking toggle and budget slider (128–1024 tokens) for models with reasoning capability. Thinking pills in AgentsView and StandaloneChat changed from hover-based popovers to click-to-expand.
+
 ### Changed
 
 - **Parallel Tool Execution in React Workflows** — `ReactWorkflowExecutor` now runs all tool calls from a single LLM response concurrently via `Promise.all`, matching the existing behavior in the agent react-loop. All `tool_call` status events are emitted upfront before execution begins.
@@ -62,6 +74,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AgentsView** — Expanded with workflow chat integration (start, stream, interrupt/resume), session management improvements, and mobile sidebar support.
 
 - **StandaloneChat** — Now uses shared `styles.css` instead of inline Tailwind styles.
+
+- **Function Parameter Coercion** — `SimpleFunctionWrapper` now uses `z.coerce.string()`, `z.coerce.number()`, `z.coerce.boolean()` instead of strict types, so LLMs that pass e.g. a number as a string get automatic type coercion.
+
+- **Embedding Batch Size** — OpenAI embeddings batch size increased from 16 to 128, improving throughput for large embedding operations.
+
+- **Dynamic Local LLM Ports** — `LLMFactory` and `KnowledgeStore` now read the base URL from `llamaEngine.getBaseUrl()` / `llamaEmbeddingEngine.getBaseUrl()` instead of hardcoded ports, supporting dynamic port allocation.
+
+- **Knowledge Store Entity Rowid Map** — SQLite store creates an `entity_rowid_map` table for stable rowid mapping to the `entity_vectors` virtual table.
+
+- **IDE Dirty State** — Visual/source mode switching in IDE no longer triggers false dirty-state changes; user's view mode preference preserved when navigating between agent files.
+
+- **Standalone Chat Path** — Stylesheet path changed from relative to absolute (`/styles.css`) to work correctly under nested `/chat/<agent>` paths.
 
 ### Dependencies
 

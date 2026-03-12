@@ -30,13 +30,13 @@ function parameterToZodSchema(param: SimpleFunctionParameter): z.ZodTypeAny {
 
   switch (param.type) {
     case 'string':
-      schema = z.string();
+      schema = z.coerce.string();
       break;
     case 'number':
-      schema = z.number();
+      schema = z.coerce.number();
       break;
     case 'boolean':
-      schema = z.boolean();
+      schema = z.coerce.boolean();
       break;
     case 'array':
       schema = z.array(z.any());

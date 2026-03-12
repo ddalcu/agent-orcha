@@ -595,7 +595,7 @@ export class KnowledgeStore {
       case 'anthropic':
       default: {
         const apiKey = resolveApiKey(provider, embeddingConfig.apiKey);
-        const baseURL = embeddingConfig.baseUrl ?? (provider === 'local' ? 'http://127.0.0.1:9991/v1' : undefined);
+        const baseURL = embeddingConfig.baseUrl ?? (provider === 'local' ? (llamaEmbeddingEngine.getBaseUrl() ?? 'http://127.0.0.1:9991') + '/v1' : undefined);
         baseEmbeddings = new OpenAIEmbeddingsProvider({
           modelName: embeddingConfig.model,
           apiKey,

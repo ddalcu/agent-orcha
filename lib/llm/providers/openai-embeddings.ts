@@ -42,7 +42,7 @@ export class OpenAIEmbeddingsProvider implements Embeddings {
     const results: number[][] = new Array(texts.length);
 
     // Batch to avoid payload size limits
-    const batchSize = 16;
+    const batchSize = 128;
     for (let i = 0; i < filtered.length; i += batchSize) {
       const batch = filtered.slice(i, i + batchSize);
       const response = await this.client.embeddings.create({

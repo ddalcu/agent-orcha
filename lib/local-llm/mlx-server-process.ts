@@ -3,32 +3,16 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, unlink
 import * as net from 'net';
 import * as path from 'path';
 import { logger } from '../logger.ts';
-import { getBinaryPath } from './binary-manager.ts';
-
-export interface ServerOptions {
-  modelPath: string;
-  mmproj?: string;
-  port?: number;
-  embedding?: boolean;
-  gpuLayers?: number;
-  contextSize?: number;
-  flashAttn?: boolean;
-  threads?: number;
-  batchSize?: number;
-  ubatchSize?: number;
-  cacheTypeK?: string;
-  cacheTypeV?: string;
-  mlock?: boolean;
-  reasoningBudget?: number;
-}
+import { getMlxBinaryPath } from './mlx-binary-manager.ts';
 
 const HEALTH_POLL_MS = 500;
 const STARTUP_TIMEOUT_MS = 120_000;
+const MLX_MANUAL = process.env.MLX_MANUAL === 'true';
 
 // ─── PID file management ──────────────────────────────────────────────────────
 
 function pidDir(baseDir: string): string {
-  return path.join(baseDir, '.llama-server', 'pids');
+  return path.join(baseDir, '.mlx-serve', 'pids');
 }
 
 function pidFilePath(baseDir: string, role: string): string {
@@ -49,11 +33,7 @@ function isProcessAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
-/**
- * Kill any orphaned llama-server processes from a previous run.
- * Call this once at startup before launching new servers.
- */
-export function killOrphanedServers(baseDir: string): void {
+export function killOrphanedMlxServers(baseDir: string): void {
   const dir = pidDir(baseDir);
   if (!existsSync(dir)) return;
 
@@ -65,15 +45,14 @@ export function killOrphanedServers(baseDir: string): void {
     try {
       const info = JSON.parse(readFileSync(path.join(dir, file), 'utf-8'));
       if (info.pid && isProcessAlive(info.pid)) {
-        logger.warn(`[LlamaServer] Killing orphaned llama-server (PID ${info.pid}, port ${info.port})`);
+        logger.warn(`[MlxServer] Killing orphaned mlx-serve (PID ${info.pid}, port ${info.port})`);
         try { process.kill(info.pid, 'SIGTERM'); } catch { /* already dead */ }
-        // Give it a moment, then force kill
         setTimeout(() => {
           try { if (isProcessAlive(info.pid)) process.kill(info.pid, 'SIGKILL'); } catch { /* gone */ }
         }, 3000);
       }
       unlinkSync(path.join(dir, file));
-    } catch { /* corrupt pid file, remove it */
+    } catch {
       try { unlinkSync(path.join(dir, file)); } catch { /* ignore */ }
     }
   }
@@ -90,20 +69,25 @@ async function findFreePort(start: number): Promise<number> {
   });
 }
 
-export class LlamaServerProcess {
+export interface MlxServerOptions {
+  modelPath: string;
+  port?: number;
+  contextSize?: number;
+  reasoningBudget?: number;
+}
+
+export class MlxServerProcess {
   private proc: ChildProcess | null = null;
   private _port = 0;
   private _modelPath = '';
   private _running = false;
   private _ready = false;
   private baseDir: string;
-  private isEmbedding: boolean;
   private role: string;
 
-  constructor(baseDir: string, isEmbedding = false) {
+  constructor(baseDir: string, role: string = 'chat') {
     this.baseDir = baseDir;
-    this.isEmbedding = isEmbedding;
-    this.role = isEmbedding ? 'embedding' : 'chat';
+    this.role = role;
   }
 
   get port() { return this._port; }
@@ -111,48 +95,45 @@ export class LlamaServerProcess {
   get running() { return this._running; }
   get ready() { return this._ready; }
 
-  async start(options: ServerOptions): Promise<void> {
+  async start(options: MlxServerOptions): Promise<void> {
     await this.stop();
 
-    const binaryPath = await getBinaryPath(this.baseDir);
-    this._port = options.port ?? await findFreePort(this.isEmbedding ? 9991 : 9990);
+    const binaryPath = await getMlxBinaryPath(this.baseDir);
+
+    this._port = options.port ?? await findFreePort(9990);
     this._modelPath = options.modelPath;
 
     const args = [
       '--model', options.modelPath,
-      '--port', String(this._port),
+      '--serve',
       '--host', '127.0.0.1',
-      '--n-gpu-layers', String(options.gpuLayers ?? -1),
-      '--parallel', '1',
+      '--port', String(this._port),
     ];
 
-    if (options.mmproj) args.push('--mmproj', options.mmproj);
-    if (options.contextSize) args.push('--ctx-size', String(options.contextSize));
-    if (options.flashAttn !== false) args.push('--flash-attn', 'on');
-    if (options.threads) args.push('--threads', String(options.threads));
-    if (options.batchSize) args.push('--batch-size', String(options.batchSize));
-    if (options.ubatchSize) args.push('--ubatch-size', String(options.ubatchSize));
-    if (options.cacheTypeK) args.push('--cache-type-k', options.cacheTypeK);
-    if (options.cacheTypeV) args.push('--cache-type-v', options.cacheTypeV);
-    if (options.mlock) args.push('--mlock');
-    if (options.reasoningBudget !== undefined) {
-      args.push('--reasoning-format', 'deepseek');
-      // TODO: llama-server b8280 and earlier only accept -1 or 0.
-      // Arbitrary budgets (N>0) land after b8280 — remove clamp once binary is updated.
-      const budget = options.reasoningBudget > 0 ? -1 : 0;
-      args.push('--reasoning-budget', String(budget));
+    if (options.contextSize) {
+      args.push('--ctx-size', String(options.contextSize));
     }
-    if (options.embedding || this.isEmbedding) args.push('--embedding');
 
-    logger.info(`[LlamaServer] Starting: ${binaryPath} ${args.join(' ')}`);
+    if (options.reasoningBudget !== undefined) {
+      args.push('--reasoning-budget', String(options.reasoningBudget));
+    }
 
-    const binDir = path.dirname(binaryPath);
+    if (MLX_MANUAL) {
+      // Manual mode: print command for user to start, then poll for readiness
+      logger.info(`[MlxServer] Run manually:\n${binaryPath} ${args.join(' ')}`);
+      this._running = true;
+      await this.waitForReady();
+      this._ready = true;
+      logger.info(`[MlxServer] Ready on port ${this._port}`);
+      return;
+    }
+
+    logger.info(`[MlxServer] Starting: ${binaryPath} ${args.join(' ')}`);
+
     this.proc = spawn(binaryPath, args, {
       stdio: ['ignore', 'ignore', 'pipe'],
-      env: { ...process.env, LD_LIBRARY_PATH: `${binDir}:${process.env.LD_LIBRARY_PATH ?? ''}` },
     });
 
-    // Buffer stderr so we can surface it when the process crashes
     const stderrChunks: Buffer[] = [];
     this.proc.stderr?.on('data', (data: Buffer) => { stderrChunks.push(data); });
 
@@ -168,19 +149,26 @@ export class LlamaServerProcess {
       await this.waitForReady();
     } catch (err) {
       const stderr = Buffer.concat(stderrChunks).toString().trim();
-      if (stderr) logger.error(`[LlamaServer] stderr:\n${stderr}`);
+      if (stderr) logger.error(`[MlxServer] stderr:\n${stderr}`);
       throw err;
     }
     this._ready = true;
     writePidFile(this.baseDir, this.role, { pid: this.proc!.pid!, port: this._port, model: this._modelPath });
 
-    logger.info(`[LlamaServer] Ready on port ${this._port}`);
+    logger.info(`[MlxServer] Ready on port ${this._port}`);
   }
 
   async stop(): Promise<void> {
+    if (MLX_MANUAL) {
+      logger.info('[MlxServer] Stopped (manual mode — kill the process yourself)');
+      this._running = false;
+      this._ready = false;
+      return;
+    }
+
     if (!this.proc) return;
 
-    logger.info('[LlamaServer] Stopping');
+    logger.info('[MlxServer] Stopping');
     this.proc.kill('SIGTERM');
 
     await new Promise<void>((resolve) => {
@@ -209,20 +197,10 @@ export class LlamaServerProcess {
     return `http://127.0.0.1:${this._port}`;
   }
 
-  async getServerProps(): Promise<any> {
-    if (!this._ready) return null;
-    try {
-      const res = await fetch(`${this.getBaseUrl()}/props`);
-      if (res.ok) return res.json();
-    } catch { /* server may be down */ }
-    return null;
-  }
-
-
   private async waitForReady(): Promise<void> {
     const start = Date.now();
     while (Date.now() - start < STARTUP_TIMEOUT_MS) {
-      if (!this._running) throw new Error('llama-server process exited during startup');
+      if (!this._running) throw new Error('mlx-serve process exited during startup');
       try {
         const res = await fetch(`http://127.0.0.1:${this._port}/health`);
         if (res.ok) {
@@ -233,6 +211,6 @@ export class LlamaServerProcess {
       await new Promise(r => setTimeout(r, HEALTH_POLL_MS));
     }
     await this.stop();
-    throw new Error(`llama-server failed to become ready within ${STARTUP_TIMEOUT_MS / 1000}s`);
+    throw new Error(`mlx-serve failed to become ready within ${STARTUP_TIMEOUT_MS / 1000}s`);
   }
 }

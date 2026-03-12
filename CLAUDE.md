@@ -117,6 +117,8 @@ New fields beyond the base schema: `skills`, `memory`, `integrations`, `triggers
 
 Located in `public/`. Uses vanilla JS web components (`Component` base class). No build step — served directly by Fastify static. Tabs: Agents, Knowledge, MCP, Workflows, Skills, Monitor, IDE.
 
+**Styling:** No CSS framework (no Tailwind, Bootstrap, etc.). All styles are custom CSS in `public/styles.css` using CSS custom properties (design tokens) defined in `:root`. Before using any CSS variable or utility class, verify it exists in `styles.css` — do not assume variables like `--bg-tertiary` or classes like `bg-secondary` exist. Check the `:root` block for available tokens (e.g., `--bg`, `--surface`, `--hover`, `--border`, `--text-muted`).
+
 ### Documentation Sync
 
 Schema documentation lives in multiple files. When changing schemas (agents, knowledge, workflows, etc.), update **all** of these:

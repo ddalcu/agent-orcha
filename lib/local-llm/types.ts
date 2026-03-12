@@ -5,6 +5,7 @@ export interface LocalModel {
   sizeBytes: number;
   repo?: string;
   downloadedAt: string;
+  type: 'gguf' | 'mlx';
 }
 
 export interface LocalLlmStatus {
