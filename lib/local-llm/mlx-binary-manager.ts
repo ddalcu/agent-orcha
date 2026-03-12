@@ -86,33 +86,41 @@ async function downloadMlxBinary(destDir: string): Promise<void> {
 
   await fs.unlink(archivePath).catch(() => {});
 
-  // Find the binary in the extracted directory and move files to destDir
+  // Find the binary in the extracted directory and move everything to destDir
   const found = await findFileRecursive(extractDir, BINARY_NAME);
   if (!found) throw new Error('mlx-serve binary not found in archive');
 
-  // Copy all files from the binary's directory to destDir
+  // Move all files and subdirectories (e.g. lib/) from the binary's directory to destDir
   const srcDir = path.dirname(found);
   const entries = await fs.readdir(srcDir, { withFileTypes: true });
   for (const entry of entries) {
-    if (!entry.isFile()) continue;
     const src = path.join(srcDir, entry.name);
     const dest = path.join(destDir, entry.name);
     await fs.rename(src, dest).catch(async () => {
-      await fs.copyFile(src, dest);
-      await fs.unlink(src);
+      await fs.cp(src, dest, { recursive: true });
+      await fs.rm(src, { recursive: true, force: true });
     });
   }
 
   await fs.rm(extractDir, { recursive: true, force: true });
 
-  // Make binaries executable
-  const destEntries = await fs.readdir(destDir);
-  for (const name of destEntries) {
-    if (name.startsWith('_') || name.startsWith('.')) continue;
-    await fs.chmod(path.join(destDir, name), 0o755).catch(() => {});
-  }
+  // Make binaries and shared libs executable on Unix
+  await chmodRecursive(destDir);
 
   logger.info(`[MlxBinaryManager] mlx-serve ready at ${path.join(destDir, BINARY_NAME)}`);
+}
+
+async function chmodRecursive(dir: string): Promise<void> {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name.startsWith('_') || entry.name.startsWith('.')) continue;
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await chmodRecursive(fullPath);
+    } else {
+      await fs.chmod(fullPath, 0o755).catch(() => {});
+    }
+  }
 }
 
 /**
