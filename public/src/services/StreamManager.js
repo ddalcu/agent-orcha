@@ -24,6 +24,7 @@ class StreamManager {
             usageData: null,
             error: null,
             listeners: new Set(),
+            taskId: null,
         };
 
         this.streams.set(sessionId, state);
@@ -115,6 +116,13 @@ class StreamManager {
 
                     try {
                         const event = JSON.parse(data);
+
+                        // Capture task ID from server (first event)
+                        if (event.type === 'task_id') {
+                            state.taskId = event.taskId;
+                            continue;
+                        }
+
                         state.events.push(event);
 
                         if (state.streamType === 'agent') {

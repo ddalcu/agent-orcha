@@ -7,25 +7,44 @@ const NOVNC_PATH = '/usr/share/novnc';
 const WEBSOCKIFY_PORT = 6080;
 
 export const vncRoutes: FastifyPluginAsync = async (fastify) => {
-  const enabled = process.env['BROWSER_SANDBOX'] === 'true';
+  const inContainer = process.env['BROWSER_SANDBOX'] === 'true';
+  const hasLocalNoVNC = fs.existsSync(NOVNC_PATH);
 
-  fastify.get('/api/vnc/status', async () => ({ enabled }));
+  // Check if sandbox container is running externally (local dev mode)
+  const sandboxContainerAvailable = async (): Promise<boolean> => {
+    if (inContainer) return false;
+    try {
+      const res = await fetch('http://localhost:9222/json/version');
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
 
-  if (!enabled || !fs.existsSync(NOVNC_PATH)) return;
+  fastify.get('/api/vnc/status', async () => {
+    if (inContainer && hasLocalNoVNC) {
+      return { enabled: true, mode: 'embedded', url: '/vnc/vnc.html?autoconnect=true&path=websockify' };
+    }
+    const external = await sandboxContainerAvailable();
+    if (external) {
+      return { enabled: true, mode: 'external', url: 'http://localhost:6080/vnc.html?autoconnect=true' };
+    }
+    return { enabled: false };
+  });
 
-  // Serve noVNC static files under /vnc/
+  // Serve noVNC static files and WebSocket proxy only when running inside Docker
+  if (!inContainer || !hasLocalNoVNC) return;
+
   await fastify.register(fastifyStatic, {
     root: NOVNC_PATH,
     prefix: '/vnc/',
     decorateReply: false,
   });
 
-  // Redirect /vnc to the viewer
   fastify.get('/vnc', async (_request, reply) => {
     reply.redirect('/vnc/vnc.html?autoconnect=true&path=websockify');
   });
 
-  // WebSocket proxy for VNC
   const wss = new WebSocketServer({ noServer: true });
 
   fastify.server.on('upgrade', (req, socket, head) => {

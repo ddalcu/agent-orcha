@@ -56,11 +56,22 @@ export class AgentsView extends Component {
     }
 
     cancelCurrentStream() {
+        const activeId = sessionStore.getActiveId();
+
+        // Cancel via server tasks API if we have a task ID
+        if (activeId) {
+            const streamState = streamManager.getState(activeId);
+            const wfState = workflowTasks.get(activeId);
+            const taskId = streamState?.taskId || wfState?.taskId;
+            if (taskId) {
+                api.cancelTask(taskId).catch(() => {});
+            }
+        }
+
         if (this.currentAbortController) {
             this.currentAbortController.abort();
             return;
         }
-        const activeId = sessionStore.getActiveId();
         if (!activeId) return;
         const wfState = workflowTasks.get(activeId);
         if (wfState?.abortController) {
@@ -1189,6 +1200,7 @@ export class AgentsView extends Component {
             status: 'streaming',
             events: [],
             inputMessage: message,
+            taskId: null,
         });
 
         try {
@@ -1305,6 +1317,12 @@ export class AgentsView extends Component {
     _handleWorkflowStreamEvent(update, sessionId, responseId) {
         const wfState = workflowTasks.get(sessionId);
         if (!wfState) return;
+
+        // Capture task ID from server
+        if (update.type === 'task_id') {
+            wfState.taskId = update.taskId;
+            return;
+        }
 
         const bubble = this.querySelector(`#${responseId}`);
 

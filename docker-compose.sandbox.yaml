@@ -1,0 +1,13 @@
+services:
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    container_name: orcha-sandbox
+    ports:
+      - "9222:9223"
+      - "6080:6080"
+    shm_size: "2gb"
+    cap_add:
+      - SYS_ADMIN
+    restart: unless-stopped

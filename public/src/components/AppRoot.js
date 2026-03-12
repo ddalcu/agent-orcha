@@ -130,22 +130,23 @@ export class AppRoot extends Component {
         try {
             const res = await fetch('/api/vnc/status');
             const data = await res.json();
-            if (data.enabled) this._showVncButton();
+            if (data.enabled) this._showVncButton(data.url);
         } catch { /* ignore */ }
     }
 
-    _showVncButton() {
+    _showVncButton(vncUrl) {
         if (this.querySelector('#vnc-desktop-btn')) return;
         const actions = this.querySelector('#header-actions');
         if (!actions) return;
 
+        const targetUrl = vncUrl || '/vnc';
         const btn = document.createElement('button');
         btn.id = 'vnc-desktop-btn';
         btn.className = 'btn-ghost';
         btn.title = 'View Browser Desktop';
         btn.innerHTML = '<i class="fas fa-desktop"></i>';
         btn.addEventListener('click', () => {
-            window.open('/vnc', 'vnc-desktop', 'width=1300,height=760,menubar=no,toolbar=no');
+            window.open(targetUrl, 'vnc-desktop', 'width=1300,height=760,menubar=no,toolbar=no');
         });
         actions.appendChild(btn);
     }

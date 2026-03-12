@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { existsSync } from 'node:fs';
 import * as path from 'path';
 import { AgentLoader } from './agents/agent-loader.ts';
 import { AgentExecutor } from './agents/agent-executor.ts';
@@ -24,6 +25,7 @@ import { VmExecutor } from './sandbox/vm-executor.ts';
 import { createSandboxExecTool } from './sandbox/sandbox-exec.ts';
 import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web.ts';
 import { createSandboxShellTool } from './sandbox/sandbox-shell.ts';
+import { SandboxContainer } from './sandbox/sandbox-container.ts';
 import { createFileTools } from './sandbox/sandbox-file.ts';
 import { createBrowserTools } from './sandbox/sandbox-browser.ts';
 import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
@@ -85,6 +87,7 @@ export class Orchestrator {
   private memoryManager: MemoryManager;
   private integrationManager: IntegrationManager | null = null;
   private triggerManager: TriggerManager | null = null;
+  private sandboxContainer: SandboxContainer | null = null;
 
   private initialized = false;
 
@@ -233,8 +236,48 @@ export class Orchestrator {
 
     if (this.sandboxConfig.enabled) {
       this.vmExecutor = new VmExecutor();
+
+      // When running locally (not in Docker), try to auto-launch the sandbox container
+      if (!this.isRunningInContainer()) {
+        await this.launchSandboxContainer();
+      }
     } else {
       this.vmExecutor = null;
+    }
+  }
+
+  private isRunningInContainer(): boolean {
+    if (existsSync('/.dockerenv')) return true;
+    if (existsSync('/run/.containerenv')) return true;
+    return process.env['BROWSER_SANDBOX'] === 'true';
+  }
+
+  private async launchSandboxContainer(): Promise<void> {
+    const container = new SandboxContainer();
+
+    if (!container.detectDocker()) {
+      logger.warn('');
+      logger.warn('╔══════════════════════════════════════════════════════════════════╗');
+      logger.warn('║  SANDBOX: Docker not detected on this system                    ║');
+      logger.warn('║                                                                 ║');
+      logger.warn('║  The following sandbox tools are NOT available:                  ║');
+      logger.warn('║    - sandbox:shell (shell command execution)                     ║');
+      logger.warn('║    - sandbox:browser_* (web browser automation)                  ║');
+      logger.warn('║    - sandbox:vision_* (vision browser automation)                ║');
+      logger.warn('║                                                                 ║');
+      logger.warn('║  To enable these features, install Docker Desktop:               ║');
+      logger.warn('║    https://www.docker.com/products/docker-desktop                ║');
+      logger.warn('║                                                                 ║');
+      logger.warn('║  Tools still available: sandbox:exec, sandbox:web_fetch,         ║');
+      logger.warn('║    sandbox:web_search, sandbox:file_*                            ║');
+      logger.warn('╚══════════════════════════════════════════════════════════════════╝');
+      logger.warn('');
+      return;
+    }
+
+    const started = await container.start();
+    if (started) {
+      this.sandboxContainer = container;
     }
   }
 
@@ -248,7 +291,7 @@ export class Orchestrator {
     tools.set('exec', createSandboxExecTool(this.vmExecutor, this.sandboxConfig));
     tools.set('web_fetch', createSandboxWebFetchTool(this.sandboxConfig));
     tools.set('web_search', createSandboxWebSearchTool());
-    tools.set('shell', createSandboxShellTool(this.sandboxConfig));
+    tools.set('shell', createSandboxShellTool(this.sandboxConfig, this.sandboxContainer ?? undefined));
 
     const fileTools = createFileTools(this.sandboxConfig);
     for (const ft of fileTools) {
@@ -934,6 +977,9 @@ export class Orchestrator {
     }
     if (this.knowledgeStoreManager) {
       this.knowledgeStoreManager.close();
+    }
+    if (this.sandboxContainer) {
+      await this.sandboxContainer.stop();
     }
   }
 

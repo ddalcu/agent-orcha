@@ -5,6 +5,7 @@ import { tool } from '../types/tool-factory.ts';
 import { z } from 'zod';
 import type { StructuredTool } from '../types/llm-types.ts';
 import type { SandboxConfig, ShellResult } from './types.ts';
+import type { SandboxContainer } from './sandbox-container.ts';
 
 const SANDBOX_UID = 10000;
 const SANDBOX_GID = 10000;
@@ -27,44 +28,46 @@ function isRunningInContainer(): boolean {
   return false;
 }
 
-export function createSandboxShellTool(config: SandboxConfig): StructuredTool {
+export function createSandboxShellTool(config: SandboxConfig, sandboxContainer?: SandboxContainer): StructuredTool {
   const inDocker = isRunningInContainer();
   const allowUnsafe = process.env['ALLOW_UNSAFE_HOST_EXECUTION'] === 'true';
 
   return tool(
     async ({ command, timeout }) => {
-      if (!inDocker && !allowUnsafe) {
-        return JSON.stringify({
-          stdout: '',
-          stderr: '',
-          exitCode: -1,
-          error: 'Shell execution is disabled outside Docker. Set ALLOW_UNSAFE_HOST_EXECUTION=true to enable.',
-        });
-      }
-
       const effectiveTimeout = timeout
         ? Math.min(timeout, config.commandTimeout)
         : config.commandTimeout;
 
-      const result = await executeShell(command, effectiveTimeout, inDocker);
-
-      let output = JSON.stringify(result);
-      if (output.length > config.maxOutputChars) {
-        const truncated = {
-          ...result,
-          stdout: result.stdout.substring(0, config.maxOutputChars),
-          _truncated: true,
-        };
-        output = JSON.stringify(truncated);
+      // Running inside Docker — execute locally as sandbox user
+      if (inDocker) {
+        const result = await executeShell(command, effectiveTimeout, true);
+        return truncateOutput(result, config.maxOutputChars);
       }
 
-      return output;
+      // Running locally with sandbox container — route through docker exec
+      if (sandboxContainer?.isRunning) {
+        const result = await sandboxContainer.exec(command, effectiveTimeout);
+        return truncateOutput(result, config.maxOutputChars);
+      }
+
+      // Unsafe host execution explicitly allowed
+      if (allowUnsafe) {
+        const result = await executeShell(command, effectiveTimeout, false);
+        return truncateOutput(result, config.maxOutputChars);
+      }
+
+      return JSON.stringify({
+        stdout: '',
+        stderr: '',
+        exitCode: -1,
+        error: 'Shell execution is disabled. No sandbox container running and ALLOW_UNSAFE_HOST_EXECUTION is not set.',
+      });
     },
     {
       name: 'sandbox_shell',
       description:
-        'Execute a shell command on the host system. ' +
-        'Commands run in an isolated context with limited permissions. ' +
+        'Execute a shell command in a sandboxed environment. ' +
+        'Commands run in an isolated container with limited permissions. ' +
         'Returns JSON with stdout, stderr, exitCode, and error fields.',
       schema: z.object({
         command: z.string().describe('The shell command to execute'),
@@ -75,6 +78,19 @@ export function createSandboxShellTool(config: SandboxConfig): StructuredTool {
       }),
     },
   );
+}
+
+function truncateOutput(result: ShellResult, maxChars: number): string {
+  let output = JSON.stringify(result);
+  if (output.length > maxChars) {
+    const truncated = {
+      ...result,
+      stdout: result.stdout.substring(0, maxChars),
+      _truncated: true,
+    };
+    output = JSON.stringify(truncated);
+  }
+  return output;
 }
 
 function executeShell(

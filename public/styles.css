@@ -1044,6 +1044,7 @@ img { display: block; max-width: 100%; }
   margin-top: var(--sp-2);
 }
 .tool-pill {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;

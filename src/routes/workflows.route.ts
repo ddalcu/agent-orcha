@@ -78,6 +78,9 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
       reply.raw.setHeader('Cache-Control', 'no-cache');
       reply.raw.setHeader('Connection', 'keep-alive');
 
+      // Send task ID as first event so the client can cancel via the tasks API
+      reply.raw.write(`data: ${JSON.stringify({ type: 'task_id', taskId: task.id })}\n\n`);
+
       try {
         const stream = fastify.orchestrator.streamWorkflow(name, input);
 
