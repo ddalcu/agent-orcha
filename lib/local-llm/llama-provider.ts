@@ -189,11 +189,16 @@ export const llamaEngine = {
   },
 };
 
+const EMBEDDING_UBATCH_SIZES = [8192, 4096, 2048, 1024] as const;
+
 export const llamaEmbeddingEngine = {
   _baseDir: '',
   _engineType: null as EngineType,
+  _currentUbatchSize: null as number | null,
 
   setBaseDir(dir: string) { this._baseDir = dir; },
+
+  getUbatchSize(): number | null { return this._currentUbatchSize; },
 
   async load(modelPath: string): Promise<void> {
     const modelType = detectModelType(modelPath);
@@ -204,16 +209,38 @@ export const llamaEmbeddingEngine = {
       if (!mlxEmbeddingServer) mlxEmbeddingServer = new MlxServerProcess(this._baseDir, 'embedding');
 
       this._engineType = 'mlx';
+      this._currentUbatchSize = null;
       await mlxEmbeddingServer.start({ modelPath });
       logger.info(`[LlamaEngine] MLX embedding server ready on port ${mlxEmbeddingServer.port}`);
       return;
     }
 
-    // GGUF path: existing llama-server behavior
+    // GGUF path: try descending ubatch sizes until one works
     this._engineType = 'llama';
     if (!embeddingServer) embeddingServer = new LlamaServerProcess(this._baseDir, true);
     if (embeddingServer.running && embeddingServer.modelPath === modelPath) return;
-    await embeddingServer.start({ modelPath, embedding: true });
+
+    for (let i = 0; i < EMBEDDING_UBATCH_SIZES.length; i++) {
+      const ubatch = EMBEDDING_UBATCH_SIZES[i]!;
+      try {
+        await embeddingServer.start({ modelPath, embedding: true, batchSize: ubatch, ubatchSize: ubatch });
+        this._currentUbatchSize = ubatch;
+        if (i > 0) {
+          logger.warn(`[LlamaEngine] Embedding server started with reduced batch size: ${ubatch} (default ${EMBEDDING_UBATCH_SIZES[0]} was too large for available GPU resources)`);
+        }
+        return;
+      } catch (err) {
+        const isLast = i === EMBEDDING_UBATCH_SIZES.length - 1;
+        if (isLast) {
+          this._currentUbatchSize = null;
+          throw new Error(
+            `Embedding server failed to start at all batch sizes (tried: ${EMBEDDING_UBATCH_SIZES.join(', ')}). ` +
+            `Insufficient GPU/system resources. Original error: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+        logger.warn(`[LlamaEngine] Embedding server failed to start with ubatch=${ubatch}, trying ${EMBEDDING_UBATCH_SIZES[i + 1]}...`);
+      }
+    }
   },
 
   async unload(): Promise<void> {
@@ -226,11 +253,31 @@ export const llamaEmbeddingEngine = {
   },
 
   async ensureRunning(modelName: string): Promise<void> {
-    if (this._engineType === 'mlx' && mlxEmbeddingServer?.running) return;
-    if (this._engineType === 'llama' && embeddingServer?.running) return;
+    // Check if the server is actually healthy, not just the flag
+    if (this._engineType === 'mlx' && mlxEmbeddingServer?.running && mlxEmbeddingServer?.ready) {
+      if (await this._healthCheck()) return;
+      logger.warn('[LlamaEngine] Embedding server flagged as ready but health check failed, restarting...');
+    }
+    if (this._engineType === 'llama' && embeddingServer?.running && embeddingServer?.ready) {
+      if (await this._healthCheck()) return;
+      logger.warn('[LlamaEngine] Embedding server flagged as ready but health check failed, restarting...');
+    }
     logger.info(`[LlamaEngine] Auto-starting embedding model: ${modelName}`);
     const { filePath } = await resolveModelPath(this._baseDir, modelName);
     await this.load(filePath);
+  },
+
+  async _healthCheck(): Promise<boolean> {
+    const url = this.getBaseUrl();
+    if (!url) return false;
+    try {
+      const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) {
+        const body: any = await res.json();
+        return body.status === 'ok';
+      }
+    } catch { /* server not reachable */ }
+    return false;
   },
 
   getStatus(): { running: boolean; activeModel: string | null } {

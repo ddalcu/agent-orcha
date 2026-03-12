@@ -595,7 +595,18 @@ export class KnowledgeStore {
       case 'anthropic':
       default: {
         const apiKey = resolveApiKey(provider, embeddingConfig.apiKey);
-        const baseURL = embeddingConfig.baseUrl ?? (provider === 'local' ? (llamaEmbeddingEngine.getBaseUrl() ?? 'http://127.0.0.1:9991') + '/v1' : undefined);
+        let baseURL = embeddingConfig.baseUrl;
+        if (!baseURL && provider === 'local') {
+          const serverUrl = llamaEmbeddingEngine.getBaseUrl();
+          if (!serverUrl) {
+            throw new Error(
+              `Embedding server is not ready (provider: ${provider}, model: ${embeddingConfig.model}). ` +
+              `The local embedding server may have failed to start or crashed. Check logs for details.`
+            );
+          }
+          baseURL = serverUrl + '/v1';
+        }
+        logger.info(`Embedding endpoint: ${baseURL ?? 'OpenAI default'}`);
         baseEmbeddings = new OpenAIEmbeddingsProvider({
           modelName: embeddingConfig.model,
           apiKey,

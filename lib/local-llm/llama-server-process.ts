@@ -20,6 +20,7 @@ export interface ServerOptions {
   cacheTypeV?: string;
   mlock?: boolean;
   reasoningBudget?: number;
+  isCuda?: boolean;
 }
 
 const HEALTH_POLL_MS = 500;
@@ -137,10 +138,7 @@ export class LlamaServerProcess {
     if (options.mlock) args.push('--mlock');
     if (options.reasoningBudget !== undefined) {
       args.push('--reasoning-format', 'deepseek');
-      // TODO: llama-server b8280 and earlier only accept -1 or 0.
-      // Arbitrary budgets (N>0) land after b8280 — remove clamp once binary is updated.
-      const budget = options.reasoningBudget > 0 ? -1 : 0;
-      args.push('--reasoning-budget', String(budget));
+      args.push('--reasoning-budget', String(options.reasoningBudget));
     }
     if (options.embedding || this.isEmbedding) args.push('--embedding');
 
@@ -149,7 +147,12 @@ export class LlamaServerProcess {
     const binDir = path.dirname(binaryPath);
     this.proc = spawn(binaryPath, args, {
       stdio: ['ignore', 'ignore', 'pipe'],
-      env: { ...process.env, LD_LIBRARY_PATH: `${binDir}:${process.env.LD_LIBRARY_PATH ?? ''}` },
+      env: {
+        ...process.env,
+        LD_LIBRARY_PATH: `${binDir}:${process.env.LD_LIBRARY_PATH ?? ''}`,
+        // Force NVIDIA dGPU on Optimus laptops — without this, CUDA may pick Intel iGPU
+        ...(options.isCuda ? { CUDA_VISIBLE_DEVICES: '0' } : {}),
+      },
     });
 
     // Buffer stderr so we can surface it when the process crashes
