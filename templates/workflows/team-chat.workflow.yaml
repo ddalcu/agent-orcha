@@ -43,6 +43,5 @@ config:
   onError: stop
 
 sampleQuestions:
-  - "Have the chatbot write a welcome message and the architect review it"
   - "Ask each agent to introduce themselves and their capabilities"
   - "Get a security assessment from the network security agent"

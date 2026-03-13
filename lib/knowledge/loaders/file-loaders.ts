@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
-import { PDFParse } from 'pdf-parse';
+// @ts-ignore - pdf-parse v1 has no type declarations
+import pdfParse from 'pdf-parse';
 import type { Document } from '../../types/llm-types.ts';
 
 // --- Reusable content parsers (used by both file loaders and WebLoader) ---
@@ -154,11 +155,10 @@ export class PDFLoader {
 
   async load(): Promise<Document[]> {
     const buffer = await fs.readFile(this.filePath);
-    const parser = new PDFParse({ data: new Uint8Array(buffer) });
-    const result = await parser.getText();
+    const result = await pdfParse(buffer);
 
     return [{
-      pageContent: result.text || '(No text content found in PDF)',
+      pageContent: result?.text || '(No text content found in PDF)',
       metadata: {
         source: this.filePath,
         pdf_pages: result.pages?.length ?? 0,

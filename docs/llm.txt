@@ -6,7 +6,7 @@ Agent Orcha is a declarative TypeScript framework for building, managing, and sc
 
 **Repository:** https://github.com/ddalcu/agent-orcha
 **NPM Package:** https://www.npmjs.com/package/agent-orcha
-**Version:** 0.0.5
+**Version:** 0.0.8
 **License:** MIT
 **Requirements:** Node.js >= 24.0.0
 
@@ -23,6 +23,15 @@ Agent Orcha is a declarative TypeScript framework for building, managing, and sc
 9. **Structured Output**: JSON schema validation for agent responses
 10. **Extensible Functions**: Custom JavaScript functions to extend agent capabilities with zero boilerplate
 11. **AI-First Design**: YAML configurations are ideal for LLMs to read, write, and maintain
+12. **Published Agents**: Share agents via standalone chat pages at /chat/<name> with optional per-agent password protection
+13. **Browser Sandbox**: Full Chromium browser with CDP control, Xvfb, and noVNC — plus experimental Vision Browser for pixel-coordinate control
+14. **Skills System**: Prompt augmentation via Markdown files injected into agent system prompts
+15. **Integrations**: Connect agents to external platforms (Email via IMAP/SMTP, Collabnook WebSocket chat)
+16. **Triggers**: Cron schedules and webhooks for automated agent execution
+17. **Engine Registry**: Pluggable local inference with llama-cpp, mlx-serve, Ollama, and LM Studio
+18. **Environment Variable Substitution**: ${ENV_VAR} and ${ENV_VAR:-default} in all config files
+19. **Thinking/Reasoning**: Extended thinking for Anthropic, reasoning budgets for local models
+20. **Security**: Rate limiting, SSRF protection, SQL injection hardening
 
 ## Quick Start
 
@@ -38,6 +47,7 @@ This creates a project with:
 - workflows/ - Workflow definition files
 - functions/ - Custom JavaScript functions
 - knowledge/ - Knowledge store configurations and data
+- skills/ - Skill prompt augmentation files
 - llm.json - LLM and embedding provider settings
 - mcp.json - MCP server configuration
 
@@ -47,36 +57,81 @@ This creates a project with:
 {
   "version": "1.0",
   "models": {
-    "default": {
-      "provider": "openai",
-      "baseUrl": "http://localhost:1234/v1",
-      "apiKey": "not-needed",
-      "model": "your-model-name",
-      "temperature": 0.7
+    "default": "llama-cpp",
+    "llama-cpp": {
+      "provider": "local",
+      "engine": "llama-cpp",
+      "model": "Qwen3.5-4B-IQ4_NL",
+      "reasoningBudget": 0,
+      "contextSize": 32768
+    },
+    "ollama": {
+      "provider": "local",
+      "engine": "ollama",
+      "baseUrl": "http://localhost:11434/v1",
+      "model": "qwen3.5:latest",
+      "reasoningBudget": 0
     },
     "openai": {
-      "apiKey": "sk-your-openai-key",
-      "model": "gpt-4o",
-      "temperature": 0.7
+      "provider": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
+      "model": "gpt-4o"
+    },
+    "anthropic": {
+      "provider": "anthropic",
+      "apiKey": "${ANTHROPIC_API_KEY}",
+      "model": "claude-sonnet-4-6",
+      "thinkingBudget": 10000
     }
   },
   "embeddings": {
-    "default": {
+    "default": "llama-cpp",
+    "llama-cpp": {
+      "provider": "local",
+      "engine": "llama-cpp",
+      "model": "nomic-embed-text-v1.5.Q4_K_M",
+      "eosToken": "</s>"
+    },
+    "openai": {
       "provider": "openai",
-      "baseUrl": "http://localhost:1234/v1",
-      "apiKey": "not-needed",
-      "model": "text-embedding-model"
+      "apiKey": "${OPENAI_API_KEY}",
+      "model": "text-embedding-3-small"
     }
+  },
+  "engineUrls": {
+    "lmstudio": "http://localhost:1234",
+    "ollama": "http://localhost:11434"
   }
 }
 ```
 
+**Pointer System:** The `default` key is a string reference to another entry (e.g., `"default": "llama-cpp"`). This enables fast switching between pre-configured providers without duplicating config. Getter functions automatically dereference one level of pointer.
+
+**Model Config Fields:**
+- `provider` — `openai` | `anthropic` | `gemini` | `local`
+- `engine` — `llama-cpp` | `mlx-serve` | `ollama` | `lmstudio` (for `provider: local`)
+- `model` — Model name or filename
+- `baseUrl` — Custom API endpoint (optional for cloud providers)
+- `apiKey` — API key (supports `${ENV_VAR}` substitution)
+- `temperature` — Sampling temperature (optional)
+- `maxTokens` — Max generation tokens (optional, default 4096 for local)
+- `contextSize` — Context window size (optional, auto-calculated for local)
+- `reasoningBudget` — Token budget for chain-of-thought reasoning in local models (0 = disabled)
+- `thinkingBudget` — Token budget for extended thinking in Anthropic models
+
+**Embedding Config Fields:**
+- `provider`, `engine`, `model`, `baseUrl`, `apiKey` — Same as model config
+- `eosToken` — End-of-sequence token override (e.g., `</s>` for nomic models)
+
+**engineUrls:** Custom base URLs for external engines (Ollama, LM Studio). Stored in `llm.json` and configurable via API.
+
 **LLM Providers:**
 - OpenAI: Omit baseUrl (uses default OpenAI endpoint)
-- LM Studio: baseUrl: "http://localhost:1234/v1"
-- Ollama: baseUrl: "http://localhost:11434/v1"
+- LM Studio: baseUrl configured via engineUrls
+- Ollama: baseUrl configured via engineUrls
 - Anthropic: Supported via provider configuration
 - Gemini: Supported via provider configuration
+- Local (llama-cpp, mlx-serve): Managed engines with automatic binary management
 
 ### 3. Create Agent (agents/myagent.agent.yaml)
 
@@ -152,7 +207,40 @@ tools:                          # Available tools (optional)
   - mcp:<server-name>           # MCP server tools
   - knowledge:<store-name>      # Knowledge store search
   - function:<function-name>    # Custom functions
-  - builtin:<tool-name>         # Built-in tools (e.g., ask_user)
+  - builtin:<tool-name>         # Built-in tools (ask_user, save_memory)
+  - sandbox:<tool-name>         # Sandboxed execution tools
+  - workspace:<tool-name>       # Workspace file tools
+
+skills:                         # Skills to attach (optional)
+  - skill-name                  # By name (loads skills/<name>/SKILL.md)
+  # Or: { mode: all }           # Attach all available skills
+
+memory: boolean | object        # Persistent agent memory (optional)
+  # Simple: memory: true
+  # With config: memory: { enabled: true, maxLines: 100 }
+
+publish: boolean | object       # Standalone chat page (optional)
+  # Simple: publish: true
+  # With password: publish: { enabled: true, password: "secret" }
+
+integrations:                   # External integrations (optional)
+  - type: email                 # Email via IMAP/SMTP
+    config: { ... }
+  - type: collabnook            # WebSocket chat
+    config: { ... }
+
+triggers:                       # Automated execution (optional)
+  - type: cron
+    schedule: "0 9 * * *"       # Cron expression
+    input: { ... }
+  - type: webhook
+    path: "/hook/my-agent"
+
+maxIterations: number           # Override default 200 iteration limit (optional)
+
+sampleQuestions:                # Example prompts shown in UI (optional)
+  - "What can you help me with?"
+  - "Analyze this data"
 
 output:                         # Output formatting (optional)
   format: text | json | structured
@@ -164,10 +252,6 @@ output:                         # Output formatting (optional)
         description: string
         enum: [values]
     required: [field1, field2]
-
-metadata:                       # Custom metadata (optional)
-  category: string
-  tags: [string]
 ```
 
 **Example Agent with Tools:**
@@ -192,6 +276,21 @@ tools:
   - mcp:fetch              # Web fetch MCP server
   - knowledge:docs         # Knowledge store search
   - function:custom-tool   # Custom function
+  - sandbox:exec           # Sandboxed code execution
+  - workspace:read         # Read workspace files
+
+skills:
+  - web-pilot
+
+memory: true
+
+publish:
+  enabled: true
+  password: "research-pass"
+
+sampleQuestions:
+  - "Research the latest trends in AI"
+  - "What does the knowledge base say about X?"
 
 output:
   format: text
@@ -234,6 +333,62 @@ output:
       - confidence
 ```
 
+### Published Agents
+
+Agents with `publish: true` (or `publish: { enabled: true, password: "..." }`) get standalone chat pages at `/chat/<agent-name>`. These pages are independent of the global `AUTH_PASSWORD` and support per-agent password protection.
+
+Features:
+- Standalone chat UI with markdown rendering, code highlighting, thinking blocks, tool call visualization
+- File/image attachments via drag-and-drop or paste
+- Streaming responses with real-time stats
+- Per-agent token auth (independent of global auth)
+- Accessible at `http://localhost:3000/chat/<agent-name>`
+
+### Skills System
+
+Skills are prompt augmentation files that inject additional context and instructions into agent system prompts at runtime.
+
+**Skill File Format:** `skills/<name>/SKILL.md`
+```markdown
+---
+description: What this skill does
+tags: [category1, category2]
+sandbox: true  # Optional: indicates skill needs sandbox tools
+---
+
+# Skill Instructions
+
+Your skill content here. This markdown is injected into the agent's system prompt.
+```
+
+**Attaching Skills to Agents:**
+```yaml
+# Specific skills
+skills:
+  - web-pilot
+  - pii-guard
+
+# All available skills
+skills:
+  mode: all
+```
+
+### Persistent Memory
+
+Agents can persist memory across sessions to disk. Memory is saved to `.memory/<agent-name>.md` and loaded into the system prompt on each invocation.
+
+```yaml
+# Simple
+memory: true
+
+# With configuration
+memory:
+  enabled: true
+  maxLines: 100    # Max lines to keep in memory file
+```
+
+When memory is enabled, agents receive a `save_memory` built-in tool that allows them to persist important information between conversations.
+
 ### Conversation Memory
 
 Agents automatically support conversation memory when a `sessionId` is provided in API calls. No agent-level configuration is required.
@@ -274,6 +429,10 @@ description: string             # Human-readable description (required)
 version: string                 # Semantic version (default: "1.0.0")
 type: steps                     # Optional, "steps" is default
 
+chatOutputFormat: text | json   # Controls UI rendering (optional, default: text)
+sampleQuestions:                # Example prompts shown in UI (optional)
+  - "Run analysis on X"
+
 input:                          # Input schema (required)
   schema:
     <field_name>:
@@ -310,10 +469,6 @@ config:                         # Workflow configuration (optional)
 
 output:                         # Output mapping (required)
   <key>: "{{steps.stepId.output}}"
-
-metadata:                       # Custom metadata (optional)
-  category: string
-  tags: [string]
 ```
 
 **Template Syntax:**
@@ -327,6 +482,9 @@ metadata:                       # Custom metadata (optional)
 name: research-paper
 description: Research a topic and write a comprehensive paper
 version: "1.0.0"
+
+sampleQuestions:
+  - "Write a paper about quantum computing"
 
 input:
   schema:
@@ -386,6 +544,10 @@ description: string             # Human-readable description (required)
 version: string                 # Semantic version (default: "1.0.0")
 type: react                     # Required for ReAct workflows
 
+chatOutputFormat: text | json   # Controls UI rendering (optional, default: text)
+sampleQuestions:                # Example prompts shown in UI (optional)
+  - "Research topic X"
+
 input:                          # Input schema (required)
   schema:
     <field_name>:
@@ -427,10 +589,6 @@ output:                         # Output extraction (required)
 
 config:                         # Workflow configuration (optional)
   onError: stop | continue | retry
-
-metadata:                       # Custom metadata (optional)
-  category: string
-  tags: [string]
 ```
 
 **Execution Modes:**
@@ -440,7 +598,7 @@ metadata:                       # Custom metadata (optional)
 | `single-turn` | Calls tools once, then returns | Research, data gathering, straightforward tasks |
 | `react` | Multiple rounds of tool calls with reasoning | Complex multi-step problems, iterative analysis |
 
-**Human-in-the-Loop:** ReAct workflows support the `builtin:ask_user` tool. When called, the workflow pauses and waits for user input. Include `builtin` in tool sources to enable it.
+**Human-in-the-Loop:** ReAct workflows support the `builtin:ask_user` tool. When called, the workflow pauses and waits for user input. Resume with `POST /api/workflows/:name/resume`. Include `builtin` in tool sources to enable it.
 
 **Example ReAct Workflow:**
 ```yaml
@@ -448,6 +606,9 @@ name: react-research
 description: Autonomous research using tool discovery
 version: "1.0.0"
 type: react
+
+sampleQuestions:
+  - "Research the latest AI developments"
 
 input:
   schema:
@@ -511,8 +672,13 @@ source:                         # Data source (required)
   headers:                      # Custom headers (optional)
     Authorization: "Bearer TOKEN"
 
-loader:                         # Document loader (required)
-  type: text | pdf | csv | json | markdown
+loader:                         # Document loader (optional)
+  type: text | pdf | csv | json | markdown | html
+  # Defaults: html for web sources, text for file/directory sources
+  # Not used for database sources
+
+  jsonPath: string              # Dot-notation path to extract nested array from JSON (optional)
+                                # e.g., "items" or "data.results" — web sources only
 
 splitter:                       # Text chunking (required)
   type: character | recursive | token | markdown
@@ -520,6 +686,12 @@ splitter:                       # Text chunking (required)
   chunkOverlap: number          # Overlap between chunks (default: 200)
 
 embedding: string               # Reference to embedding config (default: "default")
+
+metadata:                       # Custom metadata (optional)
+  key: value
+
+reindex:                        # Automatic reindexing (optional)
+  schedule: string              # Cron expression, e.g., "0 */6 * * *" for every 6 hours
 
 graph:                          # Optional — enables entity graph
   directMapping:                # Maps structured data to entities and relationships
@@ -546,6 +718,7 @@ search:                         # Search configuration (optional)
 - Stores with `graph.directMapping` also store entities and relationships with vector embeddings
 - Agents get additional graph tools (traverse, entity_lookup, graph_schema) when entities exist
 - Search combines chunk KNN + entity KNN + neighborhood expansion, merged by score
+- Stores with `reindex.schedule` automatically refresh on a schedule via node-cron
 
 **Example Vector-Only Store:**
 ```yaml
@@ -570,6 +743,53 @@ embedding: default
 search:
   defaultK: 4
   scoreThreshold: 0.2
+```
+
+**Example PDF Knowledge Store:**
+```yaml
+name: patient-records
+description: Deidentified patient records
+
+source:
+  type: directory
+  path: knowledge/pdfs
+  pattern: "*.pdf"
+
+loader:
+  type: pdf
+
+splitter:
+  type: recursive
+  chunkSize: 2000
+  chunkOverlap: 200
+
+embedding: default
+```
+
+**Example Web Source with JSON Path:**
+```yaml
+name: api-data
+description: Data from a REST API
+
+source:
+  type: web
+  url: https://api.example.com/data
+  headers:
+    Authorization: "Bearer ${API_TOKEN}"
+
+loader:
+  type: json
+  jsonPath: "data.results"
+
+splitter:
+  type: recursive
+  chunkSize: 1000
+  chunkOverlap: 100
+
+embedding: default
+
+reindex:
+  schedule: "0 */6 * * *"
 ```
 
 **Example Store with Graph (Direct Mapping):**
@@ -790,13 +1010,124 @@ Agent Orcha Studio is a built-in web dashboard available at `http://localhost:30
 
 | Tab | Description |
 |-----|-------------|
-| **Agents** | Browse agents, invoke with custom input, stream responses, manage conversation sessions |
+| **Agents** | Browse agents, invoke with custom input, stream responses, manage sessions, workflow chat integration (start, stream, interrupt/resume) |
 | **Knowledge** | Browse and search knowledge stores, view entities and graph structure for stores with direct mapping |
 | **MCP** | Browse MCP servers, view available tools, call tools directly |
-| **Workflows** | Browse and execute workflows (step-based and ReAct), stream execution progress |
 | **Skills** | Browse and inspect available skills |
-| **Monitor** | View LLM call logs with context size, token estimates, and duration metrics |
-| **IDE** | In-browser file editor with file tree, syntax highlighting (YAML, JSON, JS), save with hot-reload |
+| **Local LLM** | Engine management with tabs for llama-cpp, mlx-serve, Ollama, and LM Studio. Model download/activation, context size config, API key management, embedding config |
+| **Monitor** | Real-time react-loop metrics (iteration, messages, images, context size, tokens) and scrollable activity feed with tool calls, thinking blocks, and content events |
+| **IDE** | In-browser file editor with file tree, syntax highlighting, save with hot-reload, Agent Composer (visual editor for .agent.yaml files with source/visual mode toggle) |
+
+### Integrations
+
+Integrations connect agents to external platforms. Configured in agent YAML via the `integrations` field.
+
+**Email Integration (IMAP + SMTP):**
+```yaml
+integrations:
+  - type: email
+    config:
+      imap:
+        host: imap.gmail.com
+        port: 993
+        user: ${EMAIL_USER}
+        password: ${EMAIL_PASSWORD}
+      smtp:
+        host: smtp.gmail.com
+        port: 587
+        user: ${EMAIL_USER}
+        password: ${EMAIL_PASSWORD}
+      fromName: "My Agent"
+      fromAddress: ${EMAIL_USER}
+      pollInterval: 60000       # Check every 60 seconds
+      folder: INBOX
+```
+
+When an agent has email integration, it receives inbound emails as triggers and gets an `email_send` tool for composing new emails.
+
+**Collabnook Integration (WebSocket Chat):**
+```yaml
+integrations:
+  - type: collabnook
+    config:
+      url: ws://localhost:8080
+      channel: general
+```
+
+Agents receive messages via @mention and reply in-channel.
+
+**Auto-injected Tools:**
+- `integration_post` — Post messages to connected channels
+- `integration_context` — Get recent channel context
+- `email_send` — Send emails (agents with email integration)
+
+### Triggers
+
+Triggers automate agent execution on schedules or external events.
+
+**Cron Trigger:**
+```yaml
+triggers:
+  - type: cron
+    schedule: "0 9 * * *"       # Every day at 9am
+    input:
+      query: "Generate daily report"
+```
+
+**Webhook Trigger:**
+```yaml
+triggers:
+  - type: webhook
+    path: "/hook/my-agent"
+```
+
+Webhook triggers create an endpoint at `POST /api/triggers/webhook/<path>`. The request body is passed as agent input.
+
+### Engine Registry
+
+The engine registry provides a pluggable architecture for local inference engines. Each engine implements a standardized interface for model loading, unloading, and status reporting.
+
+**Supported Engines:**
+
+| Engine | Format | Platform | Managed |
+|--------|--------|----------|---------|
+| `llama-cpp` | GGUF | Cross-platform | Yes (auto binary management) |
+| `mlx-serve` | MLX SafeTensors | Apple Silicon | Yes (auto binary management) |
+| `ollama` | Ollama models | Cross-platform | No (external) |
+| `lmstudio` | Any supported | Cross-platform | No (external) |
+
+Managed engines (llama-cpp, mlx-serve) handle binary downloads, model loading, and process lifecycle automatically. External engines (Ollama, LM Studio) are probed for availability and controlled via their APIs.
+
+**Engine API Endpoints:**
+- `GET /api/local-llm/engines` — List all engines with status
+- `POST /api/local-llm/engines/activate` — Activate model on an engine
+- `POST /api/local-llm/engines/context` — Update context size
+- `POST /api/local-llm/engines/unload` — Unload model from engine
+- `GET /api/local-llm/status` — Current engine and model status
+- `GET /api/local-llm/models` — Available models
+
+### Environment Variable Substitution
+
+All config files (agent YAML, knowledge YAML, workflow YAML, skill frontmatter, `llm.json`, `mcp.json`, `sandbox.json`) support environment variable placeholders.
+
+**Syntax:**
+- `${ENV_VAR}` — Replaced with the value of `ENV_VAR` from `process.env`
+- `${ENV_VAR:-default}` — Uses `default` if `ENV_VAR` is not set
+
+**Example:**
+```yaml
+# In agent YAML
+integrations:
+  - type: email
+    config:
+      imap:
+        password: ${EMAIL_PASSWORD}
+
+# In llm.json
+{
+  "apiKey": "${OPENAI_API_KEY}"
+}
+```
 
 ## REST API Reference
 
@@ -814,7 +1145,7 @@ Response:
 
 ### Authentication
 
-When `AUTH_PASSWORD` is set, all `/api/*` routes require a valid session cookie. The `/health` endpoint is always public. When `AUTH_PASSWORD` is not set, authentication is disabled and all routes are open.
+When `AUTH_PASSWORD` is set, all `/api/*` routes require a valid session cookie. The `/health` endpoint is always public. When `AUTH_PASSWORD` is not set, authentication is disabled and all routes are open. Login is rate-limited to 5 attempts per 60 seconds.
 
 **Check Auth Status** (never returns 401)
 ```
@@ -894,7 +1225,8 @@ Response:
   "llm": { "name": "default", "temperature": 0.7 },
   "prompt": { "system": "...", "inputVariables": ["query"] },
   "tools": ["mcp:fetch"],
-  "output": { "format": "text" }
+  "output": { "format": "text" },
+  "publish": { "enabled": true, "hasPassword": false }
 }
 ```
 
@@ -909,7 +1241,8 @@ Request:
     "topic": "your topic",
     "context": "additional context"
   },
-  "sessionId": "optional-session-id"
+  "sessionId": "optional-session-id",
+  "attachments": [{ "data": "base64...", "mediaType": "image/png" }]
 }
 
 Response:
@@ -935,10 +1268,12 @@ Request:
   "input": {
     "query": "your query"
   },
-  "sessionId": "optional-session-id"
+  "sessionId": "optional-session-id",
+  "attachments": [{ "data": "base64...", "mediaType": "image/png" }]
 }
 
 Response: Server-Sent Events stream with incremental output
+Event types: content, thinking, tool_call, tool_result, metrics, done
 ```
 
 **Session Statistics**
@@ -966,6 +1301,13 @@ Response:
 }
 ```
 
+**Get Session Messages (compact)**
+```
+GET /api/agents/sessions/:sessionId/messages
+
+Response: Compact summary of conversation messages (role, text char count, image count/bytes, tool call names)
+```
+
 **Delete Session**
 ```
 DELETE /api/agents/sessions/:sessionId
@@ -974,6 +1316,52 @@ Response:
 {
   "success": true
 }
+```
+
+### Chat Endpoints (Published Agents)
+
+**Get Chat Config**
+```
+GET /api/chat/:agentName/config
+
+Response:
+{
+  "name": "agent1",
+  "description": "Agent description",
+  "requiresPassword": true,
+  "sampleQuestions": ["Example prompt"]
+}
+```
+
+**Authenticate for Chat**
+```
+POST /api/chat/:agentName/auth
+Content-Type: application/json
+
+Request:
+{
+  "password": "agent-password"
+}
+
+Response:
+{
+  "authenticated": true
+}
+```
+
+**Stream Chat (SSE)**
+```
+POST /api/chat/:agentName/stream
+Content-Type: application/json
+
+Request:
+{
+  "input": { "message": "Hello" },
+  "sessionId": "session-123",
+  "attachments": [...]
+}
+
+Response: Server-Sent Events stream
 ```
 
 ### Workflows Endpoints
@@ -1054,6 +1442,21 @@ Request:
 }
 
 Response: Server-Sent Events stream with step progress updates
+Event types: content, thinking, tool_call, tool_result, toolInput, toolOutput, done
+```
+
+**Resume Workflow (Human-in-the-Loop)**
+```
+POST /api/workflows/:name/resume
+Content-Type: application/json
+
+Request:
+{
+  "sessionId": "session-123",
+  "input": "User response to ask_user"
+}
+
+Response: SSE stream continuing the interrupted workflow
 ```
 
 ### Knowledge Endpoints
@@ -1174,6 +1577,132 @@ Response:
 ]
 ```
 
+### Graph Endpoints
+
+**Get Graph Config**
+```
+GET /api/graph/config
+
+Response: Graph visualization configuration
+```
+
+**Get Full Graph**
+```
+GET /api/graph/full
+
+Response: All nodes and edges across all knowledge stores with entities
+```
+
+**Get Neighbors**
+```
+GET /api/graph/neighbors/:nodeId
+
+Response: Neighboring nodes and edges for a given node
+```
+
+### Tasks Endpoints
+
+**List Tasks**
+```
+GET /api/tasks
+
+Response: Array of tasks (events array stripped for compact payloads)
+```
+
+**Get Task Details**
+```
+GET /api/tasks/:id
+
+Response: Full task details including events array
+```
+
+**Submit Agent Task**
+```
+POST /api/tasks/agent
+Content-Type: application/json
+
+Request:
+{
+  "agent": "agent-name",
+  "input": { "query": "..." },
+  "sessionId": "optional"
+}
+
+Response:
+{
+  "taskId": "task-uuid"
+}
+```
+
+**Submit Workflow Task**
+```
+POST /api/tasks/workflow
+Content-Type: application/json
+
+Request:
+{
+  "workflow": "workflow-name",
+  "input": { "topic": "..." }
+}
+
+Response:
+{
+  "taskId": "task-uuid"
+}
+```
+
+**Cancel Task**
+```
+POST /api/tasks/:id/cancel
+```
+
+**Respond to Task (Human-in-the-Loop)**
+```
+POST /api/tasks/:id/respond
+Content-Type: application/json
+
+Request:
+{
+  "response": "User response text"
+}
+```
+
+**Stream Task Events (SSE)**
+```
+GET /api/tasks/:id/stream
+
+Response: Server-Sent Events stream with task progress
+```
+
+### Skills Endpoints
+
+**List Skills**
+```
+GET /api/skills
+
+Response:
+[
+  {
+    "name": "web-pilot",
+    "description": "Web browsing guidance",
+    "tags": ["browser", "web"]
+  }
+]
+```
+
+**Get Skill Details**
+```
+GET /api/skills/:name
+
+Response:
+{
+  "name": "web-pilot",
+  "description": "Web browsing guidance",
+  "tags": ["browser", "web"],
+  "content": "# Skill markdown content..."
+}
+```
+
 ### LLM Endpoints
 
 **List All LLM Configurations**
@@ -1195,6 +1724,45 @@ Response:
 GET /api/llm/:name
 ```
 
+**Get Full LLM Config (with CRUD)**
+```
+GET /api/llm/config
+
+Response: Full llm.json with redacted API keys and env var detection
+```
+
+**Update Model Config**
+```
+PUT /api/llm/config/models/:name
+Content-Type: application/json
+
+Request: Model config object
+
+Response: Updated llm.json
+```
+
+**Delete Model Config**
+```
+DELETE /api/llm/config/models/:name
+```
+
+**Update Embedding Config**
+```
+PUT /api/llm/config/embeddings/:name
+Content-Type: application/json
+
+Request: Embedding config object
+
+Response: Updated llm.json
+```
+
+**Check LLM Readiness**
+```
+GET /api/llm/readiness
+
+Response: Whether the default LLM and embedding are configured and reachable
+```
+
 **Chat with LLM**
 ```
 POST /api/llm/:name/chat
@@ -1202,7 +1770,9 @@ Content-Type: application/json
 
 Request:
 {
-  "message": "Hello, how are you?"
+  "message": "Hello, how are you?",
+  "sessionId": "optional",
+  "attachments": [...]
 }
 
 Response:
@@ -1218,10 +1788,67 @@ Content-Type: application/json
 
 Request:
 {
-  "message": "Hello"
+  "message": "Hello",
+  "sessionId": "optional",
+  "attachments": [...]
 }
 
 Response: Server-Sent Events stream
+```
+
+### Local LLM Engine Endpoints
+
+**List Engines**
+```
+GET /api/local-llm/engines
+
+Response: All four engines with availability, model lists, running state, and VRAM
+```
+
+**Activate Engine Model**
+```
+POST /api/local-llm/engines/activate
+Content-Type: application/json
+
+Request:
+{
+  "engine": "ollama",
+  "model": "qwen3.5:latest",
+  "type": "chat"
+}
+```
+
+**Update Context Size**
+```
+POST /api/local-llm/engines/context
+Content-Type: application/json
+
+Request:
+{
+  "contextSize": 32768
+}
+```
+
+**Unload Engine Model**
+```
+POST /api/local-llm/engines/unload
+Content-Type: application/json
+
+Request:
+{
+  "engine": "ollama",
+  "model": "qwen3.5:latest"
+}
+```
+
+**Get Engine Status**
+```
+GET /api/local-llm/status
+```
+
+**List Available Models**
+```
+GET /api/local-llm/models
 ```
 
 ### Functions Endpoints
@@ -1367,6 +1994,57 @@ Response:
 }
 ```
 
+**Create File**
+```
+POST /api/files/create
+Content-Type: application/json
+
+Request:
+{
+  "path": "agents/new-agent.agent.yaml",
+  "content": "name: new-agent\n..."
+}
+```
+
+**Rename File**
+```
+POST /api/files/rename
+Content-Type: application/json
+
+Request:
+{
+  "oldPath": "agents/old.agent.yaml",
+  "newPath": "agents/new.agent.yaml"
+}
+```
+
+**Delete File**
+```
+DELETE /api/files/delete
+Content-Type: application/json
+
+Request:
+{
+  "path": "agents/old.agent.yaml"
+}
+```
+
+**Get Template**
+```
+GET /api/files/template?type=agent&name=chatbot
+
+Response: Template file content for scaffolding new resources
+```
+
+### Logs Endpoint
+
+**Stream Logs (SSE)**
+```
+GET /api/logs/stream
+
+Response: Server-Sent Events stream of server log entries
+```
+
 ## CLI Reference
 
 ### Commands
@@ -1462,6 +2140,9 @@ my-project/
 │   ├── graph.knowledge.yaml
 │   └── sample-data/
 │       └── documents.txt
+├── skills/                     # Skill prompt augmentation
+│   └── web-pilot/
+│       └── SKILL.md
 ├── llm.json                    # LLM and embedding configurations
 ├── mcp.json                    # MCP server configuration
 ├── .env                        # Environment variables (optional)
@@ -1474,17 +2155,28 @@ my-project/
 # Server Configuration
 PORT=3000                       # Server port (default: 3000)
 HOST=0.0.0.0                   # Server host (default: 0.0.0.0)
-WORKSPACE=./my-project    # Base directory for config files (default: current directory)
-CORS_ORIGIN=true               # CORS origin policy (default: true)
+WORKSPACE=./my-project          # Base directory for config files (default: current directory)
+CORS_ORIGIN=false               # CORS origin policy (default: false, same-origin only)
+LOG_LEVEL=debug                 # Log level (default: info)
+NODE_ENV=development            # development enables watch mode for auto-restart
 
 # Authentication (optional — when set, all API routes and Studio UI require this password)
 AUTH_PASSWORD=your-secret-password
 
-# Note: LLM API keys are configured in llm.json, not via environment variables
+# Sandbox / Browser
+BROWSER_SANDBOX=true            # Enable Chromium browser in Docker (default: false)
+BROWSER_VERBOSE=false           # Show Chromium output in logs (default: false)
+EXPERIMENTAL_VISION=false       # Enable experimental vision browser tools (default: false)
+
+# Local LLM
+MLX_MANUAL=false                # Skip automatic mlx-serve binary management (default: false)
 
 # Database (for database knowledge sources when not in YAML)
 DATABASE_URL=postgresql://user:pass@localhost:5432/db
 MYSQL_URL=mysql://user:pass@localhost:3306/db
+
+# Note: LLM API keys can be configured in llm.json using ${ENV_VAR} substitution
+# All config files support ${ENV_VAR} and ${ENV_VAR:-default} syntax
 ```
 
 ## Tool Types Reference
@@ -1496,11 +2188,17 @@ MYSQL_URL=mysql://user:pass@localhost:3306/db
      - mcp:filesystem         # All tools from "filesystem" server
    ```
 
-2. **Knowledge Tools** - Semantic search on knowledge stores
+2. **Knowledge Tools** - Semantic search and graph tools on knowledge stores
    ```yaml
    tools:
      - knowledge:docs         # Search "docs" knowledge store
    ```
+   When a knowledge store has entities, agents also get these tools:
+   - `<store>_search` — Semantic search across chunks and entities
+   - `<store>_traverse` — Walk the entity graph
+   - `<store>_entity_lookup` — Look up specific entities
+   - `<store>_graph_schema` — Get the graph schema (entity types, relationship types)
+   - `<store>_sql` — Run read-only SQL against the store's SQLite database
 
 3. **Function Tools** - Custom JavaScript/TypeScript functions in functions/
    ```yaml
@@ -1512,23 +2210,59 @@ MYSQL_URL=mysql://user:pass@localhost:3306/db
 4. **Built-in Tools** - Framework-provided tools
    ```yaml
    tools:
-     - builtin:ask_user       # Human-in-the-loop (ReAct workflows)
-     - builtin:memory_save    # Save to persistent memory
+     - builtin:ask_user       # Human-in-the-loop (pauses for user input)
    ```
+   Auto-injected built-in tools (no explicit declaration needed):
+   - `save_memory` — Save to persistent memory (when `memory: true`)
+   - `integration_post` — Post to connected channels (when integrations configured)
+   - `integration_context` — Get channel context (when integrations configured)
+   - `email_send` — Send emails (when email integration configured)
 
-5. **Sandbox Tools** - Sandboxed code execution
+5. **Sandbox Tools** - Sandboxed execution in Docker container
    ```yaml
    tools:
-     - sandbox:exec           # Execute code in sandbox
-     - sandbox:web_fetch      # Fetch URLs from sandbox
+     # VM execution
+     - sandbox:exec           # Execute code in sandbox VM
+     - sandbox:web_fetch      # Fetch URLs from sandbox (with SSRF protection)
      - sandbox:web_search     # Web search from sandbox
+
+     # Shell
+     - sandbox:shell          # Execute shell commands as non-root sandbox user
+
+     # DOM-based browser tools
+     - sandbox:browser_navigate    # Navigate to URL
+     - sandbox:browser_observe     # Get page structure and text excerpt
+     - sandbox:browser_click       # Click elements by CSS selector
+     - sandbox:browser_type        # Type text into form fields
+     - sandbox:browser_screenshot  # Take screenshot (returns image)
+     - sandbox:browser_evaluate    # Run JavaScript in page context
+
+     # Vision browser tools (EXPERIMENTAL_VISION=true)
+     - sandbox:vision_screenshot   # Take screenshot for vision analysis
+     - sandbox:vision_navigate     # Navigate to URL
+     - sandbox:vision_click        # Click at pixel coordinates
+     - sandbox:vision_type         # Type text at current focus
+     - sandbox:vision_scroll       # Scroll page
+     - sandbox:vision_key          # Press keyboard key
+     - sandbox:vision_drag         # Drag between coordinates
+
+     # Sandboxed file tools
+     - sandbox:file_read           # Read files (scoped to /tmp)
+     - sandbox:file_write          # Write files (scoped to /tmp)
+     - sandbox:file_edit           # Edit files (scoped to /tmp)
+     - sandbox:file_insert         # Insert lines (scoped to /tmp)
+     - sandbox:file_replace_lines  # Replace line ranges (scoped to /tmp)
    ```
 
-6. **Project Tools** - Workspace file access
+6. **Workspace Tools** - Workspace file access
    ```yaml
    tools:
-     - project:read           # Read project files
-     - project:write          # Write project files
+     - workspace:read              # Read workspace files
+     - workspace:write             # Write workspace files
+     - workspace:delete            # Delete files/directories
+     - workspace:list              # List directory contents
+     - workspace:list_resources    # List all loaded resources
+     - workspace:diagnostics       # Get workspace diagnostics
    ```
 
 ## Production Deployment
@@ -1547,10 +2281,12 @@ CMD ["npx", "agent-orcha", "start"]
 
 ### Configuration Best Practices
 
-1. **LLM Configuration**: Store API keys in environment variables, not in llm.json
+1. **LLM Configuration**: Store API keys in environment variables, reference via `${ENV_VAR}` in llm.json
 2. **Knowledge Stores**: All stores use SQLite — data persists automatically to `.knowledge-data/`
 3. **Timeouts**: Configure appropriate timeouts for workflows based on expected duration
 4. **Error Handling**: Set onError strategy in workflows (stop, continue, retry)
+5. **CORS**: Default is same-origin only; set `CORS_ORIGIN` for cross-origin access
+6. **Auth**: Always set `AUTH_PASSWORD` in production
 
 ## Examples
 
@@ -1603,6 +2339,16 @@ tools:
   - mcp:fetch
   - knowledge:docs
 
+skills:
+  - web-pilot
+
+memory: true
+
+publish: true
+
+sampleQuestions:
+  - "Research the latest trends in AI"
+
 output:
   format: text
 ```
@@ -1614,6 +2360,9 @@ output:
 name: analysis
 description: Multi-step data analysis workflow
 version: "1.0.0"
+
+sampleQuestions:
+  - "Analyze the quarterly sales data"
 
 input:
   schema:
@@ -1660,6 +2409,11 @@ name: autonomous-research
 description: Autonomous research using ReAct
 version: "1.0.0"
 type: react
+
+chatOutputFormat: text
+
+sampleQuestions:
+  - "Research quantum computing advances"
 
 input:
   schema:
@@ -1784,13 +2538,15 @@ search:
 
 1. **LLM Connection Errors**
    - Verify API keys in llm.json or environment variables
-   - Check baseUrl for local models (LM Studio, Ollama)
+   - Check baseUrl for local models (LM Studio, Ollama) — configure via engineUrls in llm.json
    - Ensure model name matches provider configuration
+   - For local engines, check `GET /api/local-llm/engines` for status
 
 2. **Knowledge Store Errors**
    - Check embedding model configuration in llm.json
    - Ensure source documents exist at specified paths
    - Verify SQLite write permissions for `.knowledge-data/` directory
+   - For PDF stores, ensure `pdf-parse` dependency is available
 
 3. **MCP Server Errors**
    - Verify MCP server is accessible at specified URL
@@ -1802,11 +2558,18 @@ search:
    - Verify agent names referenced in steps exist
    - Review timeout configuration for long-running workflows
    - For ReAct: Check maxIterations to prevent runaway loops
+   - Use `POST /api/workflows/:name/resume` for interrupted human-in-the-loop workflows
 
 5. **Session/Memory Issues**
    - Ensure consistent sessionId across requests
    - Check session TTL hasn't expired
-   - Memory is in-process; sessions are lost on server restart
+   - Session memory is in-process; sessions are lost on server restart
+   - Persistent memory (`memory: true`) survives restarts via `.memory/` directory
+
+6. **Sandbox/Browser Issues**
+   - Ensure Docker container has `BROWSER_SANDBOX=true` set
+   - Check CDP connectivity at port 9222
+   - Vision browser requires `EXPERIMENTAL_VISION=true`
 
 ## Additional Resources
 
@@ -1818,7 +2581,25 @@ search:
 
 ## Version History
 
-- **0.0.5** (Current)
+- **0.0.8** (Current)
+  - Engine Registry: Pluggable engine architecture (llama-cpp, mlx-serve, Ollama, LM Studio) replacing monolithic singletons
+  - LLM Config API: Full CRUD for llm.json via REST with pointer system for fast provider switching
+  - MLX-Serve engine for Apple Silicon local inference
+  - PDF knowledge store support, reasoning budgets for local models, workflow resume streaming
+
+- **0.0.7**
+  - Vision Browser: Experimental pixel-coordinate browser control for vision LLMs
+  - Environment variable substitution (${VAR}) in all config files
+  - Thinking/reasoning support for Anthropic, OpenAI, and local models
+  - ReAct loop rewrite (streaming-first), rate limiting, SSRF protection, sandbox file tools
+
+- **0.0.6**
+  - Published Agents: Standalone chat pages at /chat/<name> with per-agent auth
+  - Browser Sandbox: Full Chromium with CDP, Xvfb, noVNC
+  - Email integration (IMAP + SMTP), shell sandbox, multimodal message support
+  - Knowledge store scheduled reindexing, jsonPath, resource unloading
+
+- **0.0.5**
   - LangChain removed — replaced with custom implementations and direct LLM provider SDKs
   - Node.js 24+ required (built-in TypeScript support)
   - Unified SQLite + sqlite-vec knowledge stores (Chroma/Pinecone/Qdrant/Neo4j/S3 removed)
@@ -1851,4 +2632,4 @@ search:
 
 ---
 
-Last Updated: 2026-02-23
+Last Updated: 2026-03-13

@@ -64,7 +64,8 @@ export type EmbeddingModelConfig = z.infer<typeof EmbeddingModelConfigSchema>;
 export type LLMJsonConfig = z.infer<typeof LLMJsonConfigSchema>;
 
 // Singleton config manager
-let loadedConfig: LLMJsonConfig | null = null;
+let loadedConfig: LLMJsonConfig | null = null;   // runtime (env vars resolved)
+let rawConfig: LLMJsonConfig | null = null;       // disk-safe (${...} references preserved)
 let loadedConfigPath: string | null = null;
 
 /**
@@ -110,25 +111,33 @@ function migrateSection(section: Record<string, any>): boolean {
 
 export async function loadLLMConfig(llmJsonPath: string): Promise<LLMJsonConfig> {
   const content = await fs.readFile(llmJsonPath, 'utf-8');
-  const parsed = JSON.parse(substituteEnvVars(content));
-  const validated = LLMJsonConfigSchema.parse(parsed);
+
+  // Parse raw (no env substitution) — this is what we write back to disk
+  const rawParsed = LLMJsonConfigSchema.parse(JSON.parse(content));
+  // Parse resolved (with env substitution) — this is what runtime uses
+  const resolvedParsed = LLMJsonConfigSchema.parse(JSON.parse(substituteEnvVars(content)));
 
   // Auto-migrate old format (default = object) to new format (default = string pointer)
+  // Migrate both raw and resolved configs identically
   let migrated = false;
-  migrated = migrateSection(validated.models) || migrated;
-  migrated = migrateSection(validated.embeddings) || migrated;
+  migrated = migrateSection(rawParsed.models) || migrated;
+  migrated = migrateSection(rawParsed.embeddings) || migrated;
+  migrateSection(resolvedParsed.models);
+  migrateSection(resolvedParsed.embeddings);
 
-  loadedConfig = validated;
+  rawConfig = rawParsed;
+  loadedConfig = resolvedParsed;
   loadedConfigPath = llmJsonPath;
 
   if (migrated) {
     logger.info('[LLMConfig] Migrated old format to pointer-based config');
-    await fs.writeFile(llmJsonPath, JSON.stringify(validated, null, 2));
+    // Write the RAW config (preserves ${...} env var references)
+    await fs.writeFile(llmJsonPath, JSON.stringify(rawParsed, null, 2));
   }
 
-  logger.info(`[LLMConfig] Loaded ${Object.keys(validated.models).length} model(s), ${Object.keys(validated.embeddings).length} embedding(s)`);
+  logger.info(`[LLMConfig] Loaded ${Object.keys(resolvedParsed.models).length} model(s), ${Object.keys(resolvedParsed.embeddings).length} embedding(s)`);
 
-  return validated;
+  return resolvedParsed;
 }
 
 export function getModelConfig(name: string): ModelConfig {
@@ -205,8 +214,55 @@ export function getLLMConfigPath(): string | null {
   return loadedConfigPath;
 }
 
+/**
+ * Sync changes from the resolved runtime config into rawConfig,
+ * preserving ${...} env var references in apiKey fields.
+ */
+function syncToRaw(config: LLMJsonConfig): void {
+  if (!rawConfig) {
+    rawConfig = structuredClone(config);
+    return;
+  }
+
+  for (const section of ['models', 'embeddings'] as const) {
+    const rawSection = rawConfig[section];
+    const newSection = config[section];
+
+    // Remove keys that were deleted
+    for (const key of Object.keys(rawSection)) {
+      if (!(key in newSection)) delete rawSection[key];
+    }
+
+    // Add/update keys
+    for (const [key, value] of Object.entries(newSection)) {
+      if (typeof value === 'string') {
+        // String pointer (e.g. "default": "llama-cpp")
+        rawSection[key] = value;
+      } else {
+        const rawEntry = rawSection[key];
+        if (rawEntry && typeof rawEntry === 'object') {
+          // Existing entry — preserve ${...} apiKey reference
+          const rawApiKey = (rawEntry as any).apiKey;
+          rawSection[key] = { ...value };
+          if (rawApiKey && typeof rawApiKey === 'string' && rawApiKey.includes('${')) {
+            (rawSection[key] as any).apiKey = rawApiKey;
+          }
+        } else {
+          // New entry — write as-is
+          rawSection[key] = { ...value };
+        }
+      }
+    }
+  }
+
+  // Sync top-level fields
+  rawConfig.version = config.version;
+  rawConfig.engineUrls = config.engineUrls ? { ...config.engineUrls } : undefined;
+}
+
 export async function saveLLMConfig(llmJsonPath: string, config: LLMJsonConfig): Promise<void> {
-  await fs.writeFile(llmJsonPath, JSON.stringify(config, null, 2));
+  syncToRaw(config);
+  await fs.writeFile(llmJsonPath, JSON.stringify(rawConfig, null, 2));
   loadedConfig = config;
   logger.info(`[LLMConfig] Saved config with ${Object.keys(config.models).length} model(s), ${Object.keys(config.embeddings).length} embedding(s)`);
 }

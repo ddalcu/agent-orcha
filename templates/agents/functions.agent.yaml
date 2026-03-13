@@ -1,5 +1,5 @@
-name: mlx-test
-description: Test agent for MLX local model — uses calculator and text-formatter functions
+name: functions
+description: Simple agent that uses calculator and text-formatter functions
 version: "1.0.0"
 
 llm:

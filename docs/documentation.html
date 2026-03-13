@@ -119,8 +119,24 @@
                 <li><a href="#mcp-api">MCP API</a></li>
                 <li><a href="#files-api">Files API</a></li>
                 <li><a href="#llm-api">LLM API</a></li>
+                <li><a href="#graph-api">Graph API</a></li>
+                <li><a href="#logs-api">Logs API</a></li>
+                <li><a href="#local-llm-api">Local LLM API</a></li>
+                <li><a href="#llm-config-api">LLM Config API</a></li>
               </ul>
             </li>
+          </ul>
+
+          <h4>Configuration</h4>
+          <ul>
+            <li><a href="#engine-registry">Engine Registry</a></li>
+            <li><a href="#env-var-substitution">Environment Variable Substitution</a></li>
+            <li><a href="#thinking-reasoning">Thinking / Reasoning</a></li>
+          </ul>
+
+          <h4>Version History</h4>
+          <ul>
+            <li><a href="#version-history">Changelog</a></li>
           </ul>
 
           <h4>Examples</h4>
@@ -184,34 +200,56 @@
                   <pre id="llm-config"><code>{
   "version": "1.0",
   "models": {
-    "default": {
-      "provider": "openai",
+    "default": "llama-cpp",
+    "llama-cpp": {
+      "provider": "local",
+      "engine": "llama-cpp",
+      "model": "Qwen3.5-4B-IQ4_NL",
+      "reasoningBudget": 0,
+      "contextSize": 32768
+    },
+    "lmstudio": {
+      "provider": "local",
+      "engine": "lmstudio",
       "baseUrl": "http://localhost:1234/v1",
-      "apiKey": "not-needed",
       "model": "your-model-name",
-      "temperature": 0.7
+      "reasoningBudget": 0
+    },
+    "anthropic": {
+      "provider": "anthropic",
+      "apiKey": "${ANTHROPIC_API_KEY}",
+      "model": "claude-sonnet-4-6",
+      "thinkingBudget": 5000
     },
     "openai": {
-      "apiKey": "sk-your-openai-key",
+      "provider": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
       "model": "gpt-4o",
       "temperature": 0.7
     }
   },
   "embeddings": {
-    "default": {
+    "default": "llama-cpp",
+    "llama-cpp": {
+      "provider": "local",
+      "engine": "llama-cpp",
+      "model": "nomic-embed-text-v1.5.Q4_K_M"
+    },
+    "openai": {
       "provider": "openai",
-      "baseUrl": "http://localhost:1234/v1",
-      "apiKey": "not-needed",
-      "model": "text-embedding-model"
+      "apiKey": "${OPENAI_API_KEY}",
+      "model": "text-embedding-3-small"
     }
   }
 }</code></pre>
                 </div>
               </div>
-              <p><strong>For local models:</strong></p>
+              <p><strong>Key concepts:</strong></p>
               <ul>
-                <li><strong>LM Studio:</strong> Use <code>baseUrl: "http://localhost:1234/v1"</code></li>
-                <li><strong>Ollama:</strong> Use <code>baseUrl: "http://localhost:11434/v1"</code></li>
+                <li><strong>Pointer system:</strong> Set <code>"default": "llama-cpp"</code> to point <code>default</code> at another config by name (string = pointer, object = full config)</li>
+                <li><strong>Engine field:</strong> Local models use <code>engine</code> to specify the runtime: <code>llama-cpp</code>, <code>mlx-serve</code>, <code>lmstudio</code>, or <code>ollama</code></li>
+                <li><strong>Environment variables:</strong> Use <code>${ENV_VAR}</code> syntax for API keys (e.g., <code>"apiKey": "${ANTHROPIC_API_KEY}"</code>)</li>
+                <li><strong>Thinking/Reasoning:</strong> Use <code>thinkingBudget</code> for Anthropic models, <code>reasoningBudget</code> for local models (set to <code>0</code> to disable)</li>
               </ul>
             </div>
           </div>
@@ -330,7 +368,7 @@ output:
           <tbody>
             <tr>
               <td><strong>Agents</strong></td>
-              <td>Browse all agents, invoke with custom input, stream responses, manage conversation sessions</td>
+              <td>Browse all agents and workflows, invoke with custom input, stream responses, manage conversation sessions. Workflows are integrated into the Agents tab.</td>
             </tr>
             <tr>
               <td><strong>Knowledge</strong></td>
@@ -341,8 +379,8 @@ output:
               <td>Browse MCP servers, view available tools per server, call tools directly</td>
             </tr>
             <tr>
-              <td><strong>Workflows</strong></td>
-              <td>Browse and execute workflows (step-based and ReAct), stream execution progress, respond to Human-in-the-Loop prompts</td>
+              <td><strong>Local LLM</strong></td>
+              <td>Manage local LLM engines (llama-cpp, mlx-serve). Download, load, and unload models. Monitor engine status.</td>
             </tr>
             <tr>
               <td><strong>Skills</strong></td>
@@ -350,11 +388,11 @@ output:
             </tr>
             <tr>
               <td><strong>Monitor</strong></td>
-              <td>View LLM call logs with context size, token estimates, and duration metrics</td>
+              <td>View ReAct-loop metrics, LLM call logs with context size, token estimates, duration metrics, and real-time activity feed</td>
             </tr>
             <tr>
               <td><strong>IDE</strong></td>
-              <td>Full in-browser file editor with file tree, syntax highlighting (YAML, JSON, JS), hot-reload on save</td>
+              <td>Full in-browser file editor with file tree, syntax highlighting (YAML, JSON, JS), hot-reload on save, and Agent Composer for creating agents visually</td>
             </tr>
           </tbody>
         </table>
@@ -440,6 +478,26 @@ output:
               <td>When <code>true</code>, starts Chromium + Xvfb + VNC inside the container for browser sandbox tools. The VNC viewer is accessible through the Studio UI at <code>/vnc</code>.</td>
               <td><code>true</code></td>
             </tr>
+            <tr>
+              <td><code>LOG_LEVEL</code></td>
+              <td>Logging verbosity level (<code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>)</td>
+              <td><code>info</code></td>
+            </tr>
+            <tr>
+              <td><code>EXPERIMENTAL_VISION</code></td>
+              <td>When <code>true</code>, enables experimental vision browser tools (pixel-coordinate based browser control for vision LLMs)</td>
+              <td><code>false</code></td>
+            </tr>
+            <tr>
+              <td><code>BROWSER_VERBOSE</code></td>
+              <td>When <code>true</code>, enables verbose logging for browser sandbox tools</td>
+              <td><code>false</code></td>
+            </tr>
+            <tr>
+              <td><code>MLX_MANUAL</code></td>
+              <td>When <code>true</code>, disables automatic mlx-serve process management (use when running mlx-serve externally)</td>
+              <td><code>false</code></td>
+            </tr>
           </tbody>
         </table>
 
@@ -506,8 +564,9 @@ tools:                          # Tools available to agent (optional)
   - mcp:&lt;server-name&gt;           # MCP server tools
   - knowledge:&lt;store-name&gt;      # Knowledge store search
   - function:&lt;function-name&gt;    # Custom functions
-  - builtin:&lt;tool-name&gt;         # Built-in tools (e.g., ask_user)
-  - sandbox:&lt;tool-name&gt;         # Sandbox tools (exec, shell, browser, web)
+  - builtin:&lt;tool-name&gt;         # Built-in tools (ask_user, save_memory)
+  - sandbox:&lt;tool-name&gt;         # Sandbox tools (exec, shell, browser_*, vision_*, file_*, web_*)
+  - workspace:&lt;tool-name&gt;       # Workspace tools (read, write, delete, list, list_resources, diagnostics)
 
 skills:                         # Skills to inject into system prompt (optional)
   - skill-name                  # Array of skill names
@@ -544,7 +603,13 @@ integrations:                   # External connectors (optional)
 
 publish: boolean | object       # Standalone chat page (optional)
   # Simple: publish: true
-  # With password: publish: { enabled: true, password: "secret" }</code></pre>
+  # With password: publish: { enabled: true, password: "secret" }
+
+maxIterations: number           # Override default 200 iteration limit (optional)
+
+sampleQuestions:                # Example prompts shown in UI (optional)
+  - "What can you help me with?"
+  - "Tell me about..."</code></pre>
           </div>
         </div>
 
@@ -695,6 +760,11 @@ steps:                          # Workflow steps (required)
 config:                         # Workflow configuration (optional)
   timeout: number               # Total timeout ms (default: 300000)
   onError: stop | continue | retry
+
+chatOutputFormat: text | json   # Output format for chat/stream (optional, default: text)
+
+sampleQuestions:                # Example prompts shown in UI (optional)
+  - "Run with default settings"
 
 output:                         # Output mapping (required)
   &lt;key&gt;: "{{steps.stepId.output}}"</code></pre>
@@ -1169,6 +1239,51 @@ curl -X POST http://localhost:3000/api/tasks/workflow \
               <td><code>sandbox:browser_evaluate</code></td>
               <td>Execute JavaScript in the browser page context</td>
               <td><code>expression</code> (string)</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:vision_screenshot</code></td>
+              <td>Take a screenshot for vision LLM analysis</td>
+              <td>&mdash;</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:vision_navigate</code></td>
+              <td>Navigate browser (vision mode) to a URL</td>
+              <td><code>url</code> (string)</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:vision_click</code></td>
+              <td>Click at pixel coordinates (vision mode)</td>
+              <td><code>x</code> (number), <code>y</code> (number)</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:vision_type</code></td>
+              <td>Type text at current focus (vision mode)</td>
+              <td><code>text</code> (string)</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:vision_scroll</code></td>
+              <td>Scroll the page (vision mode)</td>
+              <td><code>x</code> (number), <code>y</code> (number), <code>deltaY</code> (number)</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:vision_key</code></td>
+              <td>Press a keyboard key (vision mode)</td>
+              <td><code>key</code> (string)</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:vision_drag</code></td>
+              <td>Drag from one point to another (vision mode)</td>
+              <td><code>startX</code>, <code>startY</code>, <code>endX</code>, <code>endY</code> (numbers)</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:file_read</code></td>
+              <td>Read a file from the sandbox filesystem</td>
+              <td><code>path</code> (string)</td>
+            </tr>
+            <tr>
+              <td><code>sandbox:file_write</code></td>
+              <td>Write content to a file in the sandbox filesystem</td>
+              <td><code>path</code> (string), <code>content</code> (string)</td>
             </tr>
           </tbody>
         </table>
@@ -2278,6 +2393,11 @@ Response (auth disabled):
               <td><code>/api/workflows/:name/stream</code></td>
               <td>Stream workflow execution (SSE)</td>
             </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/workflows/:name/resume</code></td>
+              <td>Resume a paused workflow (human-in-the-loop)</td>
+            </tr>
           </tbody>
         </table>
 
@@ -2563,6 +2683,113 @@ Response (auth disabled):
               <td>PUT</td>
               <td><code>/api/files/write</code></td>
               <td>Write file contents (hot-reload)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="graph-api" class="mt-xl">Graph API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/graph/:name/entities</code></td>
+              <td>Get graph entities for a knowledge store</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/graph/:name/edges</code></td>
+              <td>Get graph edges for a knowledge store</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/graph/:name/schema</code></td>
+              <td>Get graph schema (entity types, relationship types)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="logs-api" class="mt-xl">Logs API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/logs/stream</code></td>
+              <td>Stream server logs in real-time (SSE)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="local-llm-api" class="mt-xl">Local LLM API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/local-llm/status</code></td>
+              <td>Get status of all local LLM engines</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/local-llm/:engine/start</code></td>
+              <td>Start a local LLM engine</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/local-llm/:engine/stop</code></td>
+              <td>Stop a local LLM engine</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/local-llm/:engine/models</code></td>
+              <td>List available models for an engine</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/local-llm/:engine/load</code></td>
+              <td>Load a specific model into an engine</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="llm-config-api" class="mt-xl">LLM Config API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/llm/config</code></td>
+              <td>Get the full llm.json configuration</td>
+            </tr>
+            <tr>
+              <td>PUT</td>
+              <td><code>/api/llm/config</code></td>
+              <td>Update the llm.json configuration</td>
             </tr>
           </tbody>
         </table>
@@ -2891,6 +3118,201 @@ publish:
           </div>
         </div>
 
+        <!-- Engine Registry -->
+        <h2 id="engine-registry" class="mt-2xl">Engine Registry</h2>
+        <p>Agent Orcha uses a pluggable engine architecture for local LLM inference. Each engine manages its own process lifecycle (start, stop, health checks) and exposes an OpenAI-compatible API.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Engine</th>
+              <th>Description</th>
+              <th>Platforms</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>llama-cpp</code></td>
+              <td>High-performance GGUF model inference via llama.cpp. Ships with the Docker image. Supports CPU and GPU acceleration.</td>
+              <td>Linux, macOS, Windows</td>
+            </tr>
+            <tr>
+              <td><code>mlx-serve</code></td>
+              <td>Apple Silicon optimized inference via MLX framework. Best performance on M-series Macs.</td>
+              <td>macOS (Apple Silicon)</td>
+            </tr>
+            <tr>
+              <td><code>ollama</code></td>
+              <td>Uses an external Ollama instance. Configure <code>baseUrl</code> to point to your Ollama server.</td>
+              <td>All (external process)</td>
+            </tr>
+            <tr>
+              <td><code>lmstudio</code></td>
+              <td>Uses an external LM Studio instance. Configure <code>baseUrl</code> to point to your LM Studio server.</td>
+              <td>All (external process)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Configuration in llm.json</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">JSON</span>
+          </div>
+          <div class="code-content">
+            <pre><code>{
+  "models": {
+    "default": "llama-cpp",
+    "llama-cpp": {
+      "provider": "local",
+      "engine": "llama-cpp",
+      "model": "Qwen3.5-4B-IQ4_NL",
+      "reasoningBudget": 0,
+      "contextSize": 32768
+    }
+  }
+}</code></pre>
+          </div>
+        </div>
+        <p>The <code>engine</code> field selects the runtime. The <code>model</code> field specifies which model file (for llama-cpp/mlx-serve) or model name (for ollama/lmstudio) to load. Engines are managed via the Local LLM tab in Studio or the <code>/api/local-llm</code> API.</p>
+
+        <!-- Environment Variable Substitution -->
+        <h2 id="env-var-substitution" class="mt-2xl">Environment Variable Substitution</h2>
+        <p>Agent Orcha supports environment variable substitution in configuration files using <code>${VAR}</code> syntax. This keeps secrets out of your config files.</p>
+
+        <h4>Syntax</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Pattern</th>
+              <th>Behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>${VAR}</code></td>
+              <td>Replaced with the value of environment variable <code>VAR</code>. Throws an error if not set.</td>
+            </tr>
+            <tr>
+              <td><code>${VAR:-default}</code></td>
+              <td>Replaced with <code>VAR</code> if set, otherwise uses <code>default</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Examples</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">JSON</span>
+          </div>
+          <div class="code-content">
+            <pre><code>{
+  "anthropic": {
+    "provider": "anthropic",
+    "apiKey": "${ANTHROPIC_API_KEY}",
+    "model": "claude-sonnet-4-6"
+  },
+  "openai": {
+    "provider": "openai",
+    "apiKey": "${OPENAI_API_KEY:-sk-placeholder}",
+    "model": "gpt-4o"
+  }
+}</code></pre>
+          </div>
+        </div>
+        <p>Environment variable substitution works in <code>llm.json</code>, <code>mcp.json</code>, and YAML configuration files (agent, knowledge, workflow definitions).</p>
+
+        <!-- Thinking / Reasoning -->
+        <h2 id="thinking-reasoning" class="mt-2xl">Thinking / Reasoning</h2>
+        <p>Some LLM providers support extended thinking or reasoning, where the model explicitly reasons through a problem before responding. Agent Orcha exposes this through two configuration fields.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Provider</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>thinkingBudget</code></td>
+              <td>Anthropic</td>
+              <td>Max tokens for the model's thinking process. Enables extended thinking for Claude models.</td>
+            </tr>
+            <tr>
+              <td><code>reasoningBudget</code></td>
+              <td>Local models</td>
+              <td>Token budget for reasoning in local models that support it (e.g., Qwen3). Set to <code>0</code> to disable thinking.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Configuration</h4>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">JSON</span>
+          </div>
+          <div class="code-content">
+            <pre><code>{
+  "anthropic": {
+    "provider": "anthropic",
+    "apiKey": "${ANTHROPIC_API_KEY}",
+    "model": "claude-sonnet-4-6",
+    "thinkingBudget": 5000
+  },
+  "local-thinking": {
+    "provider": "local",
+    "engine": "llama-cpp",
+    "model": "Qwen3.5-4B-IQ4_NL",
+    "reasoningBudget": 4096
+  }
+}</code></pre>
+          </div>
+        </div>
+        <p>When thinking is enabled, the model's reasoning steps are visible in the Studio UI as collapsible thinking blocks within agent responses.</p>
+
+        <!-- Version History -->
+        <h2 id="version-history" class="mt-2xl">Version History</h2>
+
+        <h4>v0.0.8</h4>
+        <ul>
+          <li>Engine Registry architecture: pluggable engine abstraction (llama-cpp, mlx-serve, ollama, lmstudio) replacing monolithic singletons</li>
+          <li>Vision browser tools for pixel-coordinate browser control with vision LLMs</li>
+          <li>Workspace tools (read, write, delete, list, list_resources, diagnostics)</li>
+          <li>Agent Composer in IDE for visual agent creation</li>
+          <li>Local LLM management tab in Studio</li>
+        </ul>
+
+        <h4>v0.0.7</h4>
+        <ul>
+          <li>Sandbox file tools (file_read, file_write)</li>
+          <li>Environment variable substitution (<code>${VAR}</code> and <code>${VAR:-default}</code>) in all config files</li>
+          <li>Thinking/reasoning budget support for Anthropic and local models</li>
+          <li>Workflow resume endpoint for human-in-the-loop</li>
+          <li>ReAct-loop metrics and activity feed in Monitor tab</li>
+        </ul>
+
+        <h4>v0.0.6</h4>
+        <ul>
+          <li>Published agents with standalone chat pages at <code>/chat/&lt;name&gt;</code></li>
+          <li>Integrations system: Email (IMAP+SMTP) and Collabnook connectors</li>
+          <li>Triggers system: cron and webhook triggers for agents</li>
+          <li>Skills system: prompt augmentation via SKILL.md files</li>
+          <li>Persistent memory for agents across sessions and restarts</li>
+          <li>PDF loader for knowledge stores</li>
+        </ul>
+
+        <h4>v0.0.5</h4>
+        <ul>
+          <li>Initial public release</li>
+          <li>Agents, workflows (step-based and ReAct), knowledge stores, MCP integration</li>
+          <li>Agent Orcha Studio with Agents, Knowledge, MCP, Workflows, Skills, Monitor, and IDE tabs</li>
+          <li>SQLite + sqlite-vec unified persistence for knowledge stores</li>
+          <li>Direct mapping for knowledge graphs</li>
+          <li>Sandbox tools (exec, shell, web_fetch, web_search, browser_*)</li>
+        </ul>
+
       </div>
     </div>
   </section>
@@ -2928,7 +3350,7 @@ publish:
           <h4>About</h4>
           <ul class="footer-links">
             <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
-            <li>Version 0.0.5</li>
+            <li>Version 0.0.8</li>
             <li>MIT License</li>
           </ul>
         </div>

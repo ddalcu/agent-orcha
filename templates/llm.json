@@ -47,7 +47,7 @@
     }
   },
   "embeddings": {
-    "default": "gemini",
+    "default": "llama-cpp",
     "llama-cpp": {
       "provider": "local",
       "engine": "llama-cpp",

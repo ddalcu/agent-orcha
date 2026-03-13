@@ -19,9 +19,17 @@ prompt:
   inputVariables:
     - query
 tools:                                # mcp:<server> | knowledge:<store> | function:<name>
-  - mcp:server-name                   # builtin:<name> | sandbox:<tool> | project:<tool>
-  - knowledge:store-name              # sandbox: exec, shell, web_fetch, web_search, browser_*
-  - sandbox:browser_navigate          # project: read, write, delete, list, list_resources
+  - mcp:server-name                   # builtin:<name> | sandbox:<tool> | workspace:<tool>
+  - knowledge:store-name              # workspace: read, write, delete, list, list_resources, diagnostics
+  - sandbox:browser_navigate          # sandbox: exec, shell, web_fetch, web_search
+                                      # sandbox: browser_navigate, browser_observe, browser_screenshot,
+                                      #   browser_content, browser_click, browser_type, browser_evaluate
+                                      # sandbox: vision_screenshot, vision_navigate, vision_click,
+                                      #   vision_type, vision_scroll, vision_key, vision_drag
+                                      #   (requires EXPERIMENTAL_VISION=true)
+                                      # sandbox: file_read, file_write, file_edit, file_insert, file_replace_lines
+                                      # builtin: ask_user, save_memory
+                                      #   (conditional: integration_post, integration_context, email_send)
 skills:
   - skill-name                        # or use mode: all to attach all skills
 output:
@@ -103,6 +111,9 @@ config:
   onError: stop                       # stop | continue | retry
 output:
   result: "{{step_two_result}}"
+chatOutputFormat: text                  # text | json
+sampleQuestions:
+  - "Run the pipeline"
 ```
 
 ## ReAct Workflows (`workflows/<name>.workflow.yaml`)
@@ -140,6 +151,9 @@ graph:
   timeout: 300000
 output:
   result: "{{result}}"
+chatOutputFormat: text                  # text | json
+sampleQuestions:
+  - "What can you do?"
 ```
 
 ## Knowledge Stores (`knowledge/<name>.knowledge.yaml`)
@@ -197,6 +211,8 @@ export default async function({ input }) {
 }
 ```
 
+Function parameters support automatic type coercion — if an LLM passes a number as a string, it is auto-coerced to the declared type.
+
 ## Skills (`skills/<name>/SKILL.md`)
 
 Markdown files with YAML frontmatter (`name`, `description`). Content is injected into the agent's system prompt. Add `sandbox: true` if the skill requires sandbox tools.
@@ -208,6 +224,43 @@ Markdown files with YAML frontmatter (`name`, `description`). Content is injecte
 ```
 
 Remote: `url`. Local: `command` + `args`. Optional: `headers`, `env`, `timeout`, `transport`, `description`. Transport is auto-detected. To add a server: read `mcp.json`, add entry, write back, then reference as `mcp:<name>` in agent tools.
+
+## LLM Configuration (`llm.json`)
+
+```json
+{
+  "default": "llama-cpp",
+  "llama-cpp": {
+    "engine": "llama-cpp",
+    "model": "qwen3-8b",
+    "temperature": 0.7,
+    "reasoningBudget": 4096,
+    "thinkingBudget": 4096
+  },
+  "ollama-model": {
+    "engine": "ollama",
+    "model": "llama3",
+    "temperature": 0.5
+  },
+  "embeddings": {
+    "engine": "llama-cpp",
+    "model": "nomic-embed",
+    "type": "embedding"
+  },
+  "engineUrls": {
+    "llama-cpp": "http://localhost:8080",
+    "mlx-serve": "http://localhost:8081",
+    "ollama": "http://localhost:11434",
+    "lmstudio": "http://localhost:1234"
+  }
+}
+```
+
+The `"default"` key is a string pointer to another config name. Engines: `llama-cpp`, `mlx-serve`, `ollama`, `lmstudio`. Use `reasoningBudget`/`thinkingBudget` for thinking models. Values support `${ENV_VAR}` substitution.
+
+## Environment Variable Substitution
+
+All YAML and JSON config files support `${ENV_VAR}` and `${ENV_VAR:-default}` syntax. Use this for secrets, URLs, and any values that differ between environments.
 
 ## Best Practices
 

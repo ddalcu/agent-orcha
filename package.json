@@ -46,7 +46,8 @@
     "docker": "docker compose up --build --watch",
     "build:binary": "node scripts/build-sea.mjs",
     "sea": "node scripts/build-sea.mjs && ./dist/sea/agent-orcha",
-    "test:e2e": "npx playwright test"
+    "test:e2e": "npx playwright test",
+    "prepare": "./scripts/install-hooks.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",
@@ -67,7 +68,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.1",
     "openai": "^6.22.0",
-    "pdf-parse": "^2.4.5",
+    "pdf-parse": "^1.1.4",
     "pg": "^8.13.2",
     "pino": "^10.2.1",
     "pino-pretty": "^13.1.3",

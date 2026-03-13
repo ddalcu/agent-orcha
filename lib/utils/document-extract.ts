@@ -63,10 +63,10 @@ export async function extractDocumentText(
   // PDF
   if (mediaType === 'application/pdf') {
     try {
-      const { PDFParse } = await import('pdf-parse');
-      const parser = new PDFParse({ data: buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer) });
-      const result = await parser.getText();
-      return { text: result.text || '(No text content found in PDF)', format: 'pdf' };
+      // @ts-ignore - pdf-parse v1 has no type declarations
+      const pdfParse = (await import('pdf-parse')).default;
+      const result = await pdfParse(buffer);
+      return { text: result?.text || '(No text content found in PDF)', format: 'pdf' };
     } catch (err: any) {
       if (err.code === 'ERR_MODULE_NOT_FOUND' || err.code === 'MODULE_NOT_FOUND') {
         throw new Error('PDF support requires pdf-parse. Install it with: npm install pdf-parse');
@@ -102,6 +102,7 @@ export async function extractDocumentText(
       // @ts-ignore - exceljs is an optional runtime dependency
       const ExcelJS = await import('exceljs');
       const workbook = new ExcelJS.Workbook();
+      // @ts-expect-error ExcelJS types expect Buffer but Node 25 Buffer<ArrayBuffer> is compatible at runtime
       await workbook.xlsx.load(buffer);
       const sheets: string[] = [];
       for (const worksheet of workbook.worksheets) {
