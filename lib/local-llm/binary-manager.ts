@@ -26,7 +26,9 @@ interface AssetPatterns {
 }
 
 const BINARY_NAME = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server';
-const RELEASES_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
+// Pin to b8280 — b8322 has a ggml_can_mul_mat assertion bug with embedding models on CUDA
+const PINNED_TAG = 'b8280';
+const RELEASES_API = `https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/${PINNED_TAG}`;
 
 let cachedGpu: GpuInfo | null = null;
 let cachedVersion: { baseDir: string; value: string | null } | null = null;
