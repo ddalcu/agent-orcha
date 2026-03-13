@@ -84,7 +84,7 @@ function parseToolArgs(raw: string | undefined): Record<string, unknown> {
       return JSON.parse(raw.replace(/'/g, '"'));
     } catch {
       logger.warn(`[OpenAI] Failed to parse tool args: ${raw.slice(0, 200)}`);
-      return {};
+      return { _parseError: `Could not parse your tool arguments as JSON. Raw text: ${raw.slice(0, 300)}` };
     }
   }
 }
@@ -97,6 +97,10 @@ interface OpenAIChatModelOptions {
   baseURL?: string;
   streamUsage?: boolean;
   provider?: 'openai' | 'local';
+  supportsVision?: boolean;
+  reasoningBudget?: number;
+  engine?: string;
+  contextSize?: number;
 }
 
 export class OpenAIChatModel implements ChatModel {
@@ -106,10 +110,14 @@ export class OpenAIChatModel implements ChatModel {
   private maxTokens?: number;
   private streamUsage: boolean;
   private provider: 'openai' | 'local';
+  private supportsVision: boolean;
   private isReasoningModel: boolean;
+  private reasoningBudget: number;
   private boundTools?: StructuredTool[];
   private cachedProviderTools?: OpenAI.ChatCompletionTool[];
   private structuredSchema?: Record<string, unknown>;
+  private engine?: string;
+  private contextSize?: number;
 
   constructor(options: OpenAIChatModelOptions) {
     this.client = new OpenAI({
@@ -121,7 +129,11 @@ export class OpenAIChatModel implements ChatModel {
     this.maxTokens = options.maxTokens;
     this.streamUsage = options.streamUsage ?? true;
     this.provider = options.provider ?? 'openai';
+    this.supportsVision = options.supportsVision ?? true;
     this.isReasoningModel = this.provider === 'openai' && /^o[134]/.test(this.modelName);
+    this.reasoningBudget = options.reasoningBudget ?? 0;
+    this.engine = options.engine;
+    this.contextSize = options.contextSize;
   }
 
   /**
@@ -142,12 +154,18 @@ export class OpenAIChatModel implements ChatModel {
           break;
         case 'human':
           if (Array.isArray(msg.content)) {
-            const parts: OpenAI.ChatCompletionContentPart[] = msg.content.map(p => {
+            const parts: OpenAI.ChatCompletionContentPart[] = [];
+            for (const p of msg.content) {
               if (p.type === 'image') {
-                return { type: 'image_url' as const, image_url: { url: `data:${p.mediaType};base64,${p.data}` } };
+                if (this.supportsVision) {
+                  parts.push({ type: 'image_url' as const, image_url: { url: `data:${p.mediaType};base64,${p.data}` } });
+                } else {
+                  parts.push({ type: 'text' as const, text: '[Image omitted — model does not support vision]' });
+                }
+              } else {
+                parts.push({ type: 'text' as const, text: p.text });
               }
-              return { type: 'text' as const, text: p.text };
-            });
+            }
             result.push({ role: 'user', content: parts });
           } else {
             result.push({ role: 'user', content: msg.content });
@@ -191,6 +209,7 @@ export class OpenAIChatModel implements ChatModel {
 
           // Flush images as a user message once the tool sequence ends
           const nextMsg = messages[i + 1];
+          if (!this.supportsVision) pendingImages.length = 0;
           if (pendingImages.length > 0 && (!nextMsg || nextMsg.role !== 'tool')) {
             const label = pendingImages.map((img) => img.toolName).join(', ');
             const parts: OpenAI.ChatCompletionContentPart[] = [
@@ -240,9 +259,15 @@ export class OpenAIChatModel implements ChatModel {
       }));
   }
 
+  /** Build Ollama-specific options (num_ctx) when engine is ollama */
+  private ollamaOptions(): Record<string, unknown> {
+    if (this.engine !== 'ollama' || !this.contextSize) return {};
+    return { options: { num_ctx: this.contextSize } };
+  }
+
   async invoke(messages: BaseMessage[]): Promise<ChatModelResponse> {
     const tools = this.toOpenAITools();
-    const params: OpenAI.ChatCompletionCreateParamsNonStreaming = {
+    const params: OpenAI.ChatCompletionCreateParamsNonStreaming & { enable_thinking?: boolean; options?: Record<string, unknown> } = {
       model: this.modelName,
       messages: this.toOpenAIMessages(messages),
       ...(!this.isReasoningModel && this.temperature !== undefined ? { temperature: this.temperature } : {}),
@@ -264,6 +289,8 @@ export class OpenAIChatModel implements ChatModel {
             },
           }
         : {}),
+      ...(this.reasoningBudget > 0 ? { enable_thinking: true } : {}),
+      ...this.ollamaOptions(),
     };
 
     const response = await this.client.chat.completions.create(params);
@@ -302,7 +329,7 @@ export class OpenAIChatModel implements ChatModel {
     options?: { signal?: AbortSignal }
   ): AsyncIterable<ChatModelResponse> {
     const tools = this.toOpenAITools();
-    const params: OpenAI.ChatCompletionCreateParamsStreaming = {
+    const params: OpenAI.ChatCompletionCreateParamsStreaming & { enable_thinking?: boolean; options?: Record<string, unknown> } = {
       model: this.modelName,
       messages: this.toOpenAIMessages(messages),
       stream: true,
@@ -314,6 +341,8 @@ export class OpenAIChatModel implements ChatModel {
           : { max_tokens: this.maxTokens }
         : {}),
       ...(tools ? { tools } : {}),
+      ...(this.reasoningBudget > 0 ? { enable_thinking: true } : {}),
+      ...this.ollamaOptions(),
     };
 
     const stream = await this.client.chat.completions.create(params, {
@@ -410,6 +439,8 @@ export class OpenAIChatModel implements ChatModel {
       maxTokens: this.maxTokens,
       streamUsage: this.streamUsage,
       provider: this.provider,
+      supportsVision: this.supportsVision,
+      reasoningBudget: this.reasoningBudget,
     });
     bound.boundTools = tools;
     bound.structuredSchema = this.structuredSchema;
@@ -426,6 +457,8 @@ export class OpenAIChatModel implements ChatModel {
       maxTokens: this.maxTokens,
       streamUsage: this.streamUsage,
       provider: this.provider,
+      supportsVision: this.supportsVision,
+      reasoningBudget: this.reasoningBudget,
     });
     wrapped.structuredSchema = schema;
     wrapped.boundTools = this.boundTools;

@@ -1,5 +1,13 @@
 [
   {
+    "name": "actor",
+    "type": "agent",
+    "description": "Hilarious impersonation chatbot — give it any character, celebrity, or fictional figure and it stays in character while answering your questions.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/actor.agent.yaml",
+    "tags": ["chatbot", "comedy", "starter"]
+  },
+  {
     "name": "architect",
     "type": "agent",
     "description": "Design and build agents, workflows, knowledge bases, and other ORCHA resources using natural language.",
@@ -32,20 +40,28 @@
     "tags": ["music", "catalog"]
   },
   {
+    "name": "investment-analyst",
+    "type": "agent",
+    "description": "Daily tech stock analyst — researches market data and sends a high-level summary via email and Collabnook.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/investment-analyst.agent.yaml",
+    "tags": ["finance", "stocks", "automation"]
+  },
+  {
+    "name": "network-security",
+    "type": "agent",
+    "description": "Offensive network security scanner — performs deep reconnaissance, cross-subnet discovery, vulnerability scanning, and remediation.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/network-security.agent.yaml",
+    "tags": ["security", "network", "scanning"]
+  },
+  {
     "name": "transport-security",
     "type": "agent",
     "description": "Cross-references transport OT/ICS systems with cybersecurity threat intelligence and CVEs.",
     "author": "Agent Orcha",
     "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/transport-security.agent.yaml",
     "tags": ["security", "ics", "ot"]
-  },
-  {
-    "name": "vision",
-    "type": "agent",
-    "description": "Vision browser agent — controls the browser using pixel coordinates from screenshots, like a human would.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/vision.agent.yaml",
-    "tags": ["browser", "vision", "automation"]
   },
   {
     "name": "web-engineer",
@@ -88,14 +104,6 @@
     "tags": ["sandbox", "coding"]
   },
   {
-    "name": "vision-browser",
-    "type": "skill",
-    "description": "Vision-based browser automation — pixel coordinate interaction from screenshots.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/vision-browser",
-    "tags": ["browser", "vision", "automation"]
-  },
-  {
     "name": "web-pilot",
     "type": "skill",
     "description": "Browser automation — observe-act loop with element refs for navigating, clicking, and typing.",
@@ -118,6 +126,14 @@
     "author": "Agent Orcha",
     "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/workflows/react-example.workflow.yaml",
     "tags": ["react", "autonomous"]
+  },
+  {
+    "name": "team-chat",
+    "type": "workflow",
+    "description": "ReAct workflow that delegates tasks to specialized agents for collaborative problem-solving.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/workflows/team-chat.workflow.yaml",
+    "tags": ["react", "multi-agent", "coordination"]
   },
   {
     "name": "calculator",
@@ -158,6 +174,14 @@
     "author": "Agent Orcha",
     "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/pet-store.knowledge.yaml",
     "tags": ["catalog", "example"]
+  },
+  {
+    "name": "patient-records",
+    "type": "knowledge",
+    "description": "Healthcare customer records from deidentified patient PDFs.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/patient-records.knowledge.yaml",
+    "tags": ["healthcare", "pdf", "rag"]
   },
   {
     "name": "music-store",

@@ -2,20 +2,14 @@ import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
 import type { StructuredTool } from '../../types/llm-types.ts';
 import type { SqliteStore, EntityRow } from '../../knowledge/sqlite-store.ts';
-import type { KnowledgeConfig } from '../../knowledge/types.ts';
-import { buildGraphSchemaDescription } from './knowledge-tools-factory.ts';
-
 /**
  * Create an entity lookup tool for a knowledge base with entities.
  * Find entities by name, ID, or type.
  */
 export function createKnowledgeEntityLookupTool(
   name: string,
-  config: KnowledgeConfig,
   sqliteStore: SqliteStore
 ): StructuredTool {
-  const schemaInfo = buildGraphSchemaDescription(config);
-
   return tool(
     async ({ id, name: entityName, type, limit, offset }) => {
       const effectiveLimit = Math.min(limit ?? 10, 50);
@@ -72,17 +66,13 @@ export function createKnowledgeEntityLookupTool(
     },
     {
       name: `knowledge_entity_lookup_${name}`,
-      description: `Find entities in the "${name}" knowledge graph by name, ID, or type. Returns entity details including properties.
-
-${schemaInfo}
-
-TIPS: Use type filter to browse entities of a specific kind. Use name for searching. Use the returned entity IDs with knowledge_traverse_${name} to explore relationships. Use offset to paginate through large result sets (e.g., offset=0 then offset=50 to get all entities).`,
+      description: `Find entities in "${name}" graph by name, ID, or type. Use knowledge_graph_schema_${name} first to discover available types.`,
       schema: z.object({
-        id: z.string().optional().describe('Exact entity ID to look up (takes precedence over name/type filters)'),
-        name: z.string().optional().describe('Search entities by name (case-insensitive partial match)'),
-        type: z.string().optional().describe('Filter by entity type (case-insensitive exact match)'),
-        limit: z.number().optional().describe('Max results to return (default 10, max 50)'),
-        offset: z.number().optional().describe('Skip this many results before returning (default 0). Use with limit to paginate.'),
+        id: z.string().optional().describe('Exact entity ID (takes precedence over name/type)'),
+        name: z.string().optional().describe('Search by name (case-insensitive partial match)'),
+        type: z.string().optional().describe('Filter by entity type'),
+        limit: z.number().optional().describe('Max results (default 10, max 50)'),
+        offset: z.number().optional().describe('Skip N results for pagination (default 0)'),
       }),
     }
   );

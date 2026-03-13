@@ -17,3 +17,7 @@ tmp
 /mcp.json
 .local
 Dockerfile.deploy
+.models
+.llama-server
+.mlx-serve
+templates/llm.json

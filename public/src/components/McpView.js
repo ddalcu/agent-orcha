@@ -16,7 +16,7 @@ export class McpView extends Component {
 
     async loadContent() {
         const container = this.querySelector('#listContainer');
-        container.innerHTML = '<div class="text-gray-500 text-center py-8">Loading...</div>';
+        container.innerHTML = '<div class="text-muted text-center py-4">Loading...</div>';
 
         try {
             if (this.source === 'mcp') {
@@ -27,14 +27,14 @@ export class McpView extends Component {
                 this.renderFunctions(functions);
             }
         } catch (e) {
-            container.innerHTML = `<div class="text-red-400 text-center">Error: ${e.message}</div>`;
+            container.innerHTML = `<div class="text-red text-center">Error: ${e.message}</div>`;
         }
     }
 
     async renderServers(servers) {
         const container = this.querySelector('#listContainer');
         if (!servers.length) {
-            container.innerHTML = '<div class="text-gray-500 text-center py-8">No servers configured</div>';
+            container.innerHTML = '<div class="text-muted text-center py-4">No servers configured</div>';
             return;
         }
 
@@ -42,19 +42,18 @@ export class McpView extends Component {
 
         for (const server of servers) {
             const section = document.createElement('div');
-            section.className = 'bg-dark-surface/30 border border-dark-border rounded-lg overflow-hidden mb-4';
+            section.className = 'mcp-accordion';
 
-            // Initial render without tools
             section.innerHTML = `
-                <div class="p-4 cursor-pointer hover:bg-dark-surface/50 transition-colors flex items-center justify-between" onclick="this.parentElement.querySelector('.tools-grid').classList.toggle('hidden'); this.querySelector('svg').classList.toggle('rotate-180')">
+                <div class="mcp-accordion-header" onclick="this.parentElement.querySelector('.tools-grid').classList.toggle('hidden'); this.querySelector('svg').classList.toggle('rotate-180')">
                     <div class="flex-1">
-                        <div class="font-medium text-gray-200">${server.name}</div>
-                        <div class="text-xs text-gray-500 mt-0.5">${server.transport}</div>
+                        <div class="font-medium text-primary">${server.name}</div>
+                        <div class="text-xs text-muted mt-1">${server.transport}</div>
                     </div>
-                    <svg class="w-5 h-5 text-gray-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    <svg class="text-secondary transition-transform" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
-                <div class="tools-grid hidden p-4 pt-0 border-t border-dark-border/50">
-                     <div class="text-gray-500 text-sm py-2">Loading tools...</div>
+                <div class="tools-grid hidden p-4 pt-3 border-t">
+                     <div class="text-muted text-sm py-2">Loading tools...</div>
                 </div>
              `;
 
@@ -62,15 +61,15 @@ export class McpView extends Component {
             api.getMCPTools(server.name).then(tools => {
                 const grid = section.querySelector('.tools-grid');
                 if (!tools.length) {
-                    grid.innerHTML = '<div class="text-gray-500 text-sm py-2">No tools available</div>';
+                    grid.innerHTML = '<div class="text-muted text-sm py-2">No tools available</div>';
                     return;
                 }
 
-                grid.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 mt-4">
+                grid.innerHTML = `<div class="grid-auto mt-3">
                     ${tools.map(tool => `
-                        <div class="tool-card bg-dark-bg border border-dark-border hover:border-cyan-500 rounded p-3 cursor-pointer transition-colors" data-server="${server.name}" data-tool='${JSON.stringify(tool).replace(/'/g, "&#39;")}'>
-                            <div class="font-medium text-cyan-400 text-sm mb-1">${tool.name}</div>
-                            <div class="text-xs text-gray-500 line-clamp-2">${tool.description || ''}</div>
+                        <div class="tool-card mcp-tool-card" data-server="${server.name}" data-tool='${JSON.stringify(tool).replace(/'/g, "&#39;")}'>
+                            <div class="tool-name">${tool.name}</div>
+                            <div class="text-xs text-muted line-clamp-2">${tool.description || ''}</div>
                         </div>
                     `).join('')}
                  </div>`;
@@ -91,15 +90,15 @@ export class McpView extends Component {
     renderFunctions(functions) {
         const container = this.querySelector('#listContainer');
         if (!functions.length) {
-            container.innerHTML = '<div class="text-gray-500 text-center py-8">No functions available</div>';
+            container.innerHTML = '<div class="text-muted text-center py-4">No functions available</div>';
             return;
         }
 
-        container.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        container.innerHTML = `<div class="grid-auto">
             ${functions.map(func => `
-                <div class="func-card bg-dark-surface border border-dark-border hover:border-cyan-500 rounded-lg p-4 cursor-pointer transition-colors" data-func='${JSON.stringify(func).replace(/'/g, "&#39;")}'>
-                     <div class="font-medium text-cyan-400 mb-1">${func.name}</div>
-                     <div class="text-xs text-gray-500 line-clamp-2">${func.description || ''}</div>
+                <div class="func-card mcp-tool-card" data-func='${JSON.stringify(func).replace(/'/g, "&#39;")}'>
+                     <div class="tool-name">${func.name}</div>
+                     <div class="text-xs text-muted line-clamp-2">${func.description || ''}</div>
                 </div>
             `).join('')}
         </div>`;
@@ -138,8 +137,7 @@ export class McpView extends Component {
 
         // Highlight
         this.querySelectorAll('.tool-card, .func-card').forEach(el => {
-            el.classList.remove('border-cyan-500', 'bg-cyan-500/10');
-            el.classList.add('border-dark-border');
+            el.classList.remove('active');
         });
         // (Visual highlight logic omitted for brevity as it requires complex matching)
     }
@@ -281,20 +279,16 @@ export class McpView extends Component {
 
         mcpBtn.addEventListener('click', () => {
             this.source = 'mcp';
-            mcpBtn.classList.replace('bg-dark-surface', 'bg-cyan-600');
-            mcpBtn.classList.replace('text-gray-400', 'text-white');
-            funcBtn.classList.replace('bg-cyan-600', 'bg-dark-surface');
-            funcBtn.classList.replace('text-white', 'text-gray-400');
+            mcpBtn.classList.add('active');
+            funcBtn.classList.remove('active');
             this.querySelector('#executionArea').classList.add('hidden');
             this.loadContent();
         });
 
         funcBtn.addEventListener('click', () => {
             this.source = 'functions';
-            funcBtn.classList.replace('bg-dark-surface', 'bg-cyan-600');
-            funcBtn.classList.replace('text-gray-400', 'text-white');
-            mcpBtn.classList.replace('bg-cyan-600', 'bg-dark-surface');
-            mcpBtn.classList.replace('text-white', 'text-gray-400');
+            funcBtn.classList.add('active');
+            mcpBtn.classList.remove('active');
             this.querySelector('#executionArea').classList.add('hidden');
             this.loadContent();
         });
@@ -316,7 +310,7 @@ export class McpView extends Component {
         } catch (e) {
             outputArea.classList.remove('hidden');
             outputEl.textContent = 'Error: Invalid JSON arguments';
-            outputEl.classList.add('text-red-400');
+            outputEl.classList.add('text-red');
             return;
         }
 
@@ -324,7 +318,7 @@ export class McpView extends Component {
         btn.textContent = 'Executing...';
         outputArea.classList.remove('hidden');
         outputEl.textContent = 'Running...';
-        outputEl.classList.remove('text-red-400');
+        outputEl.classList.remove('text-red');
 
         try {
             let result;
@@ -342,7 +336,7 @@ export class McpView extends Component {
             outputEl.textContent = content;
         } catch (e) {
             outputEl.textContent = 'Error: ' + e.message;
-            outputEl.classList.add('text-red-400');
+            outputEl.classList.add('text-red');
         } finally {
             btn.disabled = false;
             btn.textContent = 'Execute';
@@ -351,32 +345,30 @@ export class McpView extends Component {
 
     template() {
         return `
-            <div class="space-y-6 h-full overflow-y-auto pb-8 custom-scrollbar">
-                <div class="flex gap-2 border-b border-dark-border pb-4">
-                    <button id="mcpBtn" class="px-4 py-2 rounded-lg font-medium bg-cyan-600 text-white transition-colors">MCP Servers</button>
-                    <button id="funcBtn" class="px-4 py-2 rounded-lg font-medium bg-dark-surface text-gray-400 hover:bg-dark-hover transition-colors">Internal Functions</button>
+            <div class="space-y-6 h-full overflow-y-auto pb-6 view-panel">
+                <div class="mcp-tabs">
+                    <button id="mcpBtn" class="mcp-tab active">MCP Servers</button>
+                    <button id="funcBtn" class="mcp-tab">Internal Functions</button>
                 </div>
 
                 <div id="listContainer"></div>
 
-                <div id="executionArea" class="hidden border-t border-dark-border pt-6">
-                    <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-4 mb-4">
-                         <div class="font-medium text-cyan-400" id="selectedName"></div>
-                         <div class="text-xs text-gray-500 mt-1" id="selectedDesc"></div>
+                <div id="executionArea" class="hidden border-t pt-4">
+                    <div class="panel-dim mb-4">
+                         <div class="font-medium text-accent" id="selectedName"></div>
+                         <div class="text-xs text-muted mt-1" id="selectedDesc"></div>
                     </div>
 
                     <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-300 mb-2">Arguments (JSON)</label>
-                        <textarea id="argsInput" rows="6" class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-3 text-gray-100 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
+                        <label class="block text-sm font-medium text-primary mb-2">Arguments (JSON)</label>
+                        <textarea id="argsInput" rows="6" class="textarea font-mono text-sm"></textarea>
                     </div>
 
-                    <button id="executeBtn" class="bg-cyan-600 hover:bg-cyan-700 text-white font-medium px-6 py-2.5 rounded-lg transition-colors">
-                        Execute
-                    </button>
+                    <button id="executeBtn" class="btn btn-accent">Execute</button>
 
                     <div id="outputArea" class="mt-4 hidden">
-                        <label class="block text-sm font-medium text-gray-300 mb-2">Output</label>
-                        <div id="mcpOutput" class="bg-dark-surface border border-dark-border rounded-lg p-4 min-h-[100px] font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto"></div>
+                        <label class="block text-sm font-medium text-primary mb-2">Output</label>
+                        <div id="mcpOutput" class="llm-output"></div>
                     </div>
                 </div>
             </div>

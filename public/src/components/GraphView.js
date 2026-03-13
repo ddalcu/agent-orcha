@@ -82,11 +82,9 @@ export class GraphView extends Component {
   renderError(message) {
     const main = this.querySelector("#graphContainer");
     main.innerHTML = `
-            <div class="flex items-center justify-center h-full">
-                <div class="text-center p-8">
-                    <i class="fas fa-exclamation-circle text-4xl text-red-400 mb-4"></i>
-                    <p class="text-red-300">${message}</p>
-                </div>
+            <div class="empty-state h-full">
+                <i class="fas fa-exclamation-circle text-4xl text-red mb-4"></i>
+                <p class="text-red">${message}</p>
             </div>
         `;
   }
@@ -223,8 +221,8 @@ export class GraphView extends Component {
       label: e.type,
       title: e.description || e.type,
       arrows: "to",
-      color: { color: "#475569", highlight: "#60a5fa", hover: "#64748b" },
-      font: { color: "#64748b", size: 9, strokeWidth: 0 },
+      color: { color: "#2e2f3a", highlight: "#5e6ad2", hover: "#3f404a" },
+      font: { color: "#5c5c64", size: 9, strokeWidth: 0 },
       smooth: { type: "continuous" },
       width: 1.5,
       // Store original data
@@ -353,7 +351,7 @@ export class GraphView extends Component {
     sidebarContent.innerHTML = `
             <div class="mb-2">
                 <h3 class="text-sm font-bold text-white">${this.escapeHtml(type)}</h3>
-                <span class="text-xs text-gray-500 font-mono">${this.escapeHtml(nodeId)}</span>
+                <span class="text-xs text-muted font-mono">${this.escapeHtml(nodeId)}</span>
             </div>
             <div class="space-y-1">
                 ${[
@@ -364,7 +362,7 @@ export class GraphView extends Component {
                 ].join("")}
                 ${
                   coreProps.length === 0 && propKeys.length === 0
-                    ? '<p class="text-xs text-gray-500 italic">No properties</p>'
+                    ? '<p class="text-xs text-muted italic">No properties</p>'
                     : ""
                 }
             </div>
@@ -379,9 +377,9 @@ export class GraphView extends Component {
           : val
         : JSON.stringify(val);
     return `
-            <div class="bg-dark-bg rounded px-2 py-1 border border-dark-border">
-                <span class="text-xs text-gray-500">${this.escapeHtml(key)}: </span>
-                <span class="text-xs text-gray-200 break-words">${this.escapeHtml(displayVal)}</span>
+            <div class="graph-prop">
+                <span class="text-xs text-muted">${this.escapeHtml(key)}: </span>
+                <span class="text-xs text-primary break-words">${this.escapeHtml(displayVal)}</span>
             </div>
         `;
   }
@@ -408,7 +406,7 @@ export class GraphView extends Component {
             <div class="h-full flex flex-col">
                 <div class="flex-1 min-h-0 relative">
                     <div id="graphContainer" class="h-full w-full rounded-lg graph-canvas"></div>
-                    <div id="sidebar" class="hidden absolute top-2 right-2 w-64 max-h-72 overflow-y-auto bg-dark-surface rounded-lg border border-dark-border shadow-lg opacity-90">
+                    <div id="sidebar" class="graph-sidebar hidden">
                         <div id="sidebarContent" class="p-3"></div>
                     </div>
                 </div>

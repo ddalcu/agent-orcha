@@ -2,9 +2,6 @@ import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
 import type { StructuredTool } from '../../types/llm-types.ts';
 import type { SqliteStore, EntityRow, RelationshipRow } from '../../knowledge/sqlite-store.ts';
-import type { KnowledgeConfig } from '../../knowledge/types.ts';
-import { buildGraphSchemaDescription } from './knowledge-tools-factory.ts';
-
 const MAX_NODES = 50;
 
 /**
@@ -13,11 +10,8 @@ const MAX_NODES = 50;
  */
 export function createKnowledgeTraverseTool(
   name: string,
-  config: KnowledgeConfig,
   sqliteStore: SqliteStore
 ): StructuredTool {
-  const schemaInfo = buildGraphSchemaDescription(config);
-
   return tool(
     async ({ entityName, entityId, depth }) => {
       const effectiveDepth = Math.min(Math.max(depth ?? 1, 1), 3);
@@ -61,15 +55,11 @@ export function createKnowledgeTraverseTool(
     },
     {
       name: `knowledge_traverse_${name}`,
-      description: `Explore the neighborhood around an entity in the "${name}" knowledge graph. Returns connected nodes and relationships within N hops.
-
-${schemaInfo}
-
-TIPS: Use this to understand how an entity relates to others. Start with depth=1 for immediate connections. Use knowledge_entity_lookup_${name} first if you need to find the entity's ID or name.`,
+      description: `Traverse relationships around an entity in "${name}" graph. Returns connected nodes within N hops. Use entity_lookup first to find IDs.`,
       schema: z.object({
-        entityName: z.string().optional().describe('Name of the entity to start from (case-insensitive partial match)'),
-        entityId: z.string().optional().describe('ID of the entity to start from (exact match, takes precedence over entityName)'),
-        depth: z.number().optional().describe('How many hops to traverse (1-3, default 1)'),
+        entityName: z.string().optional().describe('Entity name to start from (partial match)'),
+        entityId: z.string().optional().describe('Entity ID to start from (takes precedence over name)'),
+        depth: z.number().optional().describe('Hops to traverse (1-3, default 1)'),
       }),
     }
   );

@@ -1,7 +1,8 @@
-name: react-research
-description: Autonomous research workflow that discovers and uses all available tools and knowledge bases
+name: tool-explorer
+description: Autonomous ReAct workflow that discovers and uses all available tools and knowledge bases
 version: "1.0.0"
 type: react
+chatOutputFormat: text
 
 input:
   schema:
@@ -12,15 +13,14 @@ input:
 
 prompt:
   system: |
-    You are a research assistant with access to knowledge bases, tools, and other agents.
-
-    Available knowledge bases include company org charts, product inventories, web content, and more.
-    You also have access to calculator functions and other utility tools.
+    You are a research assistant with access to knowledge bases, tools, and utility functions.
 
     Research process:
     1. Identify which knowledge bases and tools are relevant to the topic
-    2. Search multiple sources in parallel when possible
-    3. Synthesize the results into a comprehensive, well-structured answer
+    2. Search multiple sources to gather comprehensive information
+    3. Synthesize the results into a clear, well-structured answer
+
+    When searching knowledge bases, use k=5 or fewer to keep results focused.
 
     If you need clarification from the user, use the ask_user tool.
   goal: "Research and answer: {{input.topic}}"
@@ -32,10 +32,8 @@ graph:
     mode: all
     sources: [knowledge, function, builtin]
   agents:
-    mode: all
-    exclude:
-      - architect
-  maxIterations: 10
+    mode: none
+  maxIterations: 100
   timeout: 300000
 
 output:
@@ -44,10 +42,7 @@ output:
 config:
   onError: stop
 
-metadata:
-  category: example
-  tags:
-    - demo
-    - react
-    - autonomous
-    - tool-discovery
+sampleQuestions:
+  - "Do we have any security incidents affecting our transport communication systems?"
+  - "Cross-reference our OT infrastructure with recent CVEs and tell me what's at risk"
+  - "Who are the top performers in the sales team based on their call transcripts?"

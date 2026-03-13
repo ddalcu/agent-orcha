@@ -1,4 +1,6 @@
 import * as fs from 'fs/promises';
+// @ts-ignore - pdf-parse v1 has no type declarations
+import pdfParse from 'pdf-parse';
 import type { Document } from '../../types/llm-types.ts';
 
 // --- Reusable content parsers (used by both file loaders and WebLoader) ---
@@ -144,7 +146,6 @@ export class CSVLoader {
 
 /**
  * PDF file loader. Uses pdf-parse for extraction.
- * pdf-parse must be installed separately: npm install pdf-parse
  */
 export class PDFLoader {
   private filePath: string;
@@ -153,26 +154,15 @@ export class PDFLoader {
   }
 
   async load(): Promise<Document[]> {
-    let pdfParse: any;
-    try {
-      // @ts-ignore - pdf-parse is an optional runtime dependency
-      pdfParse = (await import('pdf-parse')).default;
-    } catch {
-      throw new Error(
-        'pdf-parse is required for PDF loading. Install it with: npm install pdf-parse'
-      );
-    }
-
     const buffer = await fs.readFile(this.filePath);
-    const data = await pdfParse(buffer);
+    const result = await pdfParse(buffer);
 
-    return [({
-      pageContent: data.text,
+    return [{
+      pageContent: result?.text || '(No text content found in PDF)',
       metadata: {
         source: this.filePath,
-        pdf_pages: data.numpages,
-        pdf_info: data.info,
+        pdf_pages: result.pages?.length ?? 0,
       },
-    })];
+    }];
   }
 }

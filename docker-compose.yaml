@@ -11,6 +11,8 @@ services:
       BROWSER_SANDBOX: "true"
       AUTH_PASSWORD: ${AUTH_PASSWORD:-}
     shm_size: "2gb"
+    cap_add:
+      - SYS_ADMIN
     develop:
       watch:
         - action: sync

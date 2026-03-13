@@ -7,7 +7,11 @@ Agent Orcha is a declarative framework designed to build, manage, and scale mult
 **[Documentation](https://agentorcha.com)** | **[NPM Package](https://www.npmjs.com/package/agent-orcha)** | **[Docker Hub](https://hub.docker.com/r/ddalcu/agent-orcha)**
 
 ```bash
+# With Docker (cloud LLM providers)
 docker run -p 3000:3000 -v ./my-workspace:/data -e AUTH_PASSWORD=your-secret-password ddalcu/agent-orcha start
+
+# With npx (local inference — uses your GPU / Apple Silicon directly)
+npx agent-orcha init my-workspace && cd my-workspace && npx agent-orcha start
 ```
 
 ## Why Agent Orcha?
@@ -38,10 +42,10 @@ Built-in web dashboard at `http://localhost:3000` with agent testing, knowledge 
 - **Agents** — Browse, invoke, stream responses, manage sessions
 - **Knowledge** — Browse, search, view entities and graph structure
 - **MCP** — Browse servers, view and call tools
-- **Workflows** — Execute step-based and ReAct workflows with streaming
 - **Skills** — Browse and inspect skills
 - **Monitor** — Real-time LLM call logs, ReAct loop metrics, and activity feed
 - **IDE** — File editor with syntax highlighting, hot-reload, and **visual agent composer** for `.agent.yaml` files
+- **Local LLM** — Download, activate, and manage local model engines (llama-cpp, MLX, Ollama, LM Studio)
 
 ## Architecture
 
@@ -68,15 +72,9 @@ Agent Orcha can be used in multiple ways:
 
 ## Quick Start
 
-### Docker
+### CLI (Recommended for Local Inference)
 
-```bash
-docker run -p 3000:3000 -e AUTH_PASSWORD=mypass -v ./my-project:/data ddalcu/agent-orcha
-```
-
-An empty workspace is automatically scaffolded with example agents, workflows, and configurations.
-
-### CLI
+Run directly on your machine to take advantage of bare metal GPU / Apple Silicon performance for local models (llama-cpp, MLX, Ollama, LM Studio).
 
 ```bash
 # Initialize a project
@@ -86,6 +84,16 @@ cd my-project
 # Start the server
 npx agent-orcha start
 ```
+
+### Docker (Recommended with External LLM Providers)
+
+Best when using cloud LLM providers (OpenAI, Anthropic, Gemini) or connecting to an LLM server running on the host. Docker does not have direct access to the host GPU, so local inference engines will not be available inside the container.
+
+```bash
+docker run -p 3000:3000 -e AUTH_PASSWORD=mypass -v ./my-project:/data ddalcu/agent-orcha
+```
+
+An empty workspace is automatically scaffolded with example agents, workflows, and configurations.
 
 
 ### Library
@@ -108,35 +116,59 @@ await orchestrator.close();
 
 ### LLM Configuration (llm.json)
 
-All LLM and embedding configs are defined in `llm.json`. Agents and knowledge stores reference these by name.
+All LLM and embedding configs are defined in `llm.json`. Agents and knowledge stores reference configs by name. The `default` key is a pointer to the active engine.
 
 ```json
 {
   "version": "1.0",
   "models": {
-    "default": {
-      "baseUrl": "http://localhost:1234/v1",
-      "apiKey": "${OPENAI_API_KEY}",
-      "model": "qwen/qwen3-4b-2507",
-      "temperature": 0.7,
-      "thinkingBudget": 10000
+    "default": "llama-cpp",
+    "llama-cpp": {
+      "provider": "local",
+      "engine": "llama-cpp",
+      "model": "Qwen3.5-4B-IQ4_NL",
+      "reasoningBudget": 0,
+      "contextSize": 32768
+    },
+    "ollama": {
+      "provider": "local",
+      "engine": "ollama",
+      "baseUrl": "http://localhost:11434/v1",
+      "model": "qwen3.5:latest",
+      "reasoningBudget": 0
+    },
+    "anthropic": {
+      "provider": "anthropic",
+      "apiKey": "${ANTHROPIC_API_KEY}",
+      "model": "claude-sonnet-4-6"
     }
   },
   "embeddings": {
-    "default": {
-      "baseUrl": "http://localhost:1234/v1",
+    "default": "llama-cpp",
+    "llama-cpp": {
+      "provider": "local",
+      "engine": "llama-cpp",
+      "model": "nomic-embed-text-v1.5.Q4_K_M"
+    },
+    "openai": {
+      "provider": "openai",
       "apiKey": "${OPENAI_API_KEY}",
-      "model": "text-embedding-nomic-embed-text-v1.5",
-      "eosToken": " "
+      "model": "text-embedding-3-small"
     }
+  },
+  "engineUrls": {
+    "lmstudio": "http://192.168.2.61:1234"
   }
 }
 ```
 
-All providers are treated as OpenAI-compatible APIs. For local inference:
-- **LM Studio**: `baseUrl: "http://localhost:1234/v1"`
-- **Ollama**: `baseUrl: "http://localhost:11434/v1"`
-- **OpenAI**: Omit `baseUrl` (uses default endpoint)
+- **`default`** — Pointer string (e.g., `"llama-cpp"`) that selects the active config
+- **`engine`** — Local inference engine: `llama-cpp`, `mlx-serve`, `ollama`, `lmstudio`
+- **`provider`** — `local`, `openai`, `anthropic`, or `gemini`
+- **`contextSize`** — Context window size (local engines)
+- **`reasoningBudget`** / **`thinkingBudget`** — Token budget for reasoning (0 to disable)
+- **`engineUrls`** — Base URLs for engines running on remote hosts
+- **`${ENV_VAR}`** — Environment variable substitution (works in all config files)
 
 ### Environment Variables
 
@@ -146,7 +178,14 @@ HOST=0.0.0.0                          # Server host
 WORKSPACE=/path/to/project             # Base directory for config files
 AUTH_PASSWORD=your-secret-password     # Password auth for all API routes and Studio
 CORS_ORIGIN=https://your-frontend.com # Cross-origin policy (default: same-origin)
+LOG_LEVEL=debug                        # Pino log level (default: info)
+EXPERIMENTAL_VISION=false              # Enable vision browser tools
+BROWSER_SANDBOX=true                   # Enable browser sandbox (Docker)
+BROWSER_VERBOSE=false                  # Show Chromium logs
+MLX_MANUAL=false                       # Skip auto MLX binary download
 ```
+
+All config files (`.yaml`, `.json`, `.env`) support `${ENV_VAR}` substitution for secrets and environment-specific values.
 
 ## Agents
 
@@ -194,10 +233,11 @@ publish: true              # Standalone chat at /chat/researcher (optional)
 | `llm` | LLM config reference — string or `{ name, temperature }` |
 | `prompt.system` | System message/instructions |
 | `prompt.inputVariables` | Variables to interpolate in the prompt |
-| `tools` | Tool references: `mcp:`, `knowledge:`, `function:`, `builtin:`, `sandbox:`, `project:` |
+| `tools` | Tool references: `mcp:`, `knowledge:`, `function:`, `builtin:`, `sandbox:`, `workspace:` |
 | `output.format` | `text` or `structured` |
 | `output.schema` | JSON Schema (required when format is `structured`) |
 | `maxIterations` | Override default 200 iteration limit |
+| `sampleQuestions` | Example prompts shown in Studio UI |
 | `skills` | Skills to attach (list or `{ mode: all }`) |
 | `memory` | Enable persistent memory |
 | `integrations` | External integrations (collabnook, email) |
@@ -293,6 +333,11 @@ graph:
     mode: all
   maxIterations: 10
 
+chatOutputFormat: text            # Controls chat UI rendering (text or markdown)
+sampleQuestions:                   # Example prompts shown in Studio UI
+  - "Research quantum computing"
+  - "Analyze market trends in AI"
+
 output:
   analysis: "{{state.messages[-1].content}}"
 ```
@@ -309,12 +354,18 @@ source:
   path: knowledge/sample-data
   pattern: "*.txt"
 
+loader:
+  type: pdf                       # Optional — defaults to html (web) or text (file/directory)
+
 splitter:
   type: character
   chunkSize: 1000
   chunkOverlap: 200
 
 embedding: default
+
+reindex:
+  schedule: "0 */6 * * *"         # Cron expression for automatic periodic reindexing
 
 search:
   defaultK: 4
@@ -325,7 +376,9 @@ search:
 
 - **directory/file** — Local files with glob patterns
 - **database** — PostgreSQL/MySQL via SQL queries
-- **web** — HTML scraping, JSON APIs (with `jsonPath`), raw text
+- **web** — HTML scraping, JSON APIs (with `jsonPath` for nested arrays), raw text
+
+**Loader types:** `text`, `pdf`, `csv`, `json`, `markdown`, `html`. The `loader` field is optional — defaults to `html` for web sources, `text` for file/directory. Web sources also support `jsonPath` (dot-notation, e.g., `data.results`) to extract a nested array from the JSON response before parsing.
 
 ### Knowledge Graph (Direct Mapping)
 
@@ -410,12 +463,13 @@ Reference in agents with `mcp:fetch`.
 | `sandbox:web_fetch` | URL fetching with SSRF protection |
 | `sandbox:web_search` | Web search |
 | `sandbox:browser_*` | CDP-based Chromium control (navigate, observe, click, type, screenshot, evaluate) |
+| `sandbox:vision_*` | Pixel-coordinate browser control for vision LLMs (navigate, click, type, scroll, key, drag, screenshot) |
 | `sandbox:file_*` | Sandboxed file tools (read, write, edit, insert, replace_lines) scoped to `/tmp` |
-| `project:read/write/delete` | Workspace file access |
+| `workspace:read/write/delete/list/list_resources/diagnostics` | Workspace file and resource access |
 
 ### Vision Browser (Experimental)
 
-Pixel-coordinate browser control for vision LLMs. Enable with `EXPERIMENTAL_VISION=true`:
+Pixel-coordinate browser control for vision LLMs. Requires `EXPERIMENTAL_VISION=true` environment variable to enable:
 
 | Tool | Description |
 |------|-------------|
@@ -447,6 +501,10 @@ Full API documentation is available at [agentorcha.com](https://agentorcha.com).
 | Skills | `/api/skills/*` | List, inspect |
 | Tasks | `/api/tasks/*` | Submit, track, cancel |
 | Files | `/api/files/*` | File tree, read, write |
+| Local LLM | `/api/local-llm/*` | Engine management, model download/activation |
+| Graph | `/api/graph/*` | Multi-store graph aggregation |
+| Logs | `/api/logs/*` | Real-time log streaming |
+| VNC | `/api/vnc/*` | Browser sandbox VNC status |
 
 ## Directory Structure
 

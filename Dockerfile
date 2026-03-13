@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq python3 python3-pip python3-venv \
     # System & File Tools
     git zip unzip tar file htop lsof procps cron \
+    # GPU (Vulkan loader for NVIDIA Container Toolkit)
+    libvulkan1 \
     # Browser Sandbox
     chromium xvfb x11vnc novnc websockify fonts-liberation fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*

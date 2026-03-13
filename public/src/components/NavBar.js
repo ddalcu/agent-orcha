@@ -6,14 +6,13 @@ export class NavBar extends Component {
     constructor() {
         super();
         this.tabs = [
-            { id: 'agents', label: 'Agents', icon: 'fa-robot', color: 'blue' },
-            { id: 'workflows', label: 'Workflows', icon: 'fa-project-diagram', color: 'purple' },
-            { id: 'knowledge', label: 'Knowledge', icon: 'fa-brain', color: 'orange' },
-            { id: 'graph', label: 'Graph', icon: 'fa-network-wired', color: 'pink' },
-            { id: 'mcp', label: 'MCP', icon: 'fa-server', color: 'cyan' },
-            { id: 'skills', label: 'Skills', icon: 'fa-wand-magic-sparkles', color: 'teal' },
-            { id: 'monitor', label: 'Monitor', icon: 'fa-tasks', color: 'indigo' },
-            { id: 'ide', label: 'IDE', icon: 'fa-code', color: 'green' }
+            { id: 'agents', label: 'Agents', icon: 'fa-robot' },
+            { id: 'knowledge', label: 'Knowledge', icon: 'fa-brain' },
+            { id: 'graph', label: 'Graph', icon: 'fa-network-wired' },
+            { id: 'mcp', label: 'MCP', icon: 'fa-server' },
+            { id: 'monitor', label: 'Monitor', icon: 'fa-tasks' },
+            { id: 'llm', label: 'LLM', icon: 'fa-microchip' },
+            { id: 'ide', label: 'IDE', icon: 'fa-code' }
         ];
     }
 
@@ -27,41 +26,32 @@ export class NavBar extends Component {
             });
         });
 
-        // Sync visual state when tab changes externally (browser back/forward)
         store.addEventListener('state-change', (e) => {
             if (e.detail.key === 'activeTab') {
                 this.updateActiveState(e.detail.value);
             }
         });
 
-        // Initialize state
         this.updateActiveState(store.get('activeTab'));
     }
 
     updateActiveState(activeId) {
         this.querySelectorAll('.tab-btn').forEach(btn => {
-            const tabId = btn.dataset.tab;
-            const color = btn.dataset.color;
-            const isActive = tabId === activeId;
-
-            if (isActive) {
-                btn.classList.add(`border-${color}-500`, `text-${color}-400`);
-                btn.classList.remove('border-transparent', 'text-gray-400', 'hover:text-gray-300');
-            } else {
-                btn.classList.remove(`border-${color}-500`, `text-${color}-400`);
-                btn.classList.add('border-transparent', 'text-gray-400', 'hover:text-gray-300');
-            }
+            btn.classList.toggle('active', btn.dataset.tab === activeId);
         });
     }
 
     template() {
         return `
-            <div class="border-b border-dark-border mb-6">
-                <nav class="flex space-x-8 overflow-x-auto">
+            <div class="flex flex-col h-full">
+                <div class="sidebar-brand">
+                    <img src="/assets/logo.png" alt="Agent Orcha" class="sidebar-logo">
+                    <span>Agent Orcha</span>
+                </div>
+                <nav class="flex-1 overflow-y-auto">
                     ${this.tabs.map(tab => `
-                        <button class="tab-btn group flex items-center gap-2 border-b-2 border-transparent text-gray-400 hover:text-gray-300 pb-3 px-1 font-medium transition-colors"
-                            data-tab="${tab.id}" data-color="${tab.color}">
-                            <i class="fas ${tab.icon} text-sm group-hover:scale-110 transition-transform"></i>
+                        <button class="tab-btn" data-tab="${tab.id}">
+                            <i class="fas ${tab.icon} tab-icon"></i>
                             <span>${tab.label}</span>
                         </button>
                     `).join('')}

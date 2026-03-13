@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Release 0.0.8
+
+### Added
+
+- **Engine Registry** — Pluggable engine abstraction supporting four inference backends: llama-cpp, mlx-serve, Ollama, and LM Studio. Each engine has standardized lifecycle management, model loading/unloading, and status reporting. Switch between engines from the Studio UI or API.
+
+- **MLX-Serve Engine** — Apple Silicon native inference via Metal. Models in MLX format run alongside GGUF models. Auto-downloads mlx-serve binaries, with update checking and HuggingFace MLX model browsing.
+
+- **LLM Config Pointer System** — `llm.json` now supports string pointers (e.g., `"default": "openai"`) for fast provider switching. New `engine` field identifies which inference backend to use. Auto-migrates old format on first load.
+
+- **LLM Configuration API** — Full CRUD for `llm.json` via REST with redacted API keys and env var detection. Manage models and embeddings entirely from the browser.
+
+- **Thinking/Reasoning for Local Models** — `reasoningBudget` field enables chain-of-thought for supported models (QwQ, DeepSeek-R1). Thinking content streams as SSE events with toggle and budget controls in the UI.
+
+- **PDF Knowledge Store Support** — PDF loader for knowledge stores. New `patient-records` template with deidentified healthcare PDFs.
+
+- **Workflow Enhancements** — `chatOutputFormat` (`json` | `text`) controls output rendering. `sampleQuestions` field for suggested prompts. Resume endpoint with SSE streaming for interrupted ReAct workflows. Parallel tool execution in workflows.
+
+- **Studio Overhaul** — New Local LLM tab with engine management, model grids, and VRAM monitoring. Workflows integrated into AgentsView. Unified CSS with custom properties (Tailwind removed). Logo added to NavBar.
+
+- **New Templates** — `actor` agent (comedy impersonation chatbot), `team-chat` workflow (multi-agent ReAct coordinator)
+
+- **E2E Test Suite** — Playwright-based tests covering all four engines, model activation, streaming, and configuration.
+
+### Changed
+
+- **Tool Error Handling** — Descriptive validation errors replace raw Zod exceptions, helping LLMs self-correct. Malformed JSON arguments return the raw text for the model to fix.
+- **Local LLM Defaults** — Context sizing capped at 32K using 50% of available RAM. Default `maxTokens: 4096` for local models. Single-slot mode (`--parallel 1`) for predictable memory.
+- **Embedding Improvements** — Batch size increased to 128, with adaptive halving on VRAM errors. Dynamic port allocation via engine registry.
+- **Function Parameter Coercion** — Automatic type coercion for function parameters, so LLMs passing numbers as strings work correctly.
+- **Ollama Context Passthrough** — Configured context size now correctly forwarded to Ollama via `num_ctx`.
+- **IDE** — Visual/source mode switching no longer triggers false dirty state.
+- **Template `llm.json`** — Pre-configured entries for all engines and providers with `default` as a pointer.
+
+### Removed
+
+- Monolithic `llama-provider.ts` replaced by engine registry and individual engine classes.
+
+### Dependencies
+
+- **Added:** `pdf-parse`, `@playwright/test`
+
 ## Release 0.0.7
 
 ### Added

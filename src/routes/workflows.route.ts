@@ -8,6 +8,11 @@ interface RunBody {
   input: Record<string, unknown>;
 }
 
+interface ResumeBody {
+  threadId: string;
+  answer: string;
+}
+
 export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/', async () => {
     const workflows = fastify.orchestrator.workflows.list();
@@ -16,8 +21,10 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
       description: workflow.description,
       version: workflow.version,
       type: workflow.type || 'steps',
+      chatOutputFormat: workflow.chatOutputFormat || 'json',
       steps: workflow.type === 'react' ? 0 : workflow.steps.length,
       inputSchema: workflow.input.schema,
+      sampleQuestions: workflow.sampleQuestions,
     }));
   });
 
@@ -71,6 +78,9 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
       reply.raw.setHeader('Cache-Control', 'no-cache');
       reply.raw.setHeader('Connection', 'keep-alive');
 
+      // Send task ID as first event so the client can cancel via the tasks API
+      reply.raw.write(`data: ${JSON.stringify({ type: 'task_id', taskId: task.id })}\n\n`);
+
       try {
         const stream = fastify.orchestrator.streamWorkflow(name, input);
 
@@ -84,6 +94,33 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         taskManager.reject(task.id, error);
+        reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: message })}\n\n`);
+        reply.raw.end();
+      }
+    }
+  );
+
+  fastify.post<{ Params: WorkflowParams; Body: ResumeBody }>(
+    '/:name/resume',
+    async (request, reply) => {
+      const { name } = request.params;
+      const { threadId, answer } = request.body;
+
+      reply.raw.setHeader('Content-Type', 'text/event-stream');
+      reply.raw.setHeader('Cache-Control', 'no-cache');
+      reply.raw.setHeader('Connection', 'keep-alive');
+
+      try {
+        const stream = fastify.orchestrator.streamResumeReactWorkflow(name, threadId, answer);
+
+        for await (const update of stream) {
+          reply.raw.write(`data: ${JSON.stringify(update)}\n\n`);
+        }
+
+        reply.raw.write('data: [DONE]\n\n');
+        reply.raw.end();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: message })}\n\n`);
         reply.raw.end();
       }

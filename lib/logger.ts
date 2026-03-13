@@ -1,4 +1,6 @@
 import pino from 'pino';
+import { Writable } from 'stream';
+import { isSea } from './sea/bootstrap.ts';
 
 export interface LogEntry {
   level: string;
@@ -7,13 +9,16 @@ export interface LogEntry {
   component?: string;
 }
 
+type LogSubscriber = (entry: LogEntry) => void;
+
 class LogBuffer {
   private buffer: LogEntry[];
   private maxSize: number;
   private index = 0;
   private full = false;
+  private subscribers: Set<LogSubscriber> = new Set();
 
-  constructor(maxSize = 200) {
+  constructor(maxSize = 500) {
     this.maxSize = maxSize;
     this.buffer = new Array(maxSize);
   }
@@ -22,6 +27,7 @@ class LogBuffer {
     this.buffer[this.index] = entry;
     this.index = (this.index + 1) % this.maxSize;
     if (this.index === 0) this.full = true;
+    for (const cb of this.subscribers) cb(entry);
   }
 
   getEntries(limit?: number): LogEntry[] {
@@ -30,12 +36,65 @@ class LogBuffer {
       : this.buffer.slice(0, this.index);
     return limit ? entries.slice(-limit) : entries;
   }
+
+  subscribe(cb: LogSubscriber): void {
+    this.subscribers.add(cb);
+  }
+
+  unsubscribe(cb: LogSubscriber): void {
+    this.subscribers.delete(cb);
+  }
 }
 
-const logBuffer = new LogBuffer(200);
+const logBuffer = new LogBuffer(500);
 
 export function getRecentLogs(limit?: number): LogEntry[] {
   return logBuffer.getEntries(limit);
+}
+
+export function subscribeToLogs(cb: (entry: LogEntry) => void): void {
+  logBuffer.subscribe(cb);
+}
+
+export function unsubscribeFromLogs(cb: (entry: LogEntry) => void): void {
+  logBuffer.unsubscribe(cb);
+}
+
+// ANSI color codes for log levels
+const LEVEL_COLORS: Record<number, string> = {
+  10: '\x1b[90m',   // trace — gray
+  20: '\x1b[36m',   // debug — cyan
+  30: '\x1b[32m',   // info  — green
+  40: '\x1b[33m',   // warn  — yellow
+  50: '\x1b[31m',   // error — red
+  60: '\x1b[35m',   // fatal — magenta
+};
+const LEVEL_LABELS: Record<number, string> = {
+  10: 'TRACE', 20: 'DEBUG', 30: 'INFO', 40: 'WARN', 50: 'ERROR', 60: 'FATAL',
+};
+const RESET = '\x1b[0m';
+
+/**
+ * Lightweight pino destination that formats JSON log lines with colors.
+ * Runs in-process (no worker threads) so it works inside SEA binaries.
+ */
+function createPrettyDestination(): Writable {
+  return new Writable({
+    write(chunk, _encoding, callback) {
+      try {
+        const obj = JSON.parse(chunk.toString());
+        const color = LEVEL_COLORS[obj.level] || '';
+        const label = LEVEL_LABELS[obj.level] || 'LOG';
+        const time = obj.time ? new Date(obj.time).toLocaleTimeString('en-GB', { hour12: false }) : '';
+        const comp = obj.component ? `${obj.component} ` : '';
+        const msg = obj.msg || '';
+        process.stdout.write(`${color}${time} ${label.padEnd(5)}${RESET} ${comp}${msg}\n`);
+      } catch {
+        process.stdout.write(chunk);
+      }
+      callback();
+    },
+  });
 }
 
 /**
@@ -44,9 +103,11 @@ export function getRecentLogs(limit?: number): LogEntry[] {
 export function getPinoConfig() {
   const logLevel = process.env.LOG_LEVEL || 'debug';
   const isDevelopment = process.env.NODE_ENV !== 'production';
+  // pino-pretty uses worker threads with dynamic require() — not available in SEA binaries
+  const usePretty = isDevelopment && !isSea();
   return {
     level: logLevel,
-    transport: isDevelopment
+    transport: usePretty
       ? {
           target: 'pino-pretty',
           options: {
@@ -61,9 +122,14 @@ export function getPinoConfig() {
 }
 
 /**
- * Create a pino logger instance
+ * Create a pino logger instance.
+ * In SEA mode, uses an in-process pretty formatter instead of raw JSON.
  */
 function createPinoLogger() {
+  if (isSea()) {
+    const logLevel = process.env.LOG_LEVEL || 'debug';
+    return pino({ level: logLevel }, createPrettyDestination());
+  }
   return pino(getPinoConfig());
 }
 
@@ -72,7 +138,7 @@ export const pinoLogger = createPinoLogger();
 
 /**
  * Create a wrapper that accepts console-like API and converts to pino API.
- * Warn/error/fatal levels are also captured in the in-memory ring buffer.
+ * All levels are captured in the in-memory ring buffer for the log viewer.
  */
 function createLoggerWrapper(pinoInstance: pino.Logger, component?: string) {
   const capture = (level: string, message: string) => {
@@ -86,6 +152,7 @@ function createLoggerWrapper(pinoInstance: pino.Logger, component?: string) {
 
   return {
     info: (message: string, ...args: unknown[]) => {
+      capture('info', message);
       if (args.length > 0) {
         pinoInstance.info({ data: args }, message);
       } else {
@@ -114,6 +181,7 @@ function createLoggerWrapper(pinoInstance: pino.Logger, component?: string) {
       }
     },
     debug: (message: string, ...args: unknown[]) => {
+      capture('debug', message);
       if (args.length > 0) {
         pinoInstance.debug({ data: args }, message);
       } else {
@@ -121,6 +189,7 @@ function createLoggerWrapper(pinoInstance: pino.Logger, component?: string) {
       }
     },
     trace: (message: string, ...args: unknown[]) => {
+      capture('trace', message);
       if (args.length > 0) {
         pinoInstance.trace({ data: args }, message);
       } else {

@@ -3,7 +3,6 @@ description: Design and build agents, workflows, knowledge bases, and other ORCH
 version: 1.0.0
 llm:
   name: default
-  temperature: 0.3
 prompt:
   system: |
     You are the ORCHA Architect. Users come to you when they need new agents,

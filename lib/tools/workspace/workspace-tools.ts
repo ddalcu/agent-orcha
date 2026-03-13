@@ -116,11 +116,12 @@ function createWorkspaceWriteTool(deps: WorkspaceToolDeps): StructuredTool {
     {
       name: 'workspace_write',
       description:
-        'Create or overwrite a file in the ORCHA workspace. Automatically creates parent directories ' +
-        'and triggers hot-reload for recognized resource types (.agent.yaml, .workflow.yaml, etc.).',
+        'Create or overwrite a file in the ORCHA workspace. Both filePath and content are REQUIRED. ' +
+        'Example: filePath="agents/my-bot.agent.yaml", content="name: my-bot\\ndescription: ...". ' +
+        'Automatically creates parent directories and hot-reloads recognized resource types.',
       schema: z.object({
-        filePath: z.string().describe('Relative path from workspace root (e.g. "agents/weather-bot.agent.yaml")'),
-        content: z.string().describe('Full file content to write'),
+        filePath: z.string().describe('REQUIRED. Relative path, e.g. "agents/my-bot.agent.yaml"'),
+        content: z.string().describe('REQUIRED. The complete file content to write'),
       }),
     },
   );

@@ -115,6 +115,40 @@ export class PageReadiness {
     await this.cdp.send('Network.enable');
     await this.cdp.send('DOM.enable');
 
+    // Stealth: inject anti-detection patches before any page JS runs.
+    // Runs on every new document (navigations, iframes).
+    await this.cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `
+        // Hide webdriver flag
+        Object.defineProperty(navigator, 'webdriver', { get: () => false });
+
+        // Normal Chrome plugins array (headless has length 0)
+        Object.defineProperty(navigator, 'plugins', {
+          get: () => [1, 2, 3, 4, 5],
+        });
+
+        // Normal languages
+        Object.defineProperty(navigator, 'languages', {
+          get: () => ['en-US', 'en'],
+        });
+
+        // Chrome runtime object (missing in automation mode)
+        if (!window.chrome) window.chrome = {};
+        if (!window.chrome.runtime) window.chrome.runtime = {};
+
+        // Spoof permissions query for notifications
+        const origQuery = window.Permissions?.prototype?.query;
+        if (origQuery) {
+          window.Permissions.prototype.query = function(params) {
+            if (params.name === 'notifications') {
+              return Promise.resolve({ state: 'denied', onchange: null });
+            }
+            return origQuery.call(this, params);
+          };
+        }
+      `,
+    });
+
     this.unsubscribers.push(
       this.cdp.on('Page.loadEventFired', () => {
         this.state.loadFired = true;

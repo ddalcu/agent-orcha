@@ -1,11 +1,7 @@
 {
   "version": "1.0",
   "models": {
-    "default": {
-      "provider": "openai",
-      "model": "gpt-4o-mini",
-      "temperature": 0.3
-    },
+    "default": "openai",
     "fast": {
       "provider": "openai",
       "model": "gpt-3.5-turbo",
@@ -13,31 +9,37 @@
     },
     "gemini": {
       "provider": "gemini",
+      "apiKey": "test-gemini-key-not-real",
       "model": "gemini-2.0-flash",
-      "temperature": 0.5,
-      "apiKey": "test-gemini-key-not-real"
+      "temperature": 0.5
     },
     "claude": {
       "provider": "anthropic",
+      "apiKey": "test-anthropic-key-not-real",
       "model": "claude-sonnet-4-20250514",
-      "maxTokens": 4096,
       "temperature": 0.3,
-      "apiKey": "test-anthropic-key-not-real"
+      "maxTokens": 4096
     },
     "local": {
       "provider": "local",
-      "model": "llama3",
-      "baseUrl": "http://localhost:11434/v1"
+      "baseUrl": "http://localhost:11434/v1",
+      "model": "llama3"
     },
     "openai-custom": {
       "provider": "openai",
-      "model": "gpt-4o",
       "baseUrl": "http://localhost:8080/v1",
+      "model": "gpt-4o",
       "maxTokens": 2048
+    },
+    "openai": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "temperature": 0.3
     }
   },
   "embeddings": {
-    "default": {
+    "default": "openai",
+    "openai": {
       "provider": "openai",
       "model": "text-embedding-3-small"
     }

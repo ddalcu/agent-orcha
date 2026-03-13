@@ -2,9 +2,15 @@ import dotenv from 'dotenv';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
+import { isSea, getDefaultWorkspace, extractTemplates } from '../../../lib/sea/bootstrap.ts';
+import { openAppWindow } from '../../../lib/sea/app-window.ts';
 
-// Load .env from the project root (cwd), which is the CLI convention
-const cliEnvPath = path.join(process.cwd(), '.env');
+const workspaceRoot = isSea()
+  ? (process.env.WORKSPACE ? path.resolve(process.env.WORKSPACE) : getDefaultWorkspace())
+  : process.cwd();
+
+// Load .env from the workspace root
+const cliEnvPath = path.join(workspaceRoot, '.env');
 if (fsSync.existsSync(cliEnvPath)) {
   dotenv.config({ path: cliEnvPath });
 } else {
@@ -68,7 +74,13 @@ async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> 
 }
 
 export async function startCommand(_args: string[]): Promise<void> {
-  const workspaceRoot = process.cwd();
+  // In SEA mode, scaffold workspace on first run
+  if (isSea() && !fsSync.existsSync(path.join(workspaceRoot, 'agents'))) {
+    console.log(`\nCreating workspace at ${workspaceRoot}...`);
+    fsSync.mkdirSync(workspaceRoot, { recursive: true });
+    extractTemplates(workspaceRoot);
+    console.log('Workspace created with example configuration.\n');
+  }
 
   console.log(`
                 ⠀⠀⠀⠀⠀⠀⢀⣀⣀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -119,7 +131,13 @@ export async function startCommand(_args: string[]): Promise<void> {
 
   const server = await createServer(orchestrator);
 
+  let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
+    if (shuttingDown) {
+      logger.info('\nForce exit');
+      process.exit(1);
+    }
+    shuttingDown = true;
     logger.info('\nShutting down...');
     await server.close();
     await orchestrator.close();
@@ -131,8 +149,14 @@ export async function startCommand(_args: string[]): Promise<void> {
 
   try {
     await server.listen({ port, host });
-    logger.info(`\nServer running at http://localhost:${port}`);
-    logger.info(`Open http://localhost:${port} in your browser`);
+    const url = `http://localhost:${port}`;
+    logger.info(`\nServer running at ${url}`);
+
+    if (isSea() && !_args.includes('--no-window')) {
+      openAppWindow(url);
+    } else {
+      logger.info(`Open ${url} in your browser`);
+    }
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);

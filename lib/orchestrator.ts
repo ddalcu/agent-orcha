@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { existsSync } from 'node:fs';
 import * as path from 'path';
 import { AgentLoader } from './agents/agent-loader.ts';
 import { AgentExecutor } from './agents/agent-executor.ts';
@@ -13,7 +14,8 @@ import { SkillLoader, type Skill } from './skills/index.ts';
 import { ToolRegistry } from './tools/tool-registry.ts';
 import { ToolDiscovery } from './tools/tool-discovery.ts';
 import { MCPConfigSchema } from './mcp/types.ts';
-import { loadLLMConfig, listModelConfigs } from './llm/llm-config.ts';
+import { loadLLMConfig, getLLMConfig, listModelConfigs, getModelConfig, getEmbeddingConfig, resolveApiKey } from './llm/llm-config.ts';
+import { detectProvider } from './llm/provider-detector.ts';
 import { LLMFactory } from './llm/llm-factory.ts';
 import { resolveAgentLLMRef } from './llm/types.ts';
 import { ConversationStore } from './memory/conversation-store.ts';
@@ -23,11 +25,14 @@ import { VmExecutor } from './sandbox/vm-executor.ts';
 import { createSandboxExecTool } from './sandbox/sandbox-exec.ts';
 import { createSandboxWebFetchTool, createSandboxWebSearchTool } from './sandbox/sandbox-web.ts';
 import { createSandboxShellTool } from './sandbox/sandbox-shell.ts';
+import { SandboxContainer } from './sandbox/sandbox-container.ts';
 import { createFileTools } from './sandbox/sandbox-file.ts';
 import { createBrowserTools } from './sandbox/sandbox-browser.ts';
 import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
 import { substituteEnvVars } from './utils/env-substitution.ts';
+import { engineRegistry } from './local-llm/engine-registry.ts';
+import { ModelManager } from './local-llm/model-manager.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
 import type { IntegrationAccessor } from './integrations/types.ts';
@@ -80,6 +85,7 @@ export class Orchestrator {
   private memoryManager: MemoryManager;
   private integrationManager: IntegrationManager | null = null;
   private triggerManager: TriggerManager | null = null;
+  private sandboxContainer: SandboxContainer | null = null;
 
   private initialized = false;
 
@@ -117,6 +123,12 @@ export class Orchestrator {
     // Load LLM config first - required for agents and embeddings
     logger.info('[Orchestrator] Loading LLM config...');
     await loadLLMConfig(this.config.llmConfigPath);
+
+    // Kill any orphaned llama-server / mlx-serve processes from a previous run, then set base dir
+    engineRegistry.killAllOrphans();
+    engineRegistry.setBaseDir(this.config.workspaceRoot);
+
+    await this.checkLlmReadiness();
 
     await this.loadMCPConfig();
     await this.mcpClient.initialize();
@@ -166,6 +178,36 @@ export class Orchestrator {
     await this.integrationManager.start(this);
   }
 
+  private async checkLlmReadiness(): Promise<void> {
+    const issues: string[] = [];
+    const manager = new ModelManager(this.config.workspaceRoot);
+
+    const llmConfig = getLLMConfig();
+    const hasDefaultModel = llmConfig?.models['default'] !== undefined;
+    const hasDefaultEmb = llmConfig?.embeddings['default'] !== undefined;
+    const checks: [string, boolean, () => { model: string; baseUrl?: string; apiKey?: string }][] = [
+      ['Chat model', hasDefaultModel, () => getModelConfig('default')],
+      ['Embedding', hasDefaultEmb, () => getEmbeddingConfig('default')],
+    ];
+
+    for (const [label, hasDefault, getConfig] of checks) {
+      if (!hasDefault) { issues.push(`${label}: no default configured`); continue; }
+      const config = getConfig();
+      const provider = detectProvider(config);
+      if (provider === 'local' && !config.baseUrl) {
+        const filePath = await manager.findModelFile(config.model);
+        if (!filePath) issues.push(`${label}: model "${config.model}" not downloaded`);
+      } else if (provider !== 'local') {
+        const key = resolveApiKey(provider, config.apiKey);
+        if (!key) issues.push(`${label}: no API key for ${provider}`);
+      }
+    }
+
+    if (issues.length > 0) {
+      logger.warn(`[Orchestrator] LLM not ready — ${issues.join('; ')}. Open the Studio and go to the LLM tab to set up your models.`);
+    }
+  }
+
   private async loadMCPConfig(): Promise<void> {
     try {
       const content = await fs.readFile(this.config.mcpConfigPath, 'utf-8');
@@ -193,8 +235,48 @@ export class Orchestrator {
 
     if (this.sandboxConfig.enabled) {
       this.vmExecutor = new VmExecutor();
+
+      // When running locally (not in Docker), try to auto-launch the sandbox container
+      if (!this.isRunningInContainer()) {
+        await this.launchSandboxContainer();
+      }
     } else {
       this.vmExecutor = null;
+    }
+  }
+
+  private isRunningInContainer(): boolean {
+    if (existsSync('/.dockerenv')) return true;
+    if (existsSync('/run/.containerenv')) return true;
+    return process.env['BROWSER_SANDBOX'] === 'true';
+  }
+
+  private async launchSandboxContainer(): Promise<void> {
+    const container = new SandboxContainer();
+
+    if (!container.detectDocker()) {
+      logger.warn('');
+      logger.warn('╔════════════════════════════════════════════════════════════════╗');
+      logger.warn('║  SANDBOX: Docker not detected on this system                   ║');
+      logger.warn('║                                                                ║');
+      logger.warn('║  The following sandbox tools are NOT available:                ║');
+      logger.warn('║    - sandbox:shell (shell command execution)                   ║');
+      logger.warn('║    - sandbox:browser_* (web browser automation)                ║');
+      logger.warn('║    - sandbox:vision_* (vision browser automation)              ║');
+      logger.warn('║                                                                ║');
+      logger.warn('║  To enable these features, install Docker Desktop:             ║');
+      logger.warn('║    https://www.docker.com/products/docker-desktop              ║');
+      logger.warn('║                                                                ║');
+      logger.warn('║  Tools still available: sandbox:exec, sandbox:web_fetch,       ║');
+      logger.warn('║    sandbox:web_search, sandbox:file_*                          ║');
+      logger.warn('╚════════════════════════════════════════════════════════════════╝');
+      logger.warn('');
+      return;
+    }
+
+    const started = await container.start();
+    if (started) {
+      this.sandboxContainer = container;
     }
   }
 
@@ -208,7 +290,7 @@ export class Orchestrator {
     tools.set('exec', createSandboxExecTool(this.vmExecutor, this.sandboxConfig));
     tools.set('web_fetch', createSandboxWebFetchTool(this.sandboxConfig));
     tools.set('web_search', createSandboxWebSearchTool());
-    tools.set('shell', createSandboxShellTool(this.sandboxConfig));
+    tools.set('shell', createSandboxShellTool(this.sandboxConfig, this.sandboxContainer ?? undefined));
 
     const fileTools = createFileTools(this.sandboxConfig);
     for (const ft of fileTools) {
@@ -273,7 +355,12 @@ export class Orchestrator {
           }
         }
 
-        return { name: agent.name, llm: { name: llmName, exists: modelNames.includes(llmName) }, tools, skills };
+        // Check if the LLM name resolves to a concrete config (handles both direct names and pointer names like 'default')
+        let llmExists = modelNames.includes(llmName);
+        if (!llmExists) {
+          try { getModelConfig(llmName); llmExists = true; } catch { /* not found */ }
+        }
+        return { name: agent.name, llm: { name: llmName, exists: llmExists }, tools, skills };
       }),
     );
 
@@ -406,6 +493,10 @@ export class Orchestrator {
 
   get workspaceRoot(): string {
     return this.config.workspaceRoot;
+  }
+
+  get llmConfigPath(): string {
+    return this.config.llmConfigPath;
   }
 
   get memory(): MemoryAccessor {
@@ -786,6 +877,69 @@ export class Orchestrator {
     );
   }
 
+  async *streamResumeReactWorkflow(
+    name: string,
+    threadId: string,
+    answer: string
+  ): AsyncGenerator<{ type: 'status' | 'result'; data: unknown }, void, unknown> {
+    this.ensureInitialized();
+
+    const definition = this.workflowLoader.get(name);
+    if (!definition) {
+      throw new Error(`Workflow not found: ${name}`);
+    }
+
+    if (definition.type !== 'react') {
+      throw new Error(`Workflow "${name}" is not a ReAct workflow`);
+    }
+
+    const statusQueue: Array<{ type: 'status' | 'result'; data: unknown }> = [];
+    let resolveNext: ((value: void) => void) | null = null;
+    let isComplete = false;
+
+    const onStatus = (status: import('./workflows/types.ts').WorkflowStatus) => {
+      statusQueue.push({ type: 'status', data: status });
+      if (resolveNext) {
+        resolveNext();
+        resolveNext = null;
+      }
+    };
+
+    const executionPromise = this.reactWorkflowExecutor
+      .resumeWithAnswer(definition as ReactWorkflowDefinition, threadId, answer, onStatus)
+      .then((result) => {
+        isComplete = true;
+        statusQueue.push({ type: 'result', data: result });
+        if (resolveNext) {
+          resolveNext();
+          resolveNext = null;
+        }
+      })
+      .catch((error) => {
+        isComplete = true;
+        statusQueue.push({
+          type: 'result',
+          data: { error: error instanceof Error ? error.message : String(error) },
+        });
+        if (resolveNext) {
+          resolveNext();
+          resolveNext = null;
+        }
+      });
+
+    while (!isComplete || statusQueue.length > 0) {
+      if (statusQueue.length > 0) {
+        yield statusQueue.shift()!;
+      } else {
+        await new Promise<void>((resolve) => {
+          resolveNext = resolve;
+        });
+      }
+    }
+
+    await executionPromise;
+  }
+
   /**
    * Gets all active interrupts for a workflow.
    */
@@ -803,6 +957,9 @@ export class Orchestrator {
   }
 
   async close(): Promise<void> {
+    // Stop all local engine processes before anything else
+    await engineRegistry.unloadAll();
+
     if (this.triggerManager) {
       this.triggerManager.close();
     }
@@ -823,6 +980,9 @@ export class Orchestrator {
     }
     if (this.knowledgeStoreManager) {
       this.knowledgeStoreManager.close();
+    }
+    if (this.sandboxContainer) {
+      await this.sandboxContainer.stop();
     }
   }
 

@@ -1,6 +1,7 @@
 
 import { Component } from '../utils/Component.js';
 import { api } from '../services/ApiService.js';
+import { escapeHtml as sharedEscapeHtml } from '../utils/card.js';
 
 const STATUS_CONFIG = {
     submitted: { label: 'Submitted', color: 'gray', icon: 'fa-clock' },
@@ -77,8 +78,8 @@ export class MonitorView extends Component {
 
         if (!this.tasks.length) {
             container.innerHTML = `
-                <div class="text-gray-500 text-center py-12">
-                    <i class="fas fa-tasks text-4xl mb-4 block text-gray-600"></i>
+                <div class="empty-state">
+                    <i class="fas fa-tasks text-4xl mb-4 text-muted"></i>
                     <p class="text-lg mb-2">No tasks found</p>
                     <p class="text-sm">Submit a task via the API to see it here.</p>
                 </div>`;
@@ -92,22 +93,21 @@ export class MonitorView extends Component {
                     const isSelected = this.selectedTask?.id === task.id;
                     const elapsed = this.formatElapsed(task);
                     return `
-                        <div class="task-row ${isSelected ? `border-indigo-500 bg-indigo-500/10` : 'border-dark-border hover:border-indigo-500/50'} bg-dark-surface border rounded-lg p-3 cursor-pointer transition-colors"
-                             data-task-id="${task.id}">
+                        <div class="task-row card ${isSelected ? 'active' : ''}" data-task-id="${task.id}">
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-3 min-w-0">
-                                    <i class="fas ${cfg.icon} text-${cfg.color}-400 text-sm flex-shrink-0"></i>
+                                    <i class="fas ${cfg.icon} text-${cfg.color} text-sm flex-shrink-0"></i>
                                     <div class="min-w-0">
                                         <div class="flex items-center gap-2">
-                                            <span class="font-medium text-gray-200 truncate">${task.target}</span>
-                                            <span class="text-xs px-1.5 py-0.5 rounded ${kindBadgeClass(task.kind)}">${task.kind}</span>
+                                            <span class="font-medium text-primary truncate">${task.target}</span>
+                                            <span class="badge badge-${kindBadgeVariant(task.kind)}">${task.kind}</span>
                                         </div>
-                                        <div class="text-xs text-gray-500 mt-0.5 truncate">${task.id}</div>
+                                        <div class="text-xs text-muted mt-1 truncate">${task.id}</div>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-3 flex-shrink-0">
-                                    <span class="text-xs text-gray-500">${elapsed}</span>
-                                    <span class="text-xs px-2 py-0.5 rounded-full bg-${cfg.color}-500/20 text-${cfg.color}-400">${cfg.label}</span>
+                                    <span class="text-xs text-muted">${elapsed}</span>
+                                    <span class="badge badge-pill badge-${cfg.color}">${cfg.label}</span>
                                 </div>
                             </div>
                         </div>`;
@@ -156,31 +156,19 @@ export class MonitorView extends Component {
         this.querySelector('#detailHeader').innerHTML = `
             <div>
                 <div class="flex items-center gap-2">
-                    <i class="fas ${cfg.icon} text-${cfg.color}-400"></i>
-                    <span class="font-medium text-gray-200">${task.target}</span>
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-${cfg.color}-500/20 text-${cfg.color}-400">${cfg.label}</span>
+                    <i class="fas ${cfg.icon} text-${cfg.color}"></i>
+                    <span class="font-medium text-primary">${task.target}</span>
+                    <span class="badge badge-pill badge-${cfg.color}">${cfg.label}</span>
                 </div>
-                <div class="text-xs text-gray-500 mt-1">${task.id}</div>
+                <div class="text-xs text-muted mt-1">${task.id}</div>
             </div>`;
 
         this.querySelector('#detailMeta').innerHTML = `
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                    <span class="text-gray-500 block text-xs">Kind</span>
-                    <span class="text-gray-300">${task.kind}</span>
-                </div>
-                <div>
-                    <span class="text-gray-500 block text-xs">Created</span>
-                    <span class="text-gray-300">${created}</span>
-                </div>
-                <div>
-                    <span class="text-gray-500 block text-xs">Updated</span>
-                    <span class="text-gray-300">${updated}</span>
-                </div>
-                <div>
-                    <span class="text-gray-500 block text-xs">Completed</span>
-                    <span class="text-gray-300">${completed}</span>
-                </div>
+            <div class="grid grid-cols-4 gap-4 text-sm">
+                <div><span class="text-muted block text-xs">Kind</span><span class="text-primary">${task.kind}</span></div>
+                <div><span class="text-muted block text-xs">Created</span><span class="text-primary">${created}</span></div>
+                <div><span class="text-muted block text-xs">Updated</span><span class="text-primary">${updated}</span></div>
+                <div><span class="text-muted block text-xs">Completed</span><span class="text-primary">${completed}</span></div>
             </div>`;
 
         // Metrics section (react-loop telemetry)
@@ -188,90 +176,63 @@ export class MonitorView extends Component {
         if (task.metrics) {
             const m = task.metrics;
             metricsContainer.innerHTML = `
-                <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-4">
+                <div class="panel-dim">
                     <div class="flex items-center gap-2 mb-3">
-                        <i class="fas fa-chart-line text-indigo-400 text-sm"></i>
-                        <span class="text-sm font-medium text-gray-400">React-Loop Metrics</span>
+                        <i class="fas fa-chart-line text-accent text-sm"></i>
+                        <span class="text-sm font-medium text-secondary">React-Loop Metrics</span>
                     </div>
-                    <div class="grid grid-cols-3 md:grid-cols-6 gap-4 text-sm">
-                        <div>
-                            <span class="text-gray-500 block text-xs">Iteration</span>
-                            <span class="text-gray-200 font-mono">${m.iteration}</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-500 block text-xs">Messages</span>
-                            <span class="text-gray-200 font-mono">${m.messageCount}</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-500 block text-xs">Images</span>
-                            <span class="text-gray-200 font-mono">${m.imageCount}</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-500 block text-xs">Context Size</span>
-                            <span class="text-gray-200 font-mono">${formatContextSize(m.contextChars)}</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-500 block text-xs">Input Tokens</span>
-                            <span class="text-gray-200 font-mono">${m.inputTokens ? m.inputTokens.toLocaleString() : '-'}</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-500 block text-xs">Output Tokens</span>
-                            <span class="text-gray-200 font-mono">${m.outputTokens ? m.outputTokens.toLocaleString() : '-'}</span>
-                        </div>
+                    <div class="grid grid-cols-6 gap-4 text-sm">
+                        <div><span class="text-muted block text-xs">Iteration</span><span class="text-primary font-mono">${m.iteration}</span></div>
+                        <div><span class="text-muted block text-xs">Messages</span><span class="text-primary font-mono">${m.messageCount}</span></div>
+                        <div><span class="text-muted block text-xs">Images</span><span class="text-primary font-mono">${m.imageCount}</span></div>
+                        <div><span class="text-muted block text-xs">Context Size</span><span class="text-primary font-mono">${formatContextSize(m.contextChars)}</span></div>
+                        <div><span class="text-muted block text-xs">Input Tokens</span><span class="text-primary font-mono">${m.inputTokens ? m.inputTokens.toLocaleString() : '-'}</span></div>
+                        <div><span class="text-muted block text-xs">Output Tokens</span><span class="text-primary font-mono">${m.outputTokens ? m.outputTokens.toLocaleString() : '-'}</span></div>
                     </div>
                 </div>`;
         } else {
             metricsContainer.innerHTML = '';
         }
 
-        // Input section
         this.querySelector('#detailInput').innerHTML = `
-            <details class="group">
-                <summary class="cursor-pointer text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors">
-                    <i class="fas fa-chevron-right text-xs mr-1 group-open:rotate-90 transition-transform inline-block"></i>
-                    Input
+            <details>
+                <summary class="text-sm font-medium text-secondary">
+                    <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i> Input
                 </summary>
-                <pre class="mt-2 bg-dark-bg border border-dark-border rounded-lg p-3 text-xs text-gray-300 overflow-x-auto">${escapeHtml(JSON.stringify(task.input, null, 2))}</pre>
+                <pre class="mt-2 panel-sm text-xs text-primary overflow-x-auto">${escapeHtml(JSON.stringify(task.input, null, 2))}</pre>
             </details>`;
 
-        // Result / Error section
         const resultContainer = this.querySelector('#detailResult');
         if (task.error) {
             resultContainer.innerHTML = `
                 <div>
-                    <span class="text-sm font-medium text-red-400 block mb-2">Error</span>
-                    <pre class="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-xs text-red-300 overflow-x-auto">${escapeHtml(task.error)}</pre>
+                    <span class="text-sm font-medium text-red block mb-2">Error</span>
+                    <pre class="badge-outline-red rounded-lg p-3 text-xs overflow-x-auto">${escapeHtml(task.error)}</pre>
                 </div>`;
         } else if (task.result) {
             resultContainer.innerHTML = `
-                <details open class="group">
-                    <summary class="cursor-pointer text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors">
-                        <i class="fas fa-chevron-right text-xs mr-1 group-open:rotate-90 transition-transform inline-block"></i>
-                        Result
+                <details open>
+                    <summary class="text-sm font-medium text-secondary">
+                        <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i> Result
                     </summary>
-                    <pre class="mt-2 bg-dark-bg border border-dark-border rounded-lg p-3 text-xs text-gray-300 overflow-x-auto max-h-96 custom-scrollbar">${escapeHtml(JSON.stringify(task.result, null, 2))}</pre>
+                    <pre class="mt-2 panel-sm text-xs text-primary overflow-x-auto overflow-y-auto monitor-scroll-panel">${escapeHtml(JSON.stringify(task.result, null, 2))}</pre>
                 </details>`;
         } else {
-            resultContainer.innerHTML = `
-                <div class="text-sm text-gray-500 italic">Awaiting result...</div>`;
+            resultContainer.innerHTML = `<div class="text-sm text-muted italic">Awaiting result...</div>`;
         }
 
-        // Input-required section
         const inputReqContainer = this.querySelector('#detailInputRequest');
         if (task.status === 'input-required' && task.inputRequest) {
             inputReqContainer.innerHTML = `
-                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                <div class="interrupt-prompt">
                     <div class="flex items-center gap-2 mb-3">
-                        <i class="fas fa-question-circle text-amber-400"></i>
-                        <span class="text-sm font-medium text-amber-400">Input Required</span>
+                        <i class="fas fa-question-circle text-amber"></i>
+                        <span class="text-sm font-medium text-amber">Input Required</span>
                     </div>
-                    <p class="text-sm text-gray-300 mb-3">${escapeHtml(task.inputRequest.question)}</p>
+                    <p class="text-sm text-primary mb-3">${escapeHtml(task.inputRequest.question)}</p>
                     <div class="flex gap-2">
-                        <input id="respondInput" type="text" placeholder="Type your response..."
-                            class="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-amber-500" />
-                        <button id="respondBtn" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors">
-                            Send
-                        </button>
+                        <input id="respondInput" type="text" placeholder="Type your response..." class="input flex-1 text-sm" />
+                        <button id="respondBtn" class="btn btn-accent btn-sm">Send</button>
                     </div>
                 </div>`;
             this.querySelector('#respondBtn').addEventListener('click', () => this.handleRespond());
@@ -286,8 +247,8 @@ export class MonitorView extends Component {
         const actionsContainer = this.querySelector('#detailActions');
         if (['submitted', 'working', 'input-required'].includes(task.status)) {
             actionsContainer.innerHTML = `
-                <button id="cancelBtn" class="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm font-medium rounded-lg border border-red-500/30 transition-colors">
-                    <i class="fas fa-ban mr-1"></i> Cancel Task
+                <button id="cancelBtn" class="btn btn-danger btn-sm">
+                    <i class="fas fa-ban"></i> Cancel Task
                 </button>`;
             this.querySelector('#cancelBtn').addEventListener('click', () => this.handleCancel());
         } else {
@@ -311,9 +272,9 @@ export class MonitorView extends Component {
             if (evt.type === 'tool_start') {
                 const inputStr = typeof evt.input === 'string' ? evt.input : JSON.stringify(evt.input ?? {});
                 const truncInput = inputStr.length > 120 ? inputStr.slice(0, 120) + '...' : inputStr;
-                return `<div class="flex gap-2 py-1.5 border-b border-dark-border/50">
-                    <span class="text-gray-600 text-xs font-mono flex-shrink-0 w-16">${time}</span>
-                    <span class="text-xs"><i class="fas fa-play text-blue-400 mr-1"></i><span class="text-blue-300 font-medium">${escapeHtml(evt.tool)}</span> <span class="text-gray-500">${escapeHtml(truncInput)}</span></span>
+                return `<div class="monitor-event">
+                    <span class="monitor-event-time">${time}</span>
+                    <span class="text-xs"><i class="fas fa-play text-blue mr-1"></i><span class="text-blue-300 font-medium">${escapeHtml(evt.tool)}</span> <span class="text-muted">${escapeHtml(truncInput)}</span></span>
                 </div>`;
             }
             if (evt.type === 'tool_end') {
@@ -324,35 +285,35 @@ export class MonitorView extends Component {
                     outputStr = evt.output;
                 }
                 const truncOutput = outputStr.length > 200 ? outputStr.slice(0, 200) + '...' : outputStr;
-                return `<div class="flex gap-2 py-1.5 border-b border-dark-border/50">
-                    <span class="text-gray-600 text-xs font-mono flex-shrink-0 w-16">${time}</span>
-                    <span class="text-xs"><i class="fas fa-check text-green-400 mr-1"></i><span class="text-green-300 font-medium">${escapeHtml(evt.tool)}</span> <span class="text-gray-400">${escapeHtml(truncOutput)}</span></span>
+                return `<div class="monitor-event">
+                    <span class="monitor-event-time">${time}</span>
+                    <span class="text-xs"><i class="fas fa-check text-green mr-1"></i><span class="text-green-300 font-medium">${escapeHtml(evt.tool)}</span> <span class="text-secondary">${escapeHtml(truncOutput)}</span></span>
                 </div>`;
             }
             if (evt.type === 'thinking') {
                 const truncContent = (evt.content || '').length > 200 ? evt.content.slice(0, 200) + '...' : evt.content;
-                return `<div class="flex gap-2 py-1.5 border-b border-dark-border/50">
-                    <span class="text-gray-600 text-xs font-mono flex-shrink-0 w-16">${time}</span>
-                    <span class="text-xs"><i class="fas fa-brain text-purple-400 mr-1"></i><span class="text-purple-300">${escapeHtml(truncContent)}</span></span>
+                return `<div class="monitor-event">
+                    <span class="monitor-event-time">${time}</span>
+                    <span class="text-xs"><i class="fas fa-brain text-purple mr-1"></i><span class="text-purple-300">${escapeHtml(truncContent)}</span></span>
                 </div>`;
             }
             if (evt.type === 'content') {
                 const truncContent = (evt.content || '').length > 300 ? evt.content.slice(0, 300) + '...' : evt.content;
-                return `<div class="flex gap-2 py-1.5 border-b border-dark-border/50">
-                    <span class="text-gray-600 text-xs font-mono flex-shrink-0 w-16">${time}</span>
-                    <span class="text-xs"><i class="fas fa-comment text-gray-400 mr-1"></i><span class="text-gray-300">${escapeHtml(truncContent)}</span></span>
+                return `<div class="monitor-event">
+                    <span class="monitor-event-time">${time}</span>
+                    <span class="text-xs"><i class="fas fa-comment text-secondary mr-1"></i><span class="text-primary">${escapeHtml(truncContent)}</span></span>
                 </div>`;
             }
             return '';
         }).join('');
 
         container.innerHTML = `
-            <details open class="group">
-                <summary class="cursor-pointer text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors">
-                    <i class="fas fa-chevron-right text-xs mr-1 group-open:rotate-90 transition-transform inline-block"></i>
+            <details open>
+                <summary class="text-sm font-medium text-secondary">
+                    <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i>
                     Activity (${events.length} events)
                 </summary>
-                <div class="mt-2 bg-dark-bg border border-dark-border rounded-lg p-3 max-h-96 overflow-y-auto custom-scrollbar">
+                <div class="mt-2 panel-sm overflow-y-auto monitor-scroll-panel">
                     ${rows}
                 </div>
             </details>`;
@@ -449,20 +410,20 @@ export class MonitorView extends Component {
 
     template() {
         return `
-            <div class="space-y-6 h-full overflow-y-auto pb-8 custom-scrollbar">
-                <div class="flex items-center justify-between border-b border-dark-border pb-4">
+            <div class="space-y-6 h-full overflow-y-auto pb-6 view-panel">
+                <div class="flex items-center justify-between border-b pb-4">
                     <div>
-                        <h2 class="text-lg font-semibold text-gray-200">Monitor</h2>
-                        <p class="text-xs text-gray-500 mt-1">Track async task execution in real time</p>
+                        <h2 class="text-lg font-semibold text-primary">Monitor</h2>
+                        <p class="text-xs text-muted mt-1">Track async task execution in real time</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <select id="filterKind" class="bg-dark-surface border border-dark-border rounded-lg px-2 py-1 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
+                        <select id="filterKind" class="select text-sm">
                             <option value="">All kinds</option>
                             <option value="agent">Agent</option>
                             <option value="workflow">Workflow</option>
                             <option value="llm">LLM</option>
                         </select>
-                        <select id="filterStatus" class="bg-dark-surface border border-dark-border rounded-lg px-2 py-1 text-sm text-gray-300 focus:outline-none focus:border-indigo-500">
+                        <select id="filterStatus" class="select text-sm">
                             <option value="">All statuses</option>
                             <option value="submitted">Submitted</option>
                             <option value="working">Working</option>
@@ -471,7 +432,7 @@ export class MonitorView extends Component {
                             <option value="canceled">Canceled</option>
                             <option value="input-required">Input Required</option>
                         </select>
-                        <button id="refreshBtn" class="p-2 text-gray-400 hover:text-gray-200 transition-colors" title="Refresh">
+                        <button id="refreshBtn" class="btn-ghost" title="Refresh">
                             <i class="fas fa-sync-alt text-sm"></i>
                         </button>
                     </div>
@@ -479,17 +440,15 @@ export class MonitorView extends Component {
 
                 <div id="tasksListContainer"></div>
 
-                <div id="taskDetailArea" class="hidden border-t border-dark-border pt-6 space-y-4">
-                    <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-4">
+                <div id="taskDetailArea" class="hidden border-t pt-4 space-y-4">
+                    <div class="panel-dim">
                         <div class="flex items-center justify-between">
                             <div id="detailHeader"></div>
-                            <button id="closeDetailBtn" class="text-gray-500 hover:text-gray-300 transition-colors">
-                                <i class="fas fa-times"></i>
-                            </button>
+                            <button id="closeDetailBtn" class="btn-ghost"><i class="fas fa-times"></i></button>
                         </div>
                     </div>
 
-                    <div id="detailMeta" class="bg-dark-surface/50 border border-dark-border rounded-lg p-4"></div>
+                    <div id="detailMeta" class="panel-dim"></div>
                     <div id="detailMetrics"></div>
                     <div id="detailInputRequest"></div>
                     <div id="detailInput"></div>
@@ -503,18 +462,12 @@ export class MonitorView extends Component {
 }
 
 function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    return sharedEscapeHtml(str);
 }
 
-function kindBadgeClass(kind) {
-    const map = {
-        agent: 'bg-blue-500/20 text-blue-400',
-        workflow: 'bg-purple-500/20 text-purple-400',
-        llm: 'bg-emerald-500/20 text-emerald-400',
-    };
-    return map[kind] || 'bg-gray-500/20 text-gray-400';
+function kindBadgeVariant(kind) {
+    const map = { agent: 'blue', workflow: 'purple', llm: 'emerald' };
+    return map[kind] || 'gray';
 }
 
 function formatContextSize(chars) {

@@ -34,6 +34,17 @@ export function createVisionBrowserTools(config: SandboxConfig): StructuredTool[
     if (client?.connected && readiness) {
       return { cdp: client, ready: readiness };
     }
+
+    // Clean up old instances before reconnecting
+    if (readiness) {
+      readiness.detach();
+      readiness = null;
+    }
+    if (client) {
+      await client.close();
+      client = null;
+    }
+
     client = new CDPClient();
     await client.connect(cdpUrl);
     readiness = new PageReadiness(client);

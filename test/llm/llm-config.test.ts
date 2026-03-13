@@ -70,17 +70,21 @@ describe('getEmbeddingConfig', () => {
 });
 
 describe('listModelConfigs', () => {
-  it('should list all model names', () => {
+  it('should list concrete model names (not pointers)', () => {
     const names = listModelConfigs();
-    assert.ok(names.includes('default'));
+    // 'default' is a string pointer, so it should NOT be in the list
+    assert.ok(!names.includes('default'));
     assert.ok(names.includes('fast'));
+    assert.ok(names.includes('openai'));
   });
 });
 
 describe('listEmbeddingConfigs', () => {
-  it('should list all embedding names', () => {
+  it('should list concrete embedding names (not pointers)', () => {
     const names = listEmbeddingConfigs();
-    assert.ok(names.includes('default'));
+    // 'default' is a string pointer, so it should NOT be in the list
+    assert.ok(!names.includes('default'));
+    assert.ok(names.includes('openai'));
   });
 });
 

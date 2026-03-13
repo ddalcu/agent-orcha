@@ -3,23 +3,28 @@ import { Component } from '../utils/Component.js';
 import { store } from '../store.js';
 import './NavBar.js';
 import './AgentsView.js';
-import './WorkflowsView.js';
 import './KnowledgeView.js';
 import './GraphView.js';
 import './McpView.js';
-import './SkillsView.js';
 import './MonitorView.js';
 import './IdeView.js';
+import './LocalLlmView.js';
+import './LogViewer.js';
 
 export class AppRoot extends Component {
     postRender() {
         this._checkAuth();
+        this._loadVersion();
 
         window.addEventListener('auth:required', () => this._showLogin());
+
+        this.querySelector('#hamburger-btn').addEventListener('click', () => this._toggleSidebar());
+        this.querySelector('#sidebar-backdrop').addEventListener('click', () => this._toggleSidebar(true));
 
         store.addEventListener('state-change', (e) => {
             if (e.detail.key === 'activeTab') {
                 this.switchTab(e.detail.value);
+                this._toggleSidebar(true);
             }
         });
 
@@ -50,6 +55,7 @@ export class AppRoot extends Component {
                 this._showLogoutButton();
             }
             this._checkVnc();
+            this._checkLlmConfig();
         } catch {
             // Server unreachable — will fail on actual API calls
         }
@@ -60,21 +66,13 @@ export class AppRoot extends Component {
 
         const overlay = document.createElement('div');
         overlay.id = 'auth-overlay';
-        overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70';
+        overlay.className = 'auth-overlay';
         overlay.innerHTML = `
-            <div class="bg-[#1e1e2e] border border-[#313244] rounded-lg shadow-xl w-full max-w-sm mx-4 p-6">
-                <h2 class="text-xl font-semibold text-gray-100 mb-4">
-                    <i class="fas fa-lock mr-2 text-blue-400"></i>Authentication Required
-                </h2>
-                <div id="auth-error" class="hidden text-red-400 text-sm mb-3"></div>
-                <input id="auth-password" type="password" placeholder="Password"
-                    class="w-full bg-[#11111b] border border-[#313244] rounded px-3 py-2 text-gray-100
-                           focus:outline-none focus:border-blue-500 mb-4" />
-                <button id="auth-submit"
-                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4
-                           rounded transition-colors">
-                    Sign In
-                </button>
+            <div class="auth-card">
+                <h2><i class="fas fa-lock text-accent"></i> Authentication Required</h2>
+                <div id="auth-error" class="auth-error"></div>
+                <input id="auth-password" type="password" placeholder="Password" class="input" />
+                <button id="auth-submit" class="btn btn-accent w-full">Sign In</button>
             </div>
         `;
         this.appendChild(overlay);
@@ -103,13 +101,13 @@ export class AppRoot extends Component {
                     this.switchTab(store.get('activeTab'));
                 } else {
                     errorDiv.textContent = 'Invalid password';
-                    errorDiv.classList.remove('hidden');
+                    errorDiv.classList.add('visible');
                     passwordInput.value = '';
                     passwordInput.focus();
                 }
             } catch {
                 errorDiv.textContent = 'Connection error';
-                errorDiv.classList.remove('hidden');
+                errorDiv.classList.add('visible');
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Sign In';
@@ -132,22 +130,23 @@ export class AppRoot extends Component {
         try {
             const res = await fetch('/api/vnc/status');
             const data = await res.json();
-            if (data.enabled) this._showVncButton();
+            if (data.enabled) this._showVncButton(data.url);
         } catch { /* ignore */ }
     }
 
-    _showVncButton() {
+    _showVncButton(vncUrl) {
         if (this.querySelector('#vnc-desktop-btn')) return;
         const actions = this.querySelector('#header-actions');
         if (!actions) return;
 
+        const targetUrl = vncUrl || '/vnc';
         const btn = document.createElement('button');
         btn.id = 'vnc-desktop-btn';
-        btn.className = 'text-gray-400 hover:text-white transition-colors';
+        btn.className = 'btn-ghost';
         btn.title = 'View Browser Desktop';
         btn.innerHTML = '<i class="fas fa-desktop"></i>';
         btn.addEventListener('click', () => {
-            window.open('/vnc', 'vnc-desktop', 'width=1300,height=760,menubar=no,toolbar=no');
+            window.open(targetUrl, 'vnc-desktop', 'width=1300,height=760,menubar=no,toolbar=no');
         });
         actions.appendChild(btn);
     }
@@ -159,7 +158,7 @@ export class AppRoot extends Component {
 
         const btn = document.createElement('button');
         btn.id = 'auth-logout-btn';
-        btn.className = 'text-gray-400 hover:text-white transition-colors';
+        btn.className = 'btn-ghost';
         btn.title = 'Logout';
         btn.innerHTML = '<i class="fas fa-right-from-bracket"></i>';
         btn.addEventListener('click', async () => {
@@ -170,6 +169,57 @@ export class AppRoot extends Component {
         actions.appendChild(btn);
     }
 
+    async _checkLlmConfig() {
+        try {
+            const res = await fetch('/api/llm/readiness');
+            const data = await res.json();
+            if (!data.ready) this._showLlmSetupModal(data.issues);
+        } catch { /* ignore */ }
+    }
+
+    _showLlmSetupModal(issues) {
+        if (this.querySelector('#llm-setup-overlay')) return;
+
+        const issueList = (issues || [])
+            .map(i => `<li class="flex items-start gap-2"><i class="fas fa-circle text-2xs text-accent flex-shrink-0 mt-1"></i><span>${i}</span></li>`)
+            .join('');
+
+        const overlay = document.createElement('div');
+        overlay.id = 'llm-setup-overlay';
+        overlay.className = 'auth-overlay';
+        overlay.innerHTML = `
+            <div class="llm-setup-modal">
+                <div class="llm-setup-icon">
+                    <i class="fas fa-microchip text-2xl text-accent"></i>
+                </div>
+                <h2 class="text-xl font-semibold text-primary mb-2">LLM Setup Required</h2>
+                <p class="text-sm text-secondary mb-4">
+                    Your models aren't ready yet. Head to the <strong class="text-primary">LLM</strong> tab to get started.
+                </p>
+                ${issueList ? `<ul class="text-xs text-muted text-left space-y-1 panel-sm mb-6">${issueList}</ul>` : ''}
+                <button id="llm-setup-go" class="btn btn-accent w-full">
+                    <i class="fas fa-arrow-right"></i> Go to LLM
+                </button>
+            </div>
+        `;
+        this.appendChild(overlay);
+
+        overlay.querySelector('#llm-setup-go').addEventListener('click', () => {
+            overlay.remove();
+            store.set('activeTab', 'llm');
+            window.location.hash = 'llm';
+        });
+    }
+
+    async _loadVersion() {
+        try {
+            const res = await fetch('/health');
+            const data = await res.json();
+            const el = this.querySelector('#app-version');
+            if (el && data.version) el.textContent = `AgentOrcha v${data.version}`;
+        } catch { /* ignore */ }
+    }
+
     switchTab(tabId) {
         const container = this.querySelector('#tabContent');
         if (!container) return;
@@ -178,12 +228,11 @@ export class AppRoot extends Component {
         let el;
         switch (tabId) {
             case 'agents': el = document.createElement('agents-view'); break;
-            case 'workflows': el = document.createElement('workflows-view'); break;
             case 'knowledge': el = document.createElement('knowledge-view'); break;
             case 'graph': el = document.createElement('graph-view'); break;
             case 'mcp': el = document.createElement('mcp-view'); break;
-            case 'skills': el = document.createElement('skills-view'); break;
             case 'monitor': el = document.createElement('monitor-view'); break;
+            case 'llm': el = document.createElement('local-llm-view'); break;
             case 'ide': el = document.createElement('ide-view'); break;
             default: el = document.createElement('agents-view'); break;
         }
@@ -194,24 +243,37 @@ export class AppRoot extends Component {
         container.appendChild(el);
     }
 
+    _toggleSidebar(forceClose) {
+        const sidebar = this.querySelector('#app-sidebar');
+        const backdrop = this.querySelector('#sidebar-backdrop');
+        const open = forceClose ? false : !sidebar.classList.contains('open');
+        sidebar.classList.toggle('open', open);
+        backdrop.classList.toggle('open', open);
+    }
+
     template() {
         return `
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-screen flex flex-col">
-                <div class="hidden sm:block mb-4 flex-shrink-0">
-                    <div id="app-header" class="flex items-center justify-between">
-                        <div>
-                            <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                                Agent Orcha
-                            </h1>
-                        </div>
-                        <div id="header-actions" class="flex items-center gap-3"></div>
+            <div class="app-shell">
+                <div id="sidebar-backdrop"></div>
+                <div id="app-sidebar">
+                    <nav-bar class="flex-1 min-h-0"></nav-bar>
+                    <div class="sidebar-footer">
+                        <div id="header-actions" class="flex items-center gap-2"></div>
+                        <span id="app-version">AgentOrcha</span>
                     </div>
                 </div>
-
-                <nav-bar class="flex-shrink-0"></nav-bar>
-
-                <div id="tabContent" class="flex-1 min-h-0 relative">
-                    <!-- Dynamic Content -->
+                <div class="app-main">
+                    <div class="app-mobile-header">
+                        <button id="hamburger-btn" class="btn-ghost">
+                            <i class="fas fa-bars text-lg"></i>
+                        </button>
+                        <img src="/assets/logo.png" alt="Agent Orcha" class="mobile-logo">
+                        <span class="text-sm font-semibold text-primary ml-2">Agent Orcha</span>
+                    </div>
+                    <div id="tabContent" class="app-content">
+                        <!-- Dynamic Content -->
+                    </div>
+                    <log-viewer class="flex-shrink-0"></log-viewer>
                 </div>
             </div>
         `;

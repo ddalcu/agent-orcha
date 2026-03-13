@@ -59,6 +59,11 @@ output:
 config:
   onError: stop
 
+sampleQuestions:
+  - "Analyze the pros and cons of microservices vs monolith architecture"
+  - "Research best practices for securing REST APIs"
+  - "Compare popular vector databases and their trade-offs"
+
 metadata:
   category: research
   tags:

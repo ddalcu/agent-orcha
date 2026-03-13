@@ -18,6 +18,17 @@ export function createBrowserTools(config: SandboxConfig): StructuredTool[] {
     if (client?.connected && readiness) {
       return { cdp: client, ready: readiness };
     }
+
+    // Clean up old instances before reconnecting
+    if (readiness) {
+      readiness.detach();
+      readiness = null;
+    }
+    if (client) {
+      await client.close();
+      client = null;
+    }
+
     client = new CDPClient();
     await client.connect(cdpUrl);
     readiness = new PageReadiness(client);
@@ -57,7 +68,13 @@ export function createBrowserTools(config: SandboxConfig): StructuredTool[] {
       try {
         const { cdp, ready } = await getReady();
         ready.resetForNavigation();
-        await cdp.send('Page.navigate', { url });
+        const navResult = await cdp.send('Page.navigate', { url }) as Record<string, unknown>;
+
+        // Check for navigation-level errors (invalid URL, network failures, etc.)
+        if (navResult?.errorText) {
+          return JSON.stringify({ error: `Navigation failed: ${navResult.errorText}`, url });
+        }
+
         await ready.waitForReady(config.commandTimeout);
         const snapshot = await ready.observe();
         return JSON.stringify(snapshot);

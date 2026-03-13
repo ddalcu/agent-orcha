@@ -83,7 +83,7 @@ export class ReactWorkflowExecutor {
       logger.info(`[ReactWorkflow] Total tools available: ${allTools.length}`);
 
       // 4. Get LLM
-      const llm = LLMFactory.create(definition.graph.model);
+      const llm = await LLMFactory.create(definition.graph.model);
 
       // 5. Execute the ReAct loop
       const goal = this.interpolateGoal(definition.prompt.goal, input);
@@ -178,7 +178,7 @@ export class ReactWorkflowExecutor {
       const allTools = [...tools, ...agentTools];
 
       // 2. Get LLM
-      const llm = LLMFactory.create(definition.graph.model);
+      const llm = await LLMFactory.create(definition.graph.model);
 
       // 3. Load saved thread state and append the user's answer
       const savedMessages = this.threadStates.get(threadId) ?? [];
@@ -329,9 +329,21 @@ export class ReactWorkflowExecutor {
         break;
       }
 
-      // Execute each tool call
+      // Execute tool calls in parallel (LLM already decided they're independent by emitting them together)
       toolExecutionCount++;
+
+      // Emit all tool_call status events upfront
       for (const tc of response.tool_calls) {
+        const inputStr = typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args, null, 2);
+        onStatus?.({
+          type: 'tool_call',
+          message: `Calling: ${tc.name}`,
+          elapsed: elapsed(),
+          toolInput: inputStr,
+        });
+      }
+
+      const toolResults = await Promise.all(response.tool_calls.map(async (tc) => {
         const tool = toolMap.get(tc.name);
         if (!tool) {
           onStatus?.({
@@ -339,26 +351,20 @@ export class ReactWorkflowExecutor {
             message: `Tool "${tc.name}" not found`,
             elapsed: elapsed(),
           });
-          allMessages.push(toolMessage(`Tool "${tc.name}" not found`, tc.id, tc.name));
-          continue;
+          return toolMessage(`Tool "${tc.name}" not found`, tc.id, tc.name);
         }
-
-        onStatus?.({
-          type: 'tool_call',
-          message: `Calling: ${tc.name}`,
-          elapsed: elapsed(),
-        });
 
         try {
           const result = await tool.invoke(tc.args);
+          const outputStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
           onStatus?.({
             type: 'tool_result',
             message: `${tc.name} completed`,
             elapsed: elapsed(),
+            toolOutput: outputStr,
           });
-          allMessages.push(toolMessage(result, tc.id, tc.name));
+          return toolMessage(result, tc.id, tc.name);
         } catch (error) {
-          // Handle NodeInterrupt: save state and re-throw
           if (error instanceof NodeInterrupt) {
             this.threadStates.set(threadId, allMessages);
             throw error;
@@ -369,9 +375,11 @@ export class ReactWorkflowExecutor {
             message: `${tc.name} failed: ${errMsg}`,
             elapsed: elapsed(),
           });
-          allMessages.push(toolMessage(`Error: ${errMsg}`, tc.id, tc.name));
+          return toolMessage(`Error: ${errMsg}`, tc.id, tc.name);
         }
-      }
+      }));
+
+      allMessages.push(...toolResults);
     }
 
     return allMessages;

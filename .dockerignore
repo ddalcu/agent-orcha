@@ -7,7 +7,6 @@ examples
 .local
 .claude
 .env*
-.DS_Store
 *.md
 lcov.info
 coverage
@@ -21,3 +20,11 @@ tsconfig.json
 .gitignore
 .gitattributes
 .github
+templates/.models
+templates/.llama-server
+templates/.knowledge-data
+templates/.knowledge-cache
+templates/.memory
+.mcp.json
+openapi.json
+**/.DS_Store

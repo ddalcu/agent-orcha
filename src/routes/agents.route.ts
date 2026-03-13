@@ -101,6 +101,9 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       reply.raw.setHeader('Cache-Control', 'no-cache');
       reply.raw.setHeader('Connection', 'keep-alive');
 
+      // Send task ID as first event so the client can cancel via the tasks API
+      reply.raw.write(`data: ${JSON.stringify({ type: 'task_id', taskId: task.id })}\n\n`);
+
       // Abort the LLM stream when the client disconnects (socket close, not request body close)
       reply.raw.on('close', () => {
         if (!abortController.signal.aborted) {

@@ -49,10 +49,10 @@ describe('AgentExecutor', () => {
     const originalCreate = LLMFactory.create;
 
     before(() => {
-        LLMFactory.create = (config: any) => ({
+        LLMFactory.create = (async (config: any) => ({
             invoke: async (input: any) => ({ content: 'Mock response' }),
             stream: async function* (input: any) { yield { content: 'Mock response' }; }
-        }) as any;
+        })) as any;
     });
 
     after(() => {

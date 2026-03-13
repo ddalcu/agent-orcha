@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolve base directory first, then load .env from it
 const baseDir = process.env.WORKSPACE
   ? path.resolve(process.env.WORKSPACE)
-  : path.resolve(__dirname, '..');
+  : path.resolve(__dirname, '..', 'templates');
 
 const envPath = path.join(baseDir, '.env');
 if (fs.existsSync(envPath)) {
@@ -106,7 +106,13 @@ async function main(): Promise<void> {
     }
   }
 
+  let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
+    if (shuttingDown) {
+      logger.info('\nForce exit');
+      process.exit(1);
+    }
+    shuttingDown = true;
     logger.info('\nShutting down...');
     await server.close();
     await orchestrator.close();

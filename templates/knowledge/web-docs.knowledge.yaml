@@ -7,7 +7,7 @@ source:
   selector: ".mw-parser-output"
 
 loader:
-  type: text
+  type: html
 
 splitter:
   type: recursive

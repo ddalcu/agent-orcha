@@ -48,11 +48,21 @@ export class ApiService {
         return res.json();
     }
 
-    async startWorkflowStream(name, input) {
+    async startWorkflowStream(name, input, signal) {
         return this._fetch(`/api/workflows/${name}/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input })
+            body: JSON.stringify({ input }),
+            signal,
+        });
+    }
+
+    async resumeWorkflowStream(name, threadId, answer, signal) {
+        return this._fetch(`/api/workflows/${name}/resume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ threadId, answer }),
+            signal,
         });
     }
 
@@ -95,6 +105,36 @@ export class ApiService {
 
     async getLLMs() {
         const res = await this._fetch('/api/llm');
+        return res.json();
+    }
+
+    async getLlmConfig() {
+        const res = await this._fetch('/api/llm/config');
+        return res.json();
+    }
+
+    async saveLlmModel(name, config) {
+        const res = await this._fetch(`/api/llm/config/models/${encodeURIComponent(name)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config),
+        });
+        return res.json();
+    }
+
+    async deleteLlmModel(name) {
+        const res = await this._fetch(`/api/llm/config/models/${encodeURIComponent(name)}`, {
+            method: 'DELETE',
+        });
+        return res.json();
+    }
+
+    async saveLlmEmbedding(name, config) {
+        const res = await this._fetch(`/api/llm/config/embeddings/${encodeURIComponent(name)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config),
+        });
         return res.json();
     }
 
@@ -261,6 +301,160 @@ export class ApiService {
 
     streamTask(id) {
         return new EventSource(`/api/tasks/${id}/stream`);
+    }
+
+    // Local LLM
+    async getLocalLlmStatus() {
+        const res = await this._fetch('/api/local-llm/status');
+        return res.json();
+    }
+
+    async getLocalLlmModels() {
+        const res = await this._fetch('/api/local-llm/models');
+        return res.json();
+    }
+
+    async activateLocalModel(id) {
+        const res = await this._fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        return res.json();
+    }
+
+    async deleteLocalModel(id) {
+        const res = await this._fetch(`/api/local-llm/models/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+        });
+        return res.json();
+    }
+
+    browseHuggingFace(query, limit = 10, format = 'gguf') {
+        return this._fetch(`/api/local-llm/browse?q=${encodeURIComponent(query)}&limit=${limit}&format=${format}`)
+            .then(r => r.json());
+    }
+
+    downloadLocalModel(repo, fileName, type = 'gguf') {
+        const params = new URLSearchParams({ repo });
+        if (type === 'mlx') {
+            params.set('type', 'mlx');
+        } else {
+            params.set('fileName', fileName);
+        }
+        return new EventSource(`/api/local-llm/models/download?${params.toString()}`);
+    }
+
+    async getActiveDownloads() {
+        const res = await this._fetch('/api/local-llm/models/downloads');
+        return res.json();
+    }
+
+    async getInterruptedDownloads() {
+        const res = await this._fetch('/api/local-llm/models/interrupted');
+        return res.json();
+    }
+
+    async deleteInterruptedDownload(fileName) {
+        const res = await this._fetch(`/api/local-llm/models/interrupted/${encodeURIComponent(fileName)}`, {
+            method: 'DELETE',
+        });
+        return res.json();
+    }
+
+    async activateLocalEmbedding(id) {
+        const res = await this._fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-embedding`, {
+            method: 'POST',
+        });
+        return res.json();
+    }
+
+    async stopLocalLlm(engine) {
+        const res = await this._fetch('/api/local-llm/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(engine ? { engine } : {}),
+        });
+        return res.json();
+    }
+
+    async stopLocalEmbedding(engine) {
+        const res = await this._fetch('/api/local-llm/stop-embedding', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(engine ? { engine } : {}),
+        });
+        return res.json();
+    }
+
+    async checkLlamaUpdate() {
+        const res = await this._fetch('/api/local-llm/check-update');
+        return res.json();
+    }
+
+    async updateLlamaBinary() {
+        const res = await this._fetch('/api/local-llm/update-binary', { method: 'POST' });
+        return res.json();
+    }
+
+    async getEngines() {
+        const res = await this._fetch('/api/local-llm/engines');
+        return res.json();
+    }
+
+    async activateEngine(engine, model, role = 'chat') {
+        const res = await this._fetch('/api/local-llm/engines/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine, model, role }),
+        });
+        return res.json();
+    }
+
+    async unloadEngineModel(engine, model, instanceId) {
+        const res = await this._fetch('/api/local-llm/engines/unload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine, model, ...(instanceId ? { instanceId } : {}) }),
+        });
+        return res.json();
+    }
+
+    async getEngineUrls() {
+        const res = await this._fetch('/api/local-llm/engines/urls');
+        return res.json();
+    }
+
+    async setEngineUrl(engine, url) {
+        const res = await this._fetch('/api/local-llm/engines/urls', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine, url }),
+        });
+        return res.json();
+    }
+
+    async setEngineContext(contextSize) {
+        const res = await this._fetch('/api/local-llm/engines/context', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contextSize }),
+        });
+        return res.json();
+    }
+
+    async checkMlxUpdate() {
+        const res = await this._fetch('/api/local-llm/check-mlx-update');
+        return res.json();
+    }
+
+    async updateMlxBinary() {
+        const res = await this._fetch('/api/local-llm/update-mlx-binary', { method: 'POST' });
+        return res.json();
+    }
+
+    streamLogs() {
+        return new EventSource('/api/logs/stream');
     }
 
     async getGraphConfig() {

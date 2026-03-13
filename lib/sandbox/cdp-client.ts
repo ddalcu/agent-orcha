@@ -5,17 +5,23 @@ interface CDPTarget {
   type: string;
 }
 
+const DEFAULT_SEND_TIMEOUT = 20_000;
+
 export class CDPClient {
   private ws: WebSocket | null = null;
   private msgId = 0;
   private pending = new Map<number, {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
   }>();
   private eventListeners = new Map<string, ((params: unknown) => void)[]>();
 
   async connect(cdpUrl: string): Promise<void> {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
+    // Clean up any existing connection before reconnecting
+    if (this.ws) {
+      this.cleanup();
+    }
 
     const httpUrl = cdpUrl.replace(/\/$/, '');
     const res = await fetch(`${httpUrl}/json`);
@@ -27,7 +33,16 @@ export class CDPClient {
       throw new Error('No page target found');
     }
 
-    await this.connectWs(page.webSocketDebuggerUrl);
+    // Rewrite the discovered WebSocket URL to match the CDP URL we connected to.
+    // When proxied (e.g. socat), Chromium reports its internal address which may not
+    // be reachable from the host. Replace host:port with the one from cdpUrl.
+    const cdpParsed = new URL(httpUrl);
+    const wsParsed = new URL(page.webSocketDebuggerUrl);
+    wsParsed.hostname = cdpParsed.hostname;
+    wsParsed.port = cdpParsed.port;
+    const wsUrl = wsParsed.toString();
+
+    await this.connectWs(wsUrl);
   }
 
   private connectWs(url: string): Promise<void> {
@@ -49,6 +64,7 @@ export class CDPClient {
         if ('id' in msg) {
           const handler = this.pending.get(msg.id);
           if (handler) {
+            clearTimeout(handler.timer);
             this.pending.delete(msg.id);
             if (msg.error) {
               handler.reject(new Error(msg.error.message));
@@ -72,6 +88,7 @@ export class CDPClient {
       ws.on('close', () => {
         this.ws = null;
         for (const [, handler] of this.pending) {
+          clearTimeout(handler.timer);
           handler.reject(new Error('CDP connection closed'));
         }
         this.pending.clear();
@@ -79,14 +96,19 @@ export class CDPClient {
     });
   }
 
-  async send(method: string, params?: object): Promise<any> {
+  async send(method: string, params?: object, timeout = DEFAULT_SEND_TIMEOUT): Promise<any> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('CDP not connected');
     }
 
     const id = ++this.msgId;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`CDP send timeout: ${method} (${timeout}ms)`));
+      }, timeout);
+
+      this.pending.set(id, { resolve, reject, timer });
       this.ws!.send(JSON.stringify({ id, method, params }));
     });
   }
@@ -118,12 +140,19 @@ export class CDPClient {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
-  async close(): Promise<void> {
+  private cleanup(): void {
     if (this.ws) {
-      this.ws.close();
+      try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
     }
+    for (const [, handler] of this.pending) {
+      clearTimeout(handler.timer);
+    }
     this.pending.clear();
+  }
+
+  async close(): Promise<void> {
+    this.cleanup();
     this.eventListeners.clear();
   }
 }

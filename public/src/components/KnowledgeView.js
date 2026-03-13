@@ -1,6 +1,7 @@
 
 import { Component } from '../utils/Component.js';
 import { api } from '../services/ApiService.js';
+import { resourceCard, badge, statusDot as sharedStatusDot, escapeHtml } from '../utils/card.js';
 
 export class KnowledgeView extends Component {
     constructor() {
@@ -94,32 +95,34 @@ export class KnowledgeView extends Component {
         if (!container) return;
 
         if (this.stores.length === 0) {
-            container.innerHTML = '<div class="text-gray-500 italic text-center py-8">No knowledge stores configured</div>';
+            container.innerHTML = '<div class="text-muted italic text-center py-4">No knowledge stores configured</div>';
             return;
         }
 
-        container.innerHTML = this.stores.map(store => `
-            <div class="knowledge-card cursor-pointer rounded-lg p-4 border transition-colors
-                ${this.selectedStore?.name === store.name
-                    ? 'bg-dark-surface border-orange-500'
-                    : 'bg-dark-surface/50 border-dark-border hover:border-orange-500/50'}"
-                data-name="${store.name}">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="font-semibold text-gray-100 text-sm truncate">${this.escapeHtml(store.name)}</span>
-                    ${this.statusDot(store)}
-                </div>
-                <div class="flex items-center gap-2 mb-2 flex-wrap">
-                    ${this.kindBadge(store)}
-                    ${this.sourceTypeBadge(store.source?.type)}
-                    ${this.storeBadge(store.store)}
-                </div>
-                <div class="text-xs text-gray-500">
-                    ${store.status === 'indexed' ? this.formatCounts(store) : store.status === 'error' ? 'Error' : 'Not indexed'}
-                    ${store.defaultK ? `<span class="ml-2 text-gray-600">K=${store.defaultK}</span>` : ''}
-                </div>
-                ${store.lastIndexedAt ? `<div class="text-xs text-gray-600 mt-1">${this.timeAgo(store.lastIndexedAt)}</div>` : ''}
-            </div>
-        `).join('');
+        container.innerHTML = this.stores.map(store => {
+            const isSelected = this.selectedStore?.name === store.name;
+            return resourceCard({
+                id: store.name,
+                selected: isSelected,
+                content: `
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-semibold text-primary text-sm truncate">${escapeHtml(store.name)}</span>
+                        ${this.statusDot(store)}
+                    </div>
+                    <div class="flex items-center gap-2 mb-2 flex-wrap">
+                        ${this.kindBadge(store)}
+                        ${this.sourceTypeBadge(store.source?.type)}
+                        ${this.storeBadge(store.store)}
+                    </div>
+                    <div class="text-xs text-secondary">
+                        ${store.status === 'indexed' ? this.formatCounts(store) : store.status === 'error' ? 'Error' : 'Not indexed'}
+                        ${store.defaultK ? `<span class="ml-2 text-muted">K=${store.defaultK}</span>` : ''}
+                    </div>
+                    ${store.lastIndexedAt ? `<div class="text-xs text-muted mt-1">${this.timeAgo(store.lastIndexedAt)}</div>` : ''}
+                `,
+                className: 'knowledge-card p-4',
+            });
+        }).join('');
 
         // Bind click handlers
         container.querySelectorAll('.knowledge-card').forEach(card => {
@@ -142,7 +145,7 @@ export class KnowledgeView extends Component {
         const container = this.querySelector('#knowledgeDetail');
         if (!container || !this.selectedStore) {
             if (container) {
-                container.innerHTML = '<div class="text-gray-500 italic text-center py-16">Select a knowledge store to view details</div>';
+                container.innerHTML = '<div class="text-muted italic text-center py-4">Select a knowledge store to view details</div>';
             }
             return;
         }
@@ -153,46 +156,41 @@ export class KnowledgeView extends Component {
         const isError = store.status === 'error';
 
         container.innerHTML = `
-            <!-- Header -->
             <div class="flex items-start justify-between mb-6">
                 <div>
-                    <h2 class="text-lg font-bold text-gray-100 mb-1">${this.escapeHtml(store.name)}</h2>
-                    <p class="text-sm text-gray-400">${this.escapeHtml(store.description || 'No description')}</p>
+                    <h2 class="text-lg font-bold text-primary mb-1">${this.escapeHtml(store.name)}</h2>
+                    <p class="text-sm text-secondary">${this.escapeHtml(store.description || 'No description')}</p>
                     <div class="flex items-center gap-2 mt-2">
                         ${this.kindBadge(store)}
                         ${this.statusBadge(store)}
                     </div>
                 </div>
-                <button id="indexBtn"
-                    class="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2"
-                    ${isIndexing ? 'disabled' : ''}>
+                <button id="indexBtn" class="btn btn-accent btn-sm" ${isIndexing ? 'disabled' : ''}>
                     ${isIndexing
-                        ? '<span class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> Indexing...'
+                        ? '<span class="spinner-sm"></span> Indexing...'
                         : isIndexed ? '<i class="fas fa-sync-alt"></i> Re-index' : '<i class="fas fa-play"></i> Index'}
                 </button>
             </div>
 
             ${isError && store.errorMessage ? `
-            <div class="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-4">
-                <div class="text-red-400 text-sm"><i class="fas fa-exclamation-triangle mr-2"></i>${this.escapeHtml(store.errorMessage)}</div>
+            <div class="badge-outline-red rounded-lg p-3 mb-4">
+                <div class="text-red text-sm"><i class="fas fa-exclamation-triangle mr-2"></i>${this.escapeHtml(store.errorMessage)}</div>
             </div>` : ''}
 
-            <!-- Progress -->
             <div id="progressSection" class="${isIndexing ? '' : 'hidden'} mb-6">
-                <div class="bg-dark-surface border border-dark-border rounded-lg p-4">
+                <div class="panel">
                     <div class="flex items-center justify-between mb-2">
-                        <span id="progressPhase" class="text-sm text-gray-300">Preparing...</span>
-                        <span id="progressElapsed" class="text-xs text-gray-500 font-mono"></span>
+                        <span id="progressPhase" class="text-sm text-primary">Preparing...</span>
+                        <span id="progressElapsed" class="text-xs text-muted font-mono"></span>
                     </div>
-                    <div class="w-full bg-dark-bg rounded-full h-2">
-                        <div id="progressBar" class="bg-orange-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    <div class="progress-track">
+                        <div id="progressBar" class="progress-fill transition-all"></div>
                     </div>
-                    <div id="progressMessage" class="text-xs text-gray-500 mt-1"></div>
+                    <div id="progressMessage" class="text-xs text-muted mt-1"></div>
                 </div>
             </div>
 
-            <!-- Stats -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            <div class="grid grid-cols-4 gap-3 mb-6">
                 ${this.statCard('Documents', store.documentCount, 'fa-file-alt')}
                 ${this.statCard('Chunks', store.chunkCount, 'fa-puzzle-piece')}
                 ${store.hasGraph ? this.statCard('Entities', store.entityCount, 'fa-project-diagram') : ''}
@@ -200,53 +198,30 @@ export class KnowledgeView extends Component {
                 ${store.hasGraph ? this.statCard('Communities', store.communityCount, 'fa-layer-group') : ''}
             </div>
 
-            <!-- Info Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 text-sm">
-                <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3">
-                    <span class="text-gray-500">Source Type</span>
-                    <div class="text-gray-200 mt-1">${store.source?.type || 'N/A'}</div>
-                </div>
-                <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3">
-                    <span class="text-gray-500">Store</span>
-                    <div class="text-gray-200 mt-1">${this.storeBadge(store.store)}</div>
-                </div>
-                <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3">
-                    <span class="text-gray-500">Default K</span>
-                    <div class="text-gray-200 mt-1">${store.defaultK ?? 'N/A'}</div>
-                </div>
-                <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3">
-                    <span class="text-gray-500">Embedding</span>
-                    <div class="text-gray-200 mt-1">${store.embeddingModel || 'default'}</div>
-                </div>
-                <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3">
-                    <span class="text-gray-500">Last Indexed</span>
-                    <div class="text-gray-200 mt-1">${store.lastIndexedAt ? this.timeAgo(store.lastIndexedAt) : 'Never'}
-                        ${store.lastIndexDurationMs ? `<span class="text-gray-500 text-xs ml-1">(${this.formatDuration(store.lastIndexDurationMs)})</span>` : ''}
-                    </div>
-                </div>
+            <div class="grid grid-cols-2 gap-3 mb-6 text-sm">
+                <div class="panel-sm"><span class="text-muted">Source Type</span><div class="text-primary mt-1">${store.source?.type || 'N/A'}</div></div>
+                <div class="panel-sm"><span class="text-muted">Store</span><div class="text-primary mt-1">${this.storeBadge(store.store)}</div></div>
+                <div class="panel-sm"><span class="text-muted">Default K</span><div class="text-primary mt-1">${store.defaultK ?? 'N/A'}</div></div>
+                <div class="panel-sm"><span class="text-muted">Embedding</span><div class="text-primary mt-1">${store.embeddingModel || 'default'}</div></div>
+                <div class="panel-sm"><span class="text-muted">Last Indexed</span><div class="text-primary mt-1">${store.lastIndexedAt ? this.timeAgo(store.lastIndexedAt) : 'Never'}
+                    ${store.lastIndexDurationMs ? `<span class="text-muted text-xs ml-1">(${this.formatDuration(store.lastIndexDurationMs)})</span>` : ''}
+                </div></div>
             </div>
 
-            <!-- Search -->
-            <div class="border-t border-dark-border pt-6">
-                <h3 class="text-sm font-semibold text-gray-300 mb-3">Search</h3>
+            <div class="border-t pt-4">
+                <h3 class="text-sm font-semibold text-primary mb-3">Search</h3>
                 <div class="space-y-3">
                     <textarea id="searchQuery" rows="3" placeholder="Enter search query..."
-                        class="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-3 text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
-                        ${!isIndexed ? 'disabled' : ''}></textarea>
+                        class="textarea text-sm" ${!isIndexed ? 'disabled' : ''}></textarea>
                     <div class="flex items-center gap-3">
-                        <button id="searchBtn"
-                            class="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium px-5 py-2 rounded-lg transition-colors text-sm"
-                            ${!isIndexed ? 'disabled' : ''}>
-                            Search
-                        </button>
+                        <button id="searchBtn" class="btn btn-accent btn-sm" ${!isIndexed ? 'disabled' : ''}>Search</button>
                         <div class="flex items-center gap-2">
-                            <label class="text-xs text-gray-400">Results:</label>
-                            <input type="number" id="searchK" value="${store.defaultK ?? 4}" min="1" max="20"
-                                class="w-16 bg-dark-surface border border-dark-border rounded-lg px-2 py-1.5 text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                            <label class="text-xs text-secondary">Results:</label>
+                            <input type="number" id="searchK" value="${store.defaultK ?? 4}" min="1" max="20" class="input text-sm">
                         </div>
                     </div>
-                    <div id="searchResults" class="min-h-[100px]">
-                        ${!isIndexed ? '<div class="text-gray-600 italic text-center py-6 text-sm">Index this store to enable search</div>' : ''}
+                    <div id="searchResults">
+                        ${!isIndexed ? '<div class="text-muted italic text-center py-4 text-sm">Index this store to enable search</div>' : ''}
                     </div>
                 </div>
             </div>
@@ -344,59 +319,50 @@ export class KnowledgeView extends Component {
         const resultsEl = this.querySelector('#searchResults');
         if (!resultsEl) return;
 
-        resultsEl.innerHTML = '<div class="text-gray-400 italic text-center py-6 text-sm">Searching...</div>';
+        resultsEl.innerHTML = '<div class="text-secondary italic text-center py-4 text-sm">Searching...</div>';
 
         try {
             const res = await api.searchKnowledgeStore(this.selectedStore.name, query, k);
             const results = Array.isArray(res) ? res : res.results || [];
 
             if (results.length === 0) {
-                resultsEl.innerHTML = '<div class="text-gray-500 italic text-center py-6 text-sm">No results found</div>';
+                resultsEl.innerHTML = '<div class="text-muted italic text-center py-4 text-sm">No results found</div>';
                 return;
             }
 
             resultsEl.innerHTML = results.map((r, i) => `
-                <div class="mb-3 last:mb-0 bg-dark-bg border border-dark-border rounded-lg p-3">
-                    <div class="flex items-center justify-between mb-2 pb-2 border-b border-dark-border">
-                        <span class="font-medium text-gray-200 text-sm">Result ${i + 1}</span>
-                        <span class="text-xs font-mono text-gray-400">Score: ${r.score?.toFixed(3)}</span>
+                <div class="panel-sm mb-3">
+                    <div class="flex items-center justify-between mb-2 pb-2 border-b">
+                        <span class="font-medium text-primary text-sm">Result ${i + 1}</span>
+                        <span class="text-xs font-mono text-secondary">Score: ${r.score?.toFixed(3)}</span>
                     </div>
-                    <div class="text-sm text-gray-300 mb-2 whitespace-pre-wrap">${this.escapeHtml(r.content)}</div>
-                    <div class="text-xs text-gray-500">
-                        ${r.metadata ? Object.entries(r.metadata).map(([k, v]) => `<span class="mr-3"><span class="text-gray-600">${k}:</span> ${v}</span>`).join('') : ''}
+                    <div class="text-sm text-primary mb-2 whitespace-pre-wrap">${this.escapeHtml(r.content)}</div>
+                    <div class="text-xs text-muted">
+                        ${r.metadata ? Object.entries(r.metadata).map(([k, v]) => `<span class="mr-3"><span class="text-muted">${k}:</span> ${v}</span>`).join('') : ''}
                     </div>
                 </div>
             `).join('');
 
         } catch (e) {
-            resultsEl.innerHTML = `<div class="text-red-400 text-center text-sm">Error: ${e.message}</div>`;
+            resultsEl.innerHTML = `<div class="text-red text-center text-sm">Error: ${e.message}</div>`;
         }
     }
 
     // --- Helpers ---
 
     statusDot(store) {
-        if (store.isIndexing || store.status === 'indexing') {
-            return '<span class="inline-block w-2.5 h-2.5 rounded-full border-2 border-orange-400 border-t-transparent animate-spin flex-shrink-0"></span>';
-        }
-        const colors = {
-            indexed: 'bg-green-400',
-            error: 'bg-red-400',
-            not_indexed: 'bg-gray-500',
-        };
-        return `<span class="inline-block w-2.5 h-2.5 rounded-full ${colors[store.status] || colors.not_indexed} flex-shrink-0"></span>`;
+        const status = store.isIndexing || store.status === 'indexing' ? 'indexing' : store.status || 'not_indexed';
+        return `<span class="status-dot status-dot-${status}"></span>`;
     }
 
     kindBadge(store) {
-        if (store.hasGraph) {
-            return '<span class="text-xs font-medium px-2 py-0.5 rounded bg-purple-900/50 text-purple-300 border border-purple-700/50">graph</span>';
-        }
-        return '<span class="text-xs font-medium px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 border border-blue-700/50">vector</span>';
+        return store.hasGraph
+            ? '<span class="badge badge-outline-purple">graph</span>'
+            : '<span class="badge badge-outline-blue">vector</span>';
     }
 
     storeBadge(type) {
-        const storeType = type || 'memory';
-        return `<span class="text-xs font-medium px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700">${this.escapeHtml(storeType)}</span>`;
+        return `<span class="badge badge-gray">${this.escapeHtml(type || 'memory')}</span>`;
     }
 
     sourceTypeBadge(type) {
@@ -408,26 +374,24 @@ export class KnowledgeView extends Component {
             web: 'fa-globe',
             s3: 'fa-cloud',
         };
-        return `<span class="text-xs text-gray-500"><i class="fas ${icons[type] || 'fa-question'} mr-1"></i>${type}</span>`;
+        return `<span class="text-xs text-muted"><i class="fas ${icons[type] || 'fa-question'} mr-1"></i>${type}</span>`;
     }
 
     statusBadge(store) {
-        if (store.isIndexing || store.status === 'indexing') {
-            return '<span class="text-xs font-medium px-2 py-0.5 rounded bg-orange-900/50 text-orange-300 border border-orange-700/50">indexing</span>';
-        }
+        if (store.isIndexing || store.status === 'indexing') return '<span class="badge badge-outline-orange">indexing</span>';
         const badges = {
-            indexed: '<span class="text-xs font-medium px-2 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700/50">indexed</span>',
-            error: '<span class="text-xs font-medium px-2 py-0.5 rounded bg-red-900/50 text-red-300 border border-red-700/50">error</span>',
-            not_indexed: '<span class="text-xs font-medium px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700">not indexed</span>',
+            indexed: '<span class="badge badge-outline-green">indexed</span>',
+            error: '<span class="badge badge-outline-red">error</span>',
+            not_indexed: '<span class="badge badge-gray">not indexed</span>',
         };
         return badges[store.status] || badges.not_indexed;
     }
 
     statCard(label, value, icon) {
         return `
-            <div class="bg-dark-surface/50 border border-dark-border rounded-lg p-3 text-center">
-                <div class="text-gray-500 text-xs mb-1"><i class="fas ${icon} mr-1"></i>${label}</div>
-                <div class="text-lg font-bold text-gray-200">${value ?? 0}</div>
+            <div class="stat-card">
+                <div class="text-muted text-xs mb-1"><i class="fas ${icon} mr-1"></i>${label}</div>
+                <div class="stat-value">${value ?? 0}</div>
             </div>
         `;
     }
@@ -474,33 +438,33 @@ export class KnowledgeView extends Component {
     }
 
     escapeHtml(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return escapeHtml(text);
     }
 
     postRender() {
         this.querySelector('#refreshListBtn')?.addEventListener('click', () => this.loadStores());
+        this.querySelector('#kbSidebarToggle')?.addEventListener('click', () => {
+            this.querySelector('#kbSidebar')?.classList.toggle('hidden');
+        });
     }
 
     template() {
         return `
-            <div class="flex h-full gap-4">
-                <!-- Left sidebar -->
-                <div class="w-72 flex-shrink-0 overflow-y-auto custom-scrollbar pr-2">
+            <div class="kb-shell">
+                <button id="kbSidebarToggle" class="mobile-fab">
+                    <i class="fas fa-list text-sm"></i>
+                </button>
+                <div id="kbSidebar" class="kb-sidebar">
                     <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Stores</h3>
-                        <button id="refreshListBtn" class="text-gray-500 hover:text-gray-300 text-xs">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
+                        <h3 class="section-title">Stores</h3>
+                        <button id="refreshListBtn" class="btn-ghost text-xs"><i class="fas fa-sync-alt"></i></button>
                     </div>
                     <div id="knowledgeCards" class="space-y-2">
-                        <div class="text-gray-500 italic text-center py-8 text-sm">Loading...</div>
+                        <div class="text-muted italic text-center py-4 text-sm">Loading...</div>
                     </div>
                 </div>
-
-                <!-- Right detail panel -->
-                <div class="flex-1 overflow-y-auto custom-scrollbar pl-2 border-l border-dark-border" id="knowledgeDetail">
-                    <div class="text-gray-500 italic text-center py-16">Select a knowledge store to view details</div>
+                <div class="kb-detail" id="knowledgeDetail">
+                    <div class="text-muted italic text-center py-4">Select a knowledge store to view details</div>
                 </div>
             </div>
         `;

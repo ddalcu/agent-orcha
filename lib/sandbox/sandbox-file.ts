@@ -1,17 +1,18 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { resolve, dirname, sep } from 'node:path';
 import { tool } from '../types/tool-factory.ts';
 import { z } from 'zod';
 import type { StructuredTool } from '../types/llm-types.ts';
 import type { SandboxConfig } from './types.ts';
 
-const ALLOWED_ROOT = '/tmp';
+const ALLOWED_ROOT = process.platform === 'win32' ? tmpdir() : '/tmp';
 // On macOS, /tmp is a symlink to /private/tmp
 const REAL_ALLOWED_ROOT = existsSync(ALLOWED_ROOT) ? realpathSync(ALLOWED_ROOT) : ALLOWED_ROOT;
 
 function isUnderRoot(p: string): boolean {
-  return (p.startsWith(ALLOWED_ROOT + '/') || p === ALLOWED_ROOT ||
-          p.startsWith(REAL_ALLOWED_ROOT + '/') || p === REAL_ALLOWED_ROOT);
+  return (p.startsWith(ALLOWED_ROOT + sep) || p === ALLOWED_ROOT ||
+          p.startsWith(REAL_ALLOWED_ROOT + sep) || p === REAL_ALLOWED_ROOT);
 }
 
 function validatePath(rawPath: string): string {
