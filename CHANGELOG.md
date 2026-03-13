@@ -9,118 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **PDF Knowledge Store Support** — `pdf-parse` added as a production dependency. PDF loader rewritten to use the `PDFParse` class directly (no lazy import), extracting text page-by-page. New template knowledge store: `patient-records` with deidentified healthcare PDFs.
+- **Engine Registry** — Pluggable engine abstraction supporting four inference backends: llama-cpp, mlx-serve, Ollama, and LM Studio. Each engine has standardized lifecycle management, model loading/unloading, and status reporting. Switch between engines from the Studio UI or API.
 
-- **LLM Configuration API** — Full CRUD for `llm.json` via REST: `GET /api/llm/config` (with redacted API keys and env var detection), `PUT /api/llm/config/models/:name`, `DELETE /api/llm/config/models/:name`, `PUT /api/llm/config/embeddings/:name`. Enables in-browser LLM management without editing files.
+- **MLX-Serve Engine** — Apple Silicon native inference via Metal. Models in MLX format run alongside GGUF models. Auto-downloads mlx-serve binaries, with update checking and HuggingFace MLX model browsing.
 
-- **LocalLlmView Redesign** — Complete rewrite of the Local LLM management UI. Full model and embedding config editing, API key management with env var detection, model download/delete, llama-server controls, and context size configuration — all from the browser.
+- **LLM Config Pointer System** — `llm.json` now supports string pointers (e.g., `"default": "openai"`) for fast provider switching. New `engine` field identifies which inference backend to use. Auto-migrates old format on first load.
 
-- **Reasoning Budget Support** — New `reasoningBudget` field in model config (`llm.json`). Passes `--reasoning-format deepseek` and `--reasoning-budget` flags to llama-server for models with chain-of-thought capabilities (e.g., QwQ, DeepSeek-R1).
+- **LLM Configuration API** — Full CRUD for `llm.json` via REST with redacted API keys and env var detection. Manage models and embeddings entirely from the browser.
 
-- **Workflow Resume Streaming** — `POST /api/workflows/:name/resume` endpoint with SSE streaming for resuming interrupted ReAct workflows. `Orchestrator.streamResumeReactWorkflow()` added to support human-in-the-loop continuation.
+- **Thinking/Reasoning for Local Models** — `reasoningBudget` field enables chain-of-thought for supported models (QwQ, DeepSeek-R1). Thinking content streams as SSE events with toggle and budget controls in the UI.
 
-- **Workflow Chat Enhancements** — `chatOutputFormat` field (`json` | `text`) on workflow schemas controls how output renders in the chat UI. `sampleQuestions` field added to both step-based and react workflow schemas.  `toolInput` and `toolOutput` fields added to `WorkflowStatus` for richer streaming events.
+- **PDF Knowledge Store Support** — PDF loader for knowledge stores. New `patient-records` template with deidentified healthcare PDFs.
 
-- **Team Chat Workflow Template** — New `team-chat.workflow.yaml` template: a ReAct coordinator that delegates tasks to specialized agents for collaborative problem-solving.
+- **Workflow Enhancements** — `chatOutputFormat` (`json` | `text`) controls output rendering. `sampleQuestions` field for suggested prompts. Resume endpoint with SSE streaming for interrupted ReAct workflows. Parallel tool execution in workflows.
 
-- **Studio CSS Overhaul** — All inline styles extracted from `index.html` and `chat.html` into a unified `public/styles.css` stylesheet with CSS custom properties. Tailwind CDN removed. Shared `view-panel` class adds consistent borders across Knowledge, MCP, Monitor, and LLM views.
+- **Studio Overhaul** — New Local LLM tab with engine management, model grids, and VRAM monitoring. Workflows integrated into AgentsView. Unified CSS with custom properties (Tailwind removed). Logo added to NavBar.
 
-- **Studio Logo** — `public/assets/logo.png` added and integrated into the NavBar.
+- **New Templates** — `actor` agent (comedy impersonation chatbot), `team-chat` workflow (multi-agent ReAct coordinator)
 
-- **Force Shutdown** — Second Ctrl+C during shutdown now force-exits immediately (both `start.ts` and `src/index.ts`).
-
-- **MLX-Serve Engine** — Full Apple Silicon local inference backend using `mlx-serve`. Models in MLX format (`.safetensors` directories) run natively on Metal via the MLX framework, alongside the existing llama-server (GGUF) backend.
-  - `MlxServerProcess` (`lib/local-llm/mlx-server-process.ts`) — manages the mlx-serve lifecycle with PID tracking, orphan cleanup, and health polling
-  - `MlxBinaryManager` (`lib/local-llm/mlx-binary-manager.ts`) — auto-downloads signed mlx-serve binaries from GitHub releases (`ddalcu/mlx-serve`), with system PATH detection, version checking, and in-place updates
-  - `ModelManager` extended with MLX model discovery, `downloadMlxModel()` (full HuggingFace repo download with progress), and MLX-aware browsing (`browseHuggingFace()` with `format: 'mlx'`)
-  - New API endpoints: `GET /check-mlx-update`, `POST /update-mlx-binary`; download and browse endpoints accept `type=mlx` / `format=mlx` query params
-  - LocalLlmView shows platform-aware recommendations (MLX on Apple Silicon, GGUF otherwise), format selector in HuggingFace browser, and engine-specific version display and update controls
-  - New template agent: `mlx-test`
-
-- **Engine Registry Architecture** — Pluggable engine abstraction replacing the monolithic `llamaEngine`/`llamaEmbeddingEngine` singletons. Each engine (llama-cpp, mlx-serve, ollama, lmstudio) implements the `LocalEngine` interface with standardized lifecycle methods. `EngineRegistry` singleton manages registration, status aggregation, orphan cleanup, and model path resolution.
-  - `engine-interface.ts` — `LocalEngine` interface defining `loadChat`, `unloadChat`, `swapChat`, `ensureRunningChat`, `loadEmbedding`, `unloadEmbedding`, `ensureRunningEmbedding`, `getStatus`, `killOrphans`, and binary management methods
-  - `engine-registry.ts` — Registry with `getEngine()`, `getAllEngines()`, `getAllStatus()`, `setBaseDir()`, `killAllOrphans()`, `unloadAll()`, `resolveModelPath()`
-  - `engines/llama-cpp-engine.ts` — `LlamaCppEngine` class extracted from the old `llama-provider.ts`
-  - `engines/mlx-serve-engine.ts` — `MlxServeEngine` class extracted from the old `llama-provider.ts`
-
-- **External Engine Support (Ollama & LM Studio)** — Ollama and LM Studio can now be used as inference backends alongside the managed llama-cpp and mlx-serve engines. New API endpoints probe engine availability, fetch model lists with capabilities (tools, vision, reasoning, embedding), report VRAM usage, and allow model activation/unloading.
-  - `GET /api/local-llm/engines` — Probes all four engines, returns availability, model lists, running state, and VRAM
-  - `GET /api/local-llm/engines/urls` / `POST /api/local-llm/engines/urls` — Read/write custom base URLs for external engines (stored in `llm.json` under `engineUrls`)
-  - `POST /api/local-llm/engines/activate` — Activates an external engine model for chat or embedding; stops managed engines if needed, writes config, sets default pointer
-  - `POST /api/local-llm/engines/context` — Updates context size; for LM Studio, reloads the model with the new `context_length`
-  - `POST /api/local-llm/engines/unload` — Unloads a model from Ollama or LM Studio
-
-- **LLM Config Pointer System** — Model and embedding configs in `llm.json` now support string pointers. The `default` key can point to another config entry by name (e.g., `"default": "openai"`), enabling fast switching between pre-configured providers. Auto-migration converts the old format (where `default` is a full config object) to the pointer format on first load. New `engine` field on model/embedding configs identifies which inference engine to use.
-
-- **GPU VRAM Monitoring** — `queryNvidiaVram()` function queries NVIDIA GPU VRAM usage via `nvidia-smi`. Reported in engine status and the Studio UI.
-
-- **Engine Tabs UI** — LocalLlmView now features an engine tab bar (llama-cpp, mlx-serve, Ollama, LM Studio) with availability indicators, connection status dots, and default badges. Each engine tab shows its own model grid, activation controls, context/max-token sliders, and running model status. External engines display base URL configuration, system RAM, and GPU VRAM usage bars.
-
-- **E2E Test Suite** — Playwright-based end-to-end tests covering all four engines: engine tab selection, model activation for chat and embedding, streaming chat verification, and context/max-token configuration. Test helpers for authentication, config backup/restore, and SSE streaming.
-
-- **Thinking/Reasoning for Local Models** — Local LLM provider now supports `enable_thinking` in OpenAI-compatible API requests when `reasoningBudget > 0`. Thinking content streams as SSE `thinking` events. LocalLlmView adds a thinking toggle and budget slider (128–1024 tokens) for models with reasoning capability. Thinking pills in AgentsView and StandaloneChat changed from hover-based popovers to click-to-expand.
+- **E2E Test Suite** — Playwright-based tests covering all four engines, model activation, streaming, and configuration.
 
 ### Changed
 
-- **Parallel Tool Execution in React Workflows** — `ReactWorkflowExecutor` now runs all tool calls from a single LLM response concurrently via `Promise.all`, matching the existing behavior in the agent react-loop. All `tool_call` status events are emitted upfront before execution begins.
-
-- **Tool Argument Validation** — `tool()` factory now uses `safeParse` instead of `parse`, returning a descriptive error with field names and what was provided, rather than a raw Zod exception. Helps LLMs self-correct invalid tool calls.
-
-- **Tool Arg Parse Error Feedback** — OpenAI provider's `parseToolArgs()` fallback now returns the raw text in a `_parseError` field instead of an empty object, giving the model a chance to see and fix its malformed JSON.
-
-- **Workspace Write Tool** — Description updated to emphasize that `filePath` and `content` are both required, with an inline example. Reduces tool-call errors from small LLMs.
-
-- **Local LLM Context Sizing** — `calculateOptimalContextSize` now uses 50% of available-after-weights RAM (down from 80% of native context) and applies a 32K hard cap, reducing memory pressure on smaller machines.
-
-- **Local LLM Binary Caching** — `getBinaryVersion()` and `isSystemBinary()` now cache their results, avoiding repeated `which`/`where` and `--version` subprocess calls. Cache invalidated on `updateBinary()`.
-
-- **Local LLM Model Swap** — Activation now reads `contextSize` and `reasoningBudget` from the existing `default` model config in `llm.json` and forwards them to `llamaEngine.swap()`.
-
-- **llama-server `--parallel 1`** — Hardcoded to single-slot mode for predictable memory usage on desktop.
-
-- **LLM Factory Default maxTokens** — Local provider models now default to `maxTokens: 4096` when none is specified, preventing unbounded generation.
-
-- **Research Pipeline Workflow** — Rewritten to search corporate knowledge and publish findings as a live HTML page via the web-engineer agent.
-
-- **Tool Explorer Workflow** — Renamed from `react-research`, agent delegation disabled (`agents.mode: none`), `maxIterations` raised to 100, sample questions added.
-
-- **Web Engineer Agent** — Updated to use `htmlhost_store` tool with explicit `key`/`value` parameters instead of the previous `htmlhost_deploy`.
-
-- **WorkflowsView Removed** — Standalone workflows tab removed from Studio; workflow chat is handled entirely within AgentsView.
-
-- **LogViewer Removed** — `LogViewer.js` component removed.
-
-- **AgentsView** — Expanded with workflow chat integration (start, stream, interrupt/resume), session management improvements, and mobile sidebar support.
-
-- **StandaloneChat** — Now uses shared `styles.css` instead of inline Tailwind styles.
-
-- **Function Parameter Coercion** — `SimpleFunctionWrapper` now uses `z.coerce.string()`, `z.coerce.number()`, `z.coerce.boolean()` instead of strict types, so LLMs that pass e.g. a number as a string get automatic type coercion.
-
-- **Embedding Batch Size** — OpenAI embeddings batch size increased from 16 to 128, improving throughput for large embedding operations.
-
-- **Dynamic Local LLM Ports** — `LLMFactory` and `KnowledgeStore` now read the base URL from the engine registry instead of hardcoded ports, supporting dynamic port allocation.
-
-- **Knowledge Store Entity Rowid Map** — SQLite store creates an `entity_rowid_map` table for stable rowid mapping to the `entity_vectors` virtual table.
-
-- **IDE Dirty State** — Visual/source mode switching in IDE no longer triggers false dirty-state changes; user's view mode preference preserved when navigating between agent files.
-
-- **Standalone Chat Path** — Stylesheet path changed from relative to absolute (`/styles.css`) to work correctly under nested `/chat/<agent>` paths.
-
-- **Ollama Context Window Passthrough** — `OpenAIChatModel` injects `{ options: { num_ctx } }` into request params when the engine is Ollama, ensuring the configured context size is respected.
-
-- **Adaptive Embedding Batch Size** — `OpenAIEmbeddingsProvider` now halves the batch size on "too large" errors and retries, down to a minimum of 1. Handles VRAM-limited GPUs gracefully.
-
-- **HuggingFace MLX Search** — `ModelManager.browseHuggingFace()` now uses `&filter=mlx` for MLX format searches and prioritizes `mlx-community/` repos in results.
-
-- **LLM Config List Filtering** — `listModelConfigs()` and `listEmbeddingConfigs()` now filter out string pointers, returning only concrete config entries. Getter functions dereference one level of pointer.
-
-- **Agent LLM Picker Default Badge** — The agent LLM picker modal now shows a "default" badge next to the resolved default LLM entry.
-
-- **Template `llm.json` Restructured** — Pre-configured entries for all engines (llama-cpp, mlx-serve, ollama, lmstudio, openai, anthropic, gemini) for both models and embeddings, with `default` as a pointer.
+- **Tool Error Handling** — Descriptive validation errors replace raw Zod exceptions, helping LLMs self-correct. Malformed JSON arguments return the raw text for the model to fix.
+- **Local LLM Defaults** — Context sizing capped at 32K using 50% of available RAM. Default `maxTokens: 4096` for local models. Single-slot mode (`--parallel 1`) for predictable memory.
+- **Embedding Improvements** — Batch size increased to 128, with adaptive halving on VRAM errors. Dynamic port allocation via engine registry.
+- **Function Parameter Coercion** — Automatic type coercion for function parameters, so LLMs passing numbers as strings work correctly.
+- **Ollama Context Passthrough** — Configured context size now correctly forwarded to Ollama via `num_ctx`.
+- **IDE** — Visual/source mode switching no longer triggers false dirty state.
+- **Template `llm.json`** — Pre-configured entries for all engines and providers with `default` as a pointer.
 
 ### Removed
 
-- **`llama-provider.ts`** — Monolithic `llamaEngine`/`llamaEmbeddingEngine` singletons replaced by the engine registry and individual engine classes.
+- Monolithic `llama-provider.ts` replaced by engine registry and individual engine classes.
 
 ### Dependencies
 
