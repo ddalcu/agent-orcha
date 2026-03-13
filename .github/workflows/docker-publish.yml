@@ -21,6 +21,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Generate version
+        id: version
+        run: echo "version=$(date -u +'%Y.%-m%d.%-H%M')" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -41,42 +45,21 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # ── Main image ──
-      - name: Extract metadata (main)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-
       - name: Build and push (main)
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       # ── Sandbox image ──
-      - name: Extract metadata (sandbox)
-        id: sandbox-meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository_owner }}/${{ env.SANDBOX_IMAGE_NAME }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.SANDBOX_IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-
       - name: Build and push (sandbox)
         uses: docker/build-push-action@v6
         with:
@@ -84,7 +67,10 @@ jobs:
           file: Dockerfile.sandbox
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.sandbox-meta.outputs.tags }}
-          labels: ${{ steps.sandbox-meta.outputs.labels }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.SANDBOX_IMAGE_NAME }}:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.SANDBOX_IMAGE_NAME }}:latest
           cache-from: type=gha,scope=sandbox
           cache-to: type=gha,mode=max,scope=sandbox

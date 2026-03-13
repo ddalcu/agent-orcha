@@ -92,8 +92,8 @@ function isAppleSilicon(status) {
     return status?.platform === 'darwin' && status?.arch === 'arm64';
 }
 
-function getRecommendedModels(status) {
-    return isAppleSilicon(status) ? RECOMMENDED_MODELS_MLX : RECOMMENDED_MODELS_GGUF;
+function getRecommendedModels(engine) {
+    return engine === 'mlx-serve' ? RECOMMENDED_MODELS_MLX : RECOMMENDED_MODELS_GGUF;
 }
 
 function detectCapabilities(result) {
@@ -400,8 +400,8 @@ export class LocalLlmView extends Component {
                 ? '<span class="badge badge-amber text-2xs">experimental</span>'
                 : '';
             return `
-                <button class="llm-engine-tab ${isActive ? 'active' : ''} ${!available ? 'unavailable' : ''}"
-                    data-engine="${eng}" ${!available ? 'title="Not detected / Not running"' : ''}>
+                <button class="llm-engine-tab ${isActive ? 'active' : ''}"
+                    data-engine="${eng}">
                     ${ENGINE_ICONS[eng]}
                     <span>${ENGINE_LABELS[eng]}</span>
                     ${experimentalBadge}
@@ -1831,8 +1831,9 @@ export class LocalLlmView extends Component {
 
         const selectedEng = this._selectedEngine;
 
-        // Filter to only show models matching the selected engine
+        // Filter to only show models matching the selected engine, hide mmproj files
         const filteredModels = this.models.filter(model => {
+            if (/mmproj/i.test(model.fileName)) return false;
             if (!selectedEng || !MANAGED_ENGINES.includes(selectedEng)) return true;
             const modelEngine = model.type === 'mlx' ? 'mlx-serve' : 'llama-cpp';
             return modelEngine === selectedEng;
@@ -1927,7 +1928,7 @@ export class LocalLlmView extends Component {
         const container = this.querySelector('#recommendedSection');
         if (!container) return;
 
-        const recommended = getRecommendedModels(this.status);
+        const recommended = getRecommendedModels(this._selectedEngine);
         const pending = recommended.filter(r => !this.isModelDownloaded(r.repo, r.file));
         if (!pending.length) {
             container.innerHTML = '';
@@ -2222,12 +2223,14 @@ export class LocalLlmView extends Component {
                     </div>`;
             }
 
-            // GGUF: file select
-            const options = result.ggufFiles.map(f =>
+            // GGUF: file select (hide mmproj files — they are auto-downloaded)
+            const visibleFiles = result.ggufFiles.filter(f => !/mmproj/i.test(f.fileName));
+            if (!visibleFiles.length) return '';
+            const options = visibleFiles.map(f =>
                 `<option value="${escapeHtml(f.fileName)}" data-size="${f.sizeBytes}">${escapeHtml(f.fileName)} (${formatBytes(f.sizeBytes)})</option>`
             ).join('');
 
-            const firstFile = result.ggufFiles[0];
+            const firstFile = visibleFiles[0];
             const firstTooLarge = ram > 0 && firstFile.sizeBytes > ram;
             const firstDownloaded = this.isModelDownloaded(result.repoId, firstFile.fileName);
 

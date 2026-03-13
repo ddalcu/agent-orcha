@@ -26,9 +26,10 @@ interface AssetPatterns {
 }
 
 const BINARY_NAME = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server';
-// Pin to b8280 — b8322 has a ggml_can_mul_mat assertion bug with embedding models on CUDA
-const PINNED_TAG = 'b8280';
-const RELEASES_API = `https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/${PINNED_TAG}`;
+// Pin to b8280 — b8322 has a regression in build_pooling that crashes embedding models.
+// See: https://github.com/ggml-org/llama.cpp/issues (ggml_can_mul_mat assertion in sched_reserve)
+const PINNED_RELEASE = 'b8280';
+const RELEASES_API = `https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/${PINNED_RELEASE}`;
 
 let cachedGpu: GpuInfo | null = null;
 let cachedVersion: { baseDir: string; value: string | null } | null = null;
@@ -458,11 +459,12 @@ export async function checkForUpdate(baseDir: string): Promise<UpdateInfo> {
   const currentBuild = version ? parseInt(version.match(/^(\d+)/)?.[1] || '', 10) || null : null;
 
   try {
+    // Compare against pinned release, not latest (latest may have regressions)
     const res = await fetch(RELEASES_API);
     if (!res.ok) return { available: false, currentBuild, latestBuild: null, latestTag: null, publishedAt: null, daysNewer: null };
 
     const release: any = await res.json();
-    const tag = release.tag_name; // e.g., "b8300"
+    const tag = release.tag_name; // e.g., "b8280"
     const latestBuild = parseInt(tag?.replace(/^b/, '') || '', 10) || null;
     const publishedAt = release.published_at || null;
 
