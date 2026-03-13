@@ -99,18 +99,23 @@ export async function extractDocumentText(
     fileName?.toLowerCase().endsWith('.xlsx')
   ) {
     try {
-      // @ts-ignore - xlsx is an optional runtime dependency
-      const XLSX = await import('xlsx');
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      // @ts-ignore - exceljs is an optional runtime dependency
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
       const sheets: string[] = [];
-      for (const name of workbook.SheetNames) {
-        const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name]!);
-        sheets.push(`--- Sheet: ${name} ---\n${csv}`);
+      for (const worksheet of workbook.worksheets) {
+        const rows: string[] = [];
+        worksheet.eachRow((row) => {
+          const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+          rows.push(values.map((v: any) => v ?? '').join(','));
+        });
+        sheets.push(`--- Sheet: ${worksheet.name} ---\n${rows.join('\n')}`);
       }
       return { text: sheets.join('\n\n'), format: 'xlsx' };
     } catch (err: any) {
       if (err.code === 'ERR_MODULE_NOT_FOUND' || err.code === 'MODULE_NOT_FOUND') {
-        throw new Error('Excel support requires xlsx. Install it with: npm install xlsx');
+        throw new Error('Excel support requires exceljs. Install it with: npm install exceljs');
       }
       throw new Error(`Failed to extract Excel text: ${err.message}`);
     }

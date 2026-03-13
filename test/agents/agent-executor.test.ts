@@ -441,4 +441,510 @@ describe('AgentExecutor invoke/stream', () => {
     assert.ok(typeof result.output === 'object');
     assert.equal((result.output as any).result, 'structured data');
   });
+
+  it('should store AI response in session for invoke without tools', async () => {
+    LLMFactory.create = async () => mockChatModel('Session AI response');
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    const result = await instance.invoke({ input: { message: 'hi' }, sessionId: 'sess-store' });
+    assert.equal(result.output, 'Session AI response');
+    assert.equal(result.metadata.sessionId, 'sess-store');
+    // user + ai messages stored
+    assert.ok(store.getMessageCount('sess-store') >= 2);
+  });
+
+  it('should handle structured output validation failure in invoke without tools', async () => {
+    LLMFactory.create = async () => mockChatModel('not json');
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const def = minimalDefinition({
+      output: { format: 'structured', schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } } },
+    });
+    const instance = await executor.createInstance(def);
+
+    const result = await instance.invoke({ message: 'test' });
+    // output gets wrapped in {content: ...} since it's not valid JSON
+    assert.ok(typeof result.output === 'object');
+  });
+
+  it('should handle image attachments in buildUserContent', async () => {
+    let receivedMessages: any = null;
+    LLMFactory.create = async () => {
+      const model: ChatModel = {
+        async invoke(msgs: any): Promise<ChatModelResponse> {
+          receivedMessages = msgs;
+          return { content: 'Got image' };
+        },
+        async *stream(): AsyncIterable<ChatModelResponse> { yield { content: 'ok' }; },
+        bindTools() { return model; },
+        withStructuredOutput() { return model; },
+      };
+      return model;
+    };
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    const result = await instance.invoke({
+      message: 'describe this',
+      attachments: [
+        { data: 'base64imgdata', mediaType: 'image/png', name: 'test.png' },
+      ],
+    });
+    assert.equal(result.output, 'Got image');
+    // Verify the LLM received multimodal content
+    assert.ok(receivedMessages);
+    const lastHumanMsg = receivedMessages.find((m: any) => m.role === 'human');
+    assert.ok(Array.isArray(lastHumanMsg.content));
+    assert.ok(lastHumanMsg.content.some((p: any) => p.type === 'image'));
+  });
+
+  it('should handle non-image attachments in buildUserContent', async () => {
+    let receivedMessages: any = null;
+    LLMFactory.create = async () => {
+      const model: ChatModel = {
+        async invoke(msgs: any): Promise<ChatModelResponse> {
+          receivedMessages = msgs;
+          return { content: 'Got doc' };
+        },
+        async *stream(): AsyncIterable<ChatModelResponse> { yield { content: 'ok' }; },
+        bindTools() { return model; },
+        withStructuredOutput() { return model; },
+      };
+      return model;
+    };
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    // text/plain attachment — base64 encoded "Hello world"
+    const base64Text = Buffer.from('Hello world').toString('base64');
+    const result = await instance.invoke({
+      message: 'read this',
+      attachments: [
+        { data: base64Text, mediaType: 'text/plain', name: 'note.txt' },
+      ],
+    });
+    assert.ok(result.output);
+  });
+
+  it('should handle invalid attachments gracefully', async () => {
+    LLMFactory.create = async () => mockChatModel('No attachment');
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    // Attachment with missing data/mediaType should be skipped
+    const result = await instance.invoke({
+      message: 'test',
+      attachments: [{ invalid: true }],
+    });
+    assert.equal(result.output, 'No attachment');
+  });
+
+  it('should stream without tools and store messages in session', async () => {
+    LLMFactory.create = async () => mockChatModel('Streamed session');
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    const chunks: any[] = [];
+    for await (const chunk of instance.stream({ input: { message: 'hi' }, sessionId: 'sess-stream' })) {
+      chunks.push(chunk);
+    }
+    assert.ok(chunks.some(c => c.type === 'content'));
+    // Session should have stored messages
+    assert.ok(store.hasSession('sess-stream'));
+    assert.ok(store.getMessageCount('sess-stream') >= 2);
+  });
+
+  it('should stream without tools and yield reasoning chunks', async () => {
+    LLMFactory.create = async () => {
+      const model: ChatModel = {
+        async invoke(): Promise<ChatModelResponse> { return { content: 'ok' }; },
+        async *stream(): AsyncIterable<ChatModelResponse> {
+          yield { content: 'Answer', reasoning: 'I thought about it' };
+        },
+        bindTools() { return model; },
+        withStructuredOutput() { return model; },
+      };
+      return model;
+    };
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    const chunks: any[] = [];
+    for await (const chunk of instance.stream({ input: { message: 'think' } })) {
+      chunks.push(chunk);
+    }
+    assert.ok(chunks.some(c => c.type === 'thinking'));
+    assert.ok(chunks.some(c => c.type === 'content'));
+  });
+
+  it('should stream without tools and yield usage stats', async () => {
+    LLMFactory.create = async () => {
+      const model: ChatModel = {
+        async invoke(): Promise<ChatModelResponse> { return { content: 'ok' }; },
+        async *stream(): AsyncIterable<ChatModelResponse> {
+          yield {
+            content: 'Done',
+            usage_metadata: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          };
+        },
+        bindTools() { return model; },
+        withStructuredOutput() { return model; },
+      };
+      return model;
+    };
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    const chunks: any[] = [];
+    for await (const chunk of instance.stream({ input: { message: 'stats' } })) {
+      chunks.push(chunk);
+    }
+    const usageChunk = chunks.find(c => c.type === 'usage');
+    assert.ok(usageChunk);
+    assert.equal(usageChunk.input_tokens, 10);
+    assert.equal(usageChunk.output_tokens, 5);
+  });
+
+  it('should stream without tools and handle structured output', async () => {
+    LLMFactory.create = async () => {
+      const model: ChatModel = {
+        async invoke(): Promise<ChatModelResponse> { return { content: '{}' }; },
+        async *stream(): AsyncIterable<ChatModelResponse> {
+          yield { content: '{"key": "value"}' };
+        },
+        bindTools() { return model; },
+        withStructuredOutput() { return model; },
+      };
+      return model;
+    };
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const def = minimalDefinition({
+      output: { format: 'structured' },
+    });
+    const instance = await executor.createInstance(def);
+
+    const chunks: any[] = [];
+    for await (const chunk of instance.stream({ input: { message: 'data' }, sessionId: 'sess-struct' })) {
+      chunks.push(chunk);
+    }
+    const resultChunk = chunks.find(c => c.type === 'result');
+    assert.ok(resultChunk);
+    assert.equal(resultChunk.output.key, 'value');
+    // Should store in session
+    assert.ok(store.hasSession('sess-struct'));
+  });
+});
+
+// --- extractStructuredOutput tests ---
+
+describe('AgentExecutor extractStructuredOutput (via invoke)', () => {
+  let originalCreate: typeof LLMFactory.create;
+
+  before(async () => {
+    const fp = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'llm.json');
+    await loadLLMConfig(fp);
+    originalCreate = LLMFactory.create;
+  });
+
+  afterEach(() => {
+    LLMFactory.create = originalCreate;
+  });
+
+  it('should extract structured output from object without content property (with tools)', async () => {
+    // When the react loop returns a message object without 'content', extractStructuredOutput
+    // returns it as-is. This path is only hit through invokeWithTools.
+    LLMFactory.create = async () => {
+      let callCount = 0;
+      const model: ChatModel = {
+        async invoke(): Promise<ChatModelResponse> { return { content: '' }; },
+        async *stream(): AsyncIterable<ChatModelResponse> {
+          callCount++;
+          // First call returns structured data without content
+          yield { content: '{"result": "from_tools"}' };
+        },
+        bindTools() { return model; },
+        withStructuredOutput() { return model; },
+      };
+      return model;
+    };
+
+    const dummyTool: StructuredTool = {
+      name: 'structtool',
+      description: 'dummy',
+      schema: { type: 'object', properties: {} },
+      invoke: async () => 'ok',
+    } as StructuredTool;
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const def = minimalDefinition({
+      output: { format: 'structured' },
+    });
+    const instance = await executor.createInstance(def);
+    const result = await instance.invoke({ message: 'get' });
+    assert.ok(typeof result.output === 'object');
+  });
+
+  it('should extract structured output from message with object content', async () => {
+    LLMFactory.create = async () => {
+      const model: ChatModel = {
+        async invoke(): Promise<ChatModelResponse> {
+          return { content: { nested: 'obj' } } as any;
+        },
+        async *stream(): AsyncIterable<ChatModelResponse> { yield { content: '' }; },
+        bindTools() { return model; },
+        withStructuredOutput() { return model; },
+      };
+      return model;
+    };
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const def = minimalDefinition({
+      output: { format: 'structured' },
+    });
+    const instance = await executor.createInstance(def);
+    const result = await instance.invoke({ message: 'get' });
+    assert.ok(typeof result.output === 'object');
+    assert.equal((result.output as any).nested, 'obj');
+  });
+
+  it('should extract structured output from unparseable string content', async () => {
+    LLMFactory.create = async () => mockChatModel('not valid json');
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const def = minimalDefinition({
+      output: { format: 'structured' },
+    });
+    const instance = await executor.createInstance(def);
+    const result = await instance.invoke({ message: 'get' });
+    assert.ok(typeof result.output === 'object');
+    assert.equal((result.output as any).content, 'not valid json');
+  });
+
+  it('should handle structured output with valid JSON string content', async () => {
+    LLMFactory.create = async () => mockChatModel('{"parsed": true}');
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const def = minimalDefinition({
+      output: { format: 'structured' },
+    });
+    const instance = await executor.createInstance(def);
+    const result = await instance.invoke({ message: 'get' });
+    assert.ok(typeof result.output === 'object');
+    assert.equal((result.output as any).parsed, true);
+  });
+});
+
+// --- invokeWithTools detailed tests ---
+
+describe('AgentExecutor invokeWithTools', () => {
+  let originalCreate: typeof LLMFactory.create;
+
+  before(async () => {
+    const fp = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'llm.json');
+    await loadLLMConfig(fp);
+    originalCreate = LLMFactory.create;
+  });
+
+  afterEach(() => {
+    LLMFactory.create = originalCreate;
+  });
+
+  function createToolsModel(responses: Array<{ content: string; tool_calls?: any[] }>): ChatModel {
+    let callIdx = 0;
+    const model: ChatModel = {
+      async invoke(): Promise<ChatModelResponse> {
+        return responses[Math.min(callIdx++, responses.length - 1)]!;
+      },
+      async *stream(): AsyncIterable<ChatModelResponse> {
+        const resp = responses[Math.min(callIdx++, responses.length - 1)]!;
+        yield resp;
+      },
+      bindTools() { return model; },
+      withStructuredOutput() { return model; },
+    };
+    return model;
+  }
+
+  it('should log sessionId when invoking with tools', async () => {
+    LLMFactory.create = async () => createToolsModel([
+      { content: 'Tool response with session' },
+    ]);
+
+    const dummyTool: StructuredTool = {
+      name: 'dummy',
+      description: 'dummy tool',
+      schema: { type: 'object', properties: {} },
+      invoke: async () => 'ok',
+    } as StructuredTool;
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    const result = await instance.invoke({ input: { message: 'hi' }, sessionId: 'sess-tools' });
+    assert.equal(result.metadata.sessionId, 'sess-tools');
+    assert.ok(typeof result.output === 'string');
+  });
+
+  it('should handle empty messages from agent with tools', async () => {
+    // Force the react agent to return empty messages
+    LLMFactory.create = async () => {
+      const model: ChatModel = {
+        async invoke(): Promise<ChatModelResponse> { return { content: '' }; },
+        async *stream(): AsyncIterable<ChatModelResponse> {
+          yield { content: '' };
+        },
+        bindTools() { return model; },
+        withStructuredOutput() { return model; },
+      };
+      return model;
+    };
+
+    const dummyTool: StructuredTool = {
+      name: 'noop',
+      description: 'no-op',
+      schema: { type: 'object', properties: {} },
+      invoke: async () => 'ok',
+    } as StructuredTool;
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    const result = await instance.invoke({ message: 'hi' });
+    // Should handle the case without crashing
+    assert.ok(typeof result.output === 'string');
+  });
+
+  it('should handle structured output with tools and validate', async () => {
+    LLMFactory.create = async () => createToolsModel([
+      { content: '{"name": "Alice", "age": 30}' },
+    ]);
+
+    const dummyTool: StructuredTool = {
+      name: 'lookup',
+      description: 'lookup',
+      schema: { type: 'object', properties: {} },
+      invoke: async () => 'ok',
+    } as StructuredTool;
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const def = minimalDefinition({
+      output: {
+        format: 'structured',
+        schema: { type: 'object', properties: { name: { type: 'string' } } },
+      },
+    });
+    const instance = await executor.createInstance(def);
+
+    const result = await instance.invoke({ message: 'lookup Alice' });
+    assert.ok(typeof result.output === 'object');
+    assert.ok(result.metadata.structuredOutputValid !== undefined);
+  });
+
+  it('should handle empty/null output with tools', async () => {
+    LLMFactory.create = async () => createToolsModel([
+      { content: '' },
+    ]);
+
+    const dummyTool: StructuredTool = {
+      name: 'noop2',
+      description: 'noop',
+      schema: { type: 'object', properties: {} },
+      invoke: async () => 'ok',
+    } as StructuredTool;
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    const result = await instance.invoke({ message: 'empty' });
+    // Empty output should be replaced with fallback message
+    assert.ok(typeof result.output === 'string');
+  });
+
+  it('should handle AbortError with tools', async () => {
+    LLMFactory.create = async () => {
+      const model: ChatModel = {
+        async invoke() { throw new DOMException('Aborted', 'AbortError'); },
+        async *stream() { throw new DOMException('Aborted', 'AbortError'); },
+        bindTools() { return model; },
+        withStructuredOutput() { return model; },
+      };
+      return model;
+    };
+
+    const dummyTool: StructuredTool = {
+      name: 'aborttool',
+      description: 'abort',
+      schema: { type: 'object', properties: {} },
+      invoke: async () => 'ok',
+    } as StructuredTool;
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    const result = await instance.invoke({ message: 'abort' });
+    assert.ok(typeof result.output === 'string');
+    assert.ok((result.output as string).includes('abort') || (result.output as string).includes('Abort'));
+  });
+
+  it('should store tool summaries in session with tools', async () => {
+    let callCount = 0;
+    LLMFactory.create = async () => {
+      const model: ChatModel = {
+        async invoke(): Promise<ChatModelResponse> { return { content: '' }; },
+        async *stream(): AsyncIterable<ChatModelResponse> {
+          callCount++;
+          if (callCount === 1) {
+            yield { content: '', tool_calls: [{ id: 'tc-1', name: 'greet', args: { name: 'Bob' } }] };
+          } else {
+            yield { content: 'Hello Bob! This is a response that is long enough to pass the minimum length check.' };
+          }
+        },
+        bindTools() { return model; },
+        withStructuredOutput() { return model; },
+      };
+      return model;
+    };
+
+    const greetTool: StructuredTool = {
+      name: 'greet',
+      description: 'greet',
+      schema: { type: 'object', properties: { name: { type: 'string' } } },
+      invoke: async (args: any) => `Hi ${args.name}`,
+    } as StructuredTool;
+
+    const store = new ConversationStore();
+    const executor = new AgentExecutor(mockToolRegistry([greetTool]), store);
+    const instance = await executor.createInstance(minimalDefinition());
+
+    const result = await instance.invoke({ input: { message: 'greet Bob' }, sessionId: 'sess-tool-summary' });
+    assert.equal(result.metadata.sessionId, 'sess-tool-summary');
+    assert.ok(store.hasSession('sess-tool-summary'));
+  });
 });

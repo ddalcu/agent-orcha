@@ -8,6 +8,10 @@ const DEFAULT_WORKSPACE = path.join(os.homedir(), 'agent-orcha-workspace');
 let _isSea: boolean | null = null;
 let _sea: any = null;
 
+// Exported for testing — not part of the public API
+export function _resetSeaCache() { _isSea = null; _sea = null; }
+export function _setSeaMock(seaMod: any) { _sea = seaMod; }
+
 function sea(): any {
   if (_sea) return _sea;
   try {

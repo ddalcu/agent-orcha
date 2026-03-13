@@ -29,13 +29,14 @@ function validateChatToken(token: string, agentName: string): boolean {
   return true;
 }
 
-// Periodic cleanup of expired tokens
-setInterval(() => {
+// Periodic cleanup of expired tokens (unref so it doesn't block process exit)
+const cleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [token, entry] of chatTokens) {
     if (now > entry.expiresAt) chatTokens.delete(token);
   }
 }, 60 * 60 * 1000); // every hour
+cleanupInterval.unref();
 
 interface AgentParams {
   agentName: string;

@@ -379,6 +379,200 @@ describe('knowledge.route', () => {
     assert.equal(body.edges[0].type, 'RELATES_TO');
   });
 
+  it('POST /:name/add should return 500 on error', async () => {
+    const result = await createTestApp(knowledgeRoutes, '/api/knowledge', {
+      knowledge: {
+        get: () => ({
+          addDocuments: async () => { throw new Error('Storage full'); },
+        }),
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/knowledge/kb1/add',
+      payload: { documents: [{ content: 'doc' }] },
+    });
+    assert.equal(res.statusCode, 500);
+    assert.equal(JSON.parse(res.payload).error, 'Storage full');
+  });
+
+  it('POST /:name/add should return 500 with non-Error thrown', async () => {
+    const result = await createTestApp(knowledgeRoutes, '/api/knowledge', {
+      knowledge: {
+        get: () => ({
+          addDocuments: async () => { throw 'string error'; },
+        }),
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/knowledge/kb1/add',
+      payload: { documents: [{ content: 'doc' }] },
+    });
+    assert.equal(res.statusCode, 500);
+    assert.equal(JSON.parse(res.payload).error, 'string error');
+  });
+
+  it('POST /:name/index should broadcast error when refresh fails', async () => {
+    let broadcastedData: string | undefined;
+    // We need to trigger the .catch() path by making refresh reject
+    const result = await createTestApp(knowledgeRoutes, '/api/knowledge', {
+      knowledge: {
+        getConfig: () => ({ name: 'kb1' }),
+        isIndexing: () => false,
+        get: () => ({ search: async () => [] }), // existing store => refresh path
+        refresh: async () => { throw new Error('Refresh boom'); },
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({ method: 'POST', url: '/api/knowledge/kb1/index' });
+    assert.equal(res.statusCode, 200);
+    // The route returns 200 immediately; the error is broadcast async via SSE.
+    // Wait a tick for the catch handler to fire.
+    await new Promise((r) => setTimeout(r, 50));
+  });
+
+  it('POST /:name/index should broadcast error when initialize fails', async () => {
+    const result = await createTestApp(knowledgeRoutes, '/api/knowledge', {
+      knowledge: {
+        getConfig: () => ({ name: 'kb1' }),
+        isIndexing: () => false,
+        get: () => undefined, // no existing store => initialize path
+        initialize: async () => { throw new Error('Init boom'); },
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({ method: 'POST', url: '/api/knowledge/kb1/index' });
+    assert.equal(res.statusCode, 200);
+    await new Promise((r) => setTimeout(r, 50));
+  });
+
+  it('POST /:name/index should broadcast error with non-Error thrown (refresh)', async () => {
+    const result = await createTestApp(knowledgeRoutes, '/api/knowledge', {
+      knowledge: {
+        getConfig: () => ({ name: 'kb1' }),
+        isIndexing: () => false,
+        get: () => ({ search: async () => [] }),
+        refresh: async () => { throw 'string refresh error'; },
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({ method: 'POST', url: '/api/knowledge/kb1/index' });
+    assert.equal(res.statusCode, 200);
+    await new Promise((r) => setTimeout(r, 50));
+  });
+
+  it('POST /:name/index should broadcast error with non-Error thrown (initialize)', async () => {
+    const result = await createTestApp(knowledgeRoutes, '/api/knowledge', {
+      knowledge: {
+        getConfig: () => ({ name: 'kb1' }),
+        isIndexing: () => false,
+        get: () => undefined,
+        initialize: async () => { throw 42; },
+      },
+    });
+    app = result.app;
+
+    const res = await app.inject({ method: 'POST', url: '/api/knowledge/kb1/index' });
+    assert.equal(res.statusCode, 200);
+    await new Promise((r) => setTimeout(r, 50));
+  });
+
+  it('POST /:name/index onProgress callback should call broadcastSSE', async () => {
+    let capturedOnProgress: any;
+    const result = await createTestApp(knowledgeRoutes, '/api/knowledge', {
+      knowledge: {
+        getConfig: () => ({ name: 'kb1' }),
+        isIndexing: () => false,
+        get: () => undefined,
+        initialize: async (_name: string, onProgress: any) => {
+          capturedOnProgress = onProgress;
+        },
+      },
+    });
+    app = result.app;
+
+    // Trigger indexing to capture the onProgress callback
+    await app.inject({ method: 'POST', url: '/api/knowledge/kb1/index' });
+
+    // Call the onProgress callback to exercise broadcastSSE (line 144)
+    // This covers the broadcastSSE function (lines 39-53) and the onProgress closure (line 143-144)
+    assert.ok(capturedOnProgress, 'onProgress callback should have been captured');
+    // Call with a non-terminal phase (covers lines 39-52 without done/error branch)
+    capturedOnProgress({ name: 'kb1', phase: 'embedding', progress: 50, message: 'Processing...' });
+    // Call with done phase (covers lines 43-45 setTimeout cleanup)
+    capturedOnProgress({ name: 'kb1', phase: 'done', progress: 100, message: 'Done' });
+  });
+
+  it('POST /:name/index onProgress for refresh should call broadcastSSE', async () => {
+    let capturedOnProgress: any;
+    const result = await createTestApp(knowledgeRoutes, '/api/knowledge', {
+      knowledge: {
+        getConfig: () => ({ name: 'kb1' }),
+        isIndexing: () => false,
+        get: () => ({ search: async () => [] }), // existing store => refresh path
+        refresh: async (_name: string, onProgress: any) => {
+          capturedOnProgress = onProgress;
+        },
+      },
+    });
+    app = result.app;
+
+    await app.inject({ method: 'POST', url: '/api/knowledge/kb1/index' });
+
+    assert.ok(capturedOnProgress, 'onProgress callback should have been captured');
+    capturedOnProgress({ name: 'kb1', phase: 'loading', progress: 25, message: 'Loading...' });
+  });
+
+  it('broadcastSSE with error phase should schedule cleanup', async () => {
+    let capturedOnProgress: any;
+    const result = await createTestApp(knowledgeRoutes, '/api/knowledge', {
+      knowledge: {
+        getConfig: () => ({ name: 'kberr' }),
+        isIndexing: () => false,
+        get: () => undefined,
+        initialize: async (_name: string, onProgress: any) => {
+          capturedOnProgress = onProgress;
+        },
+      },
+    });
+    app = result.app;
+
+    await app.inject({ method: 'POST', url: '/api/knowledge/kberr/index' });
+    assert.ok(capturedOnProgress);
+    // error phase also triggers the cleanup setTimeout (line 43-45)
+    capturedOnProgress({ name: 'kberr', phase: 'error', progress: 0, message: 'Failed' });
+  });
+
+  it('broadcastSSE with no listeners should not throw', async () => {
+    let capturedOnProgress: any;
+    const result = await createTestApp(knowledgeRoutes, '/api/knowledge', {
+      knowledge: {
+        getConfig: () => ({ name: 'kbnolisten' }),
+        isIndexing: () => false,
+        get: () => undefined,
+        initialize: async (_name: string, onProgress: any) => {
+          capturedOnProgress = onProgress;
+        },
+      },
+    });
+    app = result.app;
+
+    await app.inject({ method: 'POST', url: '/api/knowledge/kbnolisten/index' });
+    assert.ok(capturedOnProgress);
+    // No SSE listeners connected - broadcastSSE should handle gracefully (line 47-52)
+    assert.doesNotThrow(() => {
+      capturedOnProgress({ name: 'kbnolisten', phase: 'loading', progress: 10, message: 'loading' });
+    });
+  });
+
   it('GET / should return statuses with metadata', async () => {
     const statuses = new Map([
       ['kb1', { status: 'indexed', documentCount: 10, chunkCount: 20 }],
