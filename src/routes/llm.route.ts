@@ -2,9 +2,10 @@ import type { FastifyPluginAsync } from 'fastify';
 import {
   LLMFactory,
   listModelConfigs, getModelConfig,
-  listEmbeddingConfigs, getEmbeddingConfig,
+  getEmbeddingConfig,
   resolveApiKey,
   getLLMConfig, saveLLMConfig,
+  resolveDefaultName,
 } from '../../lib/llm/index.ts';
 import { ModelConfigSchema, EmbeddingModelConfigSchema } from '../../lib/llm/llm-config.ts';
 import { detectProvider } from '../../lib/llm/provider-detector.ts';
@@ -92,6 +93,11 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
     const models: Record<string, any> = {};
     for (const [name, m] of Object.entries(config.models)) {
+      if (typeof m === 'string') {
+        // String pointer — pass through as-is
+        models[name] = m;
+        continue;
+      }
       const provider = detectProvider(m);
       const envVar = PROVIDER_ENV_VARS[provider];
       models[name] = {
@@ -105,6 +111,10 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
     const embeddings: Record<string, any> = {};
     for (const [name, e] of Object.entries(config.embeddings)) {
+      if (typeof e === 'string') {
+        embeddings[name] = e;
+        continue;
+      }
       embeddings[name] = {
         ...e,
         apiKey: redactKey(e.apiKey),
@@ -114,7 +124,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
     return { version: config.version, models, embeddings };
   });
 
-  // PUT /config/models/:name — upsert a model config entry
+  // PUT /config/models/:name — upsert a model config entry (or set pointer for 'default')
   fastify.put<{ Params: { name: string }; Body: any }>(
     '/config/models/:name',
     async (request) => {
@@ -124,16 +134,27 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       const { name } = request.params;
       const body = { ...request.body };
 
+      // If writing a string pointer (e.g. setting default to a key name)
+      if (typeof body === 'string' || (typeof body._pointer === 'string')) {
+        const pointer = typeof body === 'string' ? body : body._pointer;
+        config.models[name] = pointer;
+        await saveLLMConfig(llmJsonPath, config);
+        LLMFactory.clearCache();
+        return { ok: true };
+      }
+
       // Strip internal fields
       delete body._provider;
       delete body._hasEnvKey;
       delete body._envVar;
+      delete body._pointer;
 
       // Preserve existing API key if redacted or empty
       const existing = config.models[name];
+      const existingObj = (existing && typeof existing !== 'string') ? existing : null;
       if (!body.apiKey || body.apiKey.startsWith('••••')) {
-        if (existing?.apiKey) {
-          body.apiKey = existing.apiKey;
+        if (existingObj?.apiKey) {
+          body.apiKey = existingObj.apiKey;
         } else {
           delete body.apiKey;
         }
@@ -164,7 +185,12 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
       const { name } = request.params;
       if (name === 'default') {
-        return reply.status(400).send({ error: 'Cannot delete the default model config' });
+        return reply.status(400).send({ error: 'Cannot delete the default pointer' });
+      }
+      // Prevent deleting the entry that default currently points to
+      const defaultTarget = resolveDefaultName('models');
+      if (name === defaultTarget) {
+        return reply.status(400).send({ error: `Cannot delete "${name}" — it is the current default. Change the default first.` });
       }
 
       delete config.models[name];
@@ -175,7 +201,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // PUT /config/embeddings/:name — upsert an embedding config entry
+  // PUT /config/embeddings/:name — upsert an embedding config entry (or set pointer)
   fastify.put<{ Params: { name: string }; Body: any }>(
     '/config/embeddings/:name',
     async (request) => {
@@ -185,10 +211,19 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       const { name } = request.params;
       const body = { ...request.body };
 
+      // If writing a string pointer
+      if (typeof body === 'string' || (typeof body._pointer === 'string')) {
+        const pointer = typeof body === 'string' ? body : body._pointer;
+        config.embeddings[name] = pointer;
+        await saveLLMConfig(llmJsonPath, config);
+        return { ok: true };
+      }
+
       const existing = config.embeddings[name];
+      const existingObj = (existing && typeof existing !== 'string') ? existing : null;
       if (!body.apiKey || body.apiKey.startsWith('••••')) {
-        if (existing?.apiKey) {
-          body.apiKey = existing.apiKey;
+        if (existingObj?.apiKey) {
+          body.apiKey = existingObj.apiKey;
         } else {
           delete body.apiKey;
         }
@@ -207,17 +242,29 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /readiness — check if default model + embedding are usable
   fastify.get('/readiness', async () => {
     const issues: string[] = [];
+    const config = getLLMConfig();
 
-    if (listModelConfigs().includes('default')) {
-      const result = await checkConfigReady(getModelConfig('default'), manager);
-      if (!result.ready) issues.push(`Chat: ${result.reason}`);
+    // Check if default exists (either as a concrete entry or as a pointer to one)
+    const hasDefaultModel = config?.models['default'] !== undefined;
+    if (hasDefaultModel) {
+      try {
+        const result = await checkConfigReady(getModelConfig('default'), manager);
+        if (!result.ready) issues.push(`Chat: ${result.reason}`);
+      } catch {
+        issues.push('Default model pointer is broken');
+      }
     } else {
       issues.push('No default model configured');
     }
 
-    if (listEmbeddingConfigs().includes('default')) {
-      const result = await checkConfigReady(getEmbeddingConfig('default'), manager);
-      if (!result.ready) issues.push(`Embedding: ${result.reason}`);
+    const hasDefaultEmb = config?.embeddings['default'] !== undefined;
+    if (hasDefaultEmb) {
+      try {
+        const result = await checkConfigReady(getEmbeddingConfig('default'), manager);
+        if (!result.ready) issues.push(`Embedding: ${result.reason}`);
+      } catch {
+        issues.push('Default embedding pointer is broken');
+      }
     } else {
       issues.push('No default embedding configured');
     }

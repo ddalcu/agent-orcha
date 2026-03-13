@@ -12,7 +12,7 @@ import { OpenAIEmbeddingsProvider } from '../llm/providers/openai-embeddings.ts'
 import { GeminiEmbeddingsProvider } from '../llm/providers/gemini-embeddings.ts';
 import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.ts';
 import { detectProvider } from '../llm/provider-detector.ts';
-import { llamaEmbeddingEngine } from '../local-llm/llama-provider.ts';
+import { engineRegistry } from '../local-llm/engine-registry.ts';
 import { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
 import cron from 'node-cron';
 import { substituteEnvVars } from '../utils/env-substitution.ts';
@@ -578,7 +578,9 @@ export class KnowledgeStore {
 
     // Auto-start local embedding server if needed (skip if user provides their own baseUrl)
     if (provider === 'local' && !embeddingConfig.baseUrl) {
-      await llamaEmbeddingEngine.ensureRunning(embeddingConfig.model);
+      const engineName = embeddingConfig.engine ?? 'llama-cpp';
+      const engine = engineRegistry.getEngine(engineName);
+      if (engine) await engine.ensureRunningEmbedding(embeddingConfig.model);
     }
 
     let baseEmbeddings: Embeddings;
@@ -595,7 +597,12 @@ export class KnowledgeStore {
       case 'anthropic':
       default: {
         const apiKey = resolveApiKey(provider, embeddingConfig.apiKey);
-        const baseURL = embeddingConfig.baseUrl ?? (provider === 'local' ? (llamaEmbeddingEngine.getBaseUrl() ?? 'http://127.0.0.1:9991') + '/v1' : undefined);
+        let baseURL = embeddingConfig.baseUrl;
+        if (provider === 'local' && !baseURL) {
+          const engineName = embeddingConfig.engine ?? 'llama-cpp';
+          const engine = engineRegistry.getEngine(engineName);
+          baseURL = (engine?.getEmbeddingBaseUrl() ?? 'http://127.0.0.1:9991') + '/v1';
+        }
         baseEmbeddings = new OpenAIEmbeddingsProvider({
           modelName: embeddingConfig.model,
           apiKey,

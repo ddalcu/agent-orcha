@@ -314,11 +314,11 @@ export class ApiService {
         return res.json();
     }
 
-    async activateLocalModel(id, { setAsDefault = false } = {}) {
+    async activateLocalModel(id) {
         const res = await this._fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ setAsDefault }),
+            body: JSON.stringify({}),
         });
         return res.json();
     }
@@ -369,13 +369,21 @@ export class ApiService {
         return res.json();
     }
 
-    async stopLocalLlm() {
-        const res = await this._fetch('/api/local-llm/stop', { method: 'POST' });
+    async stopLocalLlm(engine) {
+        const res = await this._fetch('/api/local-llm/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(engine ? { engine } : {}),
+        });
         return res.json();
     }
 
-    async stopLocalEmbedding() {
-        const res = await this._fetch('/api/local-llm/stop-embedding', { method: 'POST' });
+    async stopLocalEmbedding(engine) {
+        const res = await this._fetch('/api/local-llm/stop-embedding', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(engine ? { engine } : {}),
+        });
         return res.json();
     }
 
@@ -386,6 +394,52 @@ export class ApiService {
 
     async updateLlamaBinary() {
         const res = await this._fetch('/api/local-llm/update-binary', { method: 'POST' });
+        return res.json();
+    }
+
+    async getEngines() {
+        const res = await this._fetch('/api/local-llm/engines');
+        return res.json();
+    }
+
+    async activateEngine(engine, model, role = 'chat') {
+        const res = await this._fetch('/api/local-llm/engines/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine, model, role }),
+        });
+        return res.json();
+    }
+
+    async unloadEngineModel(engine, model, instanceId) {
+        const res = await this._fetch('/api/local-llm/engines/unload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine, model, ...(instanceId ? { instanceId } : {}) }),
+        });
+        return res.json();
+    }
+
+    async getEngineUrls() {
+        const res = await this._fetch('/api/local-llm/engines/urls');
+        return res.json();
+    }
+
+    async setEngineUrl(engine, url) {
+        const res = await this._fetch('/api/local-llm/engines/urls', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine, url }),
+        });
+        return res.json();
+    }
+
+    async setEngineContext(contextSize) {
+        const res = await this._fetch('/api/local-llm/engines/context', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contextSize }),
+        });
         return res.json();
     }
 

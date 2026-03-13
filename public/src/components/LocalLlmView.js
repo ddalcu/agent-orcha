@@ -132,6 +132,21 @@ function capabilityBadges(caps) {
     return badges.join(' ');
 }
 
+const ENGINE_LABELS = {
+    'llama-cpp': 'llama-cpp',
+    'mlx-serve': 'mlx-serve',
+    'ollama': 'Ollama',
+    'lmstudio': 'LM Studio',
+};
+const ENGINE_ICONS = {
+    'llama-cpp': '<i class="fas fa-server"></i>',
+    'mlx-serve': '<i class="fab fa-apple"></i>',
+    'ollama': '<i class="fas fa-cube"></i>',
+    'lmstudio': '<i class="fas fa-flask"></i>',
+};
+const MANAGED_ENGINES = ['llama-cpp', 'mlx-serve'];
+const EXTERNAL_ENGINES = ['ollama', 'lmstudio'];
+
 export class LocalLlmView extends Component {
     constructor() {
         super();
@@ -146,6 +161,39 @@ export class LocalLlmView extends Component {
         this.activeProvider = 'local';
         this.llmConfig = null;
         this._browseFormat = 'gguf';
+        this._selectedEngine = null; // auto-detect from status
+        this._engines = null; // cached engine probe result
+        this._engineUrls = {}; // custom base URLs for external engines
+    }
+
+    /**
+     * Resolve a config section's default pointer to the actual config object.
+     * In the new pointer format, `default` is a string key pointing to another entry.
+     * @param {'models'|'embeddings'} section
+     * @returns {object|null} The resolved config object, or null
+     */
+    _resolveDefault(section) {
+        const sectionData = this.llmConfig?.[section];
+        if (!sectionData) return null;
+        let val = sectionData['default'];
+        // Dereference string pointer (one level)
+        if (typeof val === 'string') {
+            val = sectionData[val];
+        }
+        return (val && typeof val === 'object') ? val : null;
+    }
+
+    /**
+     * Get the resolved key name that 'default' points to.
+     * @param {'models'|'embeddings'} section
+     * @returns {string|null}
+     */
+    _resolveDefaultKey(section) {
+        const sectionData = this.llmConfig?.[section];
+        if (!sectionData) return null;
+        const val = sectionData['default'];
+        if (typeof val === 'string') return val;
+        return 'default';
     }
 
     async connectedCallback() {
@@ -154,6 +202,7 @@ export class LocalLlmView extends Component {
         await this.refresh();
         this.pollActiveDownloads();
         this.loadInterruptedDownloads();
+        this.loadEngines();
     }
 
     disconnectedCallback() {
@@ -287,6 +336,8 @@ export class LocalLlmView extends Component {
         try {
             this.status = await api.getLocalLlmStatus();
             this.systemRamBytes = this.status.systemRamBytes || 0;
+            // Re-render engine tabs if available (status may update engine availability)
+            if (this._engines) this.renderEngineTabs();
             this.renderStatus();
         } catch (e) {
             console.error('Failed to load local LLM status:', e);
@@ -305,12 +356,656 @@ export class LocalLlmView extends Component {
         }
     }
 
+    async loadEngines() {
+        try {
+            const [engines, urls] = await Promise.all([api.getEngines(), api.getEngineUrls()]);
+            this._engines = engines;
+            this._engineUrls = urls || {};
+            // Auto-detect initial engine from current default config
+            if (!this._selectedEngine) {
+                const configEngine = this.status?.defaultEngine || this._resolveDefault('models')?.engine;
+                if (configEngine) {
+                    this._selectedEngine = configEngine;
+                } else {
+                    this._selectedEngine = 'llama-cpp';
+                }
+            }
+            this.renderEngineTabs();
+            this.renderEngineContent();
+        } catch (e) {
+            console.error('Failed to load engines:', e);
+        }
+    }
+
+    renderEngineTabs() {
+        const container = this.querySelector('#engineTabs');
+        if (!container || !this._engines) return;
+
+        const isMacHost = this.status?.platform === 'darwin';
+        const configDefaultEngine = this._resolveDefault('models')?.engine || this.status?.defaultEngine || null;
+        const engines = ['llama-cpp', 'mlx-serve', 'ollama', 'lmstudio']
+            .filter(eng => eng !== 'mlx-serve' || isMacHost);
+        container.innerHTML = engines.map(eng => {
+            const available = this._engines[eng]?.available;
+            const isActive = this._selectedEngine === eng;
+            const isExternal = EXTERNAL_ENGINES.includes(eng);
+            const isDefault = eng === configDefaultEngine;
+            const statusDot = isExternal
+                ? `<span class="engine-status ${available ? 'connected' : 'disconnected'}"></span>`
+                : '';
+            const defaultBadge = isDefault
+                ? '<span class="badge badge-green text-2xs">default</span>'
+                : '';
+            const experimentalBadge = eng === 'mlx-serve'
+                ? '<span class="badge badge-amber text-2xs">experimental</span>'
+                : '';
+            return `
+                <button class="llm-engine-tab ${isActive ? 'active' : ''} ${!available ? 'unavailable' : ''}"
+                    data-engine="${eng}" ${!available ? 'title="Not detected / Not running"' : ''}>
+                    ${ENGINE_ICONS[eng]}
+                    <span>${ENGINE_LABELS[eng]}</span>
+                    ${experimentalBadge}
+                    ${defaultBadge}
+                    ${statusDot}
+                </button>`;
+        }).join('');
+
+        container.querySelectorAll('.llm-engine-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const eng = btn.dataset.engine;
+                // Allow selecting unavailable engines (they'll show "not detected")
+                this._selectedEngine = eng;
+                this.renderEngineTabs();
+                this.renderEngineContent();
+            });
+        });
+    }
+
+    renderEngineContent() {
+        const eng = this._selectedEngine;
+        if (!eng) return;
+
+        const isExternal = EXTERNAL_ENGINES.includes(eng);
+        const modelsSection = this.querySelector('#managedModelsSection');
+        const hfSection = this.querySelector('#hfSection');
+        const recSection = this.querySelector('#recommendedSection');
+        const extSection = this.querySelector('#externalModelsSection');
+
+        // Status bar is always visible — renderStatus handles all engines
+        this.renderStatus();
+
+        if (isExternal) {
+            if (modelsSection) modelsSection.classList.add('hidden');
+            if (hfSection) hfSection.classList.add('hidden');
+            if (recSection) recSection.classList.add('hidden');
+            if (extSection) extSection.classList.remove('hidden');
+            this.renderExternalModels();
+        } else {
+            if (modelsSection) modelsSection.classList.remove('hidden');
+            if (hfSection) hfSection.classList.remove('hidden');
+            if (extSection) extSection.classList.add('hidden');
+            this.renderModels();
+            this.renderRecommendations();
+            // Lock HF format to match engine and reset results
+            const formatSelect = this.querySelector('#hfFormatSelect');
+            if (formatSelect) {
+                const newFormat = eng === 'mlx-serve' ? 'mlx' : 'gguf';
+                if (this._browseFormat !== newFormat) {
+                    formatSelect.value = newFormat;
+                    this._browseFormat = newFormat;
+                    this.searchResults = [];
+                    const hfResults = this.querySelector('#hfResults');
+                    if (hfResults) {
+                        hfResults.innerHTML = `
+                            <div class="text-muted text-center py-8 text-sm">
+                                <i class="fas fa-cube text-2xl mb-3 block text-muted"></i>
+                                Search HuggingFace to find and download ${newFormat.toUpperCase()} models
+                            </div>`;
+                    }
+                }
+                formatSelect.disabled = true;
+            }
+        }
+    }
+
+    renderExternalModels() {
+        const container = this.querySelector('#externalModelsSection');
+        if (!container) return;
+
+        const eng = this._selectedEngine;
+        const engineData = this._engines?.[eng];
+        const available = engineData?.available;
+        const models = engineData?.models || [];
+        const label = ENGINE_LABELS[eng];
+
+        if (!available) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const currentDefault = this._resolveDefault('models');
+        const currentEmbDefault = this._resolveDefault('embeddings');
+        const isActiveChat = currentDefault?.engine === eng;
+        const isActiveEmb = currentEmbDefault?.engine === eng;
+        const activeChatModel = isActiveChat ? currentDefault?.model : null;
+        const activeEmbModel = isActiveEmb ? currentEmbDefault?.model : null;
+
+        let html = '';
+        if (!models.length) {
+            html = `<div class="text-muted text-center py-8 text-sm">No models loaded in ${label}.</div>`;
+        } else {
+            const totalRam = this.systemRamBytes;
+            html = `
+                <h3 class="section-title mb-3">Available Models</h3>
+                <div class="llm-model-grid">
+                    ${models.map(m => {
+                        const name = m.name;
+                        const isChatActive = activeChatModel === name;
+                        const isEmbActive = activeEmbModel === name;
+                        const isLoaded = !!m.loaded;
+
+                        const caps = this._detectExternalCaps(m, eng);
+                        const badges = capabilityBadges(caps);
+                        const looksLikeEmbed = caps.embedding;
+
+                        const sizeStr = m.size ? formatBytes(m.size) : '';
+                        const tooLarge = !this._isEngineRemote(eng) && totalRam && m.size && m.size > totalRam;
+
+                        const metaParts = [];
+                        if (m.parameterSize) metaParts.push(m.parameterSize);
+                        if (m.quantization) metaParts.push(m.quantization);
+                        if (m.family) metaParts.push(m.family);
+                        if (m.arch) metaParts.push(m.arch);
+                        if (m.maxContextLength) metaParts.push(`${(m.maxContextLength / 1024).toFixed(0)}K ctx`);
+                        const metaStr = metaParts.join(' · ');
+
+                        // Card highlights as active based on config; button reflects loaded state
+                        const cardCls = isChatActive ? 'llm-model-card active-chat' : isEmbActive ? 'llm-model-card active-emb' : 'llm-model-card';
+
+                        // Determine the action button/badge
+                        let actionHtml;
+                        if (looksLikeEmbed) {
+                            if (isEmbActive && isLoaded) {
+                                actionHtml = '<span class="badge badge-blue">Embedding</span>';
+                            } else if (isEmbActive && !isLoaded) {
+                                actionHtml = `<button class="ext-activate-emb btn btn-blue btn-sm" data-model="${escapeHtml(name)}">
+                                    <i class="fas fa-redo mr-1"></i>Reload
+                                </button>`;
+                            } else {
+                                actionHtml = `<button class="ext-activate-emb btn btn-blue btn-sm" data-model="${escapeHtml(name)}">
+                                    <i class="fas fa-vector-square mr-1"></i>Embed
+                                </button>`;
+                            }
+                        } else {
+                            if (isChatActive && isLoaded) {
+                                actionHtml = '<span class="badge badge-amber">Active</span>';
+                            } else if (isChatActive && !isLoaded) {
+                                actionHtml = `<button class="ext-activate-chat btn btn-amber btn-sm" data-model="${escapeHtml(name)}">
+                                    <i class="fas fa-redo mr-1"></i>Reload
+                                </button>`;
+                            } else {
+                                actionHtml = `<button class="ext-activate-chat btn btn-amber btn-sm" data-model="${escapeHtml(name)}">
+                                    <i class="fas fa-play mr-1"></i>Activate
+                                </button>`;
+                            }
+                        }
+
+                        return `
+                            <div class="${cardCls}">
+                                <div class="flex items-start justify-between mb-3">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            ${isChatActive ? `<i class="fas fa-circle ${isLoaded ? 'text-amber' : 'text-muted'} text-2xs" ${!isLoaded ? 'title="Not loaded on server"' : ''}></i>` : ''}
+                                            ${isEmbActive ? `<i class="fas fa-circle ${isLoaded ? 'text-blue' : 'text-muted'} text-2xs" ${!isLoaded ? 'title="Not loaded on server"' : ''}></i>` : ''}
+                                            <span class="font-medium text-primary text-sm truncate">${escapeHtml(name)}</span>
+                                            ${m.format ? `<span class="badge badge-${m.format === 'mlx' ? 'green' : 'amber'} text-2xs">${escapeHtml(m.format.toUpperCase())}</span>` : ''}
+                                        </div>
+                                        ${metaStr ? `<div class="text-xs text-muted">${escapeHtml(metaStr)}</div>` : ''}
+                                        ${badges ? `<div class="flex items-center gap-1 mt-1">${badges}</div>` : ''}
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3 text-xs text-muted">
+                                        ${sizeStr ? `<span><i class="fas fa-hard-drive mr-1"></i>${sizeStr}</span>` : ''}
+                                        ${tooLarge ? `<span class="text-red"><i class="fas fa-memory mr-1"></i>won't fit</span>` : ''}
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        ${actionHtml}
+                                    </div>
+                                </div>
+                            </div>`;
+                    }).join('')}
+                </div>`;
+        }
+
+        container.innerHTML = html;
+
+        container.querySelectorAll('.ext-activate-chat').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-sm"></span> Activating...';
+                try {
+                    await api.activateEngine(eng, btn.dataset.model, 'chat');
+                    await this.loadLlmConfig();
+                    await this.loadEngines();
+                } catch (e) {
+                    console.error('Failed to activate external model:', e);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-play mr-1"></i>Activate';
+                }
+            });
+        });
+
+        container.querySelectorAll('.ext-activate-emb').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-sm"></span> Activating...';
+                try {
+                    await api.activateEngine(eng, btn.dataset.model, 'embedding');
+                    await this.loadLlmConfig();
+                    await this.loadEngines();
+                } catch (e) {
+                    console.error('Failed to activate external embedding:', e);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-vector-square mr-1"></i>Embed';
+                }
+            });
+        });
+    }
+
+    _isEngineRemote(eng) {
+        const defaultUrls = { ollama: 'http://localhost:11434', lmstudio: 'http://localhost:1234' };
+        const url = this._engineUrls?.[eng] || defaultUrls[eng] || '';
+        try {
+            const host = new URL(url).hostname;
+            return host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
+        } catch { return false; }
+    }
+
+    _detectExternalCaps(model, engine) {
+        const name = model.name || '';
+        const caps = model.capabilities || [];
+        const type = model.type || ''; // LM Studio: vlm, llm, embeddings
+        // When API provides capability data, trust it over name heuristics
+        const hasApiCaps = caps.length > 0 || !!type;
+
+        // Embedding detection: API capabilities, LM Studio type, or name heuristics
+        // Always use name heuristics for embedding — LM Studio doesn't flag embedding models
+        const embedding = caps.includes('embedding') || caps.includes('embeddings')
+            || type === 'embedding' || type === 'embeddings'
+            || /embed|MiniLM|bge-|e5-|gte-|nomic/i.test(name);
+
+        // Tools: API capability, fall back to name heuristics only without API data
+        const tools = caps.includes('tools') || caps.includes('tool_use')
+            || (!hasApiCaps && TOOL_NAME_PATTERNS.some(p => p.test(name)));
+
+        // Vision: API capability, LM Studio type, or name heuristics as fallback
+        const vision = caps.includes('vision')
+            || type === 'vlm'
+            || (!hasApiCaps && VISION_NAME_PATTERNS.some(p => p.test(name)));
+
+        // Reasoning: API capability or name heuristics as fallback
+        const reasoning = caps.includes('thinking') || caps.includes('reasoning')
+            || (!hasApiCaps && REASONING_NAME_PATTERNS.some(p => p.test(name)));
+
+        return { tools, vision, reasoning, embedding };
+    }
+
+    _renderExternalStatus(container) {
+        const eng = this._selectedEngine;
+        const engineData = this._engines?.[eng];
+        const available = engineData?.available;
+        const running = engineData?.running || [];
+        const label = ENGINE_LABELS[eng];
+        const totalRam = this.systemRamBytes;
+        const freeRam = this.status?.freeRamBytes || 0;
+
+        const currentDefault = this._resolveDefault('models');
+        const currentEmbDefault = this._resolveDefault('embeddings');
+        const activeChatModel = currentDefault?.engine === eng ? currentDefault?.model : null;
+        const activeEmbModel = currentEmbDefault?.engine === eng ? currentEmbDefault?.model : null;
+        const currentCtx = currentDefault?.contextSize || 8192;
+        const currentMaxTokens = currentDefault?.maxTokens || 4096;
+
+        // Cross-reference config with server loaded state
+        const models = engineData?.models || [];
+        const activeModelData = activeChatModel ? models.find(m => m.name === activeChatModel) : null;
+        const isChatLoaded = !!activeModelData?.loaded;
+        const maxCtxFromApi = activeModelData?.maxContextLength || null; // LM Studio provides this
+
+        // Detect if engine is on a remote host (non-localhost base URL)
+        const defaultUrls = { ollama: 'http://localhost:11434', lmstudio: 'http://localhost:1234' };
+        const effectiveUrl = this._engineUrls?.[eng] || defaultUrls[eng] || '';
+        const isRemote = this._isEngineRemote(eng);
+
+        // Calculate total VRAM used by running models (Ollama provides this)
+        const totalVram = running.reduce((sum, r) => sum + (r.sizeVram || 0), 0);
+
+        let html = `<div class="llm-server-panel">`;
+
+        // --- Header ---
+        html += `
+            <div class="llm-server-header">
+                <div class="flex items-center gap-2">
+                    ${ENGINE_ICONS[eng]}
+                    <span class="text-sm font-semibold text-primary">${label}</span>
+                    <span class="${available ? 'llm-pulse llm-pulse-green' : 'llm-pulse-off'}"></span>
+                    <span class="text-xs ${available ? 'text-green' : 'text-red'}">${available ? 'Connected' : 'Not detected / Not running'}</span>
+                </div>
+                <button id="refreshEnginesBtn" class="btn-ghost text-xs flex-shrink-0">
+                    <i class="fas fa-sync-alt mr-1"></i>Refresh
+                </button>
+            </div>`;
+
+        // --- Base URL override ---
+        const currentUrl = this._engineUrls?.[eng] || '';
+        html += `
+            <div class="llm-server-section">
+                <div class="llm-section-content flex items-center gap-2">
+                    <label class="text-xs text-muted flex-shrink-0" for="engineUrlInput">Base URL</label>
+                    <input type="text" id="engineUrlInput" class="input input-sm flex-1 font-mono text-xs"
+                        value="${escapeHtml(currentUrl)}" placeholder="${defaultUrls[eng] || ''}" />
+                    <button id="engineUrlSaveBtn" class="btn btn-accent btn-sm hidden">
+                        <i class="fas fa-save mr-1"></i>Save
+                    </button>
+                    <button id="engineUrlResetBtn" class="btn-ghost text-xs ${currentUrl === defaultUrls[eng] || !currentUrl ? 'hidden' : ''}" title="Reset to default">
+                        <i class="fas fa-undo"></i>
+                    </button>
+                </div>
+            </div>`;
+
+        if (!available) {
+            html += `
+                <div class="llm-section-content flex items-center gap-3 py-2">
+                    <span class="text-sm text-muted">Make sure ${label} is running${isRemote ? ` at ${escapeHtml(effectiveUrl)}` : ' on your machine'}</span>
+                </div>`;
+        } else {
+            // --- Server details (RAM + models loaded) ---
+            // Only show local system RAM when the engine is running on localhost
+            if (!isRemote) {
+                const ramUsedPct = totalRam ? Math.round(((totalRam - freeRam) / totalRam) * 100) : 0;
+                const ramBarCls = ramUsedPct > 80 ? 'llm-mem-red' : ramUsedPct > 60 ? 'llm-mem-amber' : 'llm-mem-green';
+                html += `
+                    <div class="llm-server-details">
+                        <span title="System RAM"><i class="fas fa-memory mr-1 llm-icon-dim"></i>${formatBytes(totalRam - freeRam)} / ${formatBytes(totalRam)} RAM</span>
+                        ${totalVram ? `<span title="VRAM used by loaded models"><i class="fas fa-bolt mr-1 llm-icon-dim"></i>${formatBytes(totalVram)} VRAM</span>` : ''}
+                        <span title="Models loaded"><i class="fas fa-cube mr-1 llm-icon-dim"></i>${running.length} loaded</span>
+                    </div>`;
+
+                if (totalRam) {
+                    html += `
+                        <div class="llm-mem-bar" title="${ramUsedPct}% RAM used">
+                            <div class="llm-mem-fill ${ramBarCls}" style="width: ${ramUsedPct}%"></div>
+                        </div>`;
+                }
+
+                // --- GPU VRAM bar (NVIDIA discrete GPUs) ---
+                const gpuVram = this.status?.gpuVram;
+                if (gpuVram) {
+                    const vramPct = Math.round((gpuVram.usedBytes / gpuVram.totalBytes) * 100);
+                    const vramBarCls = vramPct > 80 ? 'llm-mem-red' : vramPct > 60 ? 'llm-mem-amber' : 'llm-mem-green';
+                    html += `
+                        <div class="llm-server-details">
+                            <span title="GPU VRAM"><i class="fas fa-microchip mr-1 llm-icon-dim"></i>${formatBytes(gpuVram.usedBytes)} / ${formatBytes(gpuVram.totalBytes)} VRAM</span>
+                        </div>
+                        <div class="llm-mem-bar" title="${vramPct}% VRAM used">
+                            <div class="llm-mem-fill ${vramBarCls}" style="width: ${vramPct}%"></div>
+                        </div>`;
+                }
+            } else {
+                // Remote engine: only show model count and VRAM from API data
+                html += `
+                    <div class="llm-server-details">
+                        ${totalVram ? `<span title="VRAM used by loaded models"><i class="fas fa-bolt mr-1 llm-icon-dim"></i>${formatBytes(totalVram)} VRAM</span>` : ''}
+                        <span title="Models loaded"><i class="fas fa-cube mr-1 llm-icon-dim"></i>${running.length} loaded</span>
+                    </div>`;
+            }
+
+            // --- Running models with unload ---
+            if (running.length) {
+                html += running.map(r => {
+                    const vramStr = r.sizeVram ? formatBytes(r.sizeVram) : '';
+                    const ctxStr = r.contextLength ? `${(r.contextLength / 1024).toFixed(0)}K ctx` : '';
+                    const sizeStr = r.size ? formatBytes(r.size) : '';
+                    const meta = [sizeStr, vramStr, ctxStr].filter(Boolean).join(' · ');
+                    return `
+                        <div class="llm-server-section">
+                            <div class="llm-section-content flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="llm-pulse llm-pulse-green"></span>
+                                    <span class="badge badge-amber font-mono">${escapeHtml(r.name)}</span>
+                                    ${meta ? `<span class="text-xs text-muted">${meta}</span>` : ''}
+                                </div>
+                                <button class="unload-btn btn btn-danger btn-sm" data-model="${escapeHtml(r.name)}"
+                                    ${r.instanceId ? `data-instance-id="${escapeHtml(r.instanceId)}"` : ''}>
+                                    <i class="fas fa-eject mr-1"></i>Unload
+                                </button>
+                            </div>
+                        </div>`;
+                }).join('');
+            }
+
+            // --- Chat model config (sliders) ---
+            html += `<div class="llm-server-section">`;
+            if (activeChatModel) {
+                html += `
+                    <div class="llm-section-content space-y-2">
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-comments text-amber text-xs"></i>
+                            <span class="text-sm text-primary">Chat Config</span>
+                            <span class="text-xs text-muted font-mono">${escapeHtml(activeChatModel)}</span>
+                            ${!isChatLoaded ? '<span class="text-2xs text-red">not loaded</span>' : ''}
+                        </div>
+                        <div class="llm-sliders-section">
+                            <div class="llm-slider-row">
+                                <label class="llm-slider-label">
+                                    <span>Context Size</span>
+                                    <span id="extCtxValue" class="font-mono">${currentCtx >= 1024 ? `${(currentCtx / 1024).toFixed(0)}K` : currentCtx}</span>
+                                </label>
+                                <input type="range" id="extCtxSlider" class="llm-range"
+                                    data-orig="${currentCtx}"
+                                    min="2048" max="${maxCtxFromApi || 131072}" step="1024" value="${Math.min(currentCtx, maxCtxFromApi || 131072)}" />
+                                <div class="llm-slider-meta">
+                                    <span>2K</span>
+                                    <span class="text-2xs text-muted">${eng === 'ollama' ? 'Sent as num_ctx per request' : 'Reloads model in LM Studio'}</span>
+                                    <span>${maxCtxFromApi ? `${(maxCtxFromApi / 1024).toFixed(0)}K` : '128K'}</span>
+                                </div>
+                            </div>
+                            <div class="llm-slider-row">
+                                <label class="llm-slider-label">
+                                    <span>Max Tokens</span>
+                                    <span id="extMaxTokValue" class="font-mono">${currentMaxTokens.toLocaleString()}</span>
+                                </label>
+                                <input type="range" id="extMaxTokSlider" class="llm-range"
+                                    data-orig="${currentMaxTokens}"
+                                    min="256" max="16384" step="256" value="${currentMaxTokens}" />
+                                <div class="llm-slider-meta">
+                                    <span>256</span>
+                                    <span>16K</span>
+                                </div>
+                            </div>
+                            <button id="extApplyBtn" class="btn btn-accent btn-sm hidden">
+                                <i class="fas fa-save mr-1"></i>Apply
+                            </button>
+                        </div>
+                    </div>`;
+            } else {
+                html += `
+                    <div class="llm-section-content flex items-center gap-3">
+                        <span class="llm-pulse-off"></span>
+                        <span class="text-sm text-secondary">Chat Model</span>
+                        <span class="text-xs text-muted">Activate a model below</span>
+                    </div>`;
+            }
+            html += `</div>`;
+
+            // --- Embedding model ---
+            if (activeEmbModel) {
+                html += `
+                    <div class="llm-server-section">
+                        <div class="llm-section-content flex items-center gap-3">
+                            <span class="llm-pulse llm-pulse-blue"></span>
+                            <span class="text-sm text-primary">Embedding Model</span>
+                            <span class="badge badge-blue font-mono">${escapeHtml(activeEmbModel)}</span>
+                        </div>
+                    </div>`;
+            }
+        }
+
+        html += `</div>`;
+        container.innerHTML = html;
+
+        // --- Wire events ---
+        container.querySelector('#refreshEnginesBtn')?.addEventListener('click', () => this.loadEngines());
+
+        // Base URL input
+        const urlInput = container.querySelector('#engineUrlInput');
+        const urlSaveBtn = container.querySelector('#engineUrlSaveBtn');
+        const urlResetBtn = container.querySelector('#engineUrlResetBtn');
+        if (urlInput) {
+            const origUrl = urlInput.value;
+            urlInput.addEventListener('input', () => {
+                const changed = urlInput.value.replace(/\/+$/, '') !== origUrl;
+                urlSaveBtn?.classList.toggle('hidden', !changed);
+            });
+            urlInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') urlSaveBtn?.click();
+            });
+        }
+        urlSaveBtn?.addEventListener('click', async () => {
+            const newUrl = urlInput.value.trim();
+            if (!newUrl) return;
+            urlSaveBtn.disabled = true;
+            urlSaveBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Saving...';
+            try {
+                await api.setEngineUrl(eng, newUrl);
+                await this.loadEngines();
+            } catch (e) {
+                console.error('Failed to set engine URL:', e);
+                urlSaveBtn.disabled = false;
+                urlSaveBtn.innerHTML = '<i class="fas fa-save mr-1"></i>Save';
+            }
+        });
+        urlResetBtn?.addEventListener('click', async () => {
+            const defaults = { ollama: 'http://localhost:11434', lmstudio: 'http://localhost:1234' };
+            urlResetBtn.disabled = true;
+            try {
+                await api.setEngineUrl(eng, defaults[eng]);
+                await this.loadEngines();
+            } catch (e) {
+                console.error('Failed to reset engine URL:', e);
+                urlResetBtn.disabled = false;
+            }
+        });
+
+        // Unload buttons
+        container.querySelectorAll('.unload-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Unloading...';
+                try {
+                    await api.unloadEngineModel(eng, btn.dataset.model, btn.dataset.instanceId);
+                    await this.loadEngines();
+                } catch (e) {
+                    console.error('Failed to unload model:', e);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-eject mr-1"></i>Unload';
+                }
+            });
+        });
+
+        // Slider wiring
+        const extCtxSlider = container.querySelector('#extCtxSlider');
+        const extMaxTokSlider = container.querySelector('#extMaxTokSlider');
+        const extApplyBtn = container.querySelector('#extApplyBtn');
+
+        const updateApplyVisibility = () => {
+            const ctxChanged = extCtxSlider && extCtxSlider.value !== extCtxSlider.dataset.orig;
+            const tokChanged = extMaxTokSlider && extMaxTokSlider.value !== extMaxTokSlider.dataset.orig;
+            extApplyBtn?.classList.toggle('hidden', !ctxChanged && !tokChanged);
+        };
+
+        if (extCtxSlider) {
+            const ctxMax = parseInt(extCtxSlider.max);
+            const updateFill = () => {
+                const pos = ((parseInt(extCtxSlider.value) - 2048) / (ctxMax - 2048)) * 100;
+                extCtxSlider.style.setProperty('--range-color', 'var(--green)');
+                extCtxSlider.style.setProperty('--range-fill', `${pos}%`);
+            };
+            updateFill();
+            extCtxSlider.addEventListener('input', () => {
+                const val = parseInt(extCtxSlider.value);
+                container.querySelector('#extCtxValue').textContent = val >= 1024 ? `${(val / 1024).toFixed(0)}K` : val;
+                updateFill();
+                updateApplyVisibility();
+            });
+        }
+        if (extMaxTokSlider) {
+            const updateFill = () => {
+                const pos = ((parseInt(extMaxTokSlider.value) - 256) / (16384 - 256)) * 100;
+                extMaxTokSlider.style.setProperty('--range-color', 'var(--green)');
+                extMaxTokSlider.style.setProperty('--range-fill', `${pos}%`);
+            };
+            updateFill();
+            extMaxTokSlider.addEventListener('input', () => {
+                container.querySelector('#extMaxTokValue').textContent = parseInt(extMaxTokSlider.value).toLocaleString();
+                updateFill();
+                updateApplyVisibility();
+            });
+        }
+
+        extApplyBtn?.addEventListener('click', async () => {
+            extApplyBtn.disabled = true;
+            extApplyBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Applying...';
+            try {
+                const newCtx = extCtxSlider ? parseInt(extCtxSlider.value) : currentCtx;
+                const newMaxTokens = extMaxTokSlider ? parseInt(extMaxTokSlider.value) : currentMaxTokens;
+
+                await api.setEngineContext(newCtx);
+
+                const resolvedKey = this._resolveDefaultKey('models');
+                const existing = this._resolveDefault('models') || {};
+                await api.saveLlmModel(resolvedKey, {
+                    ...existing,
+                    provider: existing.provider || 'local',
+                    maxTokens: newMaxTokens,
+                });
+
+                await this.loadLlmConfig();
+                if (extCtxSlider) extCtxSlider.dataset.orig = extCtxSlider.value;
+                if (extMaxTokSlider) extMaxTokSlider.dataset.orig = extMaxTokSlider.value;
+                extApplyBtn.classList.add('hidden');
+            } catch (e) {
+                console.error('Failed to apply settings:', e);
+            } finally {
+                extApplyBtn.disabled = false;
+                extApplyBtn.innerHTML = '<i class="fas fa-save mr-1"></i>Apply';
+            }
+        });
+    }
+
     renderStatus() {
         const container = this.querySelector('#statusBar');
-        if (!container || !this.status) return;
+        if (!container) return;
 
-        const { running, activeModel, embedding } = this.status;
-        const isMlx = this.status.engineType === 'mlx';
+        // External engines get their own status panel
+        if (EXTERNAL_ENGINES.includes(this._selectedEngine)) {
+            this._renderExternalStatus(container);
+            return;
+        }
+
+        if (!this.status) return;
+
+        const isMlx = this._selectedEngine === 'mlx-serve';
+        // Get per-engine status from the engines map
+        const engineStatus = this.status.engines?.[this._selectedEngine];
+        const chatStatus = engineStatus?.chat || {};
+        const embeddingStatus = engineStatus?.embedding || {};
+
+        const running = chatStatus.running || false;
+        const activeModel = running ? chatStatus.activeModel : null;
+        // Show embedding if this engine has an active embedding server
+        const embedding = embeddingStatus.running ? embeddingStatus : null;
         const version = isMlx ? this.status.mlxVersion : this.status.llamaVersion;
         const versionLabel = isMlx
             ? (version ? `v${escapeHtml(version)}` : '')
@@ -333,12 +1028,18 @@ export class LocalLlmView extends Component {
         let html = `<div class="llm-server-panel">`;
 
         // Server info header
+        const configDefaultEngine = this._resolveDefault('models')?.engine || this.status.defaultEngine || null;
+        const isDefaultEngine = this._selectedEngine === configDefaultEngine;
+
         html += `
             <div class="llm-server-header">
                 <div class="flex items-center gap-2">
                     <i class="fas fa-server text-amber text-xs"></i>
                     <span class="text-sm font-semibold text-primary">${isMlx ? 'mlx-serve' : 'llama-server'}</span>
                     ${versionLabel ? `<span class="text-xs text-muted font-mono">${versionLabel}</span>` : ''}
+                    <span class="${running ? 'llm-pulse llm-pulse-green' : 'llm-pulse-off'}"></span>
+                    <span class="text-xs ${running ? 'text-green' : 'text-muted'}">${running ? 'Running' : 'Stopped'}</span>
+                    ${isDefaultEngine ? '<span class="badge badge-green text-2xs">default</span>' : ''}
                 </div>
                 ${binarySource === 'managed' ? (
                     hasUpdate ? `
@@ -357,28 +1058,58 @@ export class LocalLlmView extends Component {
             <div class="llm-server-details">
                 <span title="Runtime"><i class="fas fa-bolt mr-1 llm-icon-dim"></i>${escapeHtml(runtimeLabel)}</span>
                 <span title="Server type"><i class="fas fa-comments mr-1 llm-icon-dim"></i>Chat Completions</span>
-                ${running && this.status.port ? `
+                ${running && chatStatus.port ? `
                     <span class="flex items-center gap-1" title="OpenAI-compatible API endpoint">
                         <i class="fas fa-link mr-1 llm-icon-dim"></i>
-                        <code class="font-mono text-secondary">http://127.0.0.1:${this.status.port}/v1</code>
-                        <button class="copy-url-btn text-muted transition-colors" data-url="http://127.0.0.1:${this.status.port}/v1" title="Copy URL">
+                        <code class="font-mono text-secondary">http://127.0.0.1:${chatStatus.port}/v1</code>
+                        <button class="copy-url-btn text-muted transition-colors" data-url="http://127.0.0.1:${chatStatus.port}/v1" title="Copy URL">
                             <i class="fas fa-copy text-2xs"></i>
                         </button>
                     </span>` : `<span><i class="fas fa-link mr-1 llm-icon-dim"></i><span class="text-muted">Not running</span></span>`}
             </div>`;
 
+        // --- System RAM bar ---
+        const totalRamManaged = this.status.systemRamBytes;
+        const freeRamManaged = this.status.freeRamBytes;
+        if (totalRamManaged) {
+            const ramUsedPct = Math.round(((totalRamManaged - freeRamManaged) / totalRamManaged) * 100);
+            const ramBarCls = ramUsedPct > 80 ? 'llm-mem-red' : ramUsedPct > 60 ? 'llm-mem-amber' : 'llm-mem-green';
+            html += `
+                <div class="llm-server-details">
+                    <span title="System RAM"><i class="fas fa-memory mr-1 llm-icon-dim"></i>${formatBytes(totalRamManaged - freeRamManaged)} / ${formatBytes(totalRamManaged)} RAM</span>
+                </div>
+                <div class="llm-mem-bar" title="${ramUsedPct}% RAM used">
+                    <div class="llm-mem-fill ${ramBarCls}" style="width: ${ramUsedPct}%"></div>
+                </div>`;
+        }
+
+        // --- GPU VRAM bar (NVIDIA discrete GPUs) ---
+        const gpuVram = this.status.gpuVram;
+        if (gpuVram) {
+            const vramPct = Math.round((gpuVram.usedBytes / gpuVram.totalBytes) * 100);
+            const vramBarCls = vramPct > 80 ? 'llm-mem-red' : vramPct > 60 ? 'llm-mem-amber' : 'llm-mem-green';
+            html += `
+                <div class="llm-server-details">
+                    <span title="GPU VRAM"><i class="fas fa-microchip mr-1 llm-icon-dim"></i>${formatBytes(gpuVram.usedBytes)} / ${formatBytes(gpuVram.totalBytes)} VRAM</span>
+                </div>
+                <div class="llm-mem-bar" title="${vramPct}% VRAM used">
+                    <div class="llm-mem-fill ${vramBarCls}" style="width: ${vramPct}%"></div>
+                </div>`;
+        }
+
         // --- Chat model (child) ---
         html += `<div class="llm-server-section">`;
         if (running) {
             const modelName = activeModel ? activeModel.split('/').pop() : 'Unknown';
-            const mem = this.status.memoryEstimate;
+            const mem = chatStatus.memoryEstimate;
             const totalRam = this.status.systemRamBytes;
-            const ctxSize = this.status.contextSize;
+            const ctxSize = chatStatus.contextSize;
             const memPct = mem && totalRam ? Math.round((mem.totalBytes / totalRam) * 100) : null;
             const memBarCls = memPct > 80 ? 'llm-mem-red' : memPct > 60 ? 'llm-mem-amber' : 'llm-mem-green';
             const kvPerToken = mem && ctxSize ? mem.kvCacheBytes / ctxSize : 0;
-            const currentMaxTokens = this.llmConfig?.models?.default?.maxTokens || 4096;
-            const currentReasoningBudget = this.llmConfig?.models?.default?.reasoningBudget || 0;
+            const resolvedDefault = this._resolveDefault('models');
+            const currentMaxTokens = resolvedDefault?.maxTokens || 4096;
+            const currentReasoningBudget = resolvedDefault?.reasoningBudget || 0;
             const activeModelObj = this.models.find(m => m.filePath === activeModel);
             const modelCaps = activeModelObj ? detectCapabilitiesFromFile(activeModelObj) : { reasoning: false };
             const thinkingEnabled = currentReasoningBudget > 0;
@@ -649,7 +1380,7 @@ export class LocalLlmView extends Component {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Checking...';
         }
         try {
-            const isMlx = this.status?.engineType === 'mlx';
+            const isMlx = this._selectedEngine === 'mlx-serve';
             if (isMlx) {
                 this.mlxUpdateInfo = await api.checkMlxUpdate();
             } else {
@@ -674,21 +1405,23 @@ export class LocalLlmView extends Component {
 
         const newCtx = parseInt(ctxSlider.value);
         const newMaxTokens = parseInt(maxTokSlider.value);
-        const currentCtx = this.status?.contextSize;
+        const engineSt = this.status?.engines?.[this._selectedEngine];
+        const currentCtx = engineSt?.chat?.contextSize;
         const ctxChanged = newCtx !== currentCtx;
 
         const thinkingToggle = this.querySelector('#thinkingToggle');
         const thinkingSlider = this.querySelector('#thinkingSlider');
         const newReasoningBudget = thinkingToggle ? (thinkingToggle.checked ? parseInt(thinkingSlider?.value || '128') : 0) : undefined;
-        const existingBudget = this.llmConfig?.models?.default?.reasoningBudget || 0;
+        const existingBudget = this._resolveDefault('models')?.reasoningBudget || 0;
         const reasoningChanged = newReasoningBudget !== undefined && newReasoningBudget !== existingBudget;
         const needsRestart = ctxChanged || reasoningChanged;
 
         if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i>${needsRestart ? 'Restarting...' : 'Saving...'}`; }
 
         try {
-            const existing = this.llmConfig?.models?.default || {};
-            await api.saveLlmModel('default', {
+            const resolvedKey = this._resolveDefaultKey('models');
+            const existing = this._resolveDefault('models') || {};
+            await api.saveLlmModel(resolvedKey, {
                 provider: existing.provider || existing._provider || 'local',
                 model: existing.model,
                 contextSize: newCtx,
@@ -698,10 +1431,11 @@ export class LocalLlmView extends Component {
             });
 
             if (needsRestart) {
-                await api.stopLocalLlm();
-                const model = this.models.find(m => this.status?.activeModel === m.filePath);
+                await api.stopLocalLlm(this._selectedEngine);
+                const activeModelPath = this.status?.engines?.[this._selectedEngine]?.chat?.activeModel;
+                const model = this.models.find(m => activeModelPath === m.filePath);
                 if (model) {
-                    await api.activateLocalModel(model.id, { setAsDefault: false });
+                    await api.activateLocalModel(model.id);
                 }
             }
 
@@ -720,7 +1454,7 @@ export class LocalLlmView extends Component {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Updating...';
         }
         try {
-            const isMlx = this.status?.engineType === 'mlx';
+            const isMlx = this._selectedEngine === 'mlx-serve';
             if (isMlx) {
                 await api.updateMlxBinary();
                 this.mlxUpdateInfo = null;
@@ -730,7 +1464,7 @@ export class LocalLlmView extends Component {
             }
             await this.refresh();
         } catch (e) {
-            console.error(`Failed to update ${this.status?.engineType === 'mlx' ? 'mlx-serve' : 'llama-server'}:`, e);
+            console.error(`Failed to update ${this._selectedEngine === 'mlx-serve' ? 'mlx-serve' : 'llama-server'}:`, e);
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-exclamation-circle mr-1 text-red"></i>Failed';
@@ -742,7 +1476,7 @@ export class LocalLlmView extends Component {
     async loadLlmConfig() {
         try {
             this.llmConfig = await api.getLlmConfig();
-            const defaultModel = this.llmConfig?.models?.default;
+            const defaultModel = this._resolveDefault('models');
             if (defaultModel?._provider) {
                 this.activeProvider = defaultModel._provider;
             }
@@ -757,7 +1491,7 @@ export class LocalLlmView extends Component {
         const container = this.querySelector('#providerTabs');
         if (!container) return;
 
-        const defaultProvider = this.llmConfig?.models?.default?._provider || 'local';
+        const defaultProvider = this._resolveDefault('models')?._provider || 'local';
 
         container.innerHTML = PROVIDERS.map(p => {
             const meta = PROVIDER_META[p];
@@ -803,19 +1537,20 @@ export class LocalLlmView extends Component {
         const models = POPULAR_MODELS[provider] || [];
         const embeddings = POPULAR_EMBEDDINGS[provider] || [];
         const config = this.llmConfig;
-        const defaultModel = config?.models?.default;
+        const defaultModel = this._resolveDefault('models');
         const isDefault = defaultModel?._provider === provider;
-        const defaultEmbedding = config?.embeddings?.default;
+        const defaultEmbedding = this._resolveDefault('embeddings');
 
         // Find the config entry for this provider (check default first, then named entries)
         let modelEntry = null;
         let modelEntryName = null;
         if (isDefault) {
             modelEntry = defaultModel;
-            modelEntryName = 'default';
+            modelEntryName = this._resolveDefaultKey('models');
         } else {
-            // Check named entries
+            // Check named entries (skip string pointers)
             for (const [name, m] of Object.entries(config?.models || {})) {
+                if (typeof m === 'string') continue;
                 if (m._provider === provider && name !== 'default') {
                     modelEntry = m;
                     modelEntryName = name;
@@ -961,7 +1696,7 @@ export class LocalLlmView extends Component {
     renderNamedConfigs(excludeProvider) {
         if (!this.llmConfig?.models) return '';
         const entries = Object.entries(this.llmConfig.models)
-            .filter(([name, m]) => name !== 'default' && m._provider !== excludeProvider);
+            .filter(([name, m]) => name !== 'default' && typeof m !== 'string' && m._provider !== excludeProvider);
         if (!entries.length) return '';
 
         const rows = entries.map(([name, m]) => `
@@ -1005,34 +1740,22 @@ export class LocalLlmView extends Component {
                 ...(thinkingBudget !== '' && thinkingBudget != null ? { thinkingBudget: parseInt(thinkingBudget) } : {}),
             };
 
-            // Always set as default; backup old default under its provider name
-            const oldDefault = this.llmConfig?.models?.default;
-            if (oldDefault && oldDefault._provider !== provider) {
-                await api.saveLlmModel(oldDefault._provider || 'local', {
-                    provider: oldDefault.provider || oldDefault._provider,
-                    model: oldDefault.model,
-                    ...(oldDefault.apiKey ? { apiKey: oldDefault.apiKey } : {}),
-                    ...(oldDefault.baseUrl ? { baseUrl: oldDefault.baseUrl } : {}),
-                    ...(oldDefault.temperature != null ? { temperature: oldDefault.temperature } : {}),
-                    ...(oldDefault.maxTokens != null ? { maxTokens: oldDefault.maxTokens } : {}),
-                    ...(oldDefault.contextSize != null ? { contextSize: oldDefault.contextSize } : {}),
-                    ...(oldDefault.reasoningBudget != null ? { reasoningBudget: oldDefault.reasoningBudget } : {}),
-                });
-            }
-
-            await api.saveLlmModel('default', config);
+            // Write config to the provider's named key, then set default pointer
+            await api.saveLlmModel(provider, config);
+            await api.saveLlmModel('default', { _pointer: provider });
 
             // Save embedding config if applicable
             const embSelect = this.querySelector('#cloudEmbModel');
             const embCustom = this.querySelector('#cloudEmbModelCustom');
             const embModel = embSelect?.value || embCustom?.value?.trim();
             if (embModel) {
-                await api.saveLlmEmbedding('default', {
+                await api.saveLlmEmbedding(provider, {
                     provider,
                     model: embModel,
                     ...(apiKey ? { apiKey } : {}),
                     ...(baseUrl ? { baseUrl } : {}),
                 });
+                await api.saveLlmEmbedding('default', { _pointer: provider });
             }
 
             await this.loadLlmConfig();
@@ -1063,23 +1786,8 @@ export class LocalLlmView extends Component {
             const baseUrl = this.querySelector('#cloudBaseUrl')?.value?.trim() || undefined;
             const thinkingBudget = this.querySelector('#cloudThinkingBudget')?.value;
 
-            // Save old default under its provider name
-            const oldDefault = this.llmConfig?.models?.default;
-            if (oldDefault && oldDefault._provider !== provider) {
-                await api.saveLlmModel(oldDefault._provider || 'local', {
-                    provider: oldDefault.provider || oldDefault._provider,
-                    model: oldDefault.model,
-                    ...(oldDefault.apiKey ? { apiKey: oldDefault.apiKey } : {}),
-                    ...(oldDefault.baseUrl ? { baseUrl: oldDefault.baseUrl } : {}),
-                    ...(oldDefault.temperature != null ? { temperature: oldDefault.temperature } : {}),
-                    ...(oldDefault.maxTokens != null ? { maxTokens: oldDefault.maxTokens } : {}),
-                    ...(oldDefault.contextSize != null ? { contextSize: oldDefault.contextSize } : {}),
-                    ...(oldDefault.reasoningBudget != null ? { reasoningBudget: oldDefault.reasoningBudget } : {}),
-                });
-            }
-
-            // Set new default
-            await api.saveLlmModel('default', {
+            // Save config to provider's named key, then set default pointer
+            await api.saveLlmModel(provider, {
                 provider,
                 model,
                 ...(apiKey ? { apiKey } : {}),
@@ -1088,6 +1796,7 @@ export class LocalLlmView extends Component {
                 ...(maxTokens !== '' && maxTokens != null ? { maxTokens: parseInt(maxTokens) } : {}),
                 ...(thinkingBudget !== '' && thinkingBudget != null ? { thinkingBudget: parseInt(thinkingBudget) } : {}),
             });
+            await api.saveLlmModel('default', { _pointer: provider });
 
             await this.loadLlmConfig();
         } catch (e) {
@@ -1110,13 +1819,41 @@ export class LocalLlmView extends Component {
             return;
         }
 
-        const activeModelPath = this.status?.activeModel;
-        const activeEmbPath = this.status?.embedding?.activeModel;
+        // Collect active models across all engines
+        let activeModelPath = null;
+        let activeEmbPath = null;
+        if (this.status?.engines) {
+            for (const eng of Object.values(this.status.engines)) {
+                if (eng.chat?.running && eng.chat.activeModel) activeModelPath = activeModelPath || eng.chat.activeModel;
+                if (eng.embedding?.running && eng.embedding.activeModel) activeEmbPath = activeEmbPath || eng.embedding.activeModel;
+            }
+        }
 
-        container.innerHTML = this.models.map(model => {
+        const selectedEng = this._selectedEngine;
+
+        // Filter to only show models matching the selected engine
+        const filteredModels = this.models.filter(model => {
+            if (!selectedEng || !MANAGED_ENGINES.includes(selectedEng)) return true;
+            const modelEngine = model.type === 'mlx' ? 'mlx-serve' : 'llama-cpp';
+            return modelEngine === selectedEng;
+        });
+
+        if (!filteredModels.length) {
+            const formatLabel = selectedEng === 'mlx-serve' ? 'MLX' : 'GGUF';
+            container.innerHTML = `
+                <div class="col-span-full text-muted text-center py-8">
+                    <i class="fas fa-box-open text-4xl mb-4 block text-muted"></i>
+                    <p class="text-lg mb-2">No ${formatLabel} models downloaded</p>
+                    <p class="text-sm">Search HuggingFace below, or download a recommended model</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = filteredModels.map(model => {
             const isChat = activeModelPath && activeModelPath === model.filePath;
             const isEmb = activeEmbPath && activeEmbPath === model.filePath;
             const looksLikeEmbedding = /embed|MiniLM/i.test(model.fileName);
+
             const cardCls = isChat ? 'llm-model-card active-chat' : isEmb ? 'llm-model-card active-emb' : 'llm-model-card';
             const caps = looksLikeEmbedding ? null : detectCapabilitiesFromFile(model);
             const badges = caps ? capabilityBadges(caps) : '';
@@ -1235,8 +1972,6 @@ export class LocalLlmView extends Component {
     }
 
     async activateModel(id) {
-        const setAsDefault = true;
-
         const gridBtn = this.querySelector(`.activate-btn[data-id="${id}"]`);
         const startBtn = this.querySelector('#startLastBtn');
         const card = gridBtn?.closest('[data-model-id]');
@@ -1253,11 +1988,13 @@ export class LocalLlmView extends Component {
         card?.querySelector('.activate-error')?.remove();
 
         try {
-            const result = await api.activateLocalModel(id, { setAsDefault });
+            const result = await api.activateLocalModel(id);
             if (result.error) {
                 throw new Error(result.error);
             }
+            await this.loadLlmConfig();
             await this.refresh();
+            this.renderEngineTabs();
         } catch (e) {
             console.error('Failed to activate model:', e);
             if (gridBtn) {
@@ -1326,7 +2063,7 @@ export class LocalLlmView extends Component {
         }
 
         try {
-            await api.stopLocalLlm();
+            await api.stopLocalLlm(this._selectedEngine);
             await this.refresh();
         } catch (e) {
             console.error('Failed to stop server:', e);
@@ -1341,7 +2078,7 @@ export class LocalLlmView extends Component {
         }
 
         try {
-            await api.stopLocalEmbedding();
+            await api.stopLocalEmbedding(this._selectedEngine);
             await this.refresh();
         } catch (e) {
             console.error('Failed to stop embedding:', e);
@@ -1635,7 +2372,10 @@ export class LocalLlmView extends Component {
 
                 <!-- Local LLM Content -->
                 <div id="localContent">
-                    <!-- Status Bar -->
+                    <!-- Engine Tabs -->
+                    <div id="engineTabs" class="llm-engine-tabs"></div>
+
+                    <!-- Status Bar (managed engines) -->
                     <div id="statusBar" class="mb-6">
                         <div class="llm-alert">
                             <i class="fas fa-spinner fa-spin text-muted text-sm"></i>
@@ -1643,12 +2383,15 @@ export class LocalLlmView extends Component {
                         </div>
                     </div>
 
+                    <!-- External Models (ollama/lmstudio) -->
+                    <div id="externalModelsSection" class="hidden mb-6"></div>
+
                     <!-- Active / Interrupted Downloads -->
                     <div id="activeDownloads" class="mb-4"></div>
                     <div id="interruptedDownloads" class="mb-4"></div>
 
-                    <!-- Downloaded Models -->
-                    <div class="mb-6">
+                    <!-- Downloaded Models (managed engines) -->
+                    <div id="managedModelsSection" class="mb-6">
                         <h3 class="section-title mb-3">Downloaded Models</h3>
                         <div id="modelsGrid" class="llm-model-grid">
                             <div class="text-muted text-center py-8 col-span-full">Loading...</div>
@@ -1658,8 +2401,8 @@ export class LocalLlmView extends Component {
                     <!-- Recommended Models (shown when not all are downloaded) -->
                     <div id="recommendedSection" class="mb-6"></div>
 
-                    <!-- HuggingFace Browser -->
-                    <div class="border-t pt-4">
+                    <!-- HuggingFace Browser (managed engines only) -->
+                    <div id="hfSection" class="border-t pt-4">
                         <h3 class="section-title mb-3">HuggingFace Browser</h3>
                         <div class="flex gap-2 mb-2">
                             <input id="hfSearchInput" type="text" placeholder="Search models (e.g. Qwen3, Llama, Phi)..."

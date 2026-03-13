@@ -160,8 +160,12 @@ export class AgentsView extends Component {
 
     async loadLLMs() {
         try {
-            const llms = await api.getLLMs();
+            const [llms, llmConfig] = await Promise.all([api.getLLMs(), api.getLlmConfig()]);
+            // Resolve the default model name from the config pointer
+            const defaultPointer = llmConfig?.models?.default;
+            const defaultLlmName = typeof defaultPointer === 'string' ? defaultPointer : null;
             store.set('llms', llms);
+            store.set('defaultLlmName', defaultLlmName);
         } catch (e) {
             console.error('Failed to load LLMs', e);
         }
@@ -499,16 +503,22 @@ export class AgentsView extends Component {
         }
 
         if (llms.length > 0) {
+            const defaultLlmName = store.get('defaultLlmName');
             itemsHtml += '<div class="modal-section-label">LLMs</div>';
-            itemsHtml += llms.map(l => `
+            itemsHtml += llms.map(l => {
+                const isDefault = l.name === defaultLlmName;
+                return `
                 <button data-type="llm" data-name="${this.escapeHtml(l.name)}" class="modal-pick-item">
                     <i class="fas fa-microchip text-purple text-sm"></i>
                     <div class="flex-1 min-w-0">
-                        <div class="text-sm font-medium text-primary">${this.escapeHtml(l.name)}</div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium text-primary">${this.escapeHtml(l.name)}</span>
+                            ${isDefault ? '<span class="badge badge-green text-2xs">default</span>' : ''}
+                        </div>
                         <div class="text-xs text-muted truncate">${this.escapeHtml(l.model || '')}</div>
                     </div>
                 </button>
-            `).join('');
+            `}).join('');
         }
 
         if (!itemsHtml) {

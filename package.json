@@ -1,6 +1,6 @@
 {
   "name": "agent-orcha",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "TypeScript Agentic Orchestration http server and framework for building multi-agent workflows with MCP tools and vector stores",
   "keywords": [
     "ai",
@@ -45,7 +45,8 @@
     "test:coverage": "node --test --test-force-exit --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info --test-reporter=spec --test-reporter-destination=stdout 'test/**/*.test.ts'",
     "docker": "docker compose up --build --watch",
     "build:binary": "node scripts/build-sea.mjs",
-    "sea": "node scripts/build-sea.mjs && ./dist/sea/agent-orcha"
+    "sea": "node scripts/build-sea.mjs && ./dist/sea/agent-orcha",
+    "test:e2e": "npx playwright test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",
@@ -77,6 +78,7 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/jsdom": "^27.0.0",
     "@types/node": "^22.10.5",
     "@types/node-cron": "^3.0.11",

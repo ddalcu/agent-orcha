@@ -5,7 +5,7 @@ import type { ChatModel } from '../types/llm-types.ts';
 import { getModelConfig, getLLMConfig, getLLMConfigPath, saveLLMConfig, resolveApiKey, type ModelConfig } from './llm-config.ts';
 import { resolveAgentLLMRef, type AgentLLMRef } from './types.ts';
 import { detectProvider, type LLMProvider } from './provider-detector.ts';
-import { llamaEngine } from '../local-llm/llama-provider.ts';
+import { engineRegistry } from '../local-llm/engine-registry.ts';
 import { logger } from '../logger.ts';
 
 export class LLMFactory {
@@ -29,16 +29,20 @@ export class LLMFactory {
       return cached;
     }
 
-    // Auto-start local llama server if needed (skip if user provides their own baseUrl)
+    // Auto-start local engine if needed (skip if user provides their own baseUrl)
     if (provider === 'local' && !config.baseUrl) {
-      await llamaEngine.ensureRunning(config.model, {
+      const engineName = config.engine ?? 'llama-cpp';
+      const engine = engineRegistry.getEngine(engineName);
+      if (!engine) throw new Error(`Unknown local engine: ${engineName}`);
+
+      await engine.ensureRunningChat(config.model, {
         contextSize: config.contextSize,
         reasoningBudget: config.reasoningBudget,
       });
 
       // Persist auto-detected contextSize to llm.json
       if (!config.contextSize) {
-        const detectedCtx = llamaEngine.getStatus().contextSize;
+        const detectedCtx = engine.getChatStatus().contextSize;
         if (detectedCtx) {
           config.contextSize = detectedCtx;
           const fullConfig = getLLMConfig();
@@ -76,8 +80,14 @@ export class LLMFactory {
 
   private static createOpenAI(config: ModelConfig, temperature?: number, provider: LLMProvider = 'openai'): ChatModel {
     const apiKey = resolveApiKey(provider, config.apiKey);
-    const baseURL = config.baseUrl ?? (provider === 'local' ? (llamaEngine.getBaseUrl() ?? 'http://127.0.0.1:9990') + '/v1' : undefined);
-    const supportsVision = provider === 'local' ? llamaEngine.getStatus().supportsVision : true;
+    let baseURL = config.baseUrl;
+    let supportsVision = true;
+    if (provider === 'local' && !baseURL) {
+      const engineName = config.engine ?? 'llama-cpp';
+      const engine = engineRegistry.getEngine(engineName);
+      baseURL = (engine?.getChatBaseUrl() ?? 'http://127.0.0.1:9990') + '/v1';
+      supportsVision = engine?.getChatStatus().supportsVision ?? false;
+    }
     return new OpenAIChatModel({
       modelName: config.model,
       apiKey,
@@ -87,6 +97,8 @@ export class LLMFactory {
       provider: provider as 'openai' | 'local',
       supportsVision,
       ...(provider === 'local' && config.reasoningBudget ? { reasoningBudget: config.reasoningBudget } : {}),
+      ...(config.engine ? { engine: config.engine } : {}),
+      ...(config.contextSize ? { contextSize: config.contextSize } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
     });
   }

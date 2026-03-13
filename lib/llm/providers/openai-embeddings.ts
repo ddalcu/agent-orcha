@@ -41,19 +41,25 @@ export class OpenAIEmbeddingsProvider implements Embeddings {
 
     const results: number[][] = new Array(texts.length);
 
-    // Batch to avoid payload size limits
-    const batchSize = 128;
-    for (let i = 0; i < filtered.length; i += batchSize) {
+    // Batch to avoid payload size limits; halve on "too large" errors (e.g. VRAM-limited GPUs)
+    let batchSize = 128;
+    for (let i = 0; i < filtered.length; ) {
       const batch = filtered.slice(i, i + batchSize);
-      const response = await this.client.embeddings.create({
-        model: this.modelName,
-        input: batch.map((b) => b.text),
-        encoding_format: 'float',
-        ...(this.dimensions ? { dimensions: this.dimensions } : {}),
-      });
-      const sorted = response.data.sort((a, b) => a.index - b.index);
-      for (let j = 0; j < sorted.length; j++) {
-        results[batch[j].index] = sorted[j].embedding;
+      try {
+        const response = await this.client.embeddings.create({
+          model: this.modelName,
+          input: batch.map((b) => b.text),
+          encoding_format: 'float',
+          ...(this.dimensions ? { dimensions: this.dimensions } : {}),
+        });
+        const sorted = response.data.sort((a, b) => a.index - b.index);
+        for (let j = 0; j < sorted.length; j++) {
+          results[batch[j].index] = sorted[j].embedding;
+        }
+        i += batch.length;
+      } catch (error: any) {
+        if (batchSize <= 1 || !/too large/i.test(error?.message ?? '')) throw error;
+        batchSize = Math.floor(batchSize / 2);
       }
     }
 

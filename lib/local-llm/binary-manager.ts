@@ -8,9 +8,16 @@ import { logger } from '../logger.ts';
 
 type Platform = 'macos-arm64' | 'macos-x64' | 'win-x64' | 'linux-x64' | 'linux-arm64';
 
+export interface GpuVram {
+  totalBytes: number;
+  usedBytes: number;
+  freeBytes: number;
+}
+
 export interface GpuInfo {
   accel: 'none' | 'metal' | 'cuda-12.4' | 'cuda-13.1' | 'vulkan';
   name?: string;
+  vram?: GpuVram;
 }
 
 interface AssetPatterns {
@@ -83,6 +90,32 @@ function detectNvidia(): { name?: string; cudaVersion: number } | null {
     } catch { /* display name is optional */ }
 
     return { name, cudaVersion };
+  } catch {
+    return null;
+  }
+}
+
+/** Query NVIDIA GPU VRAM via nvidia-smi. Returns null if unavailable. */
+export function queryNvidiaVram(): GpuVram | null {
+  try {
+    const output = execFileSync('nvidia-smi', [
+      '--query-gpu=memory.total,memory.used,memory.free',
+      '--format=csv,noheader,nounits',
+    ], { encoding: 'utf-8', timeout: 5_000 }).trim();
+
+    // First line = first GPU. Values are in MiB.
+    const firstGpu = output.split('\n')[0];
+    if (!firstGpu) return null;
+
+    const parts = firstGpu.split(',').map(s => parseInt(s.trim(), 10));
+    if (parts.length < 3 || parts.some(isNaN)) return null;
+
+    const [totalMiB, usedMiB, freeMiB] = parts;
+    return {
+      totalBytes: totalMiB! * 1024 * 1024,
+      usedBytes: usedMiB! * 1024 * 1024,
+      freeBytes: freeMiB! * 1024 * 1024,
+    };
   } catch {
     return null;
   }

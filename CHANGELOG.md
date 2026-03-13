@@ -32,12 +32,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MLX-Serve Engine** — Full Apple Silicon local inference backend using `mlx-serve`. Models in MLX format (`.safetensors` directories) run natively on Metal via the MLX framework, alongside the existing llama-server (GGUF) backend.
   - `MlxServerProcess` (`lib/local-llm/mlx-server-process.ts`) — manages the mlx-serve lifecycle with PID tracking, orphan cleanup, and health polling
   - `MlxBinaryManager` (`lib/local-llm/mlx-binary-manager.ts`) — auto-downloads signed mlx-serve binaries from GitHub releases (`ddalcu/mlx-serve`), with system PATH detection, version checking, and in-place updates
-  - `llamaEngine` and `llamaEmbeddingEngine` now support dual backends (`engineType: 'llama' | 'mlx'`), auto-detecting model type from filesystem structure
   - `ModelManager` extended with MLX model discovery, `downloadMlxModel()` (full HuggingFace repo download with progress), and MLX-aware browsing (`browseHuggingFace()` with `format: 'mlx'`)
   - New API endpoints: `GET /check-mlx-update`, `POST /update-mlx-binary`; download and browse endpoints accept `type=mlx` / `format=mlx` query params
   - LocalLlmView shows platform-aware recommendations (MLX on Apple Silicon, GGUF otherwise), format selector in HuggingFace browser, and engine-specific version display and update controls
-  - Default template `llm.json` updated to use MLX models (`Qwen3.5-4B-4bit`, `all-MiniLM-L6-v2-4bit`)
   - New template agent: `mlx-test`
+
+- **Engine Registry Architecture** — Pluggable engine abstraction replacing the monolithic `llamaEngine`/`llamaEmbeddingEngine` singletons. Each engine (llama-cpp, mlx-serve, ollama, lmstudio) implements the `LocalEngine` interface with standardized lifecycle methods. `EngineRegistry` singleton manages registration, status aggregation, orphan cleanup, and model path resolution.
+  - `engine-interface.ts` — `LocalEngine` interface defining `loadChat`, `unloadChat`, `swapChat`, `ensureRunningChat`, `loadEmbedding`, `unloadEmbedding`, `ensureRunningEmbedding`, `getStatus`, `killOrphans`, and binary management methods
+  - `engine-registry.ts` — Registry with `getEngine()`, `getAllEngines()`, `getAllStatus()`, `setBaseDir()`, `killAllOrphans()`, `unloadAll()`, `resolveModelPath()`
+  - `engines/llama-cpp-engine.ts` — `LlamaCppEngine` class extracted from the old `llama-provider.ts`
+  - `engines/mlx-serve-engine.ts` — `MlxServeEngine` class extracted from the old `llama-provider.ts`
+
+- **External Engine Support (Ollama & LM Studio)** — Ollama and LM Studio can now be used as inference backends alongside the managed llama-cpp and mlx-serve engines. New API endpoints probe engine availability, fetch model lists with capabilities (tools, vision, reasoning, embedding), report VRAM usage, and allow model activation/unloading.
+  - `GET /api/local-llm/engines` — Probes all four engines, returns availability, model lists, running state, and VRAM
+  - `GET /api/local-llm/engines/urls` / `POST /api/local-llm/engines/urls` — Read/write custom base URLs for external engines (stored in `llm.json` under `engineUrls`)
+  - `POST /api/local-llm/engines/activate` — Activates an external engine model for chat or embedding; stops managed engines if needed, writes config, sets default pointer
+  - `POST /api/local-llm/engines/context` — Updates context size; for LM Studio, reloads the model with the new `context_length`
+  - `POST /api/local-llm/engines/unload` — Unloads a model from Ollama or LM Studio
+
+- **LLM Config Pointer System** — Model and embedding configs in `llm.json` now support string pointers. The `default` key can point to another config entry by name (e.g., `"default": "openai"`), enabling fast switching between pre-configured providers. Auto-migration converts the old format (where `default` is a full config object) to the pointer format on first load. New `engine` field on model/embedding configs identifies which inference engine to use.
+
+- **GPU VRAM Monitoring** — `queryNvidiaVram()` function queries NVIDIA GPU VRAM usage via `nvidia-smi`. Reported in engine status and the Studio UI.
+
+- **Engine Tabs UI** — LocalLlmView now features an engine tab bar (llama-cpp, mlx-serve, Ollama, LM Studio) with availability indicators, connection status dots, and default badges. Each engine tab shows its own model grid, activation controls, context/max-token sliders, and running model status. External engines display base URL configuration, system RAM, and GPU VRAM usage bars.
+
+- **E2E Test Suite** — Playwright-based end-to-end tests covering all four engines: engine tab selection, model activation for chat and embedding, streaming chat verification, and context/max-token configuration. Test helpers for authentication, config backup/restore, and SSE streaming.
 
 - **Thinking/Reasoning for Local Models** — Local LLM provider now supports `enable_thinking` in OpenAI-compatible API requests when `reasoningBudget > 0`. Thinking content streams as SSE `thinking` events. LocalLlmView adds a thinking toggle and budget slider (128–1024 tokens) for models with reasoning capability. Thinking pills in AgentsView and StandaloneChat changed from hover-based popovers to click-to-expand.
 
@@ -79,7 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Embedding Batch Size** — OpenAI embeddings batch size increased from 16 to 128, improving throughput for large embedding operations.
 
-- **Dynamic Local LLM Ports** — `LLMFactory` and `KnowledgeStore` now read the base URL from `llamaEngine.getBaseUrl()` / `llamaEmbeddingEngine.getBaseUrl()` instead of hardcoded ports, supporting dynamic port allocation.
+- **Dynamic Local LLM Ports** — `LLMFactory` and `KnowledgeStore` now read the base URL from the engine registry instead of hardcoded ports, supporting dynamic port allocation.
 
 - **Knowledge Store Entity Rowid Map** — SQLite store creates an `entity_rowid_map` table for stable rowid mapping to the `entity_vectors` virtual table.
 
@@ -87,9 +106,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Standalone Chat Path** — Stylesheet path changed from relative to absolute (`/styles.css`) to work correctly under nested `/chat/<agent>` paths.
 
+- **Ollama Context Window Passthrough** — `OpenAIChatModel` injects `{ options: { num_ctx } }` into request params when the engine is Ollama, ensuring the configured context size is respected.
+
+- **Adaptive Embedding Batch Size** — `OpenAIEmbeddingsProvider` now halves the batch size on "too large" errors and retries, down to a minimum of 1. Handles VRAM-limited GPUs gracefully.
+
+- **HuggingFace MLX Search** — `ModelManager.browseHuggingFace()` now uses `&filter=mlx` for MLX format searches and prioritizes `mlx-community/` repos in results.
+
+- **LLM Config List Filtering** — `listModelConfigs()` and `listEmbeddingConfigs()` now filter out string pointers, returning only concrete config entries. Getter functions dereference one level of pointer.
+
+- **Agent LLM Picker Default Badge** — The agent LLM picker modal now shows a "default" badge next to the resolved default LLM entry.
+
+- **Template `llm.json` Restructured** — Pre-configured entries for all engines (llama-cpp, mlx-serve, ollama, lmstudio, openai, anthropic, gemini) for both models and embeddings, with `default` as a pointer.
+
+### Removed
+
+- **`llama-provider.ts`** — Monolithic `llamaEngine`/`llamaEmbeddingEngine` singletons replaced by the engine registry and individual engine classes.
+
 ### Dependencies
 
-- **Added:** `pdf-parse`
+- **Added:** `pdf-parse`, `@playwright/test`
 
 ## Release 0.0.7
 

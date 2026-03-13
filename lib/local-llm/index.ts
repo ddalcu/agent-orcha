@@ -1,6 +1,6 @@
 export { ModelManager } from './model-manager.ts';
-export { llamaEngine, llamaEmbeddingEngine } from './llama-provider.ts';
-export type { EngineType } from './llama-provider.ts';
+export { engineRegistry } from './engine-registry.ts';
+export type { LocalEngine, EngineStatus, EngineChatStatus, EngineServerStatus, LoadOptions } from './engine-interface.ts';
 export { getBinaryPath, detectGpu } from './binary-manager.ts';
 export type { GpuInfo } from './binary-manager.ts';
 export { LlamaServerProcess } from './llama-server-process.ts';

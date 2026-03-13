@@ -38,7 +38,7 @@ describe('createSandboxShellTool', () => {
     const tool = createSandboxShellTool(createConfig());
     const result = await tool.invoke({ command: 'echo hello' });
     const parsed = JSON.parse(result as string);
-    assert.ok(parsed.error?.includes('disabled outside Docker'));
+    assert.ok(parsed.error?.includes('Shell execution is disabled'));
     assert.equal(parsed.exitCode, -1);
   });
 

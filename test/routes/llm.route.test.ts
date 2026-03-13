@@ -149,9 +149,10 @@ describe('llm.route', () => {
     if (localModel) {
       assert.ok(localModel.baseUrl);
     }
-    // Default should have null baseUrl
-    const defaultModel = body.find((m: any) => m.name === 'default');
-    assert.equal(defaultModel.baseUrl, null);
+    // The resolved default ('openai') should have null baseUrl
+    const openaiModel = body.find((m: any) => m.name === 'openai');
+    assert.ok(openaiModel, 'openai model should exist (resolved default)');
+    assert.equal(openaiModel.baseUrl, null);
   });
 
   it('POST /:name/chat should return 200 on success', async () => {

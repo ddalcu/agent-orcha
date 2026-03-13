@@ -99,6 +99,8 @@ interface OpenAIChatModelOptions {
   provider?: 'openai' | 'local';
   supportsVision?: boolean;
   reasoningBudget?: number;
+  engine?: string;
+  contextSize?: number;
 }
 
 export class OpenAIChatModel implements ChatModel {
@@ -114,6 +116,8 @@ export class OpenAIChatModel implements ChatModel {
   private boundTools?: StructuredTool[];
   private cachedProviderTools?: OpenAI.ChatCompletionTool[];
   private structuredSchema?: Record<string, unknown>;
+  private engine?: string;
+  private contextSize?: number;
 
   constructor(options: OpenAIChatModelOptions) {
     this.client = new OpenAI({
@@ -128,6 +132,8 @@ export class OpenAIChatModel implements ChatModel {
     this.supportsVision = options.supportsVision ?? true;
     this.isReasoningModel = this.provider === 'openai' && /^o[134]/.test(this.modelName);
     this.reasoningBudget = options.reasoningBudget ?? 0;
+    this.engine = options.engine;
+    this.contextSize = options.contextSize;
   }
 
   /**
@@ -253,9 +259,15 @@ export class OpenAIChatModel implements ChatModel {
       }));
   }
 
+  /** Build Ollama-specific options (num_ctx) when engine is ollama */
+  private ollamaOptions(): Record<string, unknown> {
+    if (this.engine !== 'ollama' || !this.contextSize) return {};
+    return { options: { num_ctx: this.contextSize } };
+  }
+
   async invoke(messages: BaseMessage[]): Promise<ChatModelResponse> {
     const tools = this.toOpenAITools();
-    const params: OpenAI.ChatCompletionCreateParamsNonStreaming & { enable_thinking?: boolean } = {
+    const params: OpenAI.ChatCompletionCreateParamsNonStreaming & { enable_thinking?: boolean; options?: Record<string, unknown> } = {
       model: this.modelName,
       messages: this.toOpenAIMessages(messages),
       ...(!this.isReasoningModel && this.temperature !== undefined ? { temperature: this.temperature } : {}),
@@ -278,6 +290,7 @@ export class OpenAIChatModel implements ChatModel {
           }
         : {}),
       ...(this.reasoningBudget > 0 ? { enable_thinking: true } : {}),
+      ...this.ollamaOptions(),
     };
 
     const response = await this.client.chat.completions.create(params);
@@ -316,7 +329,7 @@ export class OpenAIChatModel implements ChatModel {
     options?: { signal?: AbortSignal }
   ): AsyncIterable<ChatModelResponse> {
     const tools = this.toOpenAITools();
-    const params: OpenAI.ChatCompletionCreateParamsStreaming & { enable_thinking?: boolean } = {
+    const params: OpenAI.ChatCompletionCreateParamsStreaming & { enable_thinking?: boolean; options?: Record<string, unknown> } = {
       model: this.modelName,
       messages: this.toOpenAIMessages(messages),
       stream: true,
@@ -329,6 +342,7 @@ export class OpenAIChatModel implements ChatModel {
         : {}),
       ...(tools ? { tools } : {}),
       ...(this.reasoningBudget > 0 ? { enable_thinking: true } : {}),
+      ...this.ollamaOptions(),
     };
 
     const stream = await this.client.chat.completions.create(params, {

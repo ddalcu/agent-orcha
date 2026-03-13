@@ -7,7 +7,11 @@ Agent Orcha is a declarative framework designed to build, manage, and scale mult
 **[Documentation](https://agentorcha.com)** | **[NPM Package](https://www.npmjs.com/package/agent-orcha)** | **[Docker Hub](https://hub.docker.com/r/ddalcu/agent-orcha)**
 
 ```bash
+# With Docker (cloud LLM providers)
 docker run -p 3000:3000 -v ./my-workspace:/data -e AUTH_PASSWORD=your-secret-password ddalcu/agent-orcha start
+
+# With npx (local inference — uses your GPU / Apple Silicon directly)
+npx agent-orcha init my-workspace && cd my-workspace && npx agent-orcha start
 ```
 
 ## Why Agent Orcha?
@@ -68,15 +72,9 @@ Agent Orcha can be used in multiple ways:
 
 ## Quick Start
 
-### Docker
+### CLI (Recommended for Local Inference)
 
-```bash
-docker run -p 3000:3000 -e AUTH_PASSWORD=mypass -v ./my-project:/data ddalcu/agent-orcha
-```
-
-An empty workspace is automatically scaffolded with example agents, workflows, and configurations.
-
-### CLI
+Run directly on your machine to take advantage of bare metal GPU / Apple Silicon performance for local models (llama-cpp, MLX, Ollama, LM Studio).
 
 ```bash
 # Initialize a project
@@ -86,6 +84,16 @@ cd my-project
 # Start the server
 npx agent-orcha start
 ```
+
+### Docker (Recommended with External LLM Providers)
+
+Best when using cloud LLM providers (OpenAI, Anthropic, Gemini) or connecting to an LLM server running on the host. Docker does not have direct access to the host GPU, so local inference engines will not be available inside the container.
+
+```bash
+docker run -p 3000:3000 -e AUTH_PASSWORD=mypass -v ./my-project:/data ddalcu/agent-orcha
+```
+
+An empty workspace is automatically scaffolded with example agents, workflows, and configurations.
 
 
 ### Library

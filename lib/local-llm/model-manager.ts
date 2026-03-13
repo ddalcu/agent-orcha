@@ -520,7 +520,7 @@ export class ModelManager {
     const seen = new Set<string>();
     let models: any[] = [];
     for (const q of searches) {
-      const filter = format === 'gguf' ? '&filter=gguf' : '';
+      const filter = format === 'gguf' ? '&filter=gguf' : '&filter=mlx';
       const url = `https://huggingface.co/api/models?search=${encodeURIComponent(q)}${filter}&sort=downloads&direction=-1&limit=${limit}`;
       const response = await fetch(url);
       if (!response.ok) {
@@ -535,8 +535,17 @@ export class ModelManager {
         }
       }
     }
-    // Re-sort merged results by downloads and cap at limit
-    models.sort((a: any, b: any) => (b.downloads ?? 0) - (a.downloads ?? 0));
+    // Re-sort merged results: MLX prioritizes mlx-community repos, then by downloads
+    if (format === 'mlx') {
+      models.sort((a: any, b: any) => {
+        const aIsMlx = (a.modelId ?? a.id ?? '').startsWith('mlx-community/') ? 1 : 0;
+        const bIsMlx = (b.modelId ?? b.id ?? '').startsWith('mlx-community/') ? 1 : 0;
+        if (aIsMlx !== bIsMlx) return bIsMlx - aIsMlx;
+        return (b.downloads ?? 0) - (a.downloads ?? 0);
+      });
+    } else {
+      models.sort((a: any, b: any) => (b.downloads ?? 0) - (a.downloads ?? 0));
+    }
     models = models.slice(0, limit);
     const results: HuggingFaceModelResult[] = [];
 

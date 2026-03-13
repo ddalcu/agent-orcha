@@ -14,7 +14,7 @@ import { SkillLoader, type Skill } from './skills/index.ts';
 import { ToolRegistry } from './tools/tool-registry.ts';
 import { ToolDiscovery } from './tools/tool-discovery.ts';
 import { MCPConfigSchema } from './mcp/types.ts';
-import { loadLLMConfig, listModelConfigs, listEmbeddingConfigs, getModelConfig, getEmbeddingConfig, resolveApiKey } from './llm/llm-config.ts';
+import { loadLLMConfig, getLLMConfig, listModelConfigs, getModelConfig, getEmbeddingConfig, resolveApiKey } from './llm/llm-config.ts';
 import { detectProvider } from './llm/provider-detector.ts';
 import { LLMFactory } from './llm/llm-factory.ts';
 import { resolveAgentLLMRef } from './llm/types.ts';
@@ -31,9 +31,7 @@ import { createBrowserTools } from './sandbox/sandbox-browser.ts';
 import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
 import { substituteEnvVars } from './utils/env-substitution.ts';
-import { llamaEngine, llamaEmbeddingEngine } from './local-llm/llama-provider.ts';
-import { killOrphanedServers } from './local-llm/llama-server-process.ts';
-import { killOrphanedMlxServers } from './local-llm/mlx-server-process.ts';
+import { engineRegistry } from './local-llm/engine-registry.ts';
 import { ModelManager } from './local-llm/model-manager.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
@@ -127,10 +125,8 @@ export class Orchestrator {
     await loadLLMConfig(this.config.llmConfigPath);
 
     // Kill any orphaned llama-server / mlx-serve processes from a previous run, then set base dir
-    killOrphanedServers(this.config.workspaceRoot);
-    killOrphanedMlxServers(this.config.workspaceRoot);
-    llamaEngine.setBaseDir(this.config.workspaceRoot);
-    llamaEmbeddingEngine.setBaseDir(this.config.workspaceRoot);
+    engineRegistry.killAllOrphans();
+    engineRegistry.setBaseDir(this.config.workspaceRoot);
 
     await this.checkLlmReadiness();
 
@@ -186,9 +182,12 @@ export class Orchestrator {
     const issues: string[] = [];
     const manager = new ModelManager(this.config.workspaceRoot);
 
+    const llmConfig = getLLMConfig();
+    const hasDefaultModel = llmConfig?.models['default'] !== undefined;
+    const hasDefaultEmb = llmConfig?.embeddings['default'] !== undefined;
     const checks: [string, boolean, () => { model: string; baseUrl?: string; apiKey?: string }][] = [
-      ['Chat model', listModelConfigs().includes('default'), () => getModelConfig('default')],
-      ['Embedding', listEmbeddingConfigs().includes('default'), () => getEmbeddingConfig('default')],
+      ['Chat model', hasDefaultModel, () => getModelConfig('default')],
+      ['Embedding', hasDefaultEmb, () => getEmbeddingConfig('default')],
     ];
 
     for (const [label, hasDefault, getConfig] of checks) {
@@ -257,20 +256,20 @@ export class Orchestrator {
 
     if (!container.detectDocker()) {
       logger.warn('');
-      logger.warn('╔══════════════════════════════════════════════════════════════════╗');
-      logger.warn('║  SANDBOX: Docker not detected on this system                    ║');
-      logger.warn('║                                                                 ║');
-      logger.warn('║  The following sandbox tools are NOT available:                  ║');
-      logger.warn('║    - sandbox:shell (shell command execution)                     ║');
-      logger.warn('║    - sandbox:browser_* (web browser automation)                  ║');
-      logger.warn('║    - sandbox:vision_* (vision browser automation)                ║');
-      logger.warn('║                                                                 ║');
-      logger.warn('║  To enable these features, install Docker Desktop:               ║');
-      logger.warn('║    https://www.docker.com/products/docker-desktop                ║');
-      logger.warn('║                                                                 ║');
-      logger.warn('║  Tools still available: sandbox:exec, sandbox:web_fetch,         ║');
-      logger.warn('║    sandbox:web_search, sandbox:file_*                            ║');
-      logger.warn('╚══════════════════════════════════════════════════════════════════╝');
+      logger.warn('╔════════════════════════════════════════════════════════════════╗');
+      logger.warn('║  SANDBOX: Docker not detected on this system                   ║');
+      logger.warn('║                                                                ║');
+      logger.warn('║  The following sandbox tools are NOT available:                ║');
+      logger.warn('║    - sandbox:shell (shell command execution)                   ║');
+      logger.warn('║    - sandbox:browser_* (web browser automation)                ║');
+      logger.warn('║    - sandbox:vision_* (vision browser automation)              ║');
+      logger.warn('║                                                                ║');
+      logger.warn('║  To enable these features, install Docker Desktop:             ║');
+      logger.warn('║    https://www.docker.com/products/docker-desktop              ║');
+      logger.warn('║                                                                ║');
+      logger.warn('║  Tools still available: sandbox:exec, sandbox:web_fetch,       ║');
+      logger.warn('║    sandbox:web_search, sandbox:file_*                          ║');
+      logger.warn('╚════════════════════════════════════════════════════════════════╝');
       logger.warn('');
       return;
     }
@@ -356,7 +355,12 @@ export class Orchestrator {
           }
         }
 
-        return { name: agent.name, llm: { name: llmName, exists: modelNames.includes(llmName) }, tools, skills };
+        // Check if the LLM name resolves to a concrete config (handles both direct names and pointer names like 'default')
+        let llmExists = modelNames.includes(llmName);
+        if (!llmExists) {
+          try { getModelConfig(llmName); llmExists = true; } catch { /* not found */ }
+        }
+        return { name: agent.name, llm: { name: llmName, exists: llmExists }, tools, skills };
       }),
     );
 
@@ -953,9 +957,8 @@ export class Orchestrator {
   }
 
   async close(): Promise<void> {
-    // Stop llama-server processes before anything else
-    await llamaEngine.unload();
-    await llamaEmbeddingEngine.unload();
+    // Stop all local engine processes before anything else
+    await engineRegistry.unloadAll();
 
     if (this.triggerManager) {
       this.triggerManager.close();

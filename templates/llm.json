@@ -1,18 +1,84 @@
 {
   "version": "1.0",
   "models": {
-    "default": {
+    "default": "llama-cpp",
+    "mlx-serve": {
       "provider": "local",
+      "engine": "mlx-serve",
       "model": "Qwen3.5-4B-4bit",
-      "maxTokens": 1280,
-      "reasoningBudget": 128,
-      "contextSize": 32768
+      "contextSize": 32768,
+      "reasoningBudget": 0
+    },
+    "llama-cpp": {
+      "provider": "local",
+      "engine": "llama-cpp",
+      "model": "Qwen3.5-4B-IQ4_NL",
+      "contextSize": 32768,
+      "reasoningBudget": 0
+    },
+    "lmstudio": {
+      "provider": "local",
+      "engine": "lmstudio",
+      "baseUrl": "http://localhost:1234/v1",
+      "model": "qwen3.5-9b",
+      "reasoningBudget": 0
+    },
+    "ollama": {
+      "provider": "local",
+      "engine": "ollama",
+      "baseUrl": "http://localhost:11434/v1",
+      "model": "qwen3.5:latest",
+      "reasoningBudget": 0
+    },
+    "openai": {
+      "provider": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
+      "model": "gpt-5.4"
+    },
+    "anthropic": {
+      "provider": "anthropic",
+      "apiKey": "${ANTHROPIC_API_KEY}",
+      "model": "claude-sonnet-4-6"
+    },
+    "gemini": {
+      "provider": "gemini",
+      "apiKey": "${GOOGLE_API_KEY}",
+      "model": "gemini-3.1-pro-preview"
     }
   },
   "embeddings": {
-    "default": {
+    "default": "gemini",
+    "llama-cpp": {
       "provider": "local",
+      "engine": "llama-cpp",
+      "model": "nomic-embed-text-v1.5.Q4_K_M"
+    },
+    "mlx-serve": {
+      "provider": "local",
+      "engine": "mlx-serve",
       "model": "all-MiniLM-L6-v2-4bit"
+    },
+    "lmstudio": {
+      "provider": "local",
+      "engine": "lmstudio",
+      "baseUrl": "http://192.168.2.61:1234/v1",
+      "model": "nomic-ai/text-embedding-nomic-embed-text-v1.5"
+    },
+    "ollama": {
+      "provider": "local",
+      "engine": "ollama",
+      "baseUrl": "http://localhost:11434/v1",
+      "model": "nomic-embed-text:v1.5"
+    },
+    "openai": {
+      "provider": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
+      "model": "text-embedding-3-small"
+    },
+    "gemini": {
+      "provider": "gemini",
+      "apiKey": "${GOOGLE_API_KEY}",
+      "model": "gemini-embedding-001"
     }
   }
 }

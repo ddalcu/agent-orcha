@@ -10,6 +10,7 @@ export {
   getLLMConfigPath,
   saveLLMConfig,
   resolveApiKey,
+  resolveDefaultName,
 } from './llm-config.ts';
 export type { ModelConfig, EmbeddingModelConfig, LLMJsonConfig } from './llm-config.ts';
 export { AgentLLMRefSchema, resolveAgentLLMRef } from './types.ts';
