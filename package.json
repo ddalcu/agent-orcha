@@ -47,7 +47,7 @@
     "build:binary": "node scripts/build-sea.mjs",
     "sea": "node scripts/build-sea.mjs && ./dist/sea/agent-orcha",
     "test:e2e": "npx playwright test",
-    "prepare": "./scripts/install-hooks.sh"
+    "prepare": "bash scripts/install-hooks.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",
