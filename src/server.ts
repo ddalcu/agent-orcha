@@ -32,7 +32,14 @@ function getVersion(): string {
       return (process as any).getBuiltinModule?.('node:sea')?.getAsset('version', 'utf8')?.trim() || '0.0.0';
     } catch { return '0.0.0'; }
   }
-  return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')).version;
+  // From src/: one level up. From dist/src/: two levels up.
+  for (const rel of ['..', path.join('..', '..')]) {
+    const candidate = path.join(__dirname, rel, 'package.json');
+    if (fs.existsSync(candidate)) {
+      return JSON.parse(fs.readFileSync(candidate, 'utf-8')).version;
+    }
+  }
+  return '0.0.0';
 }
 const PKG_VERSION = getVersion();
 

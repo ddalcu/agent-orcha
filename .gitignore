@@ -21,3 +21,4 @@ Dockerfile.deploy
 .llama-server
 .mlx-serve
 templates/llm.json
+agent-orcha-*.tgz

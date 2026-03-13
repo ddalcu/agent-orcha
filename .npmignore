@@ -39,6 +39,9 @@ mcp.json
 templates/
 public/
 
+# SEA binary build output
+dist/sea/
+
 # Build artifacts
 *.log
 npm-debug.log*
