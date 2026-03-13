@@ -132,11 +132,11 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       if (!config) throw new Error('No llm.json loaded');
 
       const { name } = request.params;
-      const body = { ...request.body };
+      const body: Record<string, any> = { ...(request.body as Record<string, any>) };
 
       // If writing a string pointer (e.g. setting default to a key name)
-      if (typeof body === 'string' || (typeof body._pointer === 'string')) {
-        const pointer = typeof body === 'string' ? body : body._pointer;
+      if (typeof request.body === 'string' || (typeof body._pointer === 'string')) {
+        const pointer = typeof request.body === 'string' ? request.body : body._pointer;
         config.models[name] = pointer;
         await saveLLMConfig(llmJsonPath, config);
         LLMFactory.clearCache();
@@ -209,11 +209,11 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       if (!config) throw new Error('No llm.json loaded');
 
       const { name } = request.params;
-      const body = { ...request.body };
+      const body: Record<string, any> = { ...(request.body as Record<string, any>) };
 
       // If writing a string pointer
-      if (typeof body === 'string' || (typeof body._pointer === 'string')) {
-        const pointer = typeof body === 'string' ? body : body._pointer;
+      if (typeof request.body === 'string' || (typeof body._pointer === 'string')) {
+        const pointer = typeof request.body === 'string' ? request.body : body._pointer;
         config.embeddings[name] = pointer;
         await saveLLMConfig(llmJsonPath, config);
         return { ok: true };

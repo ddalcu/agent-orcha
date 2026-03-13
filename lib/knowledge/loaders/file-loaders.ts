@@ -155,21 +155,13 @@ export class PDFLoader {
   async load(): Promise<Document[]> {
     const buffer = await fs.readFile(this.filePath);
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
-    const doc = await parser.load();
-
-    const pages: string[] = [];
-    for (let i = 1; i <= doc.numPages; i++) {
-      const result = await parser.getText({ pageNumber: i });
-      // getText returns { pages: [{ text }] }
-      const pageText = (result as any)?.pages?.map((p: any) => p.text).join('\n') ?? '';
-      pages.push(pageText);
-    }
+    const result = await parser.getText();
 
     return [{
-      pageContent: pages.join('\n'),
+      pageContent: result.text || '(No text content found in PDF)',
       metadata: {
         source: this.filePath,
-        pdf_pages: doc.numPages,
+        pdf_pages: result.pages?.length ?? 0,
       },
     }];
   }

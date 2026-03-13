@@ -36,7 +36,7 @@ export class OpenAIEmbeddingsProvider implements Embeddings {
     // Filter empty strings and track original indices
     const filtered: { text: string; index: number }[] = [];
     for (let i = 0; i < texts.length; i++) {
-      if (texts[i].trim()) filtered.push({ text: texts[i], index: i });
+      if (texts[i]!.trim()) filtered.push({ text: texts[i]!, index: i });
     }
 
     const results: number[][] = new Array(texts.length);
@@ -54,7 +54,7 @@ export class OpenAIEmbeddingsProvider implements Embeddings {
         });
         const sorted = response.data.sort((a, b) => a.index - b.index);
         for (let j = 0; j < sorted.length; j++) {
-          results[batch[j].index] = sorted[j].embedding;
+          results[batch[j]!.index] = sorted[j]!.embedding;
         }
         i += batch.length;
       } catch (error: any) {

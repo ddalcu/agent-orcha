@@ -88,7 +88,7 @@ export class SandboxContainer {
     return new Promise((resolve) => {
       execFile(this.dockerPath!, [
         'compose', '-f', composeFile, 'up', '-d', '--build',
-      ], { cwd: this.projectRoot, timeout: 120_000 }, (error, stdout, stderr) => {
+      ], { cwd: this.projectRoot, timeout: 120_000 }, (error, _stdout, stderr) => {
         if (error) {
           logger.error(`[Sandbox] Failed to start container: ${error.message}`);
           if (stderr) logger.error(`[Sandbox] ${stderr}`);

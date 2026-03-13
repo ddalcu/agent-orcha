@@ -346,7 +346,7 @@ async function downloadBinary(destDir: string, platform: Platform, gpu: GpuInfo)
     }
     const linuxMatch = name.match(/^(lib[\w-]+\.so\.\d+)\.\d+\.\d+$/);
     if (linuxMatch) {
-      shortName = linuxMatch[1];
+      shortName = linuxMatch[1] ?? null;
     }
     if (!shortName || shortName === name) continue;
     const linkPath = path.join(destDir, shortName);

@@ -63,19 +63,10 @@ export async function extractDocumentText(
   // PDF
   if (mediaType === 'application/pdf') {
     try {
-      // @ts-ignore - pdf-parse is an optional runtime dependency
-      const mod = await import('pdf-parse');
-      if (mod.PDFParse) {
-        // pdf-parse v3+ class-based API
-        const parser = new mod.PDFParse({ data: buffer });
-        await parser.load();
-        const result = await parser.getText();
-        return { text: result.text || '(No text content found in PDF)', format: 'pdf' };
-      }
-      // pdf-parse v1/v2 function-based API
-      const pdfParse = typeof mod.default === 'function' ? mod.default : mod;
-      const data = await pdfParse(buffer);
-      return { text: data.text, format: 'pdf' };
+      const { PDFParse } = await import('pdf-parse');
+      const parser = new PDFParse({ data: buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer) });
+      const result = await parser.getText();
+      return { text: result.text || '(No text content found in PDF)', format: 'pdf' };
     } catch (err: any) {
       if (err.code === 'ERR_MODULE_NOT_FOUND' || err.code === 'MODULE_NOT_FOUND') {
         throw new Error('PDF support requires pdf-parse. Install it with: npm install pdf-parse');
