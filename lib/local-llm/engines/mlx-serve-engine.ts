@@ -92,6 +92,7 @@ export class MlxServeEngine implements LocalEngine {
       contextSize: this._detectedContextSize,
       memoryEstimate: this._memoryEstimate,
       supportsVision: this._supportsVision,
+      mmprojBytes: 0,
     };
   }
 

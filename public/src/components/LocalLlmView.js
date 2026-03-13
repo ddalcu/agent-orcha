@@ -57,6 +57,63 @@ function providerIcon(provider) {
     return `<i class="fas fa-server"></i>`;
 }
 
+/**
+ * Compute VRAM-aware recommended context size.
+ * Returns { ctx, maxTokens, details } or null if VRAM data unavailable.
+ */
+function computeVramRecommendation(gpuVram, chatStatus, embeddingStatus, agents) {
+    if (!gpuVram || !chatStatus?.memoryEstimate || !chatStatus.contextSize) return null;
+    const mem = chatStatus.memoryEstimate;
+    const kvPerToken = mem.kvCacheBytes / chatStatus.contextSize;
+    if (kvPerToken <= 0) return null;
+
+    const CUDA_OVERHEAD_PER_CTX = 300 * 1024 * 1024; // 300MB per CUDA context
+    const cudaContexts = embeddingStatus?.running ? 2 : 1;
+    const driverOverhead = CUDA_OVERHEAD_PER_CTX * cudaContexts;
+    const mmprojBytes = chatStatus.mmprojBytes || 0;
+    const embModelBytes = embeddingStatus?.memoryEstimate?.modelBytes || 0;
+    const fixedVram = driverOverhead + mem.modelBytes + mmprojBytes + embModelBytes;
+
+    // Target 75% of total VRAM for performance headroom
+    const usableVram = gpuVram.totalBytes * 0.75;
+    const availableForKV = usableVram - fixedVram;
+    const maxCtxByVram = availableForKV > 0 ? Math.floor(availableForKV / kvPerToken) : 0;
+
+    // Agent Orcha minimum context budget
+    let toolCount = 0, knowledgeCount = 0, skillCount = 0;
+    if (agents && agents.length > 0) {
+        for (const a of agents) {
+            const tools = a.tools || [];
+            for (const t of tools) {
+                const src = typeof t === 'string' ? t.split(':')[0] : t.source;
+                if (src === 'knowledge') knowledgeCount++;
+                else toolCount++;
+            }
+            if (a.skills) skillCount += Array.isArray(a.skills) ? a.skills.length : 0;
+        }
+    }
+    const orchaMinCtx = (4096 + toolCount * 800 + knowledgeCount * 1500 + skillCount * 500) * 2;
+
+    // Final recommendation
+    let ctx = Math.min(maxCtxByVram, 131072);
+    ctx = Math.max(ctx, orchaMinCtx, 2048);
+    ctx = Math.floor(ctx / 1024) * 1024;
+
+    const maxTokens = Math.min(Math.floor(ctx * 0.25), 4096);
+    const spillBytes = (fixedVram + ctx * kvPerToken) > gpuVram.totalBytes
+        ? (fixedVram + ctx * kvPerToken) - gpuVram.totalBytes : 0;
+
+    return {
+        ctx,
+        maxTokens,
+        maxCtxByVram: Math.max(2048, Math.floor(maxCtxByVram / 1024) * 1024),
+        orchaMinCtx,
+        fixedVram,
+        spillBytes,
+        details: { driverOverhead, chatModelBytes: mem.modelBytes, mmprojBytes, embModelBytes, kvPerToken, toolCount, knowledgeCount, skillCount },
+    };
+}
+
 const PROVIDER_META = {
     local:     { label: 'Local',     color: 'amber' },
     openai:    { label: 'OpenAI',    color: 'green' },
@@ -218,7 +275,13 @@ export class LocalLlmView extends Component {
     }
 
     async refresh() {
-        await Promise.all([this.loadStatus(), this.loadModels()]);
+        await Promise.all([this.loadStatus(), this.loadModels(), this.loadAgents()]);
+    }
+
+    async loadAgents() {
+        try {
+            this._agents = await api.getAgents();
+        } catch { this._agents = []; }
     }
 
     startDownloadPolling() {
@@ -1114,6 +1177,15 @@ export class LocalLlmView extends Component {
             const modelCaps = activeModelObj ? detectCapabilitiesFromFile(activeModelObj) : { reasoning: false };
             const thinkingEnabled = currentReasoningBudget > 0;
 
+            // VRAM-aware recommendation
+            const vramRec = computeVramRecommendation(gpuVram, chatStatus, embeddingStatus, this._agents);
+            const recCtx = vramRec?.ctx || 0;
+            const recPct = recCtx ? ((recCtx - 2048) / (131072 - 2048)) * 100 : 0;
+            const recLabel = recCtx >= 1024 ? `${(recCtx / 1024).toFixed(0)}K` : recCtx;
+            const recTooltip = vramRec
+                ? `Recommended: ${recLabel} ctx\nVRAM budget: ${formatBytes(gpuVram?.totalBytes || 0)} (75% usable)\nFixed: model ${formatBytes(vramRec.details.chatModelBytes)}${vramRec.details.mmprojBytes ? ` + mmproj ${formatBytes(vramRec.details.mmprojBytes)}` : ''}${vramRec.details.embModelBytes ? ` + embed ${formatBytes(vramRec.details.embModelBytes)}` : ''} + driver ${formatBytes(vramRec.details.driverOverhead)}\nOrcha needs: ${(vramRec.orchaMinCtx / 1024).toFixed(0)}K min (${vramRec.details.toolCount} tools, ${vramRec.details.knowledgeCount} knowledge, ${vramRec.details.skillCount} skills)`
+                : '';
+
             html += `
                 <div class="llm-section-content space-y-2">
                     <div class="flex items-center justify-between">
@@ -1139,15 +1211,19 @@ export class LocalLlmView extends Component {
                         </div>
                     </div>` : ''}
                     <div class="llm-sliders-section">
-                        <div class="llm-slider-row">
+                        <div class="llm-slider-row" style="position: relative">
                             <label class="llm-slider-label">
                                 <span>Context Size</span>
                                 <span id="ctxValue" class="font-mono">${ctxSize >= 1024 ? `${(ctxSize / 1024).toFixed(0)}K` : ctxSize}</span>
                             </label>
-                            <input type="range" id="ctxSlider" class="llm-range"
-                                data-kv-per-token="${kvPerToken}" data-model-bytes="${mem?.modelBytes || 0}" data-total-ram="${totalRam || 0}"
-                                data-orig="${ctxSize || 8192}"
-                                min="2048" max="131072" step="1024" value="${ctxSize || 8192}" />
+                            <div style="position: relative">
+                                <input type="range" id="ctxSlider" class="llm-range"
+                                    data-kv-per-token="${kvPerToken}" data-model-bytes="${mem?.modelBytes || 0}" data-total-ram="${totalRam || 0}"
+                                    data-orig="${ctxSize || 8192}"
+                                    data-vram-total="${gpuVram?.totalBytes || 0}" data-vram-fixed="${vramRec?.fixedVram || 0}" data-rec-ctx="${recCtx}"
+                                    min="2048" max="131072" step="1024" value="${ctxSize || 8192}" />
+                                ${vramRec ? `<div class="llm-vram-rec-marker" title="${escapeHtml(recTooltip)}" style="left: ${recPct}%"><span class="llm-vram-rec-label">${recLabel}</span></div>` : ''}
+                            </div>
                             <div class="llm-slider-meta">
                                 <span>2K</span>
                                 <span id="ctxMemEstimate" class="font-mono">${formatBytes(mem?.kvCacheBytes || 0)} KV + ${formatBytes(mem?.modelBytes || 0)} model = ${formatBytes(mem?.totalBytes || 0)} / ${formatBytes(totalRam)}</span>
@@ -1291,6 +1367,21 @@ export class LocalLlmView extends Component {
 
         const updateWarning = (pct) => {
             if (!warningEl) return;
+            // VRAM spill warning takes priority when GPU is present
+            const vramTotal = parseInt(ctxSlider?.dataset.vramTotal || '0');
+            if (vramTotal > 0 && ctxSlider) {
+                const kvPT = parseFloat(ctxSlider.dataset.kvPerToken);
+                const fixedVram = parseInt(ctxSlider.dataset.vramFixed || '0');
+                const kvNeeded = parseInt(ctxSlider.value) * kvPT;
+                const totalNeeded = fixedVram + kvNeeded;
+                if (totalNeeded > vramTotal) {
+                    const spillGB = ((totalNeeded - vramTotal) / (1024 ** 3)).toFixed(1);
+                    warningEl.textContent = `~${spillGB}GB will spill from VRAM to CPU — expect significant slowdown`;
+                    warningEl.className = 'llm-slider-warning llm-slider-warning-red';
+                    return;
+                }
+            }
+            // Fall back to existing RAM warnings
             if (pct > 90) {
                 warningEl.textContent = 'Exceeds available RAM — will cause heavy swapping and very slow performance';
                 warningEl.className = 'llm-slider-warning llm-slider-warning-red';

@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import { LlamaServerProcess } from '../llama-server-process.ts';
 import { killOrphanedServers } from '../llama-server-process.ts';
 import { ModelManager } from '../model-manager.ts';
@@ -16,6 +17,8 @@ export class LlamaCppEngine implements LocalEngine {
   private _detectedContextSize: number | null = null;
   private _memoryEstimate: { modelBytes: number; kvCacheBytes: number; totalBytes: number } | null = null;
   private _supportsVision = false;
+  private _mmprojBytes = 0;
+  private _embeddingModelBytes = 0;
 
   setBaseDir(dir: string): void {
     this._baseDir = dir;
@@ -52,9 +55,11 @@ export class LlamaCppEngine implements LocalEngine {
     const manager = new ModelManager(this._baseDir);
     const mmproj = await manager.findMmprojForModel(modelFileName);
     this._supportsVision = !!mmproj;
+    this._mmprojBytes = 0;
 
     if (mmproj) {
-      logger.info(`[LlamaCppEngine] Vision enabled with mmproj: ${path.basename(mmproj)}`);
+      try { this._mmprojBytes = (await fs.stat(mmproj)).size; } catch { /* ignore */ }
+      logger.info(`[LlamaCppEngine] Vision enabled with mmproj: ${path.basename(mmproj)} (${(this._mmprojBytes / 1024 / 1024).toFixed(0)}MB)`);
     }
 
     this._detectedContextSize = contextSize ?? null;
@@ -100,6 +105,7 @@ export class LlamaCppEngine implements LocalEngine {
       contextSize: this._detectedContextSize,
       memoryEstimate: this._memoryEstimate,
       supportsVision: this._supportsVision,
+      mmprojBytes: this._mmprojBytes,
     };
   }
 
@@ -112,6 +118,7 @@ export class LlamaCppEngine implements LocalEngine {
   async loadEmbedding(modelPath: string): Promise<void> {
     if (!this.embeddingServer) this.embeddingServer = new LlamaServerProcess(this._baseDir, true);
     if (this.embeddingServer.running && this.embeddingServer.modelPath === modelPath) return;
+    try { this._embeddingModelBytes = (await fs.stat(modelPath)).size; } catch { this._embeddingModelBytes = 0; }
     await this.embeddingServer.start({ modelPath, embedding: true });
   }
 
@@ -135,7 +142,7 @@ export class LlamaCppEngine implements LocalEngine {
       activeModel: running ? (this.embeddingServer?.modelPath ?? null) : null,
       port: this.embeddingServer?.port ?? null,
       contextSize: null,
-      memoryEstimate: null,
+      memoryEstimate: running ? { modelBytes: this._embeddingModelBytes, kvCacheBytes: 0, totalBytes: this._embeddingModelBytes } : null,
     };
   }
 

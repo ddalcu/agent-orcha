@@ -8,6 +8,7 @@ export interface EngineServerStatus {
 
 export interface EngineChatStatus extends EngineServerStatus {
   supportsVision: boolean;
+  mmprojBytes: number;
 }
 
 export interface EngineStatus {

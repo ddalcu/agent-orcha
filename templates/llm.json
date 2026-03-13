@@ -6,13 +6,13 @@
       "provider": "local",
       "engine": "mlx-serve",
       "model": "Qwen3.5-4B-4bit",
-      "contextSize": 32768,
-      "reasoningBudget": 0
+      "reasoningBudget": 0,
+      "contextSize": 32768
     },
     "llama-cpp": {
       "provider": "local",
       "engine": "llama-cpp",
-      "model": "Qwen3.5-4B-IQ4_NL",
+      "model": "Qwen3.5-9B-Q4_K_M",
       "contextSize": 32768,
       "reasoningBudget": 0
     },
