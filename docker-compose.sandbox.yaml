@@ -1,3 +1,5 @@
+# Local development compose file — for contributors building from source.
+# Production users get the published image via SandboxContainer (docker run).
 services:
   sandbox:
     build:

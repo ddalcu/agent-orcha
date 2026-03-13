@@ -1,4 +1,4 @@
-name: Publish Docker Image
+name: Publish Docker Images
 
 on:
   release:
@@ -7,6 +7,7 @@ on:
 
 env:
   IMAGE_NAME: agent-orcha
+  SANDBOX_IMAGE_NAME: agent-orcha-sandbox
 
 jobs:
   docker:
@@ -38,7 +39,8 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata
+      # ── Main image ──
+      - name: Extract metadata (main)
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -50,7 +52,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
 
-      - name: Build and push
+      - name: Build and push (main)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -60,3 +62,28 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # ── Sandbox image ──
+      - name: Extract metadata (sandbox)
+        id: sandbox-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/${{ env.SANDBOX_IMAGE_NAME }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.SANDBOX_IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push (sandbox)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.sandbox
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.sandbox-meta.outputs.tags }}
+          labels: ${{ steps.sandbox-meta.outputs.labels }}
+          cache-from: type=gha,scope=sandbox
+          cache-to: type=gha,mode=max,scope=sandbox

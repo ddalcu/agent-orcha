@@ -4,20 +4,12 @@ import assert from 'node:assert';
 // ── Mutable mock delegates ──
 let execFileSyncFn: (...args: any[]) => any;
 let execFileFn: (...args: any[]) => any;
-let existsSyncFn: (path: string) => boolean;
 
 // Mock child_process
 mock.module('node:child_process', {
   namedExports: {
     execFileSync: (...args: any[]) => execFileSyncFn(...args),
     execFile: (...args: any[]) => execFileFn(...args),
-  },
-});
-
-// Mock fs
-mock.module('node:fs', {
-  namedExports: {
-    existsSync: (p: string) => existsSyncFn(p),
   },
 });
 
@@ -42,9 +34,8 @@ describe('SandboxContainer', () => {
     // Reset defaults
     execFileSyncFn = () => { throw new Error('not found'); };
     execFileFn = () => {};
-    existsSyncFn = () => true;
 
-    container = new SandboxContainer('/test/project');
+    container = new SandboxContainer();
   });
 
   afterEach(() => {
@@ -118,7 +109,6 @@ describe('SandboxContainer', () => {
     });
 
     it('should return false when container inspect throws', () => {
-      let callCount = 0;
       execFileSyncFn = (cmd: string, args: string[]) => {
         if (args && args[0] === 'version') return Buffer.from('ok');
         throw new Error('container not found');
@@ -131,17 +121,6 @@ describe('SandboxContainer', () => {
 
   describe('start', () => {
     it('should return false when docker is not detected', async () => {
-      assert.strictEqual(await container.start(), false);
-    });
-
-    it('should return false when compose file does not exist', async () => {
-      execFileSyncFn = (cmd: string, args: string[]) => {
-        if (args && args[0] === 'version') return Buffer.from('ok');
-        throw new Error('not found');
-      };
-      existsSyncFn = () => false;
-
-      container.detectDocker();
       assert.strictEqual(await container.start(), false);
     });
 
@@ -158,15 +137,17 @@ describe('SandboxContainer', () => {
       assert.strictEqual(container.isRunning, true);
     });
 
-    it('should start container and wait for CDP', async () => {
+    it('should pull image, start container and wait for CDP', async () => {
       execFileSyncFn = (cmd: string, args: string[]) => {
         if (args && args[0] === 'version') return Buffer.from('ok');
         if (args && args[0] === 'container') return Buffer.from('false');
         return Buffer.from('');
       };
 
-      // Mock execFile to call callback with success
+      // Mock execFile: first call = pull (success), second call = run (success)
+      let callCount = 0;
       execFileFn = (cmd: string, args: string[], opts: any, cb: Function) => {
+        callCount++;
         cb(null, '', '');
       };
 
@@ -181,19 +162,25 @@ describe('SandboxContainer', () => {
 
       assert.strictEqual(result, true);
       assert.strictEqual(container.isRunning, true);
+      assert.ok(callCount >= 2, 'should have called pull and run');
 
       globalThis.fetch = origFetch;
     });
 
-    it('should return false when compose up fails', async () => {
+    it('should return false when docker run fails', async () => {
       execFileSyncFn = (cmd: string, args: string[]) => {
         if (args && args[0] === 'version') return Buffer.from('ok');
         if (args && args[0] === 'container') return Buffer.from('false');
         return Buffer.from('');
       };
 
+      // Pull succeeds, run fails
       execFileFn = (cmd: string, args: string[], opts: any, cb: Function) => {
-        cb(new Error('compose up failed'), '', 'error output');
+        if (args && args[0] === 'pull') {
+          cb(null, '', '');
+        } else {
+          cb(new Error('run failed'), '', 'error output');
+        }
       };
 
       container.detectDocker();
@@ -202,7 +189,7 @@ describe('SandboxContainer', () => {
       assert.strictEqual(result, false);
     });
 
-    it('should handle compose up with stderr output on error', async () => {
+    it('should return false when all pull attempts fail', async () => {
       execFileSyncFn = (cmd: string, args: string[]) => {
         if (args && args[0] === 'version') return Buffer.from('ok');
         if (args && args[0] === 'container') return Buffer.from('false');
@@ -210,11 +197,12 @@ describe('SandboxContainer', () => {
       };
 
       execFileFn = (cmd: string, args: string[], opts: any, cb: Function) => {
-        cb(new Error('build failed'), '', 'Dockerfile syntax error');
+        cb(new Error('pull failed'));
       };
 
       container.detectDocker();
       const result = await container.start();
+
       assert.strictEqual(result, false);
     });
   });

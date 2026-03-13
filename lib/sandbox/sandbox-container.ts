@@ -1,35 +1,22 @@
 import { execFile, execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { logger } from '../logger.ts';
 
 const CONTAINER_NAME = 'orcha-sandbox';
-const COMPOSE_FILE = 'docker-compose.sandbox.yaml';
-
-// Resolve project root from this file's location: lib/sandbox/ -> project root
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const SANDBOX_IMAGE = 'ddalcu/agent-orcha-sandbox:latest';
 
 /**
- * Manages the standalone sandbox Docker container for local development.
- * Auto-detects Docker, launches the sandbox container, and provides
- * docker exec for shell commands.
+ * Manages the standalone sandbox Docker container.
+ * Pulls the published sandbox image and runs it via `docker run`.
+ * Works both in development and when installed via npm.
  */
 export class SandboxContainer {
   private dockerPath: string | null = null;
   private running = false;
-  private projectRoot: string;
-
-  constructor(projectRoot?: string) {
-    this.projectRoot = projectRoot ?? DEFAULT_PROJECT_ROOT;
-  }
 
   /**
    * Detect if Docker (or compatible runtime) is available.
    */
   detectDocker(): boolean {
-    // Try common Docker paths
     const candidates = ['/usr/local/bin/docker', '/usr/bin/docker', 'docker'];
 
     for (const candidate of candidates) {
@@ -62,7 +49,7 @@ export class SandboxContainer {
   }
 
   /**
-   * Start the sandbox container. Builds the image if needed.
+   * Start the sandbox container by pulling and running the published image.
    */
   async start(): Promise<boolean> {
     if (!this.dockerPath) {
@@ -70,25 +57,33 @@ export class SandboxContainer {
       return false;
     }
 
-    const composeFile = path.join(this.projectRoot, COMPOSE_FILE);
-    if (!existsSync(composeFile)) {
-      logger.warn(`[Sandbox] ${COMPOSE_FILE} not found at ${this.projectRoot}`);
-      return false;
-    }
-
-    // Already running?
     if (this.isContainerRunning()) {
       logger.info('[Sandbox] Container already running');
       this.running = true;
       return true;
     }
 
+    logger.info(`[Sandbox] Pulling ${SANDBOX_IMAGE}...`);
+
+    const pulled = await this.pullImage(SANDBOX_IMAGE);
+    if (!pulled) {
+      logger.error('[Sandbox] Failed to pull sandbox image');
+      return false;
+    }
+
     logger.info('[Sandbox] Starting sandbox container...');
 
     return new Promise((resolve) => {
       execFile(this.dockerPath!, [
-        'compose', '-f', composeFile, 'up', '-d', '--build',
-      ], { cwd: this.projectRoot, timeout: 120_000 }, (error, _stdout, stderr) => {
+        'run', '-d',
+        '--name', CONTAINER_NAME,
+        '-p', '9222:9223',
+        '-p', '6080:6080',
+        '--shm-size', '2g',
+        '--cap-add', 'SYS_ADMIN',
+        '--restart', 'unless-stopped',
+        SANDBOX_IMAGE,
+      ], { timeout: 30_000 }, (error, _stdout, stderr) => {
         if (error) {
           logger.error(`[Sandbox] Failed to start container: ${error.message}`);
           if (stderr) logger.error(`[Sandbox] ${stderr}`);
@@ -96,7 +91,6 @@ export class SandboxContainer {
           return;
         }
 
-        // Wait for CDP to become available
         this.waitForCDP().then((ready) => {
           if (ready) {
             logger.info('[Sandbox] Container ready (CDP: localhost:9222, VNC: localhost:6080)');
@@ -111,17 +105,15 @@ export class SandboxContainer {
   }
 
   /**
-   * Stop the sandbox container.
+   * Stop and remove the sandbox container.
    */
   async stop(): Promise<void> {
     if (!this.dockerPath || !this.running) return;
 
-    const composeFile = path.join(this.projectRoot, COMPOSE_FILE);
-
     return new Promise((resolve) => {
       execFile(this.dockerPath!, [
-        'compose', '-f', composeFile, 'down',
-      ], { cwd: this.projectRoot, timeout: 30_000 }, (error) => {
+        'rm', '-f', CONTAINER_NAME,
+      ], { timeout: 30_000 }, (error) => {
         if (error) {
           logger.warn(`[Sandbox] Failed to stop container: ${error.message}`);
         } else {
@@ -172,9 +164,14 @@ export class SandboxContainer {
     return this.dockerPath;
   }
 
-  /**
-   * Wait for CDP to respond (up to 15 seconds).
-   */
+  private pullImage(image: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      execFile(this.dockerPath!, ['pull', image], { timeout: 120_000 }, (error) => {
+        resolve(!error);
+      });
+    });
+  }
+
   private async waitForCDP(maxWait = 15_000): Promise<boolean> {
     const start = Date.now();
     while (Date.now() - start < maxWait) {
