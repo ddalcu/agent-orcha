@@ -119,7 +119,7 @@ export class LlamaCppEngine implements LocalEngine {
     if (!this.embeddingServer) this.embeddingServer = new LlamaServerProcess(this._baseDir, true);
     if (this.embeddingServer.running && this.embeddingServer.modelPath === modelPath) return;
     try { this._embeddingModelBytes = (await fs.stat(modelPath)).size; } catch { this._embeddingModelBytes = 0; }
-    await this.embeddingServer.start({ modelPath, embedding: true });
+    await this.embeddingServer.start({ modelPath, embedding: true, batchSize: 2048, ubatchSize: 2048 });
   }
 
   async unloadEmbedding(): Promise<void> {

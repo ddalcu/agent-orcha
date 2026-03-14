@@ -67,15 +67,12 @@ function computeVramRecommendation(gpuVram, chatStatus, embeddingStatus, agents)
     const kvPerToken = mem.kvCacheBytes / chatStatus.contextSize;
     if (kvPerToken <= 0) return null;
 
-    const CUDA_OVERHEAD_PER_CTX = 300 * 1024 * 1024; // 300MB per CUDA context
-    const cudaContexts = embeddingStatus?.running ? 2 : 1;
-    const driverOverhead = CUDA_OVERHEAD_PER_CTX * cudaContexts;
+    const VRAM_RESERVED_BYTES = 1280 * 1024 * 1024; // 1280MB for CUDA compute buffer + display driver
     const mmprojBytes = chatStatus.mmprojBytes || 0;
     const embModelBytes = embeddingStatus?.memoryEstimate?.modelBytes || 0;
-    const fixedVram = driverOverhead + mem.modelBytes + mmprojBytes + embModelBytes;
+    const fixedVram = VRAM_RESERVED_BYTES + mem.modelBytes + mmprojBytes + embModelBytes;
 
-    // Target 75% of total VRAM for performance headroom
-    const usableVram = gpuVram.totalBytes * 0.75;
+    const usableVram = gpuVram.totalBytes;
     const availableForKV = usableVram - fixedVram;
     const maxCtxByVram = availableForKV > 0 ? Math.floor(availableForKV / kvPerToken) : 0;
 
@@ -94,9 +91,10 @@ function computeVramRecommendation(gpuVram, chatStatus, embeddingStatus, agents)
     }
     const orchaMinCtx = (4096 + toolCount * 800 + knowledgeCount * 1500 + skillCount * 500) * 2;
 
-    // Final recommendation
-    let ctx = Math.min(maxCtxByVram, 131072);
-    ctx = Math.max(ctx, orchaMinCtx, 2048);
+    // Default 32K cap, step down to VRAM limit if it would cause spill
+    const DEFAULT_CAP = 32768;
+    const fitsInVram = Math.max(Math.floor(maxCtxByVram / 1024) * 1024, 2048);
+    let ctx = fitsInVram >= DEFAULT_CAP ? DEFAULT_CAP : fitsInVram;
     ctx = Math.floor(ctx / 1024) * 1024;
 
     const maxTokens = Math.min(Math.floor(ctx * 0.25), 4096);
@@ -110,7 +108,7 @@ function computeVramRecommendation(gpuVram, chatStatus, embeddingStatus, agents)
         orchaMinCtx,
         fixedVram,
         spillBytes,
-        details: { driverOverhead, chatModelBytes: mem.modelBytes, mmprojBytes, embModelBytes, kvPerToken, toolCount, knowledgeCount, skillCount },
+        details: { reservedBytes: VRAM_RESERVED_BYTES, chatModelBytes: mem.modelBytes, mmprojBytes, embModelBytes, kvPerToken, toolCount, knowledgeCount, skillCount },
     };
 }
 
@@ -1183,7 +1181,7 @@ export class LocalLlmView extends Component {
             const recPct = recCtx ? ((recCtx - 2048) / (131072 - 2048)) * 100 : 0;
             const recLabel = recCtx >= 1024 ? `${(recCtx / 1024).toFixed(0)}K` : recCtx;
             const recTooltip = vramRec
-                ? `Recommended: ${recLabel} ctx\nVRAM budget: ${formatBytes(gpuVram?.totalBytes || 0)} (75% usable)\nFixed: model ${formatBytes(vramRec.details.chatModelBytes)}${vramRec.details.mmprojBytes ? ` + mmproj ${formatBytes(vramRec.details.mmprojBytes)}` : ''}${vramRec.details.embModelBytes ? ` + embed ${formatBytes(vramRec.details.embModelBytes)}` : ''} + driver ${formatBytes(vramRec.details.driverOverhead)}\nOrcha needs: ${(vramRec.orchaMinCtx / 1024).toFixed(0)}K min (${vramRec.details.toolCount} tools, ${vramRec.details.knowledgeCount} knowledge, ${vramRec.details.skillCount} skills)`
+                ? `Recommended: ${recLabel} ctx\nVRAM: ${formatBytes(gpuVram?.totalBytes || 0)}\nFixed: model ${formatBytes(vramRec.details.chatModelBytes)}${vramRec.details.mmprojBytes ? ` + mmproj ${formatBytes(vramRec.details.mmprojBytes)}` : ''}${vramRec.details.embModelBytes ? ` + embed ${formatBytes(vramRec.details.embModelBytes)}` : ''} + reserved ${formatBytes(vramRec.details.reservedBytes)}\nOrcha needs: ${(vramRec.orchaMinCtx / 1024).toFixed(0)}K min (${vramRec.details.toolCount} tools, ${vramRec.details.knowledgeCount} knowledge, ${vramRec.details.skillCount} skills)`
                 : '';
 
             html += `
