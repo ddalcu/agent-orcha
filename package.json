@@ -35,7 +35,9 @@
   ],
   "scripts": {
     "dev": "node --watch src/index.ts",
-    "build": "tsc && npm run copy-assets",
+    "dev:ui": "cd ui && npm run dev",
+    "build:ui": "cd ui && npm ci && npm run build",
+    "build": "npm run build:ui && tsc && npm run copy-assets",
     "copy-assets": "node -e \"const fs=require('fs');fs.cpSync('public','dist/public',{recursive:true});fs.cpSync('templates','dist/templates',{recursive:true,filter:(s)=>!s.split('/').some(p=>p.startsWith('.')&&p!=='.'&&p!=='.env.example')})\"",
     "start": "node dist/src/index.js",
     "prepublishOnly": "npm run build",

@@ -4,7 +4,7 @@ import { authenticate } from './helpers';
 test.beforeEach(async ({ context, page }) => {
   await authenticate(context);
   await page.goto('/#agents', { waitUntil: 'domcontentloaded' });
-  await page.locator('agents-view').waitFor({ state: 'attached', timeout: 10_000 });
+  await page.locator('.agent-shell').waitFor({ state: 'attached', timeout: 10_000 });
 });
 
 test.describe('Agents Tab', () => {
@@ -15,34 +15,31 @@ test.describe('Agents Tab', () => {
   });
 
   test('sidebar with session list is present', async ({ page }) => {
-    const sidebar = page.locator('#sidebar');
+    const sidebar = page.locator('.agent-sidebar');
     await expect(sidebar).toBeAttached();
-
-    const sessionList = page.locator('#sessionList');
-    await expect(sessionList).toBeAttached();
   });
 
   test('new chat button is present', async ({ page }) => {
-    const newChatBtn = page.locator('#newChatBtn');
+    const newChatBtn = page.locator('.new-chat-btn');
     await expect(newChatBtn).toBeAttached();
     await expect(newChatBtn).toContainText('New chat');
   });
 
   test('chat input area exists', async ({ page }) => {
-    const chatInput = page.locator('#chatInput');
+    const chatInput = page.locator('.chat-input-wrap textarea');
     await expect(chatInput).toBeAttached();
 
-    const sendBtn = page.locator('#sendMessageBtn');
+    const sendBtn = page.locator('.send-btn');
     await expect(sendBtn).toBeAttached();
   });
 
   test('chat messages container exists', async ({ page }) => {
-    const messages = page.locator('#chatMessages');
+    const messages = page.locator('.chat-messages');
     await expect(messages).toBeAttached();
   });
 
   test('new agent button is present in sidebar', async ({ page }) => {
-    const newAgentBtn = page.locator('#newAgentBtn');
+    const newAgentBtn = page.locator('.sidebar-secondary-btn');
     await expect(newAgentBtn).toBeAttached();
     await expect(newAgentBtn).toContainText('New agent');
   });

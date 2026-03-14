@@ -4,12 +4,12 @@ import { authenticate } from './helpers';
 test.beforeEach(async ({ context, page }) => {
   await authenticate(context);
   await page.goto('/#graph', { waitUntil: 'domcontentloaded' });
-  await page.locator('graph-view').waitFor({ state: 'attached', timeout: 10_000 });
+  await page.locator('.graph-canvas').waitFor({ state: 'attached', timeout: 10_000 });
 });
 
 test.describe('Graph Tab — UI', () => {
   test('tab loads with GraphView component', async ({ page }) => {
-    const view = page.locator('graph-view');
+    const view = page.locator('.graph-canvas');
     await expect(view).toBeAttached();
   });
 

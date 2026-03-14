@@ -1,26 +1,27 @@
 {
   "version": "1.0",
   "models": {
-    "default": "llama-cpp",
+    "default": "lmstudio",
     "mlx-serve": {
       "provider": "local",
       "engine": "mlx-serve",
       "model": "Qwen3.5-4B-4bit",
-      "contextSize": 32768,
-      "reasoningBudget": 0
+      "reasoningBudget": 0,
+      "contextSize": 32768
     },
     "llama-cpp": {
       "provider": "local",
       "engine": "llama-cpp",
       "model": "Qwen3.5-4B-IQ4_NL",
-      "contextSize": 32768,
-      "reasoningBudget": 0
+      "reasoningBudget": 0,
+      "contextSize": 32768
     },
     "lmstudio": {
       "provider": "local",
       "engine": "lmstudio",
-      "baseUrl": "http://localhost:1234/v1",
-      "model": "qwen3.5-9b",
+      "baseUrl": "http://192.168.2.61:1234/v1",
+      "model": "qwen3.5-9b-optiq",
+      "maxTokens": 1792,
       "reasoningBudget": 0
     },
     "ollama": {
@@ -80,5 +81,8 @@
       "apiKey": "${GOOGLE_API_KEY}",
       "model": "gemini-embedding-001"
     }
+  },
+  "engineUrls": {
+    "lmstudio": "http://192.168.2.61:1234"
   }
 }

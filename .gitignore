@@ -22,3 +22,5 @@ Dockerfile.deploy
 .mlx-serve
 templates/llm.json
 agent-orcha-*.tgz
+.memory
+test-results
