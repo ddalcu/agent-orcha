@@ -16,6 +16,14 @@
     "tags": ["meta-agent", "builder"]
   },
   {
+    "name": "canvas",
+    "type": "agent",
+    "description": "Writing assistant that drafts content in a side canvas pane — articles, reports, code, and more.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/canvas.agent.yaml",
+    "tags": ["writing", "canvas", "starter"]
+  },
+  {
     "name": "chatbot",
     "type": "agent",
     "description": "General-purpose chatbot that connects to CollabNook, answers questions, and remembers channel context.",
@@ -46,6 +54,14 @@
     "author": "Agent Orcha",
     "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/investment-analyst.agent.yaml",
     "tags": ["finance", "stocks", "automation"]
+  },
+  {
+    "name": "marketer",
+    "type": "agent",
+    "description": "Autonomous marketing agent — promotes your product across forums, communities, and social platforms using browser automation.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/marketer.agent.yaml",
+    "tags": ["marketing", "growth", "browser", "automation"]
   },
   {
     "name": "network-security",

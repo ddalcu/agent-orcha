@@ -68,6 +68,8 @@ export {
   AgentToolWrapper,
   createKnowledgeSearchTool,
   createAskUserTool,
+  createCanvasWriteTool,
+  createCanvasAppendTool,
 } from './tools/index.ts';
 
 // Functions

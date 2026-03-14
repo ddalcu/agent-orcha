@@ -37,6 +37,7 @@ import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSumm
 import { IntegrationManager } from './integrations/integration-manager.ts';
 import type { IntegrationAccessor } from './integrations/types.ts';
 import { TriggerManager } from './triggers/trigger-manager.ts';
+import { createCanvasWriteTool, createCanvasAppendTool } from './tools/built-in/canvas-write.tool.ts';
 import type { SandboxConfig } from './sandbox/types.ts';
 import type { AgentDefinition, AgentResult } from './agents/types.ts';
 import type {
@@ -149,6 +150,7 @@ export class Orchestrator {
       sandboxTools,
       workspaceTools,
     );
+    this.registerBuiltInTools();
     this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader, this.memoryManager, this.integrations);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
 
@@ -312,6 +314,11 @@ export class Orchestrator {
     logger.info('[Orchestrator] Sandbox enabled with tools: ' + Array.from(tools.keys()).join(', '));
 
     return tools;
+  }
+
+  private registerBuiltInTools(): void {
+    this.toolRegistry.registerBuiltIn('canvas_write', createCanvasWriteTool());
+    this.toolRegistry.registerBuiltIn('canvas_append', createCanvasAppendTool());
   }
 
   private buildWorkspaceToolsMap(): Map<string, StructuredTool> {
@@ -623,6 +630,7 @@ export class Orchestrator {
         this.buildSandboxTools(),
         this.buildWorkspaceToolsMap(),
       );
+      this.registerBuiltInTools();
       return 'mcp';
     }
 
@@ -646,6 +654,7 @@ export class Orchestrator {
         sandboxTools,
         workspaceTools,
       );
+      this.registerBuiltInTools();
       return 'sandbox';
     }
 

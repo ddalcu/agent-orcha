@@ -50,7 +50,9 @@ Tools are provided to agents via prefixed references:
 - `mcp:<server>` — MCP server tools
 - `knowledge:<store>` — Knowledge store search + graph tools
 - `function:<name>` — Custom JS functions
-- `builtin:<name>` — Built-in tools (e.g., `ask_user`)
+- `builtin:<name>` — Built-in tools (e.g., `ask_user`, `canvas_write`)
+
+Built-in tools: `ask_user` (interrupt for user input), `save_memory` (auto-injected with memory config), `canvas_write` (write/replace content in the canvas side pane), `canvas_append` (append to existing canvas content). Canvas tools are registered in `Orchestrator.registerBuiltInTools()`. The frontend intercepts `tool_end` events to render content. `canvas_write` supports three formats: `markdown` (rendered rich text), `html` (live iframe), `code` (syntax-highlighted with `language` param).
 
 Knowledge tools are created by `lib/tools/built-in/knowledge-tools-factory.ts`. Stores with entities get extra graph tools (traverse, entity_lookup, graph_schema).
 

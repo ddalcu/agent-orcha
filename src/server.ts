@@ -21,6 +21,7 @@ import { chatRoutes } from './routes/chat.route.ts';
 import { vncRoutes } from './routes/vnc.route.ts';
 import { localLlmRoutes } from './routes/local-llm.route.ts';
 import { logsRoutes } from './routes/logs.route.ts';
+import { publishRoutes } from './routes/publish.route.ts';
 import { getPinoConfig } from '../lib/logger.ts';
 import { authPlugin } from './middleware/auth.ts';
 
@@ -89,6 +90,7 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   await fastify.register(tasksRoutes, { prefix: '/api/tasks' });
   await fastify.register(localLlmRoutes, { prefix: '/api/local-llm' });
   await fastify.register(logsRoutes, { prefix: '/api/logs' });
+  await fastify.register(publishRoutes, { prefix: '/api/publish' });
   await fastify.register(chatRoutes);
   await fastify.register(vncRoutes);
 

@@ -444,7 +444,7 @@ export class AgentComposer extends Component {
             { id: 'mcp', label: 'MCP', items: this._mcpServers.map(s => `mcp:${s.name || s}`) },
             { id: 'knowledge', label: 'Knowledge', items: this._knowledgeStores.map(s => `knowledge:${s.name || s}`) },
             { id: 'function', label: 'Functions', items: this._functions.map(f => `function:${f.name || f}`) },
-            { id: 'builtin', label: 'Builtin', items: ['builtin:ask_user'] },
+            { id: 'builtin', label: 'Builtin', items: ['builtin:ask_user', 'builtin:canvas_write', 'builtin:canvas_append'] },
             { id: 'sandbox', label: 'Sandbox', items: ['sandbox:shell','sandbox:exec','sandbox:web_fetch','sandbox:web_search','sandbox:browser_navigate','sandbox:browser_observe','sandbox:browser_click','sandbox:browser_type','sandbox:browser_screenshot','sandbox:browser_evaluate','sandbox:file_read','sandbox:file_write','sandbox:file_edit','sandbox:file_insert','sandbox:file_replace_lines'] },
         ];
         const active = tabs.find(t => t.id === this._toolPickerTab) || tabs[0];

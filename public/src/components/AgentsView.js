@@ -272,6 +272,14 @@ export class AgentsView extends Component {
     }
 
     switchToSession(sessionId) {
+        // Stop any active loop
+        if (this._loopInterval) {
+            clearInterval(this._loopInterval);
+            this._loopInterval = null;
+            this._loopPrompt = null;
+            this._loopLabel = null;
+        }
+
         // Detach from current stream rendering (don't abort — let it continue in background)
         if (this._streamUnsubscribe) {
             this._streamUnsubscribe();
@@ -348,6 +356,9 @@ export class AgentsView extends Component {
         if (!container) return;
         container.innerHTML = '';
 
+        // Close any open canvas before restoring
+        this.closeCanvas();
+
         if (session.messages.length === 0) {
             this._appendWelcomeMessage(container);
             return;
@@ -360,6 +371,9 @@ export class AgentsView extends Component {
                 this.appendRestoredAssistantMessage(msg.content, msg.meta);
             }
         }
+
+        // Restore canvas state from tool call history
+        this._restoreCanvasFromHistory(session.messages);
 
         // Check if server still has this session (survives restarts)
         try {
@@ -846,6 +860,61 @@ export class AgentsView extends Component {
 
     // --- Messaging ---
 
+    // --- Loop ---
+
+    _parseLoopCommand(message) {
+        const match = message.match(/^\/loop\s+(\d+)(m|h)\s+(.+)$/is);
+        if (!match) return null;
+        const amount = parseInt(match[1], 10);
+        const unit = match[2].toLowerCase();
+        const prompt = match[3].trim();
+        if (!amount || !prompt) return null;
+        const ms = unit === 'h' ? amount * 3600000 : amount * 60000;
+        return { ms, prompt, label: `${amount}${unit}` };
+    }
+
+    _startLoop(ms, prompt, label) {
+        this._stopLoop();
+        this._loopPrompt = prompt;
+        this._loopLabel = label;
+        this._loopInterval = setInterval(() => {
+            if (!this.isLoading) {
+                const input = this.querySelector('#chatInput');
+                if (input) {
+                    input.value = prompt;
+                    this.sendMessage();
+                }
+            }
+        }, ms);
+        this._appendSystemMessage(`Loop started — will run every ${label}: "${prompt}". Type /stop to cancel.`);
+        // Run immediately
+        const input = this.querySelector('#chatInput');
+        if (input) {
+            input.value = prompt;
+            this.sendMessage();
+        }
+    }
+
+    _stopLoop() {
+        if (this._loopInterval) {
+            clearInterval(this._loopInterval);
+            this._loopInterval = null;
+            this._appendSystemMessage('Loop stopped.');
+        }
+        this._loopPrompt = null;
+        this._loopLabel = null;
+    }
+
+    _appendSystemMessage(text) {
+        const container = this.querySelector('#chatMessages');
+        if (!container) return;
+        const div = document.createElement('div');
+        div.className = 'system-message';
+        div.innerHTML = `<i class="fas fa-rotate text-xs"></i> <span>${this.escapeHtml(text)}</span>`;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+    }
+
     async sendMessage() {
         const input = this.querySelector('#chatInput');
         const message = input.value.trim();
@@ -856,6 +925,20 @@ export class AgentsView extends Component {
 
         const hasAttachments = this.pendingAttachments.length > 0;
         if ((!message && !hasAttachments) || this.isLoading || !activeId) return;
+
+        // Handle /loop and /stop commands
+        if (message.toLowerCase() === '/stop') {
+            input.value = '';
+            this._stopLoop();
+            return;
+        }
+        const loop = this._parseLoopCommand(message);
+        if (loop) {
+            input.value = '';
+            input.style.height = 'auto';
+            this._startLoop(loop.ms, loop.prompt, loop.label);
+            return;
+        }
 
         // Handle workflow messages (including interrupt responses)
         if (selectionType === 'workflow') {
@@ -1914,6 +1997,19 @@ export class AgentsView extends Component {
                 const toolInput = toolEl.dataset.toolInput || '';
                 const toolOutput = typeof event.output === 'string' ? event.output : JSON.stringify(event.output, null, 2);
 
+                // Intercept canvas tools
+                if (event.tool === 'canvas_write' && toolInput) {
+                    try {
+                        const parsed = JSON.parse(toolInput);
+                        this.openCanvas(parsed.content, parsed.title, parsed.format || 'markdown', parsed.language, parsed.mode);
+                    } catch {}
+                } else if (event.tool === 'canvas_append' && toolInput) {
+                    try {
+                        const parsed = JSON.parse(toolInput);
+                        this.appendCanvas(parsed.content);
+                    } catch {}
+                }
+
                 toolEl.className = 'tool-pill done';
                 toolEl.innerHTML = '';
 
@@ -2107,6 +2203,278 @@ export class AgentsView extends Component {
         if (el) el.remove();
     }
 
+    // --- Canvas ---
+
+    openCanvas(content, title, format, language, mode) {
+        const pane = this.querySelector('#canvasPane');
+        const chatArea = this.querySelector('.chat-area');
+        if (!pane || !chatArea) return;
+
+        pane.classList.remove('hidden');
+        chatArea.classList.add('canvas-open');
+
+        if (title) pane.querySelector('#canvasTitle').textContent = title;
+
+        this._canvasContent = content;
+        this._canvasFormat = format;
+        this._canvasLanguage = language;
+
+        this._renderCanvasContent(pane, content, format, language);
+
+        const defaultMode = mode || (format === 'code' ? 'code' : 'preview');
+        this.toggleCanvasView(defaultMode);
+    }
+
+    appendCanvas(content) {
+        const pane = this.querySelector('#canvasPane');
+        if (!pane || !this._canvasContent) return;
+
+        this._canvasContent += content;
+        this._renderCanvasContent(pane, this._canvasContent, this._canvasFormat, this._canvasLanguage);
+    }
+
+    _renderCanvasContent(pane, content, format, language) {
+        const previewEl = pane.querySelector('#canvasPreviewView');
+        const htmlEl = pane.querySelector('#canvasHtmlView');
+        const codeEl = pane.querySelector('#canvasCodeView code');
+
+        previewEl.classList.add('hidden');
+        htmlEl.classList.add('hidden');
+        pane.querySelector('#canvasCodeView').classList.add('hidden');
+
+        if (format === 'html') {
+            htmlEl.srcdoc = content;
+            codeEl.textContent = content;
+            codeEl.className = 'language-html';
+        } else if (format === 'code') {
+            const lang = language || 'plaintext';
+            codeEl.textContent = content;
+            codeEl.className = `language-${lang}`;
+            previewEl.innerHTML = '';
+            const pre = document.createElement('pre');
+            pre.className = 'canvas-code';
+            const code = document.createElement('code');
+            code.className = `language-${lang}`;
+            code.textContent = content;
+            pre.appendChild(code);
+            previewEl.appendChild(pre);
+            if (typeof hljs !== 'undefined') hljs.highlightElement(code);
+        } else {
+            previewEl.innerHTML = markdownRenderer.render(content);
+            markdownRenderer.highlightCode(previewEl);
+            codeEl.textContent = content;
+            codeEl.className = 'language-markdown';
+        }
+
+        codeEl.removeAttribute('data-highlighted');
+        if (typeof hljs !== 'undefined') hljs.highlightElement(codeEl);
+    }
+
+    _restoreCanvasFromHistory(messages) {
+        // Walk through all messages and replay canvas tool calls to reconstruct final state
+        let canvasState = null;
+
+        for (const msg of messages) {
+            if (msg.role !== 'assistant' || !msg.meta?.tools) continue;
+            for (const t of msg.meta.tools) {
+                if (t.tool === 'canvas_write' && t.output !== undefined) {
+                    try {
+                        const input = typeof t.input === 'string' ? JSON.parse(t.input) : t.input;
+                        canvasState = {
+                            content: input.content,
+                            title: input.title,
+                            format: input.format || 'markdown',
+                            language: input.language,
+                            mode: input.mode,
+                        };
+                    } catch {}
+                } else if (t.tool === 'canvas_append' && t.output !== undefined && canvasState) {
+                    try {
+                        const input = typeof t.input === 'string' ? JSON.parse(t.input) : t.input;
+                        canvasState.content += input.content;
+                    } catch {}
+                }
+            }
+        }
+
+        if (canvasState) {
+            this.openCanvas(canvasState.content, canvasState.title, canvasState.format, canvasState.language, canvasState.mode);
+        }
+    }
+
+    showPublishModal() {
+        if (!this._canvasContent) return;
+
+        const existing = document.querySelector('#canvasPublishModal');
+        if (existing) existing.remove();
+
+        const defaultKey = 'canvas-' + Date.now().toString(36);
+
+        const overlay = document.createElement('div');
+        overlay.id = 'canvasPublishModal';
+        overlay.className = 'modal-backdrop';
+        overlay.innerHTML = `
+            <div class="modal-content modal-content-sm">
+                <div class="modal-header">
+                    <h3 class="text-lg font-semibold text-primary">Publish Canvas</h3>
+                    <button id="closePublishModal" class="modal-close-btn">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="p-4 flex flex-col gap-3">
+                    <div>
+                        <label class="text-xs text-muted block mb-1">Page name</label>
+                        <input id="publishKey" type="text" class="input w-full" value="${defaultKey}" placeholder="my-page">
+                    </div>
+                    <div id="publishResult" class="hidden">
+                        <label class="text-xs text-muted block mb-1">Published URL</label>
+                        <div class="flex gap-2">
+                            <input id="publishUrl" type="text" class="input w-full" readonly>
+                            <button id="copyPublishUrl" class="btn btn-sm">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="publishError" class="hidden text-sm text-red"></div>
+                    <button id="doPublishBtn" class="btn btn-accent w-full">
+                        <i class="fas fa-arrow-up-from-bracket text-xs"></i>
+                        <span>Publish</span>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.remove();
+        });
+        overlay.querySelector('#closePublishModal').addEventListener('click', () => overlay.remove());
+        overlay.querySelector('#doPublishBtn').addEventListener('click', () => this._publishToHtmlHost(overlay));
+        overlay.querySelector('#copyPublishUrl')?.addEventListener('click', () => {
+            const urlInput = overlay.querySelector('#publishUrl');
+            navigator.clipboard.writeText(urlInput.value);
+            const icon = overlay.querySelector('#copyPublishUrl i');
+            icon.className = 'fas fa-check text-green';
+            setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500);
+        });
+        overlay.querySelector('#publishKey').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') this._publishToHtmlHost(overlay);
+        });
+    }
+
+    _buildPublishHtml() {
+        const content = this._canvasContent;
+        const format = this._canvasFormat;
+        const title = this.querySelector('#canvasTitle')?.textContent || 'Canvas';
+
+        if (format === 'html') {
+            return content;
+        }
+
+        if (format === 'code') {
+            const lang = this._canvasLanguage || 'plaintext';
+            const escaped = this.escapeHtml(content);
+            return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${this.escapeHtml(title)}</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"><\/script>
+<style>body{background:#1b1c28;margin:0;padding:24px}pre{margin:0}code{font-size:14px}</style>
+</head><body><pre><code class="language-${lang}">${escaped}</code></pre>
+<script>hljs.highlightAll()<\/script></body></html>`;
+        }
+
+        // Markdown — render to HTML page
+        const rendered = markdownRenderer.render(content);
+        return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${this.escapeHtml(title)}</title>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:48rem;margin:0 auto;padding:24px;line-height:1.7;color:#e8e8ec;background:#1b1c28}
+a{color:#5e6ad2}pre{background:#25262f;padding:16px;border-radius:8px;overflow-x:auto}code{font-size:14px}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #2e2f3a;padding:8px 12px;text-align:left}
+blockquote{border-left:3px solid #5e6ad2;margin:0;padding:0 16px;color:#8f8f96}
+img{max-width:100%;border-radius:8px}h1,h2,h3,h4{margin-top:1.5em;margin-bottom:0.5em}</style>
+</head><body>${rendered}</body></html>`;
+    }
+
+    async _publishToHtmlHost(overlay) {
+        const keyInput = overlay.querySelector('#publishKey');
+        const resultDiv = overlay.querySelector('#publishResult');
+        const errorDiv = overlay.querySelector('#publishError');
+        const btn = overlay.querySelector('#doPublishBtn');
+        const key = keyInput.value.trim();
+
+        if (!key) {
+            errorDiv.textContent = 'Please enter a page name';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+
+        errorDiv.classList.add('hidden');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-circle-notch animate-spin text-xs"></i> <span>Publishing...</span>';
+
+        try {
+            const html = this._buildPublishHtml();
+            const res = await fetch('/api/publish', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, value: html }),
+            });
+
+            if (!res.ok) {
+                const err = await res.text();
+                throw new Error(err || `HTTP ${res.status}`);
+            }
+
+            const url = `https://htmlhost.jax.workers.dev/render/${key}`;
+            overlay.querySelector('#publishUrl').value = url;
+            resultDiv.classList.remove('hidden');
+            btn.innerHTML = '<i class="fas fa-check text-xs"></i> <span>Published</span>';
+            btn.classList.remove('btn-accent');
+            btn.classList.add('btn');
+        } catch (e) {
+            errorDiv.textContent = `Failed to publish: ${e.message}`;
+            errorDiv.classList.remove('hidden');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-arrow-up-from-bracket text-xs"></i> <span>Publish</span>';
+        }
+    }
+
+    closeCanvas() {
+        const pane = this.querySelector('#canvasPane');
+        const chatArea = this.querySelector('.chat-area');
+        if (pane) pane.classList.add('hidden');
+        if (chatArea) chatArea.classList.remove('canvas-open');
+    }
+
+    toggleCanvasView(mode) {
+        const pane = this.querySelector('#canvasPane');
+        if (!pane) return;
+
+        const previewEl = pane.querySelector('#canvasPreviewView');
+        const htmlEl = pane.querySelector('#canvasHtmlView');
+        const codeEl = pane.querySelector('#canvasCodeView');
+
+        pane.querySelectorAll('.canvas-toggle-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.view === mode);
+        });
+
+        if (mode === 'code') {
+            previewEl.classList.add('hidden');
+            htmlEl.classList.add('hidden');
+            codeEl.classList.remove('hidden');
+        } else {
+            codeEl.classList.add('hidden');
+            if (this._canvasFormat === 'html') {
+                previewEl.classList.add('hidden');
+                htmlEl.classList.remove('hidden');
+            } else {
+                htmlEl.classList.add('hidden');
+                previewEl.classList.remove('hidden');
+            }
+        }
+    }
+
     escapeHtml(text) {
         return sharedEscapeHtml(text);
     }
@@ -2248,6 +2616,13 @@ export class AgentsView extends Component {
         // New agent button
         this.querySelector('#newAgentBtn').addEventListener('click', () => this.showNewAgentModal());
 
+        // Canvas controls
+        this.querySelector('#canvasCloseBtn').addEventListener('click', () => this.closeCanvas());
+        this.querySelector('#canvasPublishBtn').addEventListener('click', () => this.showPublishModal());
+        this.querySelectorAll('.canvas-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => this.toggleCanvasView(btn.dataset.view));
+        });
+
         // Mobile sidebar toggle
         this.querySelector('#sidebarToggleBtn').addEventListener('click', () => this.toggleSidebar(true));
         this.querySelector('#sidebarBackdrop').addEventListener('click', () => this.toggleSidebar(false));
@@ -2288,8 +2663,34 @@ export class AgentsView extends Component {
                         </div>
                     </div>
 
-                    <!-- Chat Messages -->
-                    <div id="chatMessages" class="chat-messages custom-scrollbar"></div>
+                    <div class="chat-area-body">
+                        <!-- Chat Messages -->
+                        <div class="chat-main">
+                            <div id="chatMessages" class="chat-messages custom-scrollbar"></div>
+                        </div>
+
+                        <!-- Canvas Pane -->
+                        <div id="canvasPane" class="canvas-pane hidden">
+                            <div class="canvas-header">
+                                <span id="canvasTitle" class="canvas-title">Canvas</span>
+                                <div class="canvas-toggle">
+                                    <button class="canvas-toggle-btn active" data-view="preview">Preview</button>
+                                    <button class="canvas-toggle-btn" data-view="code">Code</button>
+                                </div>
+                                <button id="canvasPublishBtn" class="canvas-publish-btn" title="Publish">
+                                    <i class="fas fa-arrow-up-from-bracket text-xs"></i>
+                                </button>
+                                <button id="canvasCloseBtn" class="canvas-close-btn">
+                                    <i class="fas fa-xmark"></i>
+                                </button>
+                            </div>
+                            <div class="canvas-body custom-scrollbar">
+                                <div id="canvasPreviewView" class="canvas-preview markdown-content"></div>
+                                <iframe id="canvasHtmlView" class="canvas-iframe hidden" sandbox="allow-scripts allow-same-origin"></iframe>
+                                <pre id="canvasCodeView" class="canvas-code hidden"><code></code></pre>
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- Input Area -->
                     <div class="chat-input-area">

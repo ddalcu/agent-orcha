@@ -28,7 +28,7 @@ tools:                                # mcp:<server> | knowledge:<store> | funct
                                       #   vision_type, vision_scroll, vision_key, vision_drag
                                       #   (requires EXPERIMENTAL_VISION=true)
                                       # sandbox: file_read, file_write, file_edit, file_insert, file_replace_lines
-                                      # builtin: ask_user, save_memory
+                                      # builtin: ask_user, save_memory, canvas_write, canvas_append
                                       #   (conditional: integration_post, integration_context, email_send)
 skills:
   - skill-name                        # or use mode: all to attach all skills

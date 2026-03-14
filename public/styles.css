@@ -1025,6 +1025,16 @@ img { display: block; max-width: 100%; }
   border-color: rgba(217, 83, 79, 0.2);
   color: var(--red-400);
 }
+.system-message {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  border-radius: var(--radius-md);
+  background: var(--surface-dim);
+}
 .user-bubble {
   max-width: 56rem;
   background: var(--surface);
@@ -1322,6 +1332,160 @@ img { display: block; max-width: 100%; }
   padding-bottom: var(--sp-6);
 }
 .standalone-messages > * + * { margin-top: var(--sp-4); }
+
+/* ─── 11b. Canvas Pane ─── */
+.standalone-container {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  width: 100%;
+}
+.standalone-container .standalone-shell {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+}
+.standalone-container.canvas-open .standalone-shell {
+  max-width: none;
+}
+
+.canvas-pane {
+  display: flex;
+  flex-direction: column;
+  width: 50%;
+  max-width: 50%;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+}
+.canvas-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-40);
+}
+.canvas-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-1);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-toggle {
+  display: flex;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+.canvas-toggle-btn {
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  transition: all var(--fast);
+}
+.canvas-toggle-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+.canvas-toggle-btn:hover:not(.active) {
+  color: var(--text-1);
+}
+.canvas-publish-btn {
+  padding: var(--sp-1) var(--sp-2);
+  color: var(--text-2);
+  border-radius: var(--radius-sm);
+  transition: color var(--fast);
+}
+.canvas-publish-btn:hover {
+  color: var(--accent);
+}
+.canvas-close-btn {
+  padding: var(--sp-1) var(--sp-2);
+  color: var(--text-2);
+  border-radius: var(--radius-sm);
+  transition: color var(--fast);
+}
+.canvas-close-btn:hover {
+  color: var(--text-1);
+}
+.canvas-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+}
+.canvas-preview {
+  line-height: 1.7;
+}
+.canvas-code {
+  margin: 0;
+  font-size: var(--text-sm);
+  background: transparent;
+  overflow-x: auto;
+}
+.canvas-code code {
+  background: transparent;
+}
+.canvas-iframe {
+  width: 100%;
+  flex: 1;
+  border: none;
+  background: #fff;
+  border-radius: var(--radius-sm);
+}
+
+/* AgentsView canvas layout */
+.chat-area-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+.chat-area-body .chat-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.chat-area-body .chat-main .chat-messages {
+  flex: 1;
+}
+.chat-area.canvas-open .chat-area-body .canvas-pane {
+  display: flex;
+}
+
+@media (max-width: 767px) {
+  .standalone-container.canvas-open {
+    flex-direction: column;
+  }
+  .standalone-container.canvas-open .standalone-shell {
+    height: 50vh;
+  }
+  .standalone-container.canvas-open .canvas-pane {
+    width: 100%;
+    max-width: 100%;
+    height: 50vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .chat-area.canvas-open .chat-area-body {
+    flex-direction: column;
+  }
+  .chat-area.canvas-open .chat-area-body .canvas-pane {
+    width: 100%;
+    max-width: 100%;
+    height: 50%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+}
 
 /* Mobile floating action button */
 .mobile-fab {
