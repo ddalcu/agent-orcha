@@ -1,7 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { resolve } from 'path';
-import { readFileSync } from 'fs';
 
 /**
  * Serves chat.html for /chat/* routes in dev mode,
@@ -26,10 +25,16 @@ export default defineConfig({
   build: {
     outDir: resolve(__dirname, '../public'),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1100,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
         chat: resolve(__dirname, 'chat.html'),
+      },
+      output: {
+        manualChunks: {
+          vendor: ['marked', 'dompurify', 'highlight.js'],
+        },
       },
     },
   },

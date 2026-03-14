@@ -14,31 +14,26 @@ test.describe('Graph Tab — UI', () => {
   });
 
   test('graph container is present', async ({ page }) => {
-    const container = page.locator('#graphContainer');
+    const container = page.locator('.graph-canvas');
     await expect(container).toBeAttached();
     await expect(container).toBeVisible();
   });
 
   test('graph container has the graph-canvas class', async ({ page }) => {
-    const container = page.locator('#graphContainer.graph-canvas');
+    const container = page.locator('.graph-canvas');
     await expect(container).toBeAttached();
   });
 
   test('sidebar starts hidden', async ({ page }) => {
-    const sidebar = page.locator('#sidebar');
-    await expect(sidebar).toBeAttached();
-    await expect(sidebar).toHaveClass(/hidden/);
-  });
-
-  test('sidebar content area exists', async ({ page }) => {
-    const sidebarContent = page.locator('#sidebarContent');
-    await expect(sidebarContent).toBeAttached();
+    // In the Svelte version, the sidebar is conditionally rendered (not present when hidden)
+    const sidebar = page.locator('.graph-sidebar');
+    await expect(sidebar).not.toBeAttached();
   });
 
   test('handles empty state gracefully', async ({ page }) => {
     // The graph view should render without errors even if no knowledge stores
     // have graph data. It either shows the vis.js canvas or an error/empty message.
-    const container = page.locator('#graphContainer');
+    const container = page.locator('.graph-canvas');
     await expect(container).toBeAttached();
 
     // The container should have some content — either the vis.js canvas

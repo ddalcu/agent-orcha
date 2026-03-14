@@ -101,8 +101,8 @@ export async function restoreConfig(request: APIRequestContext, backup: ConfigBa
 
 export async function selectEngine(page: Page, engine: string): Promise<void> {
   const ENGINE_LABELS: Record<string, string> = {
-    'llama-cpp': 'llama.cpp',
-    'mlx-serve': 'MLX',
+    'llama-cpp': 'llama-cpp',
+    'mlx-serve': 'mlx-serve',
     'ollama': 'Ollama',
     'lmstudio': 'LM Studio',
   };

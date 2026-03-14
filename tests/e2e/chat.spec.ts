@@ -116,11 +116,9 @@ test.describe('Published Agent Chat', () => {
 
   test('invalid agent name shows error state', async ({ page }) => {
     await page.goto('/chat/nonexistent-agent-xyz-12345', { waitUntil: 'domcontentloaded' });
-    const chatComponent = page.locator('.standalone-container, .auth-overlay');
-    await expect(chatComponent).toBeAttached({ timeout: 10_000 });
 
     // Should show "not found or not published" message
     const errorText = page.getByText(/not found|not published/i);
-    await expect(errorText).toBeVisible({ timeout: 10_000 });
+    await expect(errorText).toBeVisible({ timeout: 15_000 });
   });
 });

@@ -4,33 +4,33 @@ import { authenticate } from './helpers';
 test.beforeEach(async ({ context, page }) => {
   await authenticate(context);
   await page.goto('/#mcp', { waitUntil: 'domcontentloaded' });
-  await page.locator('mcp-view').waitFor({ state: 'attached', timeout: 10_000 });
+  await page.locator('.mcp-tabs').waitFor({ state: 'attached', timeout: 10_000 });
 });
 
 test.describe('MCP Tab', () => {
   test('MCP tab loads with tabs for MCP Servers and Internal Functions', async ({ page }) => {
-    const mcpBtn = page.locator('#mcpBtn');
+    const mcpBtn = page.locator('.mcp-tab', { hasText: 'MCP Servers' });
     await expect(mcpBtn).toBeAttached();
     await expect(mcpBtn).toContainText('MCP Servers');
 
-    const funcBtn = page.locator('#funcBtn');
+    const funcBtn = page.locator('.mcp-tab', { hasText: 'Internal Functions' });
     await expect(funcBtn).toBeAttached();
     await expect(funcBtn).toContainText('Internal Functions');
   });
 
   test('MCP Servers tab is active by default', async ({ page }) => {
-    const mcpBtn = page.locator('#mcpBtn');
+    const mcpBtn = page.locator('.mcp-tab', { hasText: 'MCP Servers' });
     await expect(mcpBtn).toHaveClass(/active/);
   });
 
   test('list container loads content', async ({ page }) => {
-    const container = page.locator('#listContainer');
+    const container = page.locator('.view-panel');
     await expect(container).toBeAttached();
 
     // Wait for loading to finish
     await page.waitForFunction(
       () => {
-        const el = document.querySelector('#listContainer');
+        const el = document.querySelector('.view-panel');
         return el && !el.textContent?.includes('Loading...');
       },
       null,
@@ -39,12 +39,12 @@ test.describe('MCP Tab', () => {
   });
 
   test('MCP servers display or show empty state', async ({ page }) => {
-    const container = page.locator('#listContainer');
+    const container = page.locator('.view-panel');
 
     // Wait for loading
     await page.waitForFunction(
       () => {
-        const el = document.querySelector('#listContainer');
+        const el = document.querySelector('.view-panel');
         return el && !el.textContent?.includes('Loading...');
       },
       null,
@@ -61,18 +61,18 @@ test.describe('MCP Tab', () => {
   });
 
   test('switching to Internal Functions tab works', async ({ page }) => {
-    const funcBtn = page.locator('#funcBtn');
+    const funcBtn = page.locator('.mcp-tab', { hasText: 'Internal Functions' });
     await funcBtn.click();
     await expect(funcBtn).toHaveClass(/active/);
 
     // MCP button should no longer be active
-    const mcpBtn = page.locator('#mcpBtn');
+    const mcpBtn = page.locator('.mcp-tab', { hasText: 'MCP Servers' });
     await expect(mcpBtn).not.toHaveClass(/active/);
 
     // Wait for loading
     await page.waitForFunction(
       () => {
-        const el = document.querySelector('#listContainer');
+        const el = document.querySelector('.view-panel');
         return el && !el.textContent?.includes('Loading...');
       },
       null,
@@ -81,8 +81,9 @@ test.describe('MCP Tab', () => {
   });
 
   test('execution area is hidden by default', async ({ page }) => {
-    const execArea = page.locator('#executionArea');
-    await expect(execArea).toHaveClass(/hidden/);
+    // In the Svelte version, the execution area is conditionally rendered (not present when no item selected)
+    const execArea = page.locator('.border-t.pt-4');
+    await expect(execArea).not.toBeAttached();
   });
 });
 
