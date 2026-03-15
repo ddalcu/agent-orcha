@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { api } from '../lib/services/api.ts';
-  import { escapeHtml, timeAgo } from '../lib/utils/format.ts';
+  import { timeAgo } from '../lib/utils/format.ts';
 
   // ─── Helpers ───
   function formatBytes(bytes: number): string {
@@ -1060,7 +1060,7 @@
         <!-- API Key -->
         <div class="llm-form-group">
           <div class="flex items-center justify-between">
-            <label class="llm-form-label">API Key</label>
+            <label class="llm-form-label" for="cloudApiKey">API Key</label>
             {#if hasConfigKey}
               <span class="llm-key-status llm-key-status-set"><i class="fas fa-check"></i>Set in config</span>
             {:else if isEnvRef || hasEnvKey}
@@ -1069,7 +1069,7 @@
               <span class="llm-key-status llm-key-status-missing"><i class="fas fa-exclamation-triangle"></i>Not configured</span>
             {/if}
           </div>
-          <input type="password" class="input"
+          <input id="cloudApiKey" type="password" class="input"
             placeholder={envVarName ? `Or set ${envVarName} env var` : 'Enter API key'}
             bind:value={cloudApiKey} />
           {#if envVarName}
@@ -1079,9 +1079,9 @@
 
         <!-- Chat Model -->
         <div class="llm-form-group">
-          <label class="llm-form-label">Chat Model</label>
+          <label class="llm-form-label" for="cloudModel">Chat Model</label>
           <div class="llm-form-row">
-            <select class="select" bind:value={cloudModel} onchange={() => { if (cloudModel === '') { /* custom */ } }}>
+            <select id="cloudModel" class="select" bind:value={cloudModel} onchange={() => { if (cloudModel === '') { /* custom */ } }}>
               {#each popularModels as m}
                 <option value={m}>{m}</option>
               {/each}
@@ -1096,9 +1096,9 @@
         <!-- Embedding Model -->
         {#if popularEmbs.length > 0}
           <div class="llm-form-group">
-            <label class="llm-form-label">Embedding Model</label>
+            <label class="llm-form-label" for="cloudEmbModel">Embedding Model</label>
             <div class="llm-form-row">
-              <select class="select" bind:value={cloudEmbModel}>
+              <select id="cloudEmbModel" class="select" bind:value={cloudEmbModel}>
                 {#each popularEmbs as m}
                   <option value={m}>{m}</option>
                 {/each}
@@ -1113,29 +1113,30 @@
 
         <!-- Advanced -->
         <div class="llm-form-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="llm-form-label">Advanced</label>
           <div class="llm-form-row">
             <div class="llm-form-group">
-              <label class="llm-form-label">Temperature</label>
-              <input type="number" class="input" min="0" max="2" step="0.1"
+              <label class="llm-form-label" for="cloudTemp">Temperature</label>
+              <input id="cloudTemp" type="number" class="input" min="0" max="2" step="0.1"
                 placeholder="Default" bind:value={cloudTemp} />
             </div>
             <div class="llm-form-group">
-              <label class="llm-form-label">Max Tokens</label>
-              <input type="number" class="input" min="1"
+              <label class="llm-form-label" for="cloudMaxTokens">Max Tokens</label>
+              <input id="cloudMaxTokens" type="number" class="input" min="1"
                 placeholder="Default" bind:value={cloudMaxTokens} />
             </div>
           </div>
           {#if provider === 'anthropic'}
             <div class="llm-form-group">
-              <label class="llm-form-label">Thinking Budget</label>
-              <input type="number" class="input" min="0"
+              <label class="llm-form-label" for="cloudThinkingBudget">Thinking Budget</label>
+              <input id="cloudThinkingBudget" type="number" class="input" min="0"
                 placeholder="0 = disabled" bind:value={cloudThinkingBudget} />
             </div>
           {/if}
           <div class="llm-form-group">
-            <label class="llm-form-label">Base URL</label>
-            <input type="text" class="input"
+            <label class="llm-form-label" for="cloudBaseUrl">Base URL</label>
+            <input id="cloudBaseUrl" type="text" class="input"
               placeholder="Default (leave empty for standard API)" bind:value={cloudBaseUrl} />
           </div>
         </div>
@@ -1226,8 +1227,8 @@
           <!-- Base URL -->
           <div class="llm-server-section">
             <div class="llm-section-content flex items-center gap-2">
-              <label class="text-xs text-muted flex-shrink-0">Base URL</label>
-              <input type="text" class="input input-sm flex-1 font-mono text-xs"
+              <label class="text-xs text-muted flex-shrink-0" for="engineUrl">Base URL</label>
+              <input id="engineUrl" type="text" class="input input-sm flex-1 font-mono text-xs"
                 bind:value={engineUrlInput}
                 placeholder={extDefaultUrls[selectedEngine || ''] || ''}
                 onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveEngineUrl(); }} />
@@ -1326,6 +1327,7 @@
                   </div>
                   <div class="llm-sliders-section">
                     <div class="llm-slider-row">
+                      <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="llm-slider-label">
                         <span>Context Size</span>
                         <span class="font-mono">{fmtCtx(extCtxSliderValue)}</span>
@@ -1340,6 +1342,7 @@
                       </div>
                     </div>
                     <div class="llm-slider-row">
+                      <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="llm-slider-label">
                         <span>Max Tokens</span>
                         <span class="font-mono">{extMaxTokSliderValue.toLocaleString()}</span>
@@ -1498,6 +1501,7 @@
                 <!-- Sliders -->
                 <div class="llm-sliders-section">
                   <div class="llm-slider-row">
+                    <!-- svelte-ignore a11y_label_has_associated_control -->
                     <label class="llm-slider-label">
                       <span>Context Size</span>
                       <span class="font-mono">{fmtCtx(ctxSliderValue)}</span>
@@ -1513,6 +1517,7 @@
                   </div>
 
                   <div class="llm-slider-row">
+                    <!-- svelte-ignore a11y_label_has_associated_control -->
                     <label class="llm-slider-label">
                       <span>Max Tokens</span>
                       <span class="font-mono">{maxTokSliderValue.toLocaleString()}</span>
@@ -1530,6 +1535,7 @@
                   {#if modelCaps.reasoning}
                     <div class="llm-thinking-row">
                       <div class="flex items-center justify-between">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="llm-slider-label flex items-center gap-2">
                           <span><i class="fas fa-brain text-purple mr-1"></i>Thinking</span>
                           <span class="font-mono text-xs {thinkingEnabled ? (thinkingBudgetValue > 256 ? 'text-red' : 'text-purple') : 'text-muted'}">

@@ -84,10 +84,10 @@
         >Source</button>
       </div>
     {/if}
-    <button class="canvas-publish-btn" title="Publish" onclick={handlePublish}>
+    <button class="canvas-publish-btn" title="Publish" aria-label="Publish" onclick={handlePublish}>
       <i class="fas fa-arrow-up-from-bracket text-sm"></i>
     </button>
-    <button class="canvas-close-btn" title="Close" onclick={onclose}>
+    <button class="canvas-close-btn" title="Close" aria-label="Close" onclick={onclose}>
       <i class="fas fa-xmark text-sm"></i>
     </button>
   </div>
@@ -113,11 +113,11 @@
 
 {#if publishModalOpen}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="modal-backdrop" onclick={(e) => { if (e.target === e.currentTarget) closePublishModal(); }}>
+  <div class="modal-backdrop" role="presentation" onclick={(e) => { if (e.target === e.currentTarget) closePublishModal(); }}>
     <div class="modal-content modal-content-sm">
       <div class="modal-header">
         <h3 class="text-lg font-semibold text-primary">Publish Content</h3>
-        <button class="modal-close-btn" onclick={closePublishModal}>
+        <button class="modal-close-btn" aria-label="Close modal" onclick={closePublishModal}>
           <i class="fas fa-xmark"></i>
         </button>
       </div>

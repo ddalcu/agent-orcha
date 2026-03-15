@@ -143,12 +143,49 @@ test.describe('IDE Tab', () => {
     const toolbarText = await page.locator('.ide-toolbar').textContent();
     expect(toolbarText).not.toContain('Select a file to edit');
   });
+
+  test('switching to source view does not mark file as unsaved', async ({ page }) => {
+    // Wait for file tree to load
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector('.ide-tree');
+        return el && !el.textContent?.includes('Loading...');
+      },
+      null,
+      { timeout: 15_000 },
+    );
+
+    // Expand agents directory
+    const agentsDir = page.locator('.tree-item:has(.fa-folder)', { hasText: 'agents' });
+    if (await agentsDir.count() === 0) { test.skip(); return; }
+    await agentsDir.click();
+    await page.waitForTimeout(500);
+
+    // Click an agent YAML file
+    const agentFile = page.locator('.tree-item:has(.tree-filename)', { hasText: '.agent.yaml' }).first();
+    if (await agentFile.count() === 0) { test.skip(); return; }
+    await agentFile.click();
+
+    // Wait for file to load (visual mode is default for agent YAML)
+    await page.waitForTimeout(1000);
+
+    // Click Source button to switch to source view
+    const sourceBtn = page.locator('button', { hasText: 'Source' });
+    await sourceBtn.click();
+
+    // Wait for Ace editor to initialize
+    await page.waitForTimeout(1000);
+
+    // The "Unsaved" indicator should NOT be visible — no modifications were made
+    const unsavedIndicator = page.locator('.text-amber', { hasText: 'Unsaved' });
+    await expect(unsavedIndicator).not.toBeAttached();
+  });
 });
 
 test.describe('IDE API', () => {
-  test('GET /api/ide/tree returns file tree data', async ({ context }) => {
+  test('GET /api/files/tree returns file tree data', async ({ context }) => {
     await authenticate(context);
-    const res = await context.request.get('/api/ide/tree');
+    const res = await context.request.get('/api/files/tree');
     expect(res.ok()).toBeTruthy();
 
     const data = await res.json();

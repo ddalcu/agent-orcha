@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
 
 const renderer = {
-  link({ href, title, text }: { href: string; title?: string | null; text: string }) {
+  link(href: string, title: string | null | undefined, text: string) {
     const titleAttr = title ? ` title="${title}"` : '';
     return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
   },

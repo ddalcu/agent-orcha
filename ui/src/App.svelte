@@ -133,9 +133,9 @@
     </div>
   </div>
 
-  <div class="app-main">
+  <main class="app-main">
     <div class="app-mobile-header">
-      <button class="btn-ghost" onclick={() => toggleSidebar()}>
+      <button class="btn-ghost" aria-label="Toggle sidebar" onclick={() => toggleSidebar()}>
         <i class="fas fa-bars text-lg"></i>
       </button>
       <img src="/assets/logo.png" alt="Agent Orcha" class="mobile-logo">
@@ -161,7 +161,7 @@
     </div>
 
     <LogViewer />
-  </div>
+  </main>
 </div>
 
 {#if showLogin}

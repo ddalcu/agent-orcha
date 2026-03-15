@@ -3,7 +3,11 @@
   import { api } from '../lib/services/api.ts';
   import { escapeHtml } from '../lib/utils/format.ts';
 
-  declare const vis: any;
+  function getVis() {
+    const v = (window as any).vis;
+    if (!v) throw new Error('vis-network library not loaded');
+    return v;
+  }
 
   const TYPE_COLORS = [
     '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -201,14 +205,14 @@
       }
     }
 
-    nodes = new vis.DataSet([
+    nodes = new (getVis()).DataSet([
       ...new Map(visNodes.map((n: NodeData) => [n.id, n])).values(),
     ]);
-    edges = new vis.DataSet([
+    edges = new (getVis()).DataSet([
       ...new Map(visEdges.map((e: EdgeData) => [e.id, e])).values(),
     ]);
 
-    network = new vis.Network(
+    network = new (getVis()).Network(
       graphContainer,
       { nodes, edges },
       {

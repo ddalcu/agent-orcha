@@ -511,27 +511,27 @@
     <div class="composer-section space-y-3">
       <h3 class="section-title">Identity</h3>
       <div>
-        <label class="composer-label">Name</label>
-        <input type="text" value={d.name || ''}
+        <label class="composer-label" for="agent-name">Name</label>
+        <input id="agent-name" type="text" value={d.name || ''}
                oninput={(e: Event) => { d.name = (e.target as HTMLInputElement).value; emitChange(); }}
                class="composer-input-field" />
       </div>
       <div>
-        <label class="composer-label">Description</label>
-        <input type="text" value={d.description || ''}
+        <label class="composer-label" for="agent-description">Description</label>
+        <input id="agent-description" type="text" value={d.description || ''}
                oninput={(e: Event) => { d.description = (e.target as HTMLInputElement).value; emitChange(); }}
                class="composer-input-field" />
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="composer-label">Version</label>
-          <input type="text" value={d.version || '1.0.0'}
+          <label class="composer-label" for="agent-version">Version</label>
+          <input id="agent-version" type="text" value={d.version || '1.0.0'}
                  oninput={(e: Event) => { d.version = (e.target as HTMLInputElement).value; emitChange(); }}
                  class="composer-input-field" />
         </div>
         <div>
-          <label class="composer-label">Max Iterations</label>
-          <input type="number" value={d.maxIterations || ''} min="1" placeholder="Default"
+          <label class="composer-label" for="agent-max-iterations">Max Iterations</label>
+          <input id="agent-max-iterations" type="number" value={d.maxIterations || ''} min="1" placeholder="Default"
                  oninput={(e: Event) => { const v = (e.target as HTMLInputElement).value; d.maxIterations = v ? parseInt(v, 10) : undefined; emitChange(); }}
                  class="composer-input-field" />
         </div>
@@ -541,8 +541,8 @@
     <div class="composer-section space-y-3">
       <h3 class="section-title">LLM</h3>
       <div>
-        <label class="composer-label">Model</label>
-        <select value={llmName}
+        <label class="composer-label" for="agent-llm-model">Model</label>
+        <select id="agent-llm-model" value={llmName}
                 onchange={(e: Event) => handleLlmNameChange((e.target as HTMLSelectElement).value)}
                 class="composer-input-field">
           <option value="default" selected={llmName === 'default'}>default</option>
@@ -553,8 +553,8 @@
         </select>
       </div>
       <div>
-        <label class="composer-label">Temperature <span class="text-muted font-mono">{llmTemp !== undefined ? llmTemp : '\u2014'}</span></label>
-        <input type="range" min="0" max="2" step="0.1" value={llmTemp !== undefined ? llmTemp : 0.7}
+        <label class="composer-label" for="agent-llm-temp">Temperature <span class="text-muted font-mono">{llmTemp !== undefined ? llmTemp : '\u2014'}</span></label>
+        <input id="agent-llm-temp" type="range" min="0" max="2" step="0.1" value={llmTemp !== undefined ? llmTemp : 0.7}
                oninput={(e: Event) => handleLlmTempChange((e.target as HTMLInputElement).value)}
                class="w-full" />
         <div class="flex justify-between text-xs text-muted mt-1">
@@ -573,6 +573,7 @@
               oninput={(e: Event) => handlePromptChange((e.target as HTMLTextAreaElement).value)}
               class="composer-input-field font-mono composer-textarea"></textarea>
     <div>
+      <!-- svelte-ignore a11y_label_has_associated_control -->
       <label class="composer-label">Input Variables</label>
       <div class="flex flex-wrap gap-1 mb-2">
         {#each inputVariables as v}
@@ -629,7 +630,10 @@
                 {#each filteredPickerItems as item}
                   {@const added = existingTools.has(item)}
                   <div class="tool-picker-item {added ? 'added' : 'available'}"
-                       onclick={() => { if (!added) addTool(item); }}>
+                       role="button"
+                       tabindex="0"
+                       onclick={() => { if (!added) addTool(item); }}
+                       onkeydown={(e: KeyboardEvent) => { if ((e.key === 'Enter' || e.key === ' ') && !added) addTool(item); }}>
                     <span>{item.split(':')[1] || item}</span>
                     {#if added}
                       <i class="fas fa-check text-green text-2xs"></i>
@@ -693,8 +697,8 @@
       </label>
       {#if memEnabled}
         <div>
-          <label class="composer-label">Max Lines</label>
-          <input type="number" value={memMaxLines} min="1" placeholder="100"
+          <label class="composer-label" for="agent-mem-max-lines">Max Lines</label>
+          <input id="agent-mem-max-lines" type="number" value={memMaxLines} min="1" placeholder="100"
                  oninput={(e: Event) => handleMemMaxLines((e.target as HTMLInputElement).value)}
                  class="composer-input-field" />
         </div>
@@ -704,8 +708,8 @@
     <div class="composer-section space-y-3">
       <h3 class="section-title">Output</h3>
       <div>
-        <label class="composer-label">Format</label>
-        <select value={outFmt}
+        <label class="composer-label" for="agent-output-format">Format</label>
+        <select id="agent-output-format" value={outFmt}
                 onchange={(e: Event) => handleOutputFormat((e.target as HTMLSelectElement).value)}
                 class="composer-input-field">
           <option value="text" selected={outFmt === 'text'}>text</option>
@@ -714,8 +718,8 @@
       </div>
       {#if outFmt === 'structured'}
         <div>
-          <label class="composer-label">Schema (JSON)</label>
-          <textarea rows="4"
+          <label class="composer-label" for="agent-output-schema">Schema (JSON)</label>
+          <textarea id="agent-output-schema" rows="4"
                     value={outSchema}
                     oninput={(e: Event) => handleOutputSchema((e.target as HTMLTextAreaElement).value)}
                     onblur={(e: Event) => handleOutputSchemaBlur((e.target as HTMLTextAreaElement).value)}
@@ -736,8 +740,8 @@
       </label>
       {#if pubEnabled}
         <div>
-          <label class="composer-label">Password</label>
-          <input type="text" value={pubPassword} placeholder="Optional"
+          <label class="composer-label" for="agent-pub-password">Password</label>
+          <input id="agent-pub-password" type="text" value={pubPassword} placeholder="Optional"
                  oninput={(e: Event) => handlePublishPassword((e.target as HTMLInputElement).value)}
                  class="composer-input-field" />
         </div>
@@ -762,24 +766,24 @@
           <div class="composer-sub-card">
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-medium text-secondary"><i class="fas fa-comments mr-1"></i>Collabnook</span>
-              <button class="composer-remove-btn" onclick={() => removeIntegration(i)}><i class="fas fa-trash"></i></button>
+              <button class="composer-remove-btn" aria-label="Remove Collabnook integration" onclick={() => removeIntegration(i)}><i class="fas fa-trash"></i></button>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div>
-                <label class="composer-label">URL</label>
-                <input type="text" value={integ.url || ''} oninput={(e: Event) => handleIntegrationField(i, 'url', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-url">URL</label>
+                <input id="integ-{i}-url" type="text" value={integ.url || ''} oninput={(e: Event) => handleIntegrationField(i, 'url', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">Channel</label>
-                <input type="text" value={integ.channel || ''} oninput={(e: Event) => handleIntegrationField(i, 'channel', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-channel">Channel</label>
+                <input id="integ-{i}-channel" type="text" value={integ.channel || ''} oninput={(e: Event) => handleIntegrationField(i, 'channel', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">Bot Name</label>
-                <input type="text" value={integ.botName || ''} oninput={(e: Event) => handleIntegrationField(i, 'botName', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-botname">Bot Name</label>
+                <input id="integ-{i}-botname" type="text" value={integ.botName || ''} oninput={(e: Event) => handleIntegrationField(i, 'botName', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">Password</label>
-                <input type="text" value={integ.password || ''} oninput={(e: Event) => handleIntegrationField(i, 'password', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-password">Password</label>
+                <input id="integ-{i}-password" type="text" value={integ.password || ''} oninput={(e: Event) => handleIntegrationField(i, 'password', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
             </div>
           </div>
@@ -787,20 +791,20 @@
           <div class="composer-sub-card">
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-medium text-secondary"><i class="fas fa-envelope mr-1"></i>Email</span>
-              <button class="composer-remove-btn" onclick={() => removeIntegration(i)}><i class="fas fa-trash"></i></button>
+              <button class="composer-remove-btn" aria-label="Remove Email integration" onclick={() => removeIntegration(i)}><i class="fas fa-trash"></i></button>
             </div>
             <div class="grid grid-cols-3 gap-2 mb-2">
               <div>
-                <label class="composer-label">IMAP Host</label>
-                <input type="text" value={integ.imap?.host || ''} oninput={(e: Event) => handleIntegrationField(i, 'imap.host', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-imap-host">IMAP Host</label>
+                <input id="integ-{i}-imap-host" type="text" value={integ.imap?.host || ''} oninput={(e: Event) => handleIntegrationField(i, 'imap.host', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">Port</label>
-                <input type="number" value={integ.imap?.port || ''} oninput={(e: Event) => handleIntegrationField(i, 'imap.port', Number((e.target as HTMLInputElement).value) || undefined)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-imap-port">Port</label>
+                <input id="integ-{i}-imap-port" type="number" value={integ.imap?.port || ''} oninput={(e: Event) => handleIntegrationField(i, 'imap.port', Number((e.target as HTMLInputElement).value) || undefined)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">Secure</label>
-                <select value={integ.imap?.secure ? 'true' : 'false'} onchange={(e: Event) => handleIntegrationField(i, 'imap.secure', (e.target as HTMLSelectElement).value === 'true')} class="composer-input-sm">
+                <label class="composer-label" for="integ-{i}-imap-secure">Secure</label>
+                <select id="integ-{i}-imap-secure" value={integ.imap?.secure ? 'true' : 'false'} onchange={(e: Event) => handleIntegrationField(i, 'imap.secure', (e.target as HTMLSelectElement).value === 'true')} class="composer-input-sm">
                   <option value="false">false</option>
                   <option value="true">true</option>
                 </select>
@@ -808,16 +812,16 @@
             </div>
             <div class="grid grid-cols-3 gap-2 mb-2">
               <div>
-                <label class="composer-label">SMTP Host</label>
-                <input type="text" value={integ.smtp?.host || ''} oninput={(e: Event) => handleIntegrationField(i, 'smtp.host', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-smtp-host">SMTP Host</label>
+                <input id="integ-{i}-smtp-host" type="text" value={integ.smtp?.host || ''} oninput={(e: Event) => handleIntegrationField(i, 'smtp.host', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">Port</label>
-                <input type="number" value={integ.smtp?.port || ''} oninput={(e: Event) => handleIntegrationField(i, 'smtp.port', Number((e.target as HTMLInputElement).value) || undefined)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-smtp-port">Port</label>
+                <input id="integ-{i}-smtp-port" type="number" value={integ.smtp?.port || ''} oninput={(e: Event) => handleIntegrationField(i, 'smtp.port', Number((e.target as HTMLInputElement).value) || undefined)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">Secure</label>
-                <select value={integ.smtp?.secure ? 'true' : 'false'} onchange={(e: Event) => handleIntegrationField(i, 'smtp.secure', (e.target as HTMLSelectElement).value === 'true')} class="composer-input-sm">
+                <label class="composer-label" for="integ-{i}-smtp-secure">Secure</label>
+                <select id="integ-{i}-smtp-secure" value={integ.smtp?.secure ? 'true' : 'false'} onchange={(e: Event) => handleIntegrationField(i, 'smtp.secure', (e.target as HTMLSelectElement).value === 'true')} class="composer-input-sm">
                   <option value="false">false</option>
                   <option value="true">true</option>
                 </select>
@@ -825,28 +829,28 @@
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div>
-                <label class="composer-label">User</label>
-                <input type="text" value={integ.auth?.user || ''} oninput={(e: Event) => handleIntegrationField(i, 'auth.user', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-auth-user">User</label>
+                <input id="integ-{i}-auth-user" type="text" value={integ.auth?.user || ''} oninput={(e: Event) => handleIntegrationField(i, 'auth.user', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">Password</label>
-                <input type="text" value={integ.auth?.pass || ''} oninput={(e: Event) => handleIntegrationField(i, 'auth.pass', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-auth-pass">Password</label>
+                <input id="integ-{i}-auth-pass" type="text" value={integ.auth?.pass || ''} oninput={(e: Event) => handleIntegrationField(i, 'auth.pass', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">From Name</label>
-                <input type="text" value={integ.fromName || ''} oninput={(e: Event) => handleIntegrationField(i, 'fromName', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-from-name">From Name</label>
+                <input id="integ-{i}-from-name" type="text" value={integ.fromName || ''} oninput={(e: Event) => handleIntegrationField(i, 'fromName', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">From Address</label>
-                <input type="text" value={integ.fromAddress || ''} oninput={(e: Event) => handleIntegrationField(i, 'fromAddress', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-from-address">From Address</label>
+                <input id="integ-{i}-from-address" type="text" value={integ.fromAddress || ''} oninput={(e: Event) => handleIntegrationField(i, 'fromAddress', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">Poll Interval (s)</label>
-                <input type="number" value={integ.pollInterval || ''} oninput={(e: Event) => handleIntegrationField(i, 'pollInterval', Number((e.target as HTMLInputElement).value) || undefined)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-poll-interval">Poll Interval (s)</label>
+                <input id="integ-{i}-poll-interval" type="number" value={integ.pollInterval || ''} oninput={(e: Event) => handleIntegrationField(i, 'pollInterval', Number((e.target as HTMLInputElement).value) || undefined)} class="composer-input-sm" />
               </div>
               <div>
-                <label class="composer-label">Folder</label>
-                <input type="text" value={integ.folder || 'INBOX'} oninput={(e: Event) => handleIntegrationField(i, 'folder', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
+                <label class="composer-label" for="integ-{i}-folder">Folder</label>
+                <input id="integ-{i}-folder" type="text" value={integ.folder || 'INBOX'} oninput={(e: Event) => handleIntegrationField(i, 'folder', (e.target as HTMLInputElement).value)} class="composer-input-sm" />
               </div>
             </div>
           </div>
@@ -872,13 +876,13 @@
         <div class="composer-sub-card">
           <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-medium text-secondary"><i class="fas {isCron ? 'fa-clock' : 'fa-link'} mr-1"></i>{isCron ? 'Cron' : 'Webhook'}</span>
-            <button class="composer-remove-btn" onclick={() => removeTrigger(i)}><i class="fas fa-trash"></i></button>
+            <button class="composer-remove-btn" aria-label="Remove trigger" onclick={() => removeTrigger(i)}><i class="fas fa-trash"></i></button>
           </div>
           <div class="grid grid-cols-2 gap-2">
             {#if isCron}
               <div>
-                <label class="composer-label">Schedule</label>
-                <input type="text" value={trig.schedule || ''} placeholder="*/5 * * * *"
+                <label class="composer-label" for="trig-{i}-schedule">Schedule</label>
+                <input id="trig-{i}-schedule" type="text" value={trig.schedule || ''} placeholder="*/5 * * * *"
                        oninput={(e: Event) => handleTriggerField(i, 'schedule', (e.target as HTMLInputElement).value)}
                        class="composer-input-sm" />
                 <div class="flex flex-wrap gap-1 mt-1">
@@ -889,15 +893,15 @@
               </div>
             {:else}
               <div>
-                <label class="composer-label">Path</label>
-                <input type="text" value={trig.path || ''} placeholder="/webhook/my-hook"
+                <label class="composer-label" for="trig-{i}-path">Path</label>
+                <input id="trig-{i}-path" type="text" value={trig.path || ''} placeholder="/webhook/my-hook"
                        oninput={(e: Event) => handleTriggerField(i, 'path', (e.target as HTMLInputElement).value)}
                        class="composer-input-sm" />
               </div>
             {/if}
             <div>
-              <label class="composer-label">Prompt <span class="text-muted font-mono">({primaryVar})</span></label>
-              <input type="text" value={getTriggerInputValue(trig)} placeholder="e.g. Generate the daily report"
+              <label class="composer-label" for="trig-{i}-prompt">Prompt <span class="text-muted font-mono">({primaryVar})</span></label>
+              <input id="trig-{i}-prompt" type="text" value={getTriggerInputValue(trig)} placeholder="e.g. Generate the daily report"
                      oninput={(e: Event) => handleTriggerField(i, 'inputVar', (e.target as HTMLInputElement).value)}
                      class="composer-input-sm" />
             </div>
@@ -920,7 +924,7 @@
               <input type="text" value={q}
                      oninput={(e: Event) => handleQuestionChange(i, (e.target as HTMLInputElement).value)}
                      class="composer-input-field flex-1" />
-              <button class="composer-remove-btn px-1" onclick={() => removeQuestion(i)}><i class="fas fa-trash"></i></button>
+              <button class="composer-remove-btn px-1" aria-label="Remove question" onclick={() => removeQuestion(i)}><i class="fas fa-trash"></i></button>
             </div>
           {/each}
         {/if}

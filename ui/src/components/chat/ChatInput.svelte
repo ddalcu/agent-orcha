@@ -116,6 +116,7 @@
   <div class="chat-input-actions right">
     <button
       class="send-btn"
+      aria-label="Send message"
       disabled={disabled}
       onclick={submit}
     >

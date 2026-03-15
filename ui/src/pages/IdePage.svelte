@@ -66,6 +66,7 @@
   let treeData = $state<FileNode[]>([]);
   let expandedDirs = $state<Set<string>>(new Set());
   let currentFile = $state<CurrentFile | null>(null);
+  let savedContent = $state(''); // snapshot of content at last open/save
   let isDirty = $state(false);
   let viewMode = $state<'source' | 'visual'>('source');
   let renamingPath = $state<string | null>(null);
@@ -193,6 +194,7 @@
     try {
       const data = await api.readFile(filePath);
       currentFile = { path: data.path, content: data.content };
+      savedContent = data.content;
       isDirty = false;
 
       // Preserve visual/source choice when switching between agent files
@@ -237,9 +239,11 @@
       });
       editor.session.on('change', () => {
         if (loading) return;
-        if (!isDirty) {
-          isDirty = true;
-          savedMsg = '';
+        const current = editor!.getValue();
+        const dirty = current !== savedContent;
+        if (dirty !== isDirty) {
+          isDirty = dirty;
+          if (dirty) savedMsg = '';
         }
       });
     }
@@ -265,6 +269,7 @@
     try {
       const result = await api.writeFile(currentFile.path, content);
       currentFile = { ...currentFile, content };
+      savedContent = content;
       isDirty = false;
 
       const reloaded = result.reloaded && result.reloaded !== 'none';
@@ -478,47 +483,30 @@
       return;
     }
 
-    const wasDirty = isDirty;
     viewMode = 'visual';
     composerData = parsed;
     loading = true;
     tick().then(() => {
       loading = false;
-      isDirty = wasDirty;
+      // isDirty is now derived from content comparison — no manual save/restore needed
     });
   }
 
-  function switchToSource() {
+  async function switchToSource() {
     if (!currentFile) return;
 
-    const wasDirty = isDirty;
     if (composerRef && viewMode === 'visual') {
       const data = composerRef.getData();
-      const yamlStr = yaml.dump(data, { indent: 2, lineWidth: -1, noRefs: true, sortKeys: false });
-
-      loading = true;
-      currentFile = { ...currentFile, content: yamlStr };
-      viewMode = 'source';
-
-      tick().then(() => {
-        syncAceContent();
-        loading = false;
-        isDirty = wasDirty;
-        if (editor) {
-          editor.resize();
-          editor.focus();
-        }
-      });
-    } else {
-      viewMode = 'source';
-      tick().then(() => {
-        syncAceContent();
-        if (editor) {
-          editor.resize();
-          editor.focus();
-        }
-      });
+      currentFile = { ...currentFile, content: yaml.dump(data, { indent: 2, lineWidth: -1, noRefs: true, sortKeys: false }) };
     }
+
+    loading = true;
+    viewMode = 'source';
+    await tick();
+    syncAceContent();
+    loading = false;
+    // isDirty is now derived from content comparison — no manual save/restore needed
+    if (editor) { editor.resize(); editor.focus(); }
   }
 
   function handleModeToggle(mode: 'source' | 'visual') {
@@ -530,9 +518,12 @@
   // --- Composer change ---
   function handleComposerChange() {
     if (loading) return;
-    if (!isDirty) {
-      isDirty = true;
-      savedMsg = '';
+    if (!composerRef) return;
+    const current = yaml.dump(composerRef.getData(), { indent: 2, lineWidth: -1, noRefs: true, sortKeys: false });
+    const dirty = current !== savedContent;
+    if (dirty !== isDirty) {
+      isDirty = dirty;
+      if (dirty) savedMsg = '';
     }
   }
 
@@ -610,8 +601,9 @@
           {#if dropdownOpen}
             <div class="resource-dropdown">
               {#each Object.entries(RESOURCE_TYPES) as [key, rt]}
-                <div class="resource-dropdown-item"
-                     onclick={() => selectResourceType(key)}>
+                <div class="resource-dropdown-item" role="menuitem" tabindex="0"
+                     onclick={() => selectResourceType(key)}
+                     onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && selectResourceType(key)}>
                   <i class="fas {rt.icon} {rt.color} text-xs"></i>
                   <span>{rt.label}</span>
                 </div>
@@ -630,13 +622,14 @@
             {#each nodes as node}
               {#if node.type === 'directory'}
                 {@const isExpanded = expandedDirs.has(node.path)}
-                <div class="tree-item tree-depth-{Math.min(depth, 5)}"
-                     onclick={() => handleTreeItemClick(node)}>
+                <div class="tree-item tree-depth-{Math.min(depth, 5)}" role="treeitem" tabindex="0" aria-selected={isExpanded}
+                     onclick={() => handleTreeItemClick(node)}
+                     onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && handleTreeItemClick(node)}>
                   <i class="fas {isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'} text-xs text-muted"></i>
                   <i class="fas {isExpanded ? 'fa-folder-open' : 'fa-folder'} text-yellow text-sm"></i>
                   <span class="flex-1 min-w-0">{node.name}</span>
                   {#if depth > 0}
-                    <button class="tree-menu-btn"
+                    <button class="tree-menu-btn" aria-label="More options"
                             onclick={(e: MouseEvent) => { e.stopPropagation(); showContextMenu(e, node.path, 'directory'); }}>
                       <i class="fas fa-ellipsis-v text-xs"></i>
                     </button>
@@ -659,12 +652,13 @@
               {:else}
                 {@const iconInfo = getFileIcon(node.name)}
                 {@const isActive = currentFile?.path === node.path}
-                <div class="tree-item tree-depth-{Math.min(depth, 5)} {isActive ? 'active-file' : ''}"
-                     onclick={() => handleTreeItemClick(node)}>
+                <div class="tree-item tree-depth-{Math.min(depth, 5)} {isActive ? 'active-file' : ''}" role="treeitem" tabindex="0" aria-selected={isActive}
+                     onclick={() => handleTreeItemClick(node)}
+                     onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && handleTreeItemClick(node)}>
                   <span class="tree-item-spacer"></span>
                   <i class="fas {iconInfo.icon} {iconInfo.color} text-sm"></i>
                   <span class="tree-filename truncate flex-1 min-w-0">{node.name}</span>
-                  <button class="tree-menu-btn"
+                  <button class="tree-menu-btn" aria-label="More options"
                           onclick={(e: MouseEvent) => { e.stopPropagation(); showContextMenu(e, node.path, 'file'); }}>
                     <i class="fas fa-ellipsis-v text-xs"></i>
                   </button>
@@ -702,16 +696,20 @@
 
 <!-- Context menu (positioned via CSS custom properties) -->
 {#if contextMenuPath !== null}
-  <div class="context-menu"
+  <div class="context-menu" role="menu"
        style:left="{contextMenuPos.x}px"
        style:top="{contextMenuPos.y}px">
     {#if contextMenuType === 'file'}
-      <div class="context-item" onclick={() => { if (contextMenuPath) startRename(contextMenuPath); }}>
+      <div class="context-item" role="menuitem" tabindex="0"
+           onclick={() => { if (contextMenuPath) startRename(contextMenuPath); }}
+           onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && contextMenuPath) startRename(contextMenuPath); }}>
         <i class="fas fa-pen text-xs text-muted"></i>
         <span>Rename</span>
       </div>
     {/if}
-    <div class="context-item danger" onclick={() => { if (contextMenuPath) { confirmDelete(contextMenuPath, contextMenuType); contextMenuPath = null; } }}>
+    <div class="context-item danger" role="menuitem" tabindex="0"
+         onclick={() => { if (contextMenuPath) { confirmDelete(contextMenuPath, contextMenuType); contextMenuPath = null; } }}
+         onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && contextMenuPath) { confirmDelete(contextMenuPath, contextMenuType); contextMenuPath = null; } }}>
       <i class="fas fa-trash text-xs"></i>
       <span>Delete</span>
     </div>
@@ -722,14 +720,15 @@
 {#if createModalType !== null}
   {@const rt = RESOURCE_TYPES[createModalType]}
   <div class="auth-overlay">
-    <div class="absolute inset-0 bg-overlay" onclick={closeCreateModal}></div>
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="absolute inset-0 bg-overlay" role="presentation" onclick={closeCreateModal}></div>
     <div class="relative panel shadow-xl w-full ide-create-modal">
       <div class="flex items-center gap-3 px-4 py-3 border-b">
         <i class="fas {rt.icon} {rt.color}"></i>
         <span class="text-white font-medium">New {rt.label}</span>
       </div>
       <div class="p-4">
-        <label class="block text-sm text-secondary mb-2">Name</label>
+        <label for="resourceNameInput" class="block text-sm text-secondary mb-2">Name</label>
         <div class="create-modal-input">
           <span>{rt.folder}</span>
           <input type="text" id="resourceNameInput"

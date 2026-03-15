@@ -46,7 +46,7 @@ img { display: block; max-width: 100%; }
   /* Text */
   --text-1:   #e8e8ec;
   --text-2:   #8f8f96;
-  --text-3:   #5c5c64;
+  --text-3:   #8a8a94;
 
   /* Accent */
   --accent:         #5e6ad2;
@@ -299,7 +299,7 @@ img { display: block; max-width: 100%; }
 .bg-accent-dim { background: var(--accent-dim); }
 .bg-transparent { background: transparent; }
 .bg-overlay { background: var(--overlay); }
-.bg-overlay-heavy { background: var(--overlay-heavy); }
+
 
 .border-default { border-color: var(--border); }
 .border-subtle  { border-color: var(--border-subtle); }
@@ -320,7 +320,6 @@ img { display: block; max-width: 100%; }
 .mb-2 { margin-bottom: var(--sp-2); }
 .mb-3 { margin-bottom: var(--sp-3); }
 .mb-4 { margin-bottom: var(--sp-4); }
-.mb-5 { margin-bottom: var(--sp-5); }
 .mb-6 { margin-bottom: var(--sp-6); }
 .ml-1 { margin-left: var(--sp-1); }
 .ml-2 { margin-left: var(--sp-2); }
@@ -368,7 +367,6 @@ img { display: block; max-width: 100%; }
 
 /* Shadow */
 .shadow-md { box-shadow: var(--shadow-md); }
-.shadow-lg { box-shadow: var(--shadow-lg); }
 .shadow-xl { box-shadow: var(--shadow-xl); }
 
 /* ─── 6. Shared Components ─── */
@@ -1240,19 +1238,6 @@ img { display: block; max-width: 100%; }
 }
 .sample-question-chip:hover { border-color: var(--border); }
 
-/* Copy button (on assistant messages) */
-.copy-btn {
-  position: absolute;
-  bottom: -24px;
-  left: 0;
-  color: var(--text-3);
-  padding: var(--sp-1);
-  opacity: 0;
-  transition: opacity var(--fast);
-}
-.copy-btn:hover { color: var(--text-1); }
-.group:hover .copy-btn { opacity: 1; }
-
 /* New session modal */
 .modal-backdrop {
   position: fixed;
@@ -1492,38 +1477,6 @@ img { display: block; max-width: 100%; }
 }
 
 /* Mobile floating action button */
-.mobile-fab {
-  display: none;
-  position: fixed;
-  bottom: var(--sp-4);
-  right: var(--sp-4);
-  z-index: 20;
-  background: var(--accent);
-  color: #fff;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  box-shadow: var(--shadow-lg);
-  align-items: center;
-  justify-content: center;
-}
-
-/* Step diagram nodes */
-.step-node {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-lg);
-  min-width: 100px;
-  text-align: center;
-  transition: all var(--fast);
-}
-.step-node-default { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); }
-.step-node-active  { background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.3); }
-.step-node-done    { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); }
-.step-node-input   { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); min-width: 80px; }
-
 /* Interrupt prompt */
 .interrupt-prompt {
   background: rgba(245, 158, 11, 0.1);
@@ -2757,10 +2710,6 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
 }
 .animate-bounce { animation: bounce 0.6s infinite alternate; }
 .animate-pulse { animation: pulse 2s ease-in-out infinite; }
-.animate-pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
-.animation-delay-200 { animation-delay: 0.2s; }
-.animation-delay-400 { animation-delay: 0.4s; }
-.fade-in { animation: fadeIn 0.3s ease-out; }
 .sidebar-open { animation: slideInLeft 0.2s ease-out; }
 
 /* ─── Welcome Orca ─── */
@@ -2935,15 +2884,3 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
   .mobile-sidebar-toggle { display: flex; }
 }
 
-@media (min-width: 768px) {
-  .md-hidden { display: none; }
-  .md-flex { display: flex; }
-  .md-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .md-grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .md-grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .md-px-6 { padding-left: var(--sp-6); padding-right: var(--sp-6); }
-}
-
-@media (min-width: 1024px) {
-  .lg-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}

@@ -24,7 +24,7 @@
           <i class="fas fa-file text-secondary text-lg"></i>
         {/if}
         <span class="truncate attachment-name">{att.name}</span>
-        <button class="attachment-remove" onclick={() => onremove(i)}>
+        <button class="attachment-remove" aria-label="Remove attachment" onclick={() => onremove(i)}>
           <i class="fas fa-xmark text-xs"></i>
         </button>
       </div>

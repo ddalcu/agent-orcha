@@ -1,10 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { renderMarkdown, highlightCode } from '../lib/services/markdown.js';
-  import { formatElapsedTime, estimateTokens, escapeHtml } from '../lib/utils/format.js';
+  import { formatElapsedTime, estimateTokens } from '../lib/utils/format.js';
   import ChatInput from '../components/chat/ChatInput.svelte';
   import AttachmentPreview from '../components/chat/AttachmentPreview.svelte';
   import CanvasPane from '../components/chat/CanvasPane.svelte';
+  import UserBubble from '../components/chat/UserBubble.svelte';
+  import ResponseBubble from '../components/chat/ResponseBubble.svelte';
+  import StreamStatusBar from '../components/chat/StreamStatusBar.svelte';
+  import StreamStatsBar from '../components/chat/StreamStatsBar.svelte';
 
   interface AgentConfig {
     name: string;
@@ -20,6 +23,44 @@
     name: string;
   }
 
+  interface ToolEntry {
+    runId: string;
+    tool: string;
+    input: string;
+    output?: string;
+    done: boolean;
+  }
+
+  interface ThinkingEntry {
+    content: string;
+    done: boolean;
+  }
+
+  interface StatsData {
+    elapsed: string;
+    inputTokens: string;
+    outputTokens: string;
+    tps: string;
+    cancelled: boolean;
+    visible: boolean;
+  }
+
+  interface ChatBubble {
+    type: 'user' | 'response' | 'system';
+    id: string;
+    content: string;
+    attachments?: Attachment[] | null;
+    tools: ToolEntry[];
+    thinkingSections: ThinkingEntry[];
+    isLoading: boolean;
+    error: string;
+    stats: StatsData | null;
+    showStatusBar: boolean;
+    statusText: string;
+    elapsedDisplay: string;
+    resultContent?: string;
+  }
+
   let agentName = $state('');
   let agentConfig = $state<AgentConfig | null>(null);
   let loadError = $state('');
@@ -33,8 +74,12 @@
   let streamTimerInterval: ReturnType<typeof setInterval> | null = null;
   let streamUsageData: { input_tokens: number; output_tokens: number } | null = null;
   let pendingAttachments = $state<Attachment[]>([]);
-  let chatMessagesEl: HTMLElement;
-  let chatInputRef: ChatInput;
+  let chatInputRef = $state<ChatInput>(null!);
+  let messagesEl = $state<HTMLElement>(null!);
+
+  // Reactive chat state
+  let bubbles = $state<ChatBubble[]>([]);
+  let showSampleQuestions = $state(true);
 
   // Canvas state
   let canvasOpen = $state(false);
@@ -52,6 +97,10 @@
 
   function setToken(token: string) {
     sessionStorage.setItem(`chat-token-${agentName}`, token);
+  }
+
+  function scrollToBottom() {
+    if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
   onMount(() => {
@@ -140,27 +189,23 @@
   function startLoop(ms: number, prompt: string, label: string) {
     stopLoop();
     loopInterval = setInterval(() => { if (!isLoading) sendLoopMessage(prompt); }, ms);
-    appendSystemMessage(`Loop started — every ${label}: "${prompt}". /stop to cancel.`);
+    addSystemBubble(`Loop started — every ${label}: "${prompt}". /stop to cancel.`);
     sendLoopMessage(prompt);
   }
 
   function stopLoop() {
-    if (loopInterval) { clearInterval(loopInterval); loopInterval = null; appendSystemMessage('Loop stopped.'); }
+    if (loopInterval) { clearInterval(loopInterval); loopInterval = null; addSystemBubble('Loop stopped.'); }
   }
 
-  function appendSystemMessage(text: string) {
-    if (!chatMessagesEl) return;
-    const d = document.createElement('div');
-    d.className = 'system-message';
-    d.innerHTML = `<i class="fas fa-rotate text-xs"></i> <span>${escapeHtml(text)}</span>`;
-    chatMessagesEl.appendChild(d);
-    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  function addSystemBubble(text: string) {
+    bubbles = [...bubbles, { type: 'system', id: 'sys-' + Date.now(), content: text, tools: [], thinkingSections: [], isLoading: false, error: '', stats: null, showStatusBar: false, statusText: '', elapsedDisplay: '' }];
+    requestAnimationFrame(scrollToBottom);
   }
 
   async function sendLoopMessage(prompt: string) {
     if (isLoading) return;
-    chatMessagesEl?.querySelector('#sampleQuestions')?.remove();
-    appendUserMessage(`[loop] ${prompt}`);
+    showSampleQuestions = false;
+    addUserBubble(`[loop] ${prompt}`, null);
     await doStream(prompt, null);
   }
 
@@ -171,28 +216,60 @@
     const loop = parseLoopCommand(message);
     if (loop) { startLoop(loop.ms, loop.prompt, loop.label); return; }
     const att = hasAtt ? [...pendingAttachments] : null;
-    chatMessagesEl?.querySelector('#sampleQuestions')?.remove();
-    appendUserMessage(message || '(attached files)', att);
+    showSampleQuestions = false;
+    addUserBubble(message || '(attached files)', att);
     pendingAttachments = [];
     doStream(message, att);
+  }
+
+  function addUserBubble(content: string, attachments: Attachment[] | null) {
+    bubbles = [...bubbles, { type: 'user', id: 'user-' + Date.now(), content, attachments, tools: [], thinkingSections: [], isLoading: false, error: '', stats: null, showStatusBar: false, statusText: '', elapsedDisplay: '' }];
+    requestAnimationFrame(scrollToBottom);
+  }
+
+  function findBubble(id: string): ChatBubble | undefined {
+    return bubbles.find(b => b.id === id);
   }
 
   async function doStream(message: string, attachments: Attachment[] | null) {
     isLoading = true;
     const responseId = 'response-' + Date.now();
-    createResponseBubble(responseId);
+    bubbles = [...bubbles, { type: 'response', id: responseId, content: '', tools: [], thinkingSections: [], isLoading: true, error: '', stats: null, showStatusBar: true, statusText: 'Generating...', elapsedDisplay: '0.0s' }];
     currentAbortController = new AbortController();
     streamUsageData = null;
-    startStreamTimer(responseId);
+
+    streamStartTime = Date.now();
+    streamTimerInterval = setInterval(() => {
+      const b = findBubble(responseId);
+      if (b) b.elapsedDisplay = formatElapsedTime(Date.now() - (streamStartTime || 0));
+    }, 100);
+
     let finalContent = '', wasCancelled = false;
     try {
       finalContent = await streamAgent(message, responseId, attachments);
     } catch (e: unknown) {
       const err = e as Error;
       if (err.name === 'AbortError') wasCancelled = true;
-      else updateResponseError(responseId, `Error: ${err.message}`);
+      else {
+        const b = findBubble(responseId);
+        if (b) { b.error = err.message; b.isLoading = false; }
+      }
     } finally {
-      stopStreamTimer(responseId, message, finalContent, wasCancelled);
+      if (streamTimerInterval) { clearInterval(streamTimerInterval); streamTimerInterval = null; }
+      const elapsed = streamStartTime ? Date.now() - streamStartTime : 0;
+      streamStartTime = null;
+      const b = findBubble(responseId);
+      if (b) {
+        b.isLoading = false;
+        b.showStatusBar = false;
+        const usage = streamUsageData as { input_tokens: number; output_tokens: number } | null;
+        const hasReal = usage !== null && (usage.input_tokens > 0 || usage.output_tokens > 0);
+        const it = hasReal ? usage!.input_tokens : estimateTokens(message);
+        const ot = hasReal ? usage!.output_tokens : estimateTokens(finalContent);
+        const px = hasReal ? '' : '~', tps = elapsed > 0 ? (ot / (elapsed / 1000)).toFixed(1) : '0';
+        b.stats = { elapsed: formatElapsedTime(elapsed), inputTokens: `${px}${it} input`, outputTokens: `${px}${ot} output`, tps: `${px}${tps} tok/s`, cancelled: wasCancelled, visible: true };
+      }
+      streamUsageData = null;
       currentAbortController = null;
       isLoading = false;
       chatInputRef?.focus();
@@ -216,11 +293,7 @@
 
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
-    const bubble = chatMessagesEl.querySelector(`#${responseId}`) as HTMLElement;
-    const contentDiv = bubble.querySelector('.response-content') as HTMLElement;
-    const toolsDiv = bubble.querySelector('.tool-invocations') as HTMLElement;
-    const thinkingState = { thinkingContent: '', thinkingPill: null as HTMLElement | null };
-    let currentContent = '', buffer = '', hasToolCalls = false;
+    let currentContent = '', buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -234,166 +307,71 @@
         if (data === '[DONE]') continue;
         try {
           const event = JSON.parse(data);
-          if (event.error) { updateResponseError(responseId, `Error: ${event.error}`); return currentContent; }
+          if (event.error) {
+            const b = findBubble(responseId);
+            if (b) { b.error = event.error; b.isLoading = false; }
+            return currentContent;
+          }
           if (event.type === 'content') currentContent += event.content;
-          if (event.type === 'tool_start' || event.type === 'tool_end') hasToolCalls = true;
           if (event.type === 'usage') streamUsageData = { input_tokens: event.input_tokens || 0, output_tokens: event.output_tokens || 0 };
-          handleStreamEvent(event, bubble, contentDiv, toolsDiv, currentContent, thinkingState);
+          handleStreamEvent(event, responseId, currentContent);
         } catch { /* ignore */ }
       }
     }
-    finalizeThinkingPill(toolsDiv, thinkingState);
-    if (hasToolCalls && !currentContent.trim()) {
-      const dots = contentDiv.querySelector('.loading-dots');
-      if (dots) { dots.remove(); clearLoading(bubble, contentDiv); }
+    // Finalize last thinking section
+    const b = findBubble(responseId);
+    if (b) {
+      const lastThinking = b.thinkingSections[b.thinkingSections.length - 1];
+      if (lastThinking && !lastThinking.done) lastThinking.done = true;
     }
     return currentContent;
   }
 
-  function clearLoading(bubble: HTMLElement, contentDiv: HTMLElement) {
-    bubble.querySelector('.response-bubble-inner')?.classList.remove('loading');
-    contentDiv.classList.remove('flex', 'items-center', 'whitespace-pre-wrap');
-    contentDiv.innerHTML = '';
-  }
+  function handleStreamEvent(event: { type: string; content?: string; tool?: string; runId?: string; input?: unknown; output?: unknown; iteration?: number; contextChars?: number; error?: string }, responseId: string, currentContent: string) {
+    const b = findBubble(responseId);
+    if (!b) return;
 
-  function handleStreamEvent(event: any, bubble: HTMLElement, contentDiv: HTMLElement, toolsDiv: HTMLElement, currentContent: string, ts: any) {
-    const loadingDots = contentDiv.querySelector('.loading-dots');
     if (event.type === 'thinking') {
-      ts.thinkingContent = (ts.thinkingContent || '') + (event.content || '');
-      if (!ts.thinkingPill) {
-        const p = document.createElement('div'); p.className = 'tool-pill thinking';
-        p.innerHTML = '<i class="fas fa-brain animate-pulse text-2xs"></i><span>Thinking...</span>';
-        toolsDiv.appendChild(p); ts.thinkingPill = p;
+      const last = b.thinkingSections[b.thinkingSections.length - 1];
+      if (last && !last.done) {
+        last.content += event.content || '';
+      } else {
+        b.thinkingSections = [...b.thinkingSections, { content: event.content || '', done: false }];
       }
-      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
     } else if (event.type === 'content') {
-      finalizeThinkingPill(toolsDiv, ts);
-      if (loadingDots) { loadingDots.remove(); clearLoading(bubble, contentDiv); }
-      renderStreaming(contentDiv, currentContent);
-      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+      // Finalize any open thinking section
+      const last = b.thinkingSections[b.thinkingSections.length - 1];
+      if (last && !last.done) last.done = true;
+      b.content = currentContent;
+      b.isLoading = false;
     } else if (event.type === 'tool_start') {
-      finalizeThinkingPill(toolsDiv, ts);
-      if (loadingDots) { loadingDots.remove(); clearLoading(bubble, contentDiv); }
-      const el = document.createElement('div'); el.id = `tool-${event.runId}`; el.className = 'tool-pill';
-      el.dataset.toolInput = typeof event.input === 'string' ? event.input : JSON.stringify(event.input, null, 2);
-      el.innerHTML = `<i class="fas fa-circle-notch animate-spin text-blue text-2xs"></i><span>${escapeHtml(event.tool)}</span>`;
-      toolsDiv.appendChild(el);
+      const last = b.thinkingSections[b.thinkingSections.length - 1];
+      if (last && !last.done) last.done = true;
+      const input = typeof event.input === 'string' ? event.input : JSON.stringify(event.input, null, 2);
+      b.tools = [...b.tools, { runId: event.runId!, tool: event.tool!, input, done: false }];
+      b.isLoading = false;
     } else if (event.type === 'tool_end') {
-      const el = toolsDiv.querySelector(`#tool-${event.runId}`) as HTMLElement | null;
-      if (el) {
-        const ti = el.dataset.toolInput || '';
-        const to = typeof event.output === 'string' ? event.output : JSON.stringify(event.output, null, 2);
-        if (event.tool === 'canvas_write' && ti) { try { const p = JSON.parse(ti); openCanvas(p.content, p.title, p.format || 'markdown', p.language); } catch {} }
-        else if (event.tool === 'canvas_append' && ti) { try { canvasContent += JSON.parse(ti).content; } catch {} }
-        el.className = 'tool-pill done'; el.innerHTML = '';
-        const sp = document.createElement('span'); sp.className = 'inline-flex items-center gap-1';
-        sp.innerHTML = `<i class="fas fa-check text-green text-2xs"></i><span>${escapeHtml(event.tool)}</span>`;
-        el.appendChild(sp);
-        const det = document.createElement('div'); det.className = 'tool-invocation-details';
-        if (ti) { const s = document.createElement('div'); s.className = 'tool-detail-section'; s.innerHTML = '<h4>Input</h4>'; const pr = document.createElement('pre'); pr.className = 'tool-detail-pre custom-scrollbar'; pr.textContent = ti; s.appendChild(pr); det.appendChild(s); }
-        const os = document.createElement('div'); os.className = 'tool-detail-section'; os.innerHTML = '<h4>Output</h4>'; const op = document.createElement('pre'); op.className = 'tool-detail-pre custom-scrollbar'; op.textContent = to; os.appendChild(op); det.appendChild(os);
-        el.appendChild(det);
-        el.addEventListener('click', (e) => { if (det.contains(e.target as Node)) return; e.stopPropagation(); toolsDiv.querySelectorAll('.tool-invocation-details.visible').forEach(d => { if (d !== det) d.classList.remove('visible'); }); det.classList.toggle('visible'); });
-        document.addEventListener('click', (e) => { if (!el.contains(e.target as Node)) det.classList.remove('visible'); }, { capture: true });
+      const tool = b.tools.find(t => t.runId === event.runId);
+      if (tool) {
+        tool.output = typeof event.output === 'string' ? event.output : JSON.stringify(event.output, null, 2);
+        tool.done = true;
+        // Handle canvas tools
+        if (event.tool === 'canvas_write' && tool.input) {
+          try { const p = JSON.parse(tool.input); openCanvas(p.content, p.title, p.format || 'markdown', p.language); } catch {}
+        } else if (event.tool === 'canvas_append' && tool.input) {
+          try { canvasContent += JSON.parse(tool.input).content; } catch {}
+        }
       }
     } else if (event.type === 'react_iteration') {
-      const st = bubble.closest('.response-wrapper')?.querySelector('.stream-status-text');
-      if (st) st.textContent = `Iteration ${event.iteration} · ${(event.contextChars / 1024).toFixed(1)} KB context`;
+      b.statusText = `Iteration ${event.iteration} · ${((event.contextChars || 0) / 1024).toFixed(1)} KB context`;
     } else if (event.type === 'result') {
-      if (loadingDots) { loadingDots.remove(); clearLoading(bubble, contentDiv); }
-      const pr = document.createElement('pre'); pr.className = 'text-sm text-primary font-mono whitespace-pre-wrap overflow-x-auto panel';
-      pr.textContent = JSON.stringify(event.output, null, 2); contentDiv.appendChild(pr);
+      b.isLoading = false;
+      b.resultContent = JSON.stringify(event.output, null, 2);
     } else if (event.type === 'error') {
-      if (loadingDots) { loadingDots.remove(); clearLoading(bubble, contentDiv); }
-      const d = document.createElement('div'); d.className = 'text-red text-sm'; d.textContent = `Error: ${event.error}`; contentDiv.appendChild(d);
+      b.isLoading = false;
+      b.error = event.error || 'Unknown error';
     }
-    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-  }
-
-  function renderStreaming(contentDiv: HTMLElement, fullContent: string) {
-    const existing = contentDiv.querySelector('.content-text');
-    if (existing) { existing.innerHTML = renderMarkdown(fullContent); highlightCode(existing as HTMLElement); }
-    else { const d = document.createElement('div'); d.className = 'content-text markdown-content'; d.innerHTML = renderMarkdown(fullContent); highlightCode(d); contentDiv.appendChild(d); }
-  }
-
-  function finalizeThinkingPill(toolsDiv: HTMLElement, ts: any) {
-    if (!ts.thinkingPill) return;
-    const content = ts.thinkingContent || '';
-    ts.thinkingPill.className = 'tool-pill done thinking';
-    ts.thinkingPill.innerHTML = '';
-    const sp = document.createElement('span'); sp.className = 'inline-flex items-center gap-1';
-    sp.innerHTML = '<i class="fas fa-brain text-purple text-2xs"></i><span>Thinking</span>';
-    ts.thinkingPill.appendChild(sp);
-    const det = document.createElement('div'); det.className = 'tool-invocation-details';
-    const sec = document.createElement('div'); sec.className = 'tool-detail-section';
-    const pre = document.createElement('div'); pre.className = 'tool-detail-pre markdown-content custom-scrollbar';
-    pre.innerHTML = renderMarkdown(content); highlightCode(pre);
-    sec.appendChild(pre); det.appendChild(sec); ts.thinkingPill.appendChild(det);
-    const pill = ts.thinkingPill;
-    pill.addEventListener('click', (e: MouseEvent) => { if (det.contains(e.target as Node)) return; e.stopPropagation(); toolsDiv.querySelectorAll('.tool-invocation-details.visible').forEach((d: Element) => { if (d !== det) d.classList.remove('visible'); }); det.classList.toggle('visible'); });
-    document.addEventListener('click', (e) => { if (!pill.contains(e.target as Node)) det.classList.remove('visible'); }, { capture: true });
-    ts.thinkingPill = null; ts.thinkingContent = '';
-  }
-
-  function appendUserMessage(content: string, attachments?: Attachment[] | null) {
-    if (!chatMessagesEl) return;
-    const d = document.createElement('div'); d.className = 'flex justify-end';
-    let ah = '';
-    if (attachments?.length) {
-      ah = '<div class="flex flex-wrap gap-2 mb-2">' + attachments.map(a =>
-        a.mediaType.startsWith('image/') ? `<img src="data:${a.mediaType};base64,${a.data}" class="attachment-thumb">` :
-        `<div class="attachment-pill"><i class="fas fa-file"></i><span class="truncate attachment-name">${escapeHtml(a.name)}</span></div>`
-      ).join('') + '</div>';
-    }
-    d.innerHTML = `<div class="user-bubble">${ah}<div class="whitespace-pre-wrap">${escapeHtml(content)}</div></div>`;
-    chatMessagesEl.appendChild(d);
-    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-  }
-
-  function createResponseBubble(id: string) {
-    if (!chatMessagesEl) return;
-    const w = document.createElement('div'); w.className = 'response-wrapper';
-    w.innerHTML = `<div id="${id}" class="flex justify-start"><div class="response-bubble-inner loading group"><div class="response-content whitespace-pre-wrap flex items-center"><div class="loading-dots"><div></div><div></div><div></div></div></div><div class="tool-invocations"></div></div></div>
-      <div class="stream-status-bar"><div class="status-dot-pulse"></div><span class="stream-status-text">Generating...</span><span class="stream-elapsed text-muted">0.0s</span><button class="stream-cancel-btn">Stop</button></div>
-      <div class="stream-stats-bar"><span class="flex items-center gap-1"><i class="far fa-clock"></i><span class="stats-elapsed"></span></span><span class="divider">|</span><span class="flex items-center gap-1"><i class="fas fa-arrow-up text-2xs"></i><span class="stats-input-tokens"></span></span><span class="divider">|</span><span class="flex items-center gap-1"><i class="fas fa-arrow-down text-2xs"></i><span class="stats-output-tokens"></span></span><span class="divider">|</span><span class="flex items-center gap-1"><i class="fas fa-bolt text-2xs"></i><span class="stats-tps"></span></span></div>`;
-    w.querySelector('.stream-cancel-btn')!.addEventListener('click', () => currentAbortController?.abort());
-    chatMessagesEl.appendChild(w);
-    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-  }
-
-  function updateResponseError(id: string, msg: string) {
-    const b = chatMessagesEl?.querySelector(`#${id}`);
-    if (b) { const c = b.querySelector('.response-content'); if (c) c.innerHTML = `<span class="text-red">${msg}</span>`; }
-  }
-
-  function startStreamTimer(responseId: string) {
-    streamStartTime = Date.now();
-    streamTimerInterval = setInterval(() => {
-      const el = chatMessagesEl?.querySelector(`#${responseId}`)?.closest('.response-wrapper')?.querySelector('.stream-elapsed');
-      if (el) el.textContent = formatElapsedTime(Date.now() - (streamStartTime || 0));
-    }, 100);
-  }
-
-  function stopStreamTimer(responseId: string, inputMsg: string, finalContent: string, wasCancelled: boolean) {
-    if (streamTimerInterval) { clearInterval(streamTimerInterval); streamTimerInterval = null; }
-    const elapsed = streamStartTime ? Date.now() - streamStartTime : 0;
-    streamStartTime = null;
-    const wrapper = chatMessagesEl?.querySelector(`#${responseId}`)?.closest('.response-wrapper');
-    if (!wrapper) return;
-    wrapper.querySelector('.stream-status-bar')?.remove();
-    const stats = wrapper.querySelector('.stream-stats-bar') as HTMLElement | null;
-    if (stats) {
-      const u = streamUsageData, hr = u && (u.input_tokens > 0 || u.output_tokens > 0);
-      const it = hr ? u!.input_tokens : estimateTokens(inputMsg), ot = hr ? u!.output_tokens : estimateTokens(finalContent);
-      const px = hr ? '' : '~', tps = elapsed > 0 ? (ot / (elapsed / 1000)).toFixed(1) : '0';
-      stats.querySelector('.stats-elapsed')!.textContent = formatElapsedTime(elapsed);
-      stats.querySelector('.stats-input-tokens')!.textContent = `${px}${it} input`;
-      stats.querySelector('.stats-output-tokens')!.textContent = `${px}${ot} output`;
-      stats.querySelector('.stats-tps')!.textContent = `${px}${tps} tok/s`;
-      if (wasCancelled) { const b = document.createElement('span'); b.className = 'badge badge-amber'; b.textContent = 'Cancelled'; stats.appendChild(b); }
-      stats.classList.add('visible');
-      streamUsageData = null;
-    }
+    requestAnimationFrame(scrollToBottom);
   }
 
   function openCanvas(content: string, title: string, format: string, language?: string) {
@@ -430,9 +408,9 @@
           {#if agentConfig.description}<p class="text-xs text-muted truncate">{agentConfig.description}</p>{/if}
         </div>
       </div>
-      <div bind:this={chatMessagesEl} class="standalone-messages custom-scrollbar">
-        {#if agentConfig.sampleQuestions?.length}
-          <div id="sampleQuestions" class="welcome-container">
+      <div bind:this={messagesEl} class="standalone-messages custom-scrollbar">
+        {#if showSampleQuestions && agentConfig.sampleQuestions?.length && bubbles.length === 0}
+          <div class="welcome-container">
             <p class="text-muted text-sm">Try asking</p>
             <div class="sample-questions-wrap">
               {#each agentConfig.sampleQuestions as q}
@@ -441,6 +419,50 @@
             </div>
           </div>
         {/if}
+        {#each bubbles as bubble (bubble.id)}
+          {#if bubble.type === 'user'}
+            <UserBubble content={bubble.content} attachments={bubble.attachments} />
+          {:else if bubble.type === 'system'}
+            <div class="system-message">
+              <i class="fas fa-rotate text-xs"></i>
+              <span>{bubble.content}</span>
+            </div>
+          {:else if bubble.type === 'response'}
+            <div class="response-wrapper">
+              <ResponseBubble
+                id={bubble.id}
+                content={bubble.content}
+                tools={bubble.tools}
+                thinkingSections={bubble.thinkingSections}
+                isLoading={bubble.isLoading}
+                error={bubble.error}
+              >
+                {#if bubble.resultContent}
+                  <div class="panel">
+                    <pre class="text-sm text-primary font-mono whitespace-pre-wrap overflow-x-auto">{bubble.resultContent}</pre>
+                  </div>
+                {/if}
+              </ResponseBubble>
+              {#if bubble.showStatusBar}
+                <StreamStatusBar
+                  elapsed={bubble.elapsedDisplay}
+                  statusText={bubble.statusText}
+                  oncancel={() => currentAbortController?.abort()}
+                />
+              {/if}
+              {#if bubble.stats}
+                <StreamStatsBar
+                  elapsed={bubble.stats.elapsed}
+                  inputTokens={bubble.stats.inputTokens}
+                  outputTokens={bubble.stats.outputTokens}
+                  tps={bubble.stats.tps}
+                  cancelled={bubble.stats.cancelled}
+                  visible={bubble.stats.visible}
+                />
+              {/if}
+            </div>
+          {/if}
+        {/each}
       </div>
       <div class="chat-input-area">
         {#if pendingAttachments.length > 0}

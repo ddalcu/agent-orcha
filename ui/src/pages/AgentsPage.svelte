@@ -4,7 +4,7 @@
   import { sessionStore } from '../lib/stores/session.svelte.js';
   import { streamManager, type StreamState } from '../lib/stores/stream.svelte.js';
   import { appStore } from '../lib/stores/app.svelte.js';
-  import { renderMarkdown, highlightCode } from '../lib/services/markdown.js';
+
   import { formatElapsedTime, estimateTokens, escapeHtml } from '../lib/utils/format.js';
   import type { Agent, Workflow, LLM, Session, StreamEvent, MessageMeta } from '../lib/types/index.js';
 

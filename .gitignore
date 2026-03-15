@@ -24,3 +24,4 @@ templates/llm.json
 agent-orcha-*.tgz
 .memory
 test-results
+public

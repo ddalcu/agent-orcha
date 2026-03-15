@@ -130,14 +130,12 @@
     activeSSE = api.indexKnowledgeStoreStream(name);
 
     activeSSE.addEventListener('progress', ((event: MessageEvent) => {
-      const data = JSON.parse(event.data);
-      updateProgress(data);
+      try { updateProgress(JSON.parse(event.data)); } catch { /* malformed SSE */ }
     }) as EventListener);
 
     activeSSE.addEventListener('error', ((event: MessageEvent) => {
       if (event.data) {
-        const data = JSON.parse(event.data);
-        updateProgress(data);
+        try { updateProgress(JSON.parse(event.data)); } catch { /* malformed SSE */ }
       }
       onIndexingComplete();
     }) as EventListener);

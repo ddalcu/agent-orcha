@@ -88,9 +88,9 @@ test.describe('MCP Tab', () => {
 });
 
 test.describe('MCP API', () => {
-  test('GET /api/mcp/servers returns an array', async ({ context }) => {
+  test('GET /api/mcp returns an array', async ({ context }) => {
     await authenticate(context);
-    const res = await context.request.get('/api/mcp/servers');
+    const res = await context.request.get('/api/mcp');
     expect(res.ok()).toBeTruthy();
 
     const servers = await res.json();
@@ -99,7 +99,7 @@ test.describe('MCP API', () => {
 
   test('MCP servers have expected fields when present', async ({ context }) => {
     await authenticate(context);
-    const res = await context.request.get('/api/mcp/servers');
+    const res = await context.request.get('/api/mcp');
     const servers = await res.json();
 
     if (servers.length === 0) return;
