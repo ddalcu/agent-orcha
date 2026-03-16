@@ -21,6 +21,7 @@ import { chatRoutes } from './routes/chat.route.ts';
 import { vncRoutes } from './routes/vnc.route.ts';
 import { localLlmRoutes } from './routes/local-llm.route.ts';
 import { logsRoutes } from './routes/logs.route.ts';
+import { publishRoutes } from './routes/publish.route.ts';
 import { getPinoConfig } from '../lib/logger.ts';
 import { authPlugin } from './middleware/auth.ts';
 
@@ -46,6 +47,7 @@ const PKG_VERSION = getVersion();
 declare module 'fastify' {
   interface FastifyInstance {
     orchestrator: Orchestrator;
+    viteDevServer?: import('vite').ViteDevServer;
   }
 }
 
@@ -62,14 +64,15 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
 
   await fastify.register(authPlugin);
 
-  const publicDir = isSea()
-    ? getPublicDir()
-    : path.join(__dirname, '..', 'public');
-
-  await fastify.register(fastifyStatic, {
-    root: publicDir,
-    prefix: '/',
-  });
+  if (process.env['NODE_ENV'] === 'development') {
+    const { setupViteDev } = await import('./vite-dev-integration.ts');
+    await setupViteDev(fastify);
+  } else {
+    const publicDir = isSea()
+      ? getPublicDir()
+      : path.join(__dirname, '..', 'public');
+    await fastify.register(fastifyStatic, { root: publicDir, prefix: '/' });
+  }
 
   fastify.decorate('orchestrator', orchestrator);
 
@@ -89,6 +92,7 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   await fastify.register(tasksRoutes, { prefix: '/api/tasks' });
   await fastify.register(localLlmRoutes, { prefix: '/api/local-llm' });
   await fastify.register(logsRoutes, { prefix: '/api/logs' });
+  await fastify.register(publishRoutes, { prefix: '/api/publish' });
   await fastify.register(chatRoutes);
   await fastify.register(vncRoutes);
 

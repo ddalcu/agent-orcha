@@ -49,7 +49,7 @@ test.describe('Published Agent Chat', () => {
 
     // Navigate to the standalone chat page
     await page.goto(`/chat/${publishedAgent!.name}`, { waitUntil: 'domcontentloaded' });
-    const chatComponent = page.locator('standalone-chat');
+    const chatComponent = page.locator('.standalone-container, .auth-overlay');
     await expect(chatComponent).toBeAttached({ timeout: 10_000 });
   });
 
@@ -57,12 +57,12 @@ test.describe('Published Agent Chat', () => {
     test.skip(!publishedAgent, 'No published agents found — skipping chat UI test');
 
     await page.goto(`/chat/${publishedAgent!.name}`, { waitUntil: 'domcontentloaded' });
-    const chatComponent = page.locator('standalone-chat');
+    const chatComponent = page.locator('.standalone-container, .auth-overlay');
     await expect(chatComponent).toBeAttached({ timeout: 10_000 });
 
     // Wait for either the chat UI or the password overlay
-    const chatInput = page.locator('#chatInput');
-    const passwordInput = page.locator('#passwordInput');
+    const chatInput = page.locator('.chat-input-wrap textarea');
+    const passwordInput = page.locator('.auth-card input[type="password"]');
 
     const hasChat = await chatInput.isVisible().catch(() => false);
     const hasPassword = await passwordInput.isVisible().catch(() => false);
@@ -73,10 +73,10 @@ test.describe('Published Agent Chat', () => {
     if (hasChat) {
       await expect(chatInput).toBeVisible();
 
-      const sendBtn = page.locator('#sendBtn');
+      const sendBtn = page.locator('.send-btn');
       await expect(sendBtn).toBeAttached();
 
-      const chatMessages = page.locator('#chatMessages');
+      const chatMessages = page.locator('.standalone-messages');
       await expect(chatMessages).toBeAttached();
     }
   });
@@ -85,7 +85,7 @@ test.describe('Published Agent Chat', () => {
     test.skip(!publishedAgent, 'No published agents found — skipping header test');
 
     await page.goto(`/chat/${publishedAgent!.name}`, { waitUntil: 'domcontentloaded' });
-    const chatComponent = page.locator('standalone-chat');
+    const chatComponent = page.locator('.standalone-container, .auth-overlay');
     await expect(chatComponent).toBeAttached({ timeout: 10_000 });
 
     // If password-protected, the agent name appears in the auth overlay
@@ -98,29 +98,27 @@ test.describe('Published Agent Chat', () => {
     test.skip(!publishedAgent, 'No published agents found — skipping attach button test');
 
     await page.goto(`/chat/${publishedAgent!.name}`, { waitUntil: 'domcontentloaded' });
-    const chatComponent = page.locator('standalone-chat');
+    const chatComponent = page.locator('.standalone-container, .auth-overlay');
     await expect(chatComponent).toBeAttached({ timeout: 10_000 });
 
     // Only check attach button if we got past the password screen
-    const chatInput = page.locator('#chatInput');
+    const chatInput = page.locator('.chat-input-wrap textarea');
     const hasChat = await chatInput.isVisible().catch(() => false);
 
     if (hasChat) {
-      const attachBtn = page.locator('#attachBtn');
+      const attachBtn = page.locator('.attach-btn');
       await expect(attachBtn).toBeAttached();
 
-      const fileInput = page.locator('#fileInput');
+      const fileInput = page.locator('.chat-input-wrap input[type="file"]');
       await expect(fileInput).toBeAttached();
     }
   });
 
   test('invalid agent name shows error state', async ({ page }) => {
     await page.goto('/chat/nonexistent-agent-xyz-12345', { waitUntil: 'domcontentloaded' });
-    const chatComponent = page.locator('standalone-chat');
-    await expect(chatComponent).toBeAttached({ timeout: 10_000 });
 
     // Should show "not found or not published" message
     const errorText = page.getByText(/not found|not published/i);
-    await expect(errorText).toBeVisible({ timeout: 10_000 });
+    await expect(errorText).toBeVisible({ timeout: 15_000 });
   });
 });

@@ -299,6 +299,7 @@ describe('LlamaCppEngine', () => {
         contextSize: null,
         memoryEstimate: null,
         supportsVision: false,
+        mmprojBytes: 0,
       });
     });
 

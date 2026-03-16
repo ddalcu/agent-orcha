@@ -48,7 +48,7 @@ test.describe('LLM Page Navigation', () => {
   test('renders the LLM view and provider tabs', async ({ page }) => {
     await navigateToLlm(page);
 
-    await expect(page.locator('local-llm-view')).toBeVisible();
+    await expect(page.locator('.llm-provider-tabs')).toBeVisible();
 
     const providerTabs = page.locator('.llm-provider-tab');
     await expect(providerTabs.first()).toBeVisible();
@@ -59,11 +59,18 @@ test.describe('LLM Page Navigation', () => {
   test('clicking Local tab shows engine tabs', async ({ page }) => {
     await navigateToLlm(page);
 
-    await page.locator('.llm-provider-tab[data-provider="local"]').click();
-    await expect(page.locator('#engineTabs')).toBeVisible();
+    await page.locator('.llm-provider-tab', { hasText: 'Local' }).click();
+    await expect(page.locator('.llm-engine-tabs')).toBeVisible();
+
+    const ENGINE_LABELS: Record<string, string> = {
+      'llama-cpp': 'llama-cpp',
+      'mlx-serve': 'mlx-serve',
+      'ollama': 'Ollama',
+      'lmstudio': 'LM Studio',
+    };
 
     for (const eng of ['llama-cpp', 'mlx-serve', 'ollama', 'lmstudio']) {
-      await expect(page.locator(`.llm-engine-tab[data-engine="${eng}"]`)).toBeAttached();
+      await expect(page.locator('.llm-engine-tab', { hasText: ENGINE_LABELS[eng] })).toBeAttached();
     }
   });
 });
@@ -215,13 +222,13 @@ for (const { engine, managed } of ENGINE_CONFIGS) {
       test.skip(!available, `${engine} not available`);
 
       await navigateToLlm(page);
-      await page.locator('.llm-provider-tab[data-provider="local"]').click();
+      await page.locator('.llm-provider-tab', { hasText: 'Local' }).click();
       await selectEngine(page, engine);
 
       if (managed) {
-        await expect(page.locator('#managedModelsSection')).toBeVisible();
+        await expect(page.locator('.section-title', { hasText: 'Downloaded Models' })).toBeVisible();
       } else {
-        await expect(page.locator('#externalModelsSection')).toBeVisible();
+        await expect(page.locator('.section-title', { hasText: 'Available Models' })).toBeVisible();
       }
     });
 
@@ -237,17 +244,21 @@ for (const { engine, managed } of ENGINE_CONFIGS) {
       }
 
       await navigateToLlm(page);
-      await page.locator('.llm-provider-tab[data-provider="local"]').click();
+      await page.locator('.llm-provider-tab', { hasText: 'Local' }).click();
       await selectEngine(page, engine);
 
       if (managed) {
-        const btn = page.locator(`.activate-btn[data-id="${chatModelId}"]`);
+        // Find the model card by data-model-id and click its Activate button
+        const card = page.locator(`.llm-model-card[data-model-id="${chatModelId}"]`);
+        const btn = card.locator('button', { hasText: 'Activate' });
         await btn.click();
         await expect(page.locator('.llm-model-card.active-chat')).toBeVisible({ timeout: 60_000 });
       } else if (alreadyActiveChat) {
         await expect(page.locator('.llm-model-card.active-chat')).toBeVisible({ timeout: 10_000 });
       } else {
-        const btn = page.locator(`.ext-activate-chat[data-model="${chatModelId}"]`);
+        // Find the model card containing the model name and click Activate
+        const card = page.locator('.llm-model-card', { hasText: chatModelId });
+        const btn = card.locator('button', { hasText: 'Activate' });
         await btn.click();
         await expect(page.locator('.llm-model-card.active-chat')).toBeVisible({ timeout: 30_000 });
       }
@@ -272,17 +283,21 @@ for (const { engine, managed } of ENGINE_CONFIGS) {
       test.skip(!embedModelId, `No embedding model found for ${engine}`);
 
       await navigateToLlm(page);
-      await page.locator('.llm-provider-tab[data-provider="local"]').click();
+      await page.locator('.llm-provider-tab', { hasText: 'Local' }).click();
       await selectEngine(page, engine);
 
       if (managed) {
-        const btn = page.locator(`.activate-emb-btn[data-id="${embedModelId}"]`);
+        // Find the model card by data-model-id and click its Embed button
+        const card = page.locator(`.llm-model-card[data-model-id="${embedModelId}"]`);
+        const btn = card.locator('button', { hasText: 'Embed' });
         await btn.click();
         await expect(page.locator('.llm-model-card.active-emb')).toBeVisible({ timeout: 60_000 });
       } else if (alreadyActiveEmbed) {
         await expect(page.locator('.llm-model-card.active-emb')).toBeVisible({ timeout: 10_000 });
       } else {
-        const btn = page.locator(`.ext-activate-emb[data-model="${embedModelId}"]`);
+        // Find the model card containing the model name and click Embed
+        const card = page.locator('.llm-model-card', { hasText: embedModelId });
+        const btn = card.locator('button', { hasText: 'Embed' });
         await btn.click();
         await expect(page.locator('.llm-model-card.active-emb')).toBeVisible({ timeout: 30_000 });
       }
@@ -299,22 +314,28 @@ for (const { engine, managed } of ENGINE_CONFIGS) {
 
       const targetCtx = 4096;
       await navigateToLlm(page);
-      await page.locator('.llm-provider-tab[data-provider="local"]').click();
+      await page.locator('.llm-provider-tab', { hasText: 'Local' }).click();
       await selectEngine(page, engine);
 
       if (managed) {
-        await setSliderValue(page, '#ctxSlider', targetCtx);
-        await expect(page.locator('#ctxValue')).toContainText('4K');
-        await page.locator('#applySettingsBtn').click();
+        // Context size slider is inside .llm-sliders-section, the first range input is context
+        const ctxSlider = page.locator('.llm-slider-row').filter({ hasText: 'Context Size' }).locator('input[type="range"]');
+        await setSliderValue(page, '.llm-slider-row:has-text("Context Size") input[type="range"]', targetCtx);
+
+        // Click Apply button
+        const applyBtn = page.locator('.llm-sliders-section button', { hasText: 'Apply' });
+        await applyBtn.click();
         await page.waitForTimeout(5_000);
 
         const config = await getLlmConfig(request);
         expect(config.models[typeof config.models.default === 'string' ? config.models.default : 'default'].contextSize).toBe(targetCtx);
       } else {
-        await setSliderValue(page, '#extCtxSlider', targetCtx);
-        await expect(page.locator('#extCtxValue')).toContainText('4K');
-        await page.locator('#extApplyBtn').click();
-        await expect(page.locator('#extApplyBtn')).toBeHidden({ timeout: 60_000 });
+        await setSliderValue(page, '.llm-slider-row:has-text("Context Size") input[type="range"]', targetCtx);
+
+        // Click Apply button
+        const applyBtn = page.locator('.llm-sliders-section button', { hasText: 'Apply' });
+        await applyBtn.click();
+        await expect(applyBtn).toBeHidden({ timeout: 60_000 });
 
         // NOTE: Known bug — the Apply handler calls setEngineContext() which
         // saves contextSize to config, but then saveLlmModel() spreads the
@@ -328,17 +349,21 @@ for (const { engine, managed } of ENGINE_CONFIGS) {
 
       const targetMax = 2048;
       await navigateToLlm(page);
-      await page.locator('.llm-provider-tab[data-provider="local"]').click();
+      await page.locator('.llm-provider-tab', { hasText: 'Local' }).click();
       await selectEngine(page, engine);
 
       if (managed) {
-        await setSliderValue(page, '#maxTokSlider', targetMax);
-        await page.locator('#applySettingsBtn').click();
+        await setSliderValue(page, '.llm-slider-row:has-text("Max Tokens") input[type="range"]', targetMax);
+
+        const applyBtn = page.locator('.llm-sliders-section button', { hasText: 'Apply' });
+        await applyBtn.click();
         await page.waitForTimeout(3_000);
       } else {
-        await setSliderValue(page, '#extMaxTokSlider', targetMax);
-        await page.locator('#extApplyBtn').click();
-        await expect(page.locator('#extApplyBtn')).toBeHidden({ timeout: 60_000 });
+        await setSliderValue(page, '.llm-slider-row:has-text("Max Tokens") input[type="range"]', targetMax);
+
+        const applyBtn = page.locator('.llm-sliders-section button', { hasText: 'Apply' });
+        await applyBtn.click();
+        await expect(applyBtn).toBeHidden({ timeout: 60_000 });
       }
 
       const config = await getLlmConfig(request);

@@ -4,7 +4,7 @@ import { authenticate } from './helpers';
 test.beforeEach(async ({ context, page }) => {
   await authenticate(context);
   await page.goto('/#ide', { waitUntil: 'domcontentloaded' });
-  await page.locator('ide-view').waitFor({ state: 'attached', timeout: 10_000 });
+  await page.locator('.ide-shell').waitFor({ state: 'attached', timeout: 10_000 });
 });
 
 test.describe('IDE Tab', () => {
@@ -24,18 +24,18 @@ test.describe('IDE Tab', () => {
   });
 
   test('new resource button is present', async ({ page }) => {
-    const newFileBtn = page.locator('#newFileBtn');
+    const newFileBtn = page.locator('.ide-new-resource-wrapper button');
     await expect(newFileBtn).toBeAttached();
   });
 
   test('file tree loads content', async ({ page }) => {
-    const fileTree = page.locator('#fileTree');
+    const fileTree = page.locator('.ide-tree');
     await expect(fileTree).toBeAttached();
 
     // Wait for file tree to load (spinner should disappear)
     await page.waitForFunction(
       () => {
-        const el = document.querySelector('#fileTree');
+        const el = document.querySelector('.ide-tree');
         return el && !el.textContent?.includes('Loading...');
       },
       null,
@@ -47,7 +47,7 @@ test.describe('IDE Tab', () => {
     // Wait for loading
     await page.waitForFunction(
       () => {
-        const el = document.querySelector('#fileTree');
+        const el = document.querySelector('.ide-tree');
         return el && !el.textContent?.includes('Loading...');
       },
       null,
@@ -67,43 +67,42 @@ test.describe('IDE Tab', () => {
     await expect(editorArea).toBeAttached();
 
     // Welcome panel should be visible when no file is selected
-    const welcomePanel = page.locator('#welcomePanel');
-    await expect(welcomePanel).toBeVisible();
-    await expect(welcomePanel).toContainText('Select a file');
+    await expect(editorArea).toContainText('Select a file');
   });
 
   test('toolbar with save button and breadcrumb exists', async ({ page }) => {
     const toolbar = page.locator('.ide-toolbar');
     await expect(toolbar).toBeVisible();
 
-    const saveBtn = page.locator('#saveBtn');
+    const saveBtn = page.locator('.ide-toolbar button', { hasText: 'Save' });
     await expect(saveBtn).toBeAttached();
     // Save should be disabled when no file is open
     await expect(saveBtn).toBeDisabled();
 
-    const breadcrumb = page.locator('#breadcrumb');
-    await expect(breadcrumb).toBeAttached();
+    // Breadcrumb text is rendered inside toolbar
+    await expect(toolbar).toContainText('Select a file to edit');
   });
 
-  test('ace editor container exists but is hidden initially', async ({ page }) => {
-    const editorContainer = page.locator('#editorContainer');
-    await expect(editorContainer).toBeAttached();
-    await expect(editorContainer).toHaveClass(/hidden/);
+  test('editor area shows welcome state initially', async ({ page }) => {
+    // When no file is selected, the editor area shows the welcome message
+    const editorArea = page.locator('.ide-editor');
+    await expect(editorArea).toBeAttached();
+    await expect(editorArea).toContainText('Select a file from the tree');
   });
 
   test('clicking a file in the tree opens it in the editor', async ({ page }) => {
     // Wait for file tree to load
     await page.waitForFunction(
       () => {
-        const el = document.querySelector('#fileTree');
+        const el = document.querySelector('.ide-tree');
         return el && !el.textContent?.includes('Loading...');
       },
       null,
       { timeout: 15_000 },
     );
 
-    // Check if there are any directories to expand
-    const dirItems = page.locator('.tree-item[data-type="directory"]');
+    // Check if there are any directories to expand (directories have folder icons)
+    const dirItems = page.locator('.tree-item:has(.fa-folder)');
     const dirCount = await dirItems.count();
 
     if (dirCount === 0) {
@@ -118,8 +117,8 @@ test.describe('IDE Tab', () => {
     // Wait for expansion
     await page.waitForTimeout(500);
 
-    // Look for file items
-    const fileItems = page.locator('.tree-item[data-type="file"]');
+    // Look for file items (files have tree-filename class)
+    const fileItems = page.locator('.tree-item:has(.tree-filename)');
     const fileCount = await fileItems.count();
 
     if (fileCount === 0) {
@@ -130,26 +129,63 @@ test.describe('IDE Tab', () => {
     // Click the first file
     await fileItems.first().click();
 
-    // Welcome panel should be hidden, editor should be visible
+    // Editor should now show the file content (welcome state replaced by ace editor)
     await page.waitForFunction(
       () => {
-        const welcome = document.querySelector('#welcomePanel');
-        return welcome && welcome.classList.contains('hidden');
+        const editor = document.querySelector('.ide-editor');
+        return editor && !editor.textContent?.includes('Select a file from the tree');
       },
       null,
       { timeout: 10_000 },
     );
 
     // Breadcrumb should be updated
-    const breadcrumbText = await page.locator('#breadcrumb').textContent();
-    expect(breadcrumbText).not.toBe('Select a file to edit');
+    const toolbarText = await page.locator('.ide-toolbar').textContent();
+    expect(toolbarText).not.toContain('Select a file to edit');
+  });
+
+  test('switching to source view does not mark file as unsaved', async ({ page }) => {
+    // Wait for file tree to load
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector('.ide-tree');
+        return el && !el.textContent?.includes('Loading...');
+      },
+      null,
+      { timeout: 15_000 },
+    );
+
+    // Expand agents directory
+    const agentsDir = page.locator('.tree-item:has(.fa-folder)', { hasText: 'agents' });
+    if (await agentsDir.count() === 0) { test.skip(); return; }
+    await agentsDir.click();
+    await page.waitForTimeout(500);
+
+    // Click an agent YAML file
+    const agentFile = page.locator('.tree-item:has(.tree-filename)', { hasText: '.agent.yaml' }).first();
+    if (await agentFile.count() === 0) { test.skip(); return; }
+    await agentFile.click();
+
+    // Wait for file to load (visual mode is default for agent YAML)
+    await page.waitForTimeout(1000);
+
+    // Click Source button to switch to source view
+    const sourceBtn = page.locator('button', { hasText: 'Source' });
+    await sourceBtn.click();
+
+    // Wait for Ace editor to initialize
+    await page.waitForTimeout(1000);
+
+    // The "Unsaved" indicator should NOT be visible — no modifications were made
+    const unsavedIndicator = page.locator('.text-amber', { hasText: 'Unsaved' });
+    await expect(unsavedIndicator).not.toBeAttached();
   });
 });
 
 test.describe('IDE API', () => {
-  test('GET /api/ide/tree returns file tree data', async ({ context }) => {
+  test('GET /api/files/tree returns file tree data', async ({ context }) => {
     await authenticate(context);
-    const res = await context.request.get('/api/ide/tree');
+    const res = await context.request.get('/api/files/tree');
     expect(res.ok()).toBeTruthy();
 
     const data = await res.json();

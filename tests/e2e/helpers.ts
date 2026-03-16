@@ -100,16 +100,23 @@ export async function restoreConfig(request: APIRequestContext, backup: ConfigBa
 /* ------------------------------------------------------------------ */
 
 export async function selectEngine(page: Page, engine: string): Promise<void> {
-  const tab = page.locator(`.llm-engine-tab[data-engine="${engine}"]`);
+  const ENGINE_LABELS: Record<string, string> = {
+    'llama-cpp': 'llama-cpp',
+    'mlx-serve': 'mlx-serve',
+    'ollama': 'Ollama',
+    'lmstudio': 'LM Studio',
+  };
+  const label = ENGINE_LABELS[engine] || engine;
+  const tab = page.locator('.llm-engine-tab', { hasText: label });
   await tab.click();
   await tab.waitFor({ state: 'attached' });
   // wait for the active class to appear
-  await page.locator(`.llm-engine-tab.active[data-engine="${engine}"]`).waitFor({ timeout: 5_000 });
+  await page.locator('.llm-engine-tab.active', { hasText: label }).waitFor({ timeout: 5_000 });
 }
 
 export async function navigateToLlm(page: Page): Promise<void> {
   await page.goto('/#llm', { waitUntil: 'domcontentloaded' });
-  await page.locator('local-llm-view').waitFor({ state: 'attached', timeout: 10_000 });
+  await page.locator('.llm-provider-tabs').waitFor({ state: 'attached', timeout: 10_000 });
 }
 
 export async function setSliderValue(page: Page, selector: string, value: number): Promise<void> {

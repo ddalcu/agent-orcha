@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: 'http://localhost:3000',
-    headless: false,
+    headless: true,
     trace: 'on-first-retry',
   },
   projects: [

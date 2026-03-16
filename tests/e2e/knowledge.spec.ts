@@ -4,7 +4,7 @@ import { authenticate } from './helpers';
 test.beforeEach(async ({ context, page }) => {
   await authenticate(context);
   await page.goto('/#knowledge', { waitUntil: 'domcontentloaded' });
-  await page.locator('knowledge-view').waitFor({ state: 'attached', timeout: 10_000 });
+  await page.locator('.kb-shell').waitFor({ state: 'attached', timeout: 10_000 });
 });
 
 test.describe('Knowledge Tab', () => {
@@ -14,7 +14,7 @@ test.describe('Knowledge Tab', () => {
   });
 
   test('knowledge sidebar with store cards is present', async ({ page }) => {
-    const sidebar = page.locator('#kbSidebar');
+    const sidebar = page.locator('.kb-sidebar');
     await expect(sidebar).toBeAttached();
 
     // Section title should say "Stores"
@@ -22,14 +22,14 @@ test.describe('Knowledge Tab', () => {
     await expect(title).toContainText('Stores');
   });
 
-  test('knowledge cards container exists', async ({ page }) => {
-    const cards = page.locator('#knowledgeCards');
-    await expect(cards).toBeAttached();
+  test('knowledge sidebar loads content', async ({ page }) => {
+    const sidebar = page.locator('.kb-sidebar');
+    await expect(sidebar).toBeAttached();
 
-    // Wait for loading to finish (spinner replaced by content or empty state)
+    // Wait for loading to finish
     await page.waitForFunction(
       () => {
-        const el = document.querySelector('#knowledgeCards');
+        const el = document.querySelector('.kb-sidebar');
         return el && !el.textContent?.includes('Loading...');
       },
       null,
@@ -38,46 +38,46 @@ test.describe('Knowledge Tab', () => {
   });
 
   test('knowledge detail area shows placeholder when nothing selected', async ({ page }) => {
-    // Wait for cards to load
+    // Wait for sidebar to load
     await page.waitForFunction(
       () => {
-        const el = document.querySelector('#knowledgeCards');
+        const el = document.querySelector('.kb-sidebar');
         return el && !el.textContent?.includes('Loading...');
       },
       null,
       { timeout: 15_000 },
     );
 
-    const detail = page.locator('#knowledgeDetail');
+    const detail = page.locator('.kb-detail');
     await expect(detail).toBeAttached();
     await expect(detail).toContainText('Select a knowledge store');
   });
 
   test('refresh button is present', async ({ page }) => {
-    const refreshBtn = page.locator('#refreshListBtn');
+    const refreshBtn = page.locator('.kb-sidebar button[aria-label="Refresh stores"]');
     await expect(refreshBtn).toBeAttached();
   });
 
   test('knowledge stores display or show empty state', async ({ page }) => {
-    const cards = page.locator('#knowledgeCards');
+    const sidebar = page.locator('.kb-sidebar');
 
     // Wait for loading to finish
     await page.waitForFunction(
       () => {
-        const el = document.querySelector('#knowledgeCards');
+        const el = document.querySelector('.kb-sidebar');
         return el && !el.textContent?.includes('Loading...');
       },
       null,
       { timeout: 15_000 },
     );
 
-    const cardCount = await page.locator('.knowledge-card').count();
+    const cardCount = await page.locator('.kb-sidebar .card').count();
     if (cardCount === 0) {
       // Empty state
-      await expect(cards).toContainText('No knowledge stores configured');
+      await expect(sidebar).toContainText('No knowledge stores configured');
     } else {
       // At least one card should have a name
-      const firstCard = page.locator('.knowledge-card').first();
+      const firstCard = page.locator('.kb-sidebar .card').first();
       await expect(firstCard).toBeVisible();
     }
   });
