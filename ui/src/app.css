@@ -1814,34 +1814,9 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
     opacity: 0.6;
 }
 .llm-range {
-    --range-color: var(--green);
-    --range-fill: 0%;
-    -webkit-appearance: none;
-    appearance: none;
     width: 100%;
-    height: 4px;
-    border-radius: var(--radius-full);
-    background: linear-gradient(to right, var(--range-color) var(--range-fill), var(--bg) var(--range-fill));
-    outline: none;
     cursor: pointer;
-}
-.llm-range::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--range-color);
-    cursor: pointer;
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
-}
-.llm-range::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--range-color);
-    cursor: pointer;
-    border: none;
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+    accent-color: var(--green);
 }
 .llm-slider-warning {
     font-size: 0.75rem;
