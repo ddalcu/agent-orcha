@@ -138,7 +138,7 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
         for await (const chunk of stream) {
           if (abortController.signal.aborted) break;
           if (typeof chunk === 'string') {
-            reply.raw.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+            reply.raw.write(`data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`);
           } else {
             const evt = chunk as Record<string, unknown>;
             // Update task metrics on react-loop iterations
