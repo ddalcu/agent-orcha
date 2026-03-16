@@ -1905,10 +1905,7 @@
             class="input flex-1"
             bind:value={hfSearchQuery}
             onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') searchHuggingFace(); }} />
-          <select class="input" disabled bind:value={browseFormat}>
-            <option value="gguf">GGUF</option>
-            <option value="mlx">MLX</option>
-          </select>
+          <span class="badge badge-gray flex-shrink-0">{browseFormat.toUpperCase()}</span>
           <button class="btn btn-accent flex-shrink-0" disabled={hfSearching} onclick={searchHuggingFace}>
             {#if hfSearching}
               <i class="fas fa-spinner fa-spin mr-1"></i>Searching...
@@ -1935,13 +1932,16 @@
               Search HuggingFace to find and download {browseFormat.toUpperCase()} models
             </div>
           {:else}
-            {@const resultsWithFiles = searchResults.filter((r: any) => r.ggufFiles.length > 0)}
+            {@const filterGguf = (files: any[]) => selectedEngine === 'llama-cpp'
+              ? files.filter((f: any) => !/mmproj|bf16/i.test(f.fileName))
+              : files}
+            {@const resultsWithFiles = searchResults.filter((r: any) => filterGguf(r.ggufFiles).length > 0)}
             {#if resultsWithFiles.length === 0}
               <div class="text-muted text-center py-8">No {browseFormat.toUpperCase()} files found in the results.</div>
             {:else}
               <div class="space-y-2">
                 {#each searchResults as result, idx}
-                  {#if result.ggufFiles.length > 0}
+                  {#if filterGguf(result.ggufFiles).length > 0}
                     {@const caps = detectCapabilities(result)}
                     {@const isMlxFormat = browseFormat === 'mlx'}
                     {#if isMlxFormat}
@@ -1984,9 +1984,12 @@
                       </div>
                     {:else}
                       <!-- GGUF result row -->
-                      {@const firstFile = result.ggufFiles[0]}
-                      {@const selectedFileName = result._selectedFile || firstFile.fileName}
-                      {@const selectedFile = result.ggufFiles.find((f: any) => f.fileName === selectedFileName) || firstFile}
+                      {@const filteredFiles = selectedEngine === 'llama-cpp'
+                        ? result.ggufFiles.filter((f: any) => !/mmproj|bf16/i.test(f.fileName))
+                        : result.ggufFiles}
+                      {@const firstFile = filteredFiles[0]}
+                      {@const selectedFileName = result._selectedFile || firstFile?.fileName}
+                      {@const selectedFile = filteredFiles.find((f: any) => f.fileName === selectedFileName) || firstFile}
                       {@const tooLarge = systemRamBytes > 0 && selectedFile.sizeBytes > systemRamBytes}
                       {@const downloaded = isModelDownloaded(models, result.repoId, selectedFileName)}
                       {@const dlId = `${result.repoId}/${selectedFileName}`}
@@ -2009,7 +2012,7 @@
                             const target = e.target as HTMLSelectElement;
                             result._selectedFile = target.value;
                           }}>
-                          {#each result.ggufFiles as f}
+                          {#each filteredFiles as f}
                             <option value={f.fileName}>{f.fileName} ({formatBytes(f.sizeBytes)})</option>
                           {/each}
                         </select>

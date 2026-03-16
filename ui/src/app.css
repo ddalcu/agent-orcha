@@ -210,6 +210,7 @@ img { display: block; max-width: 100%; }
 
 /* Size */
 .w-full  { width: 100%; }
+.w-auto  { width: auto; }
 .h-full  { height: 100%; }
 .h-screen { height: 100vh; }
 .min-w-0 { min-width: 0; }

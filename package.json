@@ -34,8 +34,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "dev": "node --watch src/index.ts",
-    "dev:ui": "cd ui && npm run dev",
+    "dev": "NODE_ENV=development node --watch-path=src --watch-path=lib src/index.ts",
     "build:ui": "cd ui && npm ci && npm run build",
     "build": "npm run build:ui && tsc && npm run copy-assets",
     "copy-assets": "node -e \"const fs=require('fs');fs.cpSync('public','dist/public',{recursive:true});fs.cpSync('templates','dist/templates',{recursive:true,filter:(s)=>!s.split('/').some(p=>p.startsWith('.')&&p!=='.'&&p!=='.env.example')})\"",
@@ -90,7 +89,8 @@
     "@types/ws": "^8.18.1",
     "esbuild": "^0.25.12",
     "eslint": "^9.17.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0"
   },
   "engines": {
     "node": ">=24.0.0"

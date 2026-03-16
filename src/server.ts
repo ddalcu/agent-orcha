@@ -47,6 +47,7 @@ const PKG_VERSION = getVersion();
 declare module 'fastify' {
   interface FastifyInstance {
     orchestrator: Orchestrator;
+    viteDevServer?: import('vite').ViteDevServer;
   }
 }
 
@@ -63,14 +64,15 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
 
   await fastify.register(authPlugin);
 
-  const publicDir = isSea()
-    ? getPublicDir()
-    : path.join(__dirname, '..', 'public');
-
-  await fastify.register(fastifyStatic, {
-    root: publicDir,
-    prefix: '/',
-  });
+  if (process.env['NODE_ENV'] === 'development') {
+    const { setupViteDev } = await import('./vite-dev-integration.ts');
+    await setupViteDev(fastify);
+  } else {
+    const publicDir = isSea()
+      ? getPublicDir()
+      : path.join(__dirname, '..', 'public');
+    await fastify.register(fastifyStatic, { root: publicDir, prefix: '/' });
+  }
 
   fastify.decorate('orchestrator', orchestrator);
 
