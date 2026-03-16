@@ -109,6 +109,12 @@
     if (!agentName) { loadError = 'Invalid agent URL'; return; }
     sessionId = sessionStorage.getItem(`chat-session-${agentName}`) || ('chat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
     sessionStorage.setItem(`chat-session-${agentName}`, sessionId);
+    const restored = restoreBubbles();
+    if (restored.length > 0) {
+      bubbles = restored;
+      showSampleQuestions = false;
+      requestAnimationFrame(scrollToBottom);
+    }
     loadConfig();
   });
 
@@ -219,6 +225,7 @@
     showSampleQuestions = false;
     addUserBubble(message || '(attached files)', att);
     pendingAttachments = [];
+    saveBubblesState();
     doStream(message, att);
   }
 
@@ -272,6 +279,7 @@
       streamUsageData = null;
       currentAbortController = null;
       isLoading = false;
+      saveBubblesState();
       chatInputRef?.focus();
     }
   }
@@ -379,6 +387,38 @@
     canvasFormat = format as 'markdown' | 'html' | 'code'; canvasLanguage = language; canvasOpen = true;
   }
 
+  function saveBubblesState() {
+    try {
+      const stripped = bubbles.map(b => ({
+        ...b,
+        attachments: b.attachments?.map(a => ({ name: a.name, mediaType: a.mediaType, data: '' })) ?? null,
+      }));
+      sessionStorage.setItem(`chat-bubbles-${agentName}`, JSON.stringify(stripped));
+    } catch { /* storage full or unavailable */ }
+  }
+
+  function restoreBubbles(): ChatBubble[] {
+    try {
+      const raw = sessionStorage.getItem(`chat-bubbles-${agentName}`);
+      if (!raw) return [];
+      return (JSON.parse(raw) as ChatBubble[]).map(b => ({ ...b, isLoading: false, showStatusBar: false }));
+    } catch { return []; }
+  }
+
+  function clearChat() {
+    if (isLoading) return;
+    currentAbortController?.abort();
+    if (loopInterval) { clearInterval(loopInterval); loopInterval = null; }
+    sessionId = 'chat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    sessionStorage.setItem(`chat-session-${agentName}`, sessionId);
+    bubbles = [];
+    sessionStorage.removeItem(`chat-bubbles-${agentName}`);
+    showSampleQuestions = true;
+    canvasOpen = false;
+    canvasContent = '';
+    chatInputRef?.focus();
+  }
+
   function handleQuestionClick(q: string) { chatInputRef?.setValue(q); chatInputRef?.focus(); }
 </script>
 
@@ -407,6 +447,9 @@
           <h1 class="text-sm font-semibold text-primary">{agentConfig.name}</h1>
           {#if agentConfig.description}<p class="text-xs text-muted truncate">{agentConfig.description}</p>{/if}
         </div>
+        <button class="clear-chat-btn" title="New conversation" disabled={isLoading} onclick={clearChat}>
+          <i class="fas fa-plus"></i> New session
+        </button>
       </div>
       <div bind:this={messagesEl} class="standalone-messages custom-scrollbar">
         {#if showSampleQuestions && agentConfig.sampleQuestions?.length && bubbles.length === 0}

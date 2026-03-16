@@ -19,7 +19,7 @@
     {#if attachments && attachments.length > 0}
       <div class="flex flex-wrap gap-2 mb-2">
         {#each attachments as att}
-          {#if att.mediaType.startsWith('image/')}
+          {#if att.mediaType.startsWith('image/') && att.data}
             <img src="data:{att.mediaType};base64,{att.data}" class="attachment-thumb" alt={att.name}>
           {:else}
             <div class="attachment-pill">

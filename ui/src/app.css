@@ -1314,6 +1314,19 @@ img { display: block; max-width: 100%; }
   padding: var(--sp-4) var(--sp-5);
   border-bottom: 1px solid var(--border-40);
 }
+.clear-chat-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  font-size: 0.75rem;
+  color: var(--text-2);
+  border-radius: var(--radius-sm);
+  transition: color var(--fast);
+}
+.clear-chat-btn:hover:not(:disabled) { color: var(--text-1); }
+.clear-chat-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .standalone-messages {
   flex: 1;
   overflow-y: auto;
