@@ -64,7 +64,7 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
 
   await fastify.register(authPlugin);
 
-  if (process.env['NODE_ENV'] === 'development') {
+  if (process.env['NODE_ENV'] === 'development' && process.env['VITE_DEV'] !== 'false') {
     const { setupViteDev } = await import('./vite-dev-integration.ts');
     await setupViteDev(fastify);
   } else {
