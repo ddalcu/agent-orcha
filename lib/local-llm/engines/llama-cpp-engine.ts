@@ -4,7 +4,7 @@ import { LlamaServerProcess } from '../llama-server-process.ts';
 import { killOrphanedServers } from '../llama-server-process.ts';
 import { ModelManager } from '../model-manager.ts';
 import { readGGUFModelInfo, calculateOptimalContextSize, kvCacheBytesPerToken } from '../gguf-reader.ts';
-import { detectGpu, getBinaryVersion, isSystemBinary, updateBinary, checkForUpdate } from '../binary-manager.ts';
+import { detectGpu, getBinaryVersion, isSystemBinary, getProcessMemory } from '../binary-manager.ts';
 import { logger } from '../../logger.ts';
 import type { LocalEngine, EngineChatStatus, EngineServerStatus, EngineStatus, LoadOptions } from '../engine-interface.ts';
 
@@ -98,6 +98,7 @@ export class LlamaCppEngine implements LocalEngine {
 
   getChatStatus(): EngineChatStatus {
     const running = this.chatServer?.running ?? false;
+    const pid = this.chatServer?.pid;
     return {
       running,
       activeModel: running ? (this.chatServer?.modelPath ?? null) : null,
@@ -106,6 +107,7 @@ export class LlamaCppEngine implements LocalEngine {
       memoryEstimate: this._memoryEstimate,
       supportsVision: this._supportsVision,
       mmprojBytes: this._mmprojBytes,
+      processMemory: running && pid ? getProcessMemory(pid) : null,
     };
   }
 
@@ -177,13 +179,6 @@ export class LlamaCppEngine implements LocalEngine {
     return isSystemBinary() ? 'system' : 'managed';
   }
 
-  async checkForUpdate(): Promise<any> {
-    return checkForUpdate(this._baseDir);
-  }
-
-  async updateBinary(): Promise<void> {
-    return updateBinary(this._baseDir);
-  }
 
   // ─── Private ────────────────────────────────────────────────────────────────
 

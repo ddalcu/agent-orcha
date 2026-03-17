@@ -1297,7 +1297,7 @@
       updateBubble(responseId, b => {
         b.isLoading = false;
         b.tools = [...b.tools, {
-          runId: nextBubbleId('wf-tool'),
+          runId: event.toolCallId || nextBubbleId('wf-tool'),
           tool: toolName,
           input: event.toolInput || '',
           done: false,
@@ -1307,10 +1307,12 @@
 
     if (event.type === 'tool_result') {
       updateBubble(responseId, b => {
-        const activeIdx = b.tools.findLastIndex(t => !t.done);
-        if (activeIdx >= 0) {
-          b.tools[activeIdx].done = true;
-          b.tools[activeIdx].output = event.toolOutput || '';
+        const idx = event.toolCallId
+          ? b.tools.findIndex(t => t.runId === event.toolCallId)
+          : b.tools.findLastIndex(t => !t.done);
+        if (idx >= 0) {
+          b.tools[idx].done = true;
+          b.tools[idx].output = event.toolOutput || '';
         }
       });
     }
@@ -1611,6 +1613,13 @@
     if (!currentAgent?.tools?.length) return [];
     return currentAgent.tools.map(t => typeof t === 'string' ? t : t.name);
   });
+
+  const currentWorkflow = $derived.by(() => {
+    if (!headerSession || headerSession.agentType !== 'workflow') return null;
+    return appStore.workflows.find(w => w.name === headerSession!.workflowName) || null;
+  });
+  const workflowAgentNames = $derived(currentWorkflow?.agents || []);
+  const workflowToolNames = $derived(currentWorkflow?.tools || []);
 </script>
 
 <div class="agent-shell">
@@ -1705,6 +1714,30 @@
                 </div>
               </span>
             {/if}
+            {#if workflowAgentNames.length > 0}
+              <span class="tools-badge-wrapper">
+                <span class="badge badge-pill badge-blue">
+                  <i class="fas fa-robot text-2xs"></i> {workflowAgentNames.length} agent{workflowAgentNames.length !== 1 ? 's' : ''}
+                </span>
+                <div class="tools-popover">
+                  {#each workflowAgentNames as a}
+                    <div class="tools-popover-item">{a}</div>
+                  {/each}
+                </div>
+              </span>
+            {/if}
+            {#if workflowToolNames.length > 0}
+              <span class="tools-badge-wrapper">
+                <span class="badge badge-pill badge-gray">
+                  <i class="fas fa-wrench text-2xs"></i> {workflowToolNames.length} tool{workflowToolNames.length !== 1 ? 's' : ''}
+                </span>
+                <div class="tools-popover">
+                  {#each workflowToolNames as t}
+                    <div class="tools-popover-item">{t}</div>
+                  {/each}
+                </div>
+              </span>
+            {/if}
           </div>
         {:else}
           <span class="text-muted">No conversation selected</span>
@@ -1716,9 +1749,9 @@
       <div class="chat-main">
         <!-- Chat Messages -->
         <ChatMessages bind:this={chatMessagesRef}>
-          {#if chatIsEmpty && hasActiveSession}
-            <WelcomeState questions={sampleQuestions} onquestionclick={handleQuestionClick} />
-          {:else if chatIsEmpty && !hasActiveSession}
+          {#if hasActiveSession}
+            <WelcomeState questions={chatIsEmpty ? sampleQuestions : []} onquestionclick={handleQuestionClick} />
+          {:else if chatIsEmpty}
             <div class="flex-1 flex items-center justify-center h-full">
               <div class="text-center text-muted">
                 <i class="fas fa-comments text-4xl mb-4 text-muted"></i>
@@ -1726,64 +1759,63 @@
                 <p class="text-sm mt-1">Click "New chat" to begin</p>
               </div>
             </div>
-          {:else}
-            {#each bubbles as bubble (bubble.id)}
-              {#if bubble.type === 'user'}
-                <UserBubble content={bubble.content} attachments={bubble.attachments} />
-              {:else if bubble.type === 'system'}
-                <div class="system-message">
-                  <i class="fas fa-rotate text-xs"></i>
-                  <span>{bubble.content}</span>
-                </div>
-              {:else if bubble.type === 'session-reset'}
-                <div class="session-reset-banner">
-                  <div class="session-reset-line"></div>
-                  <span class="session-reset-label">
-                    <i class="fas fa-rotate-right"></i>
-                    Server restarted — new session
-                  </span>
-                  <div class="session-reset-line"></div>
-                </div>
-              {:else if bubble.type === 'response'}
-                <div class="response-wrapper">
-                  <ResponseBubble
-                    id={bubble.id}
-                    content={bubble.content}
-                    tools={bubble.tools}
-                    thinkingSections={bubble.thinkingSections}
-                    isLoading={bubble.isLoading}
-                    error={bubble.error}
-                  >
-                    {#if bubble.resultContent}
-                      <div class="panel">
-                        <pre class="text-sm text-primary font-mono whitespace-pre-wrap overflow-x-auto">{bubble.resultContent}</pre>
-                      </div>
-                    {/if}
-                    {#if bubble.warningContent}
-                      <div class="text-yellow text-sm">{bubble.warningContent}</div>
-                    {/if}
-                  </ResponseBubble>
-                  {#if bubble.showStatusBar}
-                    <StreamStatusBar
-                      elapsed={bubble.elapsedDisplay}
-                      statusText={bubble.statusText}
-                      oncancel={cancelCurrentStream}
-                    />
-                  {/if}
-                  {#if bubble.stats}
-                    <StreamStatsBar
-                      elapsed={bubble.stats.elapsed}
-                      inputTokens={bubble.stats.inputTokens}
-                      outputTokens={bubble.stats.outputTokens}
-                      tps={bubble.stats.tps}
-                      cancelled={bubble.stats.cancelled}
-                      visible={bubble.stats.visible}
-                    />
-                  {/if}
-                </div>
-              {/if}
-            {/each}
           {/if}
+          {#each bubbles as bubble (bubble.id)}
+            {#if bubble.type === 'user'}
+              <UserBubble content={bubble.content} attachments={bubble.attachments} />
+            {:else if bubble.type === 'system'}
+              <div class="system-message">
+                <i class="fas fa-rotate text-xs"></i>
+                <span>{bubble.content}</span>
+              </div>
+            {:else if bubble.type === 'session-reset'}
+              <div class="session-reset-banner">
+                <div class="session-reset-line"></div>
+                <span class="session-reset-label">
+                  <i class="fas fa-rotate-right"></i>
+                  Server restarted — new session
+                </span>
+                <div class="session-reset-line"></div>
+              </div>
+            {:else if bubble.type === 'response'}
+              <div class="response-wrapper">
+                <ResponseBubble
+                  id={bubble.id}
+                  content={bubble.content}
+                  tools={bubble.tools}
+                  thinkingSections={bubble.thinkingSections}
+                  isLoading={bubble.isLoading}
+                  error={bubble.error}
+                >
+                  {#if bubble.resultContent}
+                    <div class="panel">
+                      <pre class="text-sm text-primary font-mono whitespace-pre-wrap overflow-x-auto">{bubble.resultContent}</pre>
+                    </div>
+                  {/if}
+                  {#if bubble.warningContent}
+                    <div class="text-yellow text-sm">{bubble.warningContent}</div>
+                  {/if}
+                </ResponseBubble>
+                {#if bubble.showStatusBar}
+                  <StreamStatusBar
+                    elapsed={bubble.elapsedDisplay}
+                    statusText={bubble.statusText}
+                    oncancel={cancelCurrentStream}
+                  />
+                {/if}
+                {#if bubble.stats}
+                  <StreamStatsBar
+                    elapsed={bubble.stats.elapsed}
+                    inputTokens={bubble.stats.inputTokens}
+                    outputTokens={bubble.stats.outputTokens}
+                    tps={bubble.stats.tps}
+                    cancelled={bubble.stats.cancelled}
+                    visible={bubble.stats.visible}
+                  />
+                {/if}
+              </div>
+            {/if}
+          {/each}
         </ChatMessages>
       </div>
 

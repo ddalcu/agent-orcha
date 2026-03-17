@@ -23,7 +23,6 @@ describe('createServer', () => {
 
   it('should register all route prefixes', async () => {
     const orchestrator = createMockOrchestrator({
-      agents: { list: () => [] },
       triggers: { setManager: () => {} },
     });
 

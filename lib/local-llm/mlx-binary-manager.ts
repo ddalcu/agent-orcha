@@ -7,7 +7,8 @@ import { Readable } from 'stream';
 import { logger } from '../logger.ts';
 
 const BINARY_NAME = 'mlx-serve';
-const RELEASES_API = 'https://api.github.com/repos/ddalcu/mlx-serve/releases/latest';
+const PINNED_RELEASE = 'v0.3.1';
+const RELEASES_API = `https://api.github.com/repos/ddalcu/mlx-serve/releases/tags/${PINNED_RELEASE}`;
 const ASSET_PATTERN = 'mlx-serve-bin-macos-arm64';
 
 let cachedMlxVersion: { baseDir: string; value: string | null } | null = null;
@@ -175,60 +176,3 @@ export function isMlxSystemBinary(): boolean {
   return cachedIsMlxSystem;
 }
 
-export interface MlxUpdateInfo {
-  available: boolean;
-  currentVersion: string | null;
-  latestVersion: string | null;
-  latestTag: string | null;
-  publishedAt: string | null;
-}
-
-/**
- * Compare local mlx-serve version with latest GitHub release.
- * Uses semver comparison (e.g., 0.3.0 vs 0.3.1).
- */
-export async function checkForMlxUpdate(baseDir: string): Promise<MlxUpdateInfo> {
-  const currentVersion = getMlxBinaryVersion(baseDir);
-
-  try {
-    const res = await fetch(RELEASES_API);
-    if (!res.ok) return { available: false, currentVersion, latestVersion: null, latestTag: null, publishedAt: null };
-
-    const release: any = await res.json();
-    const tag = release.tag_name; // e.g., "v0.3.1"
-    const latestVersion = tag?.replace(/^v/, '') || null;
-    const publishedAt = release.published_at || null;
-
-    const available = !!(currentVersion && latestVersion && compareSemver(latestVersion, currentVersion) > 0);
-
-    return { available, currentVersion, latestVersion, latestTag: tag || null, publishedAt };
-  } catch (err) {
-    logger.warn('[MlxBinaryManager] Failed to check for updates:', err);
-    return { available: false, currentVersion, latestVersion: null, latestTag: null, publishedAt: null };
-  }
-}
-
-/**
- * Delete the current managed binary and re-download the latest release from GitHub.
- */
-export async function updateMlxBinary(baseDir: string): Promise<void> {
-  const binDir = path.join(baseDir, '.mlx-serve', 'macos-arm64');
-  await fs.rm(binDir, { recursive: true, force: true });
-  await downloadMlxBinary(binDir);
-  // Invalidate caches
-  cachedMlxVersion = null;
-  cachedIsMlxSystem = null;
-}
-
-/**
- * Compare two semver strings. Returns >0 if a > b, <0 if a < b, 0 if equal.
- */
-function compareSemver(a: string, b: string): number {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    const diff = (pa[i] || 0) - (pb[i] || 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
-}

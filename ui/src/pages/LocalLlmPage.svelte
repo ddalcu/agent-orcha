@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { api } from '../lib/services/api.ts';
   import { timeAgo } from '../lib/utils/format.ts';
+  import Toggle from '../components/Toggle.svelte';
 
   // ─── Helpers ───
   function formatBytes(bytes: number): string {
@@ -150,8 +151,6 @@
   let activeDownloads = $state(new Map<string, EventSource>());
   let downloadPollTimer = $state<ReturnType<typeof setInterval> | null>(null);
   let systemRamBytes = $state(0);
-  let updateInfo = $state<any>(null);
-  let mlxUpdateInfo = $state<any>(null);
   let activeProvider = $state<string>('local');
   let llmConfig = $state<any>(null);
   let browseFormat = $state<string>('gguf');
@@ -203,9 +202,7 @@
   // Button loading states
   let stoppingChat = $state(false);
   let stoppingEmb = $state(false);
-  let checkingUpdate = $state(false);
-  let updatingBinary = $state(false);
-  let settingDefault = $state(false);
+  let togglingActive = $state<string | null>(null);
   let activatingModelId = $state<string | null>(null);
   let activateErrors = $state<Record<string, string>>({});
   let activatingEmbId = $state<string | null>(null);
@@ -239,6 +236,10 @@
   let isMacHost = $derived(status?.platform === 'darwin');
 
   let configDefaultEngine = $derived(resolveDefault('models')?.engine || status?.defaultEngine || null);
+  let selectedEngineActive = $derived.by(() => {
+    const entry = llmConfig?.models?.[selectedEngine || ''];
+    return entry?.active !== false;
+  });
 
   // Engine list to show
   let engineList = $derived(
@@ -262,15 +263,6 @@
       ? (version ? `v${version}` : '')
       : (version ? `b${version?.match?.(/^(\d+)/)?.[1] || version}` : '')
   );
-  let binarySource = $derived(isMlx ? status?.mlxBinarySource : status?.binarySource);
-  let currentUpdateInfo = $derived(isMlx ? mlxUpdateInfo : updateInfo);
-  let hasUpdate = $derived(currentUpdateInfo?.available === true);
-  let daysLabel = $derived(
-    hasUpdate && currentUpdateInfo?.daysNewer != null
-      ? (currentUpdateInfo.daysNewer === 0 ? 'today' : `${currentUpdateInfo.daysNewer}d ago`)
-      : ''
-  );
-
   // GPU & runtime
   let gpuName = $derived(status?.gpu?.name);
   let gpuAccel = $derived(status?.gpu?.accel || 'none');
@@ -279,19 +271,17 @@
       ? `${gpuName} (${ACCEL_LABELS[gpuAccel] || gpuAccel})`
       : (ACCEL_LABELS[gpuAccel] || gpuAccel)
   );
-  let gpuVram = $derived(status?.gpuVram);
 
   // RAM
   let totalRam = $derived(systemRamBytes);
-  let freeRam = $derived(status?.freeRamBytes || 0);
-  let ramUsedPct = $derived(totalRam ? Math.round(((totalRam - freeRam) / totalRam) * 100) : 0);
-  let ramBarCls = $derived(ramUsedPct > 80 ? 'llm-mem-red' : ramUsedPct > 60 ? 'llm-mem-amber' : 'llm-mem-green');
 
   // Chat model details for managed engine
   let activeModelName = $derived(activeModelPath ? activeModelPath.split('/').pop() : null);
   let mem = $derived(chatStatus?.memoryEstimate);
+  let procMem = $derived(chatStatus?.processMemory);
+  let actualBytes = $derived(procMem ? (procMem.rssBytes + (procMem.gpuBytes ?? 0)) : 0);
   let ctxSize = $derived(chatStatus?.contextSize);
-  let memPct = $derived(mem && totalRam ? Math.round((mem.totalBytes / totalRam) * 100) : null);
+  let memPct = $derived(actualBytes && totalRam ? Math.round((actualBytes / totalRam) * 100) : null);
   let memBarCls = $derived((memPct ?? 0) > 80 ? 'llm-mem-red' : (memPct ?? 0) > 60 ? 'llm-mem-amber' : 'llm-mem-green');
   let kvPerToken = $derived(mem && ctxSize ? mem.kvCacheBytes / ctxSize : 0);
   let resolvedDefaultModel = $derived(resolveDefault('models'));
@@ -318,6 +308,14 @@
   let estimatedTotal = $derived((mem?.modelBytes || 0) + estimatedKvCache);
   let estimatedPct = $derived(totalRam ? Math.round(estimatedTotal / totalRam * 100) : 0);
 
+  // Slider fill color based on RAM usage
+  let ctxRangeColor = $derived(
+    estimatedPct > 90 ? 'var(--red)' : estimatedPct > 75 ? 'var(--amber-400)' : 'var(--green)'
+  );
+  let ctxRangeFill = $derived(
+    `${((ctxSliderValue - 2048) / (131072 - 2048)) * 100}%`
+  );
+
   // Slider warning
   let sliderWarning = $derived(
     estimatedPct > 90
@@ -336,7 +334,6 @@
   let extDefaultUrls: Record<string, string> = { ollama: 'http://localhost:11434', lmstudio: 'http://localhost:1234' };
   let extEffectiveUrl = $derived(engineUrls?.[selectedEngine || ''] || extDefaultUrls[selectedEngine || ''] || '');
   let extIsRemote = $derived(isExternalEngine ? isEngineRemote(selectedEngine || '', engineUrls) : false);
-  let extTotalVram = $derived(extRunning.reduce((sum: number, r: any) => sum + (r.sizeVram || 0), 0));
 
   // External engine config
   let extCurrentDefault = $derived(resolveDefault('models'));
@@ -387,11 +384,6 @@
   // Cloud config
   let defaultProvider = $derived(resolveDefault('models')?._provider || 'local');
 
-  // Named configs (excluding current provider)
-  let namedConfigs = $derived(
-    Object.entries(llmConfig?.models || {})
-      .filter(([name, m]: [string, any]) => name !== 'default' && typeof m !== 'string' && m._provider !== activeProvider)
-  );
 
   // Cloud config - model entry for current provider
   let cloudModelEntry = $derived(() => {
@@ -638,39 +630,6 @@
     }
   }
 
-  async function checkForUpdate() {
-    checkingUpdate = true;
-    try {
-      if (isMlx) {
-        mlxUpdateInfo = await api.checkMlxUpdate();
-      } else {
-        updateInfo = await api.checkLlamaUpdate();
-      }
-    } catch (e) {
-      console.error('Failed to check for updates:', e);
-    } finally {
-      checkingUpdate = false;
-    }
-  }
-
-  async function updateBinary() {
-    updatingBinary = true;
-    try {
-      if (isMlx) {
-        await api.updateMlxBinary();
-        mlxUpdateInfo = null;
-      } else {
-        await api.updateLlamaBinary();
-        updateInfo = null;
-      }
-      await refresh();
-    } catch (e) {
-      console.error('Failed to update binary:', e);
-    } finally {
-      updatingBinary = false;
-    }
-  }
-
   async function applyModelSettings() {
     const engineSt = status?.engines?.[selectedEngine || ''];
     const currentCtx = engineSt?.chat?.contextSize;
@@ -800,29 +759,18 @@
     }
   }
 
-  async function setProviderAsDefault() {
-    settingDefault = true;
+  async function toggleModelActive(configName: string) {
+    togglingActive = configName;
     try {
-      const provider = activeProvider;
-      const model = cloudModel || cloudModelCustom.trim();
-      if (!model) throw new Error('Please select or enter a model name first');
-
-      const apiKey = cloudApiKey.trim() || (PROVIDER_ENV_NAMES[provider] ? `\${${PROVIDER_ENV_NAMES[provider]}}` : undefined);
-      await api.saveLlmModel(provider, {
-        provider,
-        model,
-        ...(apiKey ? { apiKey } : {}),
-        ...(cloudBaseUrl.trim() ? { baseUrl: cloudBaseUrl.trim() } : {}),
-        ...(cloudTemp !== '' ? { temperature: parseFloat(cloudTemp) } : {}),
-        ...(cloudMaxTokens !== '' ? { maxTokens: parseInt(cloudMaxTokens) } : {}),
-        ...(cloudThinkingBudget !== '' ? { thinkingBudget: parseInt(cloudThinkingBudget) } : {}),
-      });
-      await api.saveLlmModel('default', { _pointer: provider });
-      await loadLlmConfig();
+      const entry = llmConfig?.models?.[configName];
+      const currentActive = entry?.active !== false;
+      await api.toggleLlmActive(configName, !currentActive);
+      // Refresh config without resetting activeProvider
+      llmConfig = await api.getLlmConfig();
     } catch (e: any) {
-      console.error('Failed to set default:', e);
+      console.error('Failed to toggle active:', e);
     } finally {
-      settingDefault = false;
+      togglingActive = null;
     }
   }
 
@@ -926,6 +874,11 @@
     }
   }
 
+  function selectEngine(eng: string) {
+    selectedEngine = eng;
+    syncEngineUrlInput();
+  }
+
   function copyUrl(url: string, event: MouseEvent) {
     navigator.clipboard.writeText(url);
     const target = event.currentTarget as HTMLElement;
@@ -934,11 +887,6 @@
       icon.className = 'fas fa-check text-2xs text-green';
       setTimeout(() => { icon!.className = 'fas fa-copy text-2xs'; }, 1500);
     }
-  }
-
-  function selectEngine(eng: string) {
-    selectedEngine = eng;
-    syncEngineUrlInput();
   }
 
   function selectProvider(p: string) {
@@ -1026,6 +974,7 @@
     {@const popularEmbs = POPULAR_EMBEDDINGS[provider] || []}
     {@const { entry: modelEntry } = cloudModelEntry()}
     {@const isDefault = resolveDefault('models')?._provider === provider}
+    {@const isActive = modelEntry?.active !== false}
     {@const hasEnvKey = modelEntry?._hasEnvKey || false}
     {@const isEnvRef = modelEntry?.apiKey && /^\$\{.+\}$/.test(modelEntry.apiKey)}
     {@const hasConfigKey = isEnvRef ? false : (modelEntry?.apiKey && !modelEntry.apiKey.startsWith('••••') ? false : !!modelEntry?.apiKey)}
@@ -1043,17 +992,12 @@
           </span>
           <span class="font-semibold text-primary">{meta.label} Configuration</span>
         </div>
-        {#if isDefault}
-          <span class="badge badge-green"><i class="fas fa-check mr-1"></i>Default</span>
-        {:else}
-          <button class="btn btn-accent btn-sm" disabled={settingDefault} onclick={setProviderAsDefault}>
-            {#if settingDefault}
-              <i class="fas fa-spinner fa-spin mr-1"></i>Switching...
-            {:else}
-              <i class="fas fa-star mr-1"></i>Set as Default
-            {/if}
-          </button>
-        {/if}
+        <div class="flex items-center gap-2">
+          <Toggle active={isActive} disabled={togglingActive === provider} onchange={() => toggleModelActive(provider)} />
+          {#if isDefault}
+            <span class="badge badge-green"><i class="fas fa-check mr-1"></i>Default</span>
+          {/if}
+        </div>
       </div>
 
       <div class="llm-cloud-form">
@@ -1162,21 +1106,6 @@
       </div>
     </div>
 
-    <!-- Named Configs -->
-    {#if namedConfigs.length > 0}
-      <div class="mt-4">
-        <h4 class="text-xs font-medium text-muted mb-2">Other Named Configs</h4>
-        <div class="llm-named-configs">
-          {#each namedConfigs as [name, m]}
-            <div class="llm-named-row">
-              <span class="name">{name}</span>
-              <span class="badge badge-{PROVIDER_META[(m as any)._provider]?.color || 'gray'}">{PROVIDER_META[(m as any)._provider]?.label || (m as any)._provider}</span>
-              <span class="model">{(m as any).model}</span>
-            </div>
-          {/each}
-        </div>
-      </div>
-    {/if}
   {/if}
 
   <!-- Local LLM Content -->
@@ -1219,9 +1148,12 @@
               <span class="{extAvailable ? 'llm-pulse llm-pulse-green' : 'llm-pulse-off'}"></span>
               <span class="text-xs {extAvailable ? 'text-green' : 'text-red'}">{extAvailable ? 'Connected' : 'Not detected / Not running'}</span>
             </div>
-            <button class="btn-ghost text-xs flex-shrink-0" onclick={loadEngines}>
-              <i class="fas fa-sync-alt mr-1"></i>Refresh
-            </button>
+            <div class="flex items-center gap-2">
+              <Toggle active={selectedEngineActive} disabled={togglingActive === selectedEngine} onchange={() => toggleModelActive(selectedEngine!)} />
+              <button class="btn-ghost text-xs flex-shrink-0" onclick={loadEngines}>
+                <i class="fas fa-sync-alt mr-1"></i>Refresh
+              </button>
+            </div>
           </div>
 
           <!-- Base URL -->
@@ -1254,39 +1186,6 @@
               <span class="text-sm text-muted">Make sure {extLabel} is running{extIsRemote ? ` at ${extEffectiveUrl}` : ' on your machine'}</span>
             </div>
           {:else}
-            <!-- Server details -->
-            {#if !extIsRemote}
-              <div class="llm-server-details">
-                <span title="System RAM"><i class="fas fa-memory mr-1 llm-icon-dim"></i>{formatBytes(totalRam - freeRam)} / {formatBytes(totalRam)} RAM</span>
-                {#if extTotalVram}
-                  <span title="VRAM used by loaded models"><i class="fas fa-bolt mr-1 llm-icon-dim"></i>{formatBytes(extTotalVram)} VRAM</span>
-                {/if}
-                <span title="Models loaded"><i class="fas fa-cube mr-1 llm-icon-dim"></i>{extRunning.length} loaded</span>
-              </div>
-              {#if totalRam}
-                <div class="llm-mem-bar" title="{ramUsedPct}% RAM used">
-                  <div class="llm-mem-fill {ramBarCls}" style:width="{ramUsedPct}%"></div>
-                </div>
-              {/if}
-              {#if gpuVram}
-                {@const vramPct = Math.round((gpuVram.usedBytes / gpuVram.totalBytes) * 100)}
-                {@const vramBarCls = vramPct > 80 ? 'llm-mem-red' : vramPct > 60 ? 'llm-mem-amber' : 'llm-mem-green'}
-                <div class="llm-server-details">
-                  <span title="GPU VRAM"><i class="fas fa-microchip mr-1 llm-icon-dim"></i>{formatBytes(gpuVram.usedBytes)} / {formatBytes(gpuVram.totalBytes)} VRAM</span>
-                </div>
-                <div class="llm-mem-bar" title="{vramPct}% VRAM used">
-                  <div class="llm-mem-fill {vramBarCls}" style:width="{vramPct}%"></div>
-                </div>
-              {/if}
-            {:else}
-              <div class="llm-server-details">
-                {#if extTotalVram}
-                  <span title="VRAM used by loaded models"><i class="fas fa-bolt mr-1 llm-icon-dim"></i>{formatBytes(extTotalVram)} VRAM</span>
-                {/if}
-                <span title="Models loaded"><i class="fas fa-cube mr-1 llm-icon-dim"></i>{extRunning.length} loaded</span>
-              </div>
-            {/if}
-
             <!-- Running models with unload -->
             {#each extRunning as r}
               {@const vramStr = r.sizeVram ? formatBytes(r.sizeVram) : ''}
@@ -1328,13 +1227,14 @@
                   <div class="llm-sliders-section">
                     <div class="llm-slider-row">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
-                      <label class="llm-slider-label">
+                      <label class="llm-slider-label flex items-center gap-2" style:justify-content="flex-start">
                         <span>Context Size</span>
-                        <span class="font-mono">{fmtCtx(extCtxSliderValue)}</span>
+                        <span class="font-mono text-xs text-green">{fmtCtx(extCtxSliderValue)}</span>
                       </label>
                       <input type="range" class="llm-range"
                         min="2048" max={maxCtxFromApi || 131072} step="1024"
-                        bind:value={extCtxSliderValue} />
+                        bind:value={extCtxSliderValue}
+                        style:--range-fill={`${((extCtxSliderValue - 2048) / ((maxCtxFromApi || 131072) - 2048)) * 100}%`} />
                       <div class="llm-slider-meta">
                         <span>2K</span>
                         <span class="text-2xs text-muted">{selectedEngine === 'ollama' ? 'Sent as num_ctx per request' : 'Reloads model in LM Studio'}</span>
@@ -1343,13 +1243,14 @@
                     </div>
                     <div class="llm-slider-row">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
-                      <label class="llm-slider-label">
+                      <label class="llm-slider-label flex items-center gap-2" style:justify-content="flex-start">
                         <span>Max Tokens</span>
-                        <span class="font-mono">{extMaxTokSliderValue.toLocaleString()}</span>
+                        <span class="font-mono text-xs text-green">{extMaxTokSliderValue.toLocaleString()}</span>
                       </label>
                       <input type="range" class="llm-range"
                         min="256" max="16384" step="256"
-                        bind:value={extMaxTokSliderValue} />
+                        bind:value={extMaxTokSliderValue}
+                        style:--range-fill={`${((extMaxTokSliderValue - 256) / (16384 - 256)) * 100}%`} />
                       <div class="llm-slider-meta">
                         <span>256</span>
                         <span>16K</span>
@@ -1401,27 +1302,7 @@
               <span class="text-xs {chatRunning ? 'text-green' : 'text-muted'}">{chatRunning ? 'Running' : 'Stopped'}</span>
               {#if isDefaultEngine}<span class="badge badge-green text-2xs">default</span>{/if}
             </div>
-            {#if binarySource === 'managed'}
-              {#if hasUpdate}
-                <button class="btn btn-indigo btn-sm flex-shrink-0" disabled={updatingBinary}
-                  title="Latest: {currentUpdateInfo?.latestTag || ''}"
-                  onclick={updateBinary}>
-                  {#if updatingBinary}
-                    <i class="fas fa-spinner fa-spin mr-1"></i>Updating...
-                  {:else}
-                    <i class="fas fa-arrows-rotate mr-1"></i>Update{#if daysLabel} <span class="text-muted">({daysLabel})</span>{/if}
-                  {/if}
-                </button>
-              {:else if !currentUpdateInfo}
-                <button class="btn-ghost text-xs flex-shrink-0" disabled={checkingUpdate} onclick={checkForUpdate}>
-                  {#if checkingUpdate}
-                    <i class="fas fa-spinner fa-spin mr-1"></i>Checking...
-                  {:else}
-                    <i class="fas fa-arrows-rotate mr-1"></i>Check for updates
-                  {/if}
-                </button>
-              {/if}
-            {/if}
+            <Toggle active={selectedEngineActive} disabled={togglingActive === selectedEngine} onchange={() => toggleModelActive(selectedEngine!)} />
           </div>
 
           <!-- Server details -->
@@ -1441,28 +1322,6 @@
               <span><i class="fas fa-link mr-1 llm-icon-dim"></i><span class="text-muted">Not running</span></span>
             {/if}
           </div>
-
-          <!-- System RAM bar -->
-          {#if totalRam}
-            <div class="llm-server-details">
-              <span title="System RAM"><i class="fas fa-memory mr-1 llm-icon-dim"></i>{formatBytes(totalRam - freeRam)} / {formatBytes(totalRam)} RAM</span>
-            </div>
-            <div class="llm-mem-bar" title="{ramUsedPct}% RAM used">
-              <div class="llm-mem-fill {ramBarCls}" style:width="{ramUsedPct}%"></div>
-            </div>
-          {/if}
-
-          <!-- GPU VRAM bar -->
-          {#if gpuVram}
-            {@const vramPct = Math.round((gpuVram.usedBytes / gpuVram.totalBytes) * 100)}
-            {@const vramBarCls = vramPct > 80 ? 'llm-mem-red' : vramPct > 60 ? 'llm-mem-amber' : 'llm-mem-green'}
-            <div class="llm-server-details">
-              <span title="GPU VRAM"><i class="fas fa-microchip mr-1 llm-icon-dim"></i>{formatBytes(gpuVram.usedBytes)} / {formatBytes(gpuVram.totalBytes)} VRAM</span>
-            </div>
-            <div class="llm-mem-bar" title="{vramPct}% VRAM used">
-              <div class="llm-mem-fill {vramBarCls}" style:width="{vramPct}%"></div>
-            </div>
-          {/if}
 
           <!-- Chat model section -->
           <div class="llm-server-section">
@@ -1485,15 +1344,18 @@
                 </div>
 
                 <!-- Memory bar -->
-                {#if mem}
-                  <div class="flex items-center gap-3">
+                {#if procMem}
+                  <div class="flex items-center gap-3"
+                    title={mem ? `Estimate: ${formatBytes(mem.modelBytes)} model + ${formatBytes(mem.kvCacheBytes)} KV cache = ${formatBytes(mem.totalBytes)}` : ''}>
                     <div class="llm-mem-bar">
                       <div class="llm-mem-fill {memBarCls}" style:width="{memPct}%"></div>
                     </div>
                     <div class="flex items-center gap-3 text-xs text-muted flex-shrink-0">
-                      <span title="Model weights"><i class="fas fa-cube mr-1"></i>{formatBytes(mem.modelBytes)}</span>
-                      <span title="KV cache"><i class="fas fa-memory mr-1"></i>{formatBytes(mem.kvCacheBytes)}</span>
-                      <span title="Total estimated / System RAM">{formatBytes(mem.totalBytes)} / {formatBytes(totalRam)}</span>
+                      <span><i class="fas fa-memory mr-1"></i>{formatBytes(actualBytes)}</span>
+                      {#if procMem.gpuBytes != null}
+                        <span class="text-2xs">({formatBytes(procMem.rssBytes)} RAM + {formatBytes(procMem.gpuBytes)} VRAM)</span>
+                      {/if}
+                      <span>/ {formatBytes(totalRam)}</span>
                     </div>
                   </div>
                 {/if}
@@ -1502,13 +1364,15 @@
                 <div class="llm-sliders-section">
                   <div class="llm-slider-row">
                     <!-- svelte-ignore a11y_label_has_associated_control -->
-                    <label class="llm-slider-label">
+                    <label class="llm-slider-label flex items-center gap-2" style:justify-content="flex-start">
                       <span>Context Size</span>
-                      <span class="font-mono">{fmtCtx(ctxSliderValue)}</span>
+                      <span class="font-mono text-xs" style:color={ctxRangeColor}>{fmtCtx(ctxSliderValue)}</span>
                     </label>
                     <input type="range" class="llm-range"
                       min="2048" max="131072" step="1024"
-                      bind:value={ctxSliderValue} />
+                      bind:value={ctxSliderValue}
+                      style:--range-color={ctxRangeColor}
+                      style:--range-fill={ctxRangeFill} />
                     <div class="llm-slider-meta">
                       <span>2K</span>
                       <span class="font-mono">{formatBytes(estimatedKvCache)} KV + {formatBytes(mem?.modelBytes || 0)} model = {formatBytes(estimatedTotal)} / {formatBytes(totalRam)}</span>
@@ -1518,13 +1382,14 @@
 
                   <div class="llm-slider-row">
                     <!-- svelte-ignore a11y_label_has_associated_control -->
-                    <label class="llm-slider-label">
+                    <label class="llm-slider-label flex items-center gap-2" style:justify-content="flex-start">
                       <span>Max Tokens</span>
-                      <span class="font-mono">{maxTokSliderValue.toLocaleString()}</span>
+                      <span class="font-mono text-xs text-green">{maxTokSliderValue.toLocaleString()}</span>
                     </label>
                     <input type="range" class="llm-range"
                       min="256" max="16384" step="256"
-                      bind:value={maxTokSliderValue} />
+                      bind:value={maxTokSliderValue}
+                      style:--range-fill={`${((maxTokSliderValue - 256) / (16384 - 256)) * 100}%`} />
                     <div class="llm-slider-meta">
                       <span>256</span>
                       <span>16K</span>
@@ -1551,7 +1416,8 @@
                         <div>
                           <input type="range" class="llm-range"
                             min="128" max="1024" step="128"
-                            bind:value={thinkingBudgetValue} />
+                            bind:value={thinkingBudgetValue}
+                            style:--range-fill={`${((thinkingBudgetValue - 128) / (1024 - 128)) * 100}%`} />
                           <div class="llm-slider-meta">
                             <span>128</span>
                             <span class="text-2xs text-muted">Requires server restart</span>

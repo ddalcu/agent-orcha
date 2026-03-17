@@ -329,8 +329,8 @@ describe('chat.route', () => {
       });
       assert.equal(res.statusCode, 200);
       assert.ok(res.headers['content-type']?.includes('text/event-stream'));
-      assert.ok(res.payload.includes('data: {"content":"Hello"}'));
-      assert.ok(res.payload.includes('data: {"content":" world"}'));
+      assert.ok(res.payload.includes('data: {"type":"content","content":"Hello"}'));
+      assert.ok(res.payload.includes('data: {"type":"content","content":" world"}'));
       assert.ok(res.payload.includes('data: [DONE]'));
     });
 

@@ -1,7 +1,8 @@
 import { MlxServerProcess } from '../mlx-server-process.ts';
 import { killOrphanedMlxServers } from '../mlx-server-process.ts';
 import { ModelManager } from '../model-manager.ts';
-import { getMlxBinaryVersion, isMlxSystemBinary, updateMlxBinary, checkForMlxUpdate } from '../mlx-binary-manager.ts';
+import { getMlxBinaryVersion, isMlxSystemBinary } from '../mlx-binary-manager.ts';
+import { getProcessMemory } from '../binary-manager.ts';
 import { logger } from '../../logger.ts';
 import type { LocalEngine, EngineChatStatus, EngineServerStatus, EngineStatus, LoadOptions } from '../engine-interface.ts';
 
@@ -85,6 +86,7 @@ export class MlxServeEngine implements LocalEngine {
 
   getChatStatus(): EngineChatStatus {
     const running = this.chatServer?.running ?? false;
+    const pid = this.chatServer?.pid;
     return {
       running,
       activeModel: running ? (this.chatServer?.modelPath ?? null) : null,
@@ -93,6 +95,7 @@ export class MlxServeEngine implements LocalEngine {
       memoryEstimate: this._memoryEstimate,
       supportsVision: this._supportsVision,
       mmprojBytes: 0,
+      processMemory: running && pid ? getProcessMemory(pid) : null,
     };
   }
 
@@ -165,13 +168,6 @@ export class MlxServeEngine implements LocalEngine {
     return isMlxSystemBinary() ? 'system' : 'managed';
   }
 
-  async checkForUpdate(): Promise<any> {
-    return checkForMlxUpdate(this._baseDir);
-  }
-
-  async updateBinary(): Promise<void> {
-    return updateMlxBinary(this._baseDir);
-  }
 
   // ─── Private ────────────────────────────────────────────────────────────────
 

@@ -5,8 +5,6 @@ import assert from 'node:assert';
 
 let getMlxBinaryVersionFn: (dir: string) => string | null;
 let isMlxSystemBinaryFn: () => boolean;
-let checkForMlxUpdateFn: (dir: string) => Promise<any>;
-let updateMlxBinaryFn: (dir: string) => Promise<void>;
 let killOrphanedMlxServersFn: (dir: string) => void;
 let fetchFn: (url: string) => Promise<any>;
 let findModelFileFn: (name: string) => Promise<any>;
@@ -20,9 +18,13 @@ mock.module('../../lib/local-llm/mlx-binary-manager.ts', {
   namedExports: {
     getMlxBinaryVersion: (dir: string) => getMlxBinaryVersionFn(dir),
     isMlxSystemBinary: () => isMlxSystemBinaryFn(),
-    checkForMlxUpdate: (dir: string) => checkForMlxUpdateFn(dir),
-    updateMlxBinary: (dir: string) => updateMlxBinaryFn(dir),
     getMlxBinaryPath: () => '/fake/mlx-serve',
+  },
+});
+
+mock.module('../../lib/local-llm/binary-manager.ts', {
+  namedExports: {
+    getProcessMemory: () => null,
   },
 });
 
@@ -105,8 +107,6 @@ describe('MlxServeEngine', () => {
     mlxServerInstances = [];
     getMlxBinaryVersionFn = () => '1.0.0';
     isMlxSystemBinaryFn = () => false;
-    checkForMlxUpdateFn = async () => ({ available: false });
-    updateMlxBinaryFn = async () => {};
     killOrphanedMlxServersFn = () => {};
     fetchFn = async () => ({ ok: false });
     findModelFileFn = async (name: string) => ({ filePath: `/models/${name}`, type: 'mlx' as const });
@@ -359,6 +359,7 @@ describe('MlxServeEngine', () => {
         memoryEstimate: null,
         supportsVision: false,
         mmprojBytes: 0,
+        processMemory: null,
       });
     });
 
@@ -524,24 +525,6 @@ describe('MlxServeEngine', () => {
     it('should return null when no binary', () => {
       getMlxBinaryVersionFn = () => null;
       assert.strictEqual(engine.getBinarySource(), null);
-    });
-  });
-
-  describe('checkForUpdate', () => {
-    it('should delegate to checkForMlxUpdate', async () => {
-      const expected = { available: true };
-      checkForMlxUpdateFn = async () => expected;
-      const result = await engine.checkForUpdate();
-      assert.deepStrictEqual(result, expected);
-    });
-  });
-
-  describe('updateBinary', () => {
-    it('should delegate to updateMlxBinary', async () => {
-      let called = false;
-      updateMlxBinaryFn = async () => { called = true; };
-      await engine.updateBinary();
-      assert.strictEqual(called, true);
     });
   });
 

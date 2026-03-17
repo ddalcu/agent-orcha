@@ -340,6 +340,7 @@ export class ReactWorkflowExecutor {
           message: `Calling: ${tc.name}`,
           elapsed: elapsed(),
           toolInput: inputStr,
+          toolCallId: tc.id,
         });
       }
 
@@ -362,6 +363,7 @@ export class ReactWorkflowExecutor {
             message: `${tc.name} completed`,
             elapsed: elapsed(),
             toolOutput: outputStr,
+            toolCallId: tc.id,
           });
           return toolMessage(result, tc.id, tc.name);
         } catch (error) {

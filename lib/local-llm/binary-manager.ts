@@ -26,9 +26,7 @@ interface AssetPatterns {
 }
 
 const BINARY_NAME = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server';
-// Pin to b8280 — b8322 has a regression in build_pooling that crashes embedding models.
-// See: https://github.com/ggml-org/llama.cpp/issues (ggml_can_mul_mat assertion in sched_reserve)
-const PINNED_RELEASE = 'b8280';
+const PINNED_RELEASE = 'b8389';
 const RELEASES_API = `https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/${PINNED_RELEASE}`;
 
 let cachedGpu: GpuInfo | null = null;
@@ -93,6 +91,56 @@ function detectNvidia(): { name?: string; cudaVersion: number } | null {
     } catch { /* display name is optional */ }
 
     return { name, cudaVersion };
+  } catch {
+    return null;
+  }
+}
+
+export interface ProcessMemory {
+  rssBytes: number;
+  gpuBytes: number | null;
+}
+
+/** Query actual memory usage of a running process by PID. Cross-platform. */
+export function getProcessMemory(pid: number): ProcessMemory | null {
+  try {
+    let rssBytes: number;
+
+    if (process.platform === 'win32') {
+      // tasklist outputs memory in K (locale-formatted). Use /FO CSV for parseable output.
+      const output = execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'],
+        { encoding: 'utf-8', timeout: 3000 }).trim();
+      // Format: "process.exe","PID","Session","#","123,456 K"
+      const match = output.match(/"([^"]*)\s*K"\s*$/);
+      if (!match) return null;
+      const kb = parseInt(match[1]!.replace(/[.,\s]/g, ''), 10);
+      if (isNaN(kb)) return null;
+      rssBytes = kb * 1024;
+    } else {
+      // macOS / Linux: ps -o rss= gives RSS in KB
+      const output = execFileSync('ps', ['-o', 'rss=', '-p', String(pid)],
+        { encoding: 'utf-8', timeout: 3000 }).trim();
+      const kb = parseInt(output, 10);
+      if (isNaN(kb)) return null;
+      rssBytes = kb * 1024;
+    }
+
+    // On NVIDIA, query per-process GPU memory
+    let gpuBytes: number | null = null;
+    try {
+      const output = execFileSync('nvidia-smi',
+        ['--query-compute-apps=pid,used_memory', '--format=csv,noheader,nounits'],
+        { encoding: 'utf-8', timeout: 3000 }).trim();
+      for (const line of output.split('\n')) {
+        const [pidStr, memStr] = line.split(',').map(s => s.trim());
+        if (parseInt(pidStr!, 10) === pid) {
+          gpuBytes = parseInt(memStr!, 10) * 1024 * 1024; // MiB → bytes
+          break;
+        }
+      }
+    } catch { /* no nvidia-smi or not NVIDIA */ }
+
+    return { rssBytes, gpuBytes };
   } catch {
     return null;
   }
@@ -425,67 +473,6 @@ export function isSystemBinary(): boolean {
   return cachedIsSystem;
 }
 
-/**
- * Delete the current managed binary and re-download the latest release from GitHub.
- */
-export async function updateBinary(baseDir: string): Promise<void> {
-  const platform = detectPlatform();
-  const gpu = detectGpu();
-  const dirName = getBinaryDirName(platform, gpu);
-  const binDir = path.join(baseDir, '.llama-server', dirName);
-  await fs.rm(binDir, { recursive: true, force: true });
-  await downloadBinary(binDir, platform, gpu);
-  // Invalidate caches so next call picks up the new binary
-  cachedVersion = null;
-  cachedIsSystem = null;
-}
-
-export interface UpdateInfo {
-  available: boolean;
-  currentBuild: number | null;
-  latestBuild: number | null;
-  latestTag: string | null;
-  publishedAt: string | null;
-  daysNewer: number | null;
-}
-
-/**
- * Check if a newer llama-server release is available on GitHub.
- * Parses the local build number from version string (e.g., "8234 (abc123)")
- * and compares with the latest GitHub release tag (e.g., "b8300").
- */
-export async function checkForUpdate(baseDir: string): Promise<UpdateInfo> {
-  const version = getBinaryVersion(baseDir);
-  const currentBuild = version ? parseInt(version.match(/^(\d+)/)?.[1] || '', 10) || null : null;
-
-  try {
-    // Compare against pinned release, not latest (latest may have regressions)
-    const res = await fetch(RELEASES_API);
-    if (!res.ok) return { available: false, currentBuild, latestBuild: null, latestTag: null, publishedAt: null, daysNewer: null };
-
-    const release: any = await res.json();
-    const tag = release.tag_name; // e.g., "b8280"
-    const latestBuild = parseInt(tag?.replace(/^b/, '') || '', 10) || null;
-    const publishedAt = release.published_at || null;
-
-    let daysNewer: number | null = null;
-    if (publishedAt && currentBuild && latestBuild && latestBuild > currentBuild) {
-      daysNewer = Math.max(0, Math.floor((Date.now() - new Date(publishedAt).getTime()) / 86_400_000));
-    }
-
-    return {
-      available: !!(currentBuild && latestBuild && latestBuild > currentBuild),
-      currentBuild,
-      latestBuild,
-      latestTag: tag || null,
-      publishedAt,
-      daysNewer,
-    };
-  } catch (err) {
-    logger.warn('[BinaryManager] Failed to check for updates:', err);
-    return { available: false, currentBuild, latestBuild: null, latestTag: null, publishedAt: null, daysNewer: null };
-  }
-}
 
 // Exported for testing — not part of the public API
 export { getAssetPatterns as _getAssetPatterns, getBinaryDirName as _getBinaryDirName };

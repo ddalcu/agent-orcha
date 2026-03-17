@@ -49,6 +49,9 @@ export const api = {
   async deleteLlmModel(name: string) {
     return (await _fetch(`/api/llm/config/models/${encodeURIComponent(name)}`, { method: 'DELETE' })).json();
   },
+  async toggleLlmActive(name: string, active: boolean) {
+    return (await _fetch(`/api/llm/config/models/${encodeURIComponent(name)}/active`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active }) })).json();
+  },
   async saveLlmEmbedding(name: string, config: unknown) {
     return (await _fetch(`/api/llm/config/embeddings/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })).json();
   },
@@ -143,8 +146,6 @@ export const api = {
   async stopLocalEmbedding(engine?: string) {
     return (await _fetch('/api/local-llm/stop-embedding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(engine ? { engine } : {}) })).json();
   },
-  async checkLlamaUpdate() { return (await _fetch('/api/local-llm/check-update')).json(); },
-  async updateLlamaBinary() { return (await _fetch('/api/local-llm/update-binary', { method: 'POST' })).json(); },
   async getEngines() { return (await _fetch('/api/local-llm/engines')).json(); },
   async activateEngine(engine: string, model: string, role = 'chat') {
     return (await _fetch('/api/local-llm/engines/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engine, model, role }) })).json();
@@ -159,8 +160,6 @@ export const api = {
   async setEngineContext(contextSize: number) {
     return (await _fetch('/api/local-llm/engines/context', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contextSize }) })).json();
   },
-  async checkMlxUpdate() { return (await _fetch('/api/local-llm/check-mlx-update')).json(); },
-  async updateMlxBinary() { return (await _fetch('/api/local-llm/update-mlx-binary', { method: 'POST' })).json(); },
 
   // Logs
   streamLogs() { return new EventSource('/api/logs/stream'); },

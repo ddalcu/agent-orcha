@@ -63,8 +63,6 @@ const {
   getMlxBinaryPath,
   getMlxBinaryVersion,
   isMlxSystemBinary,
-  checkForMlxUpdate,
-  updateMlxBinary,
 } = await import('../../lib/local-llm/mlx-binary-manager.ts');
 
 describe('getMlxBinaryPath', () => {
@@ -182,104 +180,6 @@ describe('isMlxSystemBinary', () => {
   });
 });
 
-describe('checkForMlxUpdate', () => {
-  beforeEach(() => {
-    execFileSyncFn = () => { throw new Error('not found'); };
-    existsSyncFn = () => false;
-    spawnSyncFn = () => ({ stdout: '', stderr: '' });
-  });
-
-  it('should return available=false when fetch fails', async () => {
-    const origFetch = globalThis.fetch;
-    globalThis.fetch = (async () => { throw new Error('network error'); }) as typeof fetch;
-
-    const result = await checkForMlxUpdate('/unique-nofetch-' + Date.now());
-    assert.strictEqual(result.available, false);
-    assert.strictEqual(result.latestVersion, null);
-
-    globalThis.fetch = origFetch;
-  });
-
-  it('should return available=false when API returns non-OK', async () => {
-    const origFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: false, status: 404 }) as any;
-
-    const result = await checkForMlxUpdate('/unique-404-' + Date.now());
-    assert.strictEqual(result.available, false);
-
-    globalThis.fetch = origFetch;
-  });
-
-  it('should return available=true when latest > current', async () => {
-    // Set up a "current" version
-    execFileSyncFn = (cmd: string) => {
-      if (cmd === 'which') return '/usr/local/bin/mlx-serve';
-      throw new Error('not found');
-    };
-    spawnSyncFn = () => ({ stdout: '0.3.0', stderr: '' });
-
-    const origFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({
-      ok: true,
-      json: async () => ({
-        tag_name: 'v0.4.0',
-        published_at: '2024-01-01T00:00:00Z',
-      }),
-    }) as any;
-
-    const result = await checkForMlxUpdate('/unique-update-' + Date.now());
-    assert.strictEqual(result.available, true);
-    assert.strictEqual(result.latestVersion, '0.4.0');
-    assert.strictEqual(result.latestTag, 'v0.4.0');
-
-    globalThis.fetch = origFetch;
-  });
-
-  it('should return available=false when current >= latest', async () => {
-    execFileSyncFn = (cmd: string) => {
-      if (cmd === 'which') return '/usr/local/bin/mlx-serve';
-      throw new Error('not found');
-    };
-    spawnSyncFn = () => ({ stdout: '0.5.0', stderr: '' });
-
-    const origFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({
-      ok: true,
-      json: async () => ({
-        tag_name: 'v0.5.0',
-        published_at: '2024-01-01T00:00:00Z',
-      }),
-    }) as any;
-
-    const result = await checkForMlxUpdate('/unique-noupdate-' + Date.now());
-    assert.strictEqual(result.available, false);
-    assert.strictEqual(result.currentVersion, '0.5.0');
-    assert.strictEqual(result.latestVersion, '0.5.0');
-
-    globalThis.fetch = origFetch;
-  });
-
-  it('should return available=false when no current version', async () => {
-    execFileSyncFn = () => { throw new Error('not found'); };
-    existsSyncFn = () => false;
-
-    const origFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({
-      ok: true,
-      json: async () => ({
-        tag_name: 'v0.5.0',
-        published_at: '2024-01-01T00:00:00Z',
-      }),
-    }) as any;
-
-    const result = await checkForMlxUpdate('/unique-nocurrent-' + Date.now());
-    assert.strictEqual(result.available, false);
-    assert.strictEqual(result.currentVersion, null);
-    assert.strictEqual(result.latestVersion, '0.5.0');
-
-    globalThis.fetch = origFetch;
-  });
-});
 
 describe('getMlxBinaryPath — download path', () => {
   beforeEach(() => {
@@ -397,30 +297,6 @@ describe('getMlxBinaryPath — download path', () => {
   });
 });
 
-describe('updateMlxBinary', () => {
-  beforeEach(() => {
-    mkdirCalls = [];
-    rmCalls = [];
-    readdirResults = new Map();
-  });
-
-  it('should remove existing binDir and attempt re-download', async () => {
-    const origFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: false, status: 500 }) as any;
-
-    // updateMlxBinary removes the dir and calls downloadMlxBinary
-    // downloadMlxBinary will fail because fetch returns 500
-    await assert.rejects(
-      () => updateMlxBinary('/base-update-' + Date.now()),
-      /GitHub API error: 500/
-    );
-
-    // Verify rm was called (binDir removal)
-    assert.ok(rmCalls.length > 0, 'rm should have been called to remove old binary');
-
-    globalThis.fetch = origFetch;
-  });
-});
 
 describe('isMlxSystemBinary — cache behavior', () => {
   it('should return cached value on subsequent calls', () => {

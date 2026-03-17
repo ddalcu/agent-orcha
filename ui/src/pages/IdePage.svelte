@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy, tick, untrack } from 'svelte';
   import yaml from 'js-yaml';
   import { api } from '../lib/services/api.js';
   import AgentComposer from './AgentComposer.svelte';
@@ -160,7 +160,7 @@
   // Init/sync ace editor
   $effect(() => {
     if (aceEditorEl && currentFile && viewMode === 'source') {
-      syncAceContent();
+      untrack(() => syncAceContent());
     }
   });
 

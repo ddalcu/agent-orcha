@@ -16,6 +16,8 @@ export interface Workflow {
   chatOutputFormat?: string;
   inputSchema?: Record<string, unknown>;
   sampleQuestions?: string[];
+  agents?: string[];
+  tools?: string[];
 }
 
 export interface LLM {
@@ -80,6 +82,7 @@ export interface StreamEvent {
   taskId?: string;
   toolInput?: string;
   toolOutput?: string;
+  toolCallId?: string;
   stepId?: string;
   agent?: string;
   status?: string;

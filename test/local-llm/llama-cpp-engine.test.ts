@@ -6,8 +6,6 @@ import assert from 'node:assert';
 let getBinaryVersionFn: (dir: string) => string | null;
 let isSystemBinaryFn: () => boolean;
 let detectGpuFn: () => { accel: string };
-let checkForUpdateFn: (dir: string) => Promise<any>;
-let updateBinaryFn: (dir: string) => Promise<void>;
 let killOrphanedServersFn: (dir: string) => void;
 let readGGUFModelInfoFn: (p: string) => Promise<any>;
 let calculateOptimalContextSizeFn: (info: any) => number;
@@ -26,8 +24,7 @@ mock.module('../../lib/local-llm/binary-manager.ts', {
     getBinaryVersion: (dir: string) => getBinaryVersionFn(dir),
     isSystemBinary: () => isSystemBinaryFn(),
     detectGpu: () => detectGpuFn(),
-    checkForUpdate: (dir: string) => checkForUpdateFn(dir),
-    updateBinary: (dir: string) => updateBinaryFn(dir),
+    getProcessMemory: () => null,
     getBinaryPath: () => '/fake/llama-server',
   },
 });
@@ -113,8 +110,6 @@ describe('LlamaCppEngine', () => {
     getBinaryVersionFn = () => '1.0.0';
     isSystemBinaryFn = () => false;
     detectGpuFn = () => ({ accel: 'none' });
-    checkForUpdateFn = async () => ({ available: false });
-    updateBinaryFn = async () => {};
     killOrphanedServersFn = () => {};
     readGGUFModelInfoFn = async () => null;
     calculateOptimalContextSizeFn = () => 4096;
@@ -300,6 +295,7 @@ describe('LlamaCppEngine', () => {
         memoryEstimate: null,
         supportsVision: false,
         mmprojBytes: 0,
+        processMemory: null,
       });
     });
 
@@ -470,24 +466,6 @@ describe('LlamaCppEngine', () => {
     it('should return null when no binary', () => {
       getBinaryVersionFn = () => null;
       assert.strictEqual(engine.getBinarySource(), null);
-    });
-  });
-
-  describe('checkForUpdate', () => {
-    it('should delegate to checkForUpdate', async () => {
-      const expected = { available: true, version: '2.0.0' };
-      checkForUpdateFn = async () => expected;
-      const result = await engine.checkForUpdate();
-      assert.deepStrictEqual(result, expected);
-    });
-  });
-
-  describe('updateBinary', () => {
-    it('should delegate to updateBinary', async () => {
-      let called = false;
-      updateBinaryFn = async () => { called = true; };
-      await engine.updateBinary();
-      assert.strictEqual(called, true);
     });
   });
 
