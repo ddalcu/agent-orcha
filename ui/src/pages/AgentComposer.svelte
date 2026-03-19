@@ -35,6 +35,9 @@
   let knowledgeStores = $state<any[]>([]);
   let functions = $state<any[]>([]);
   let availableSkills = $state<any[]>([]);
+  let builtinToolNames = $state<string[]>([]);
+  let sandboxToolNames = $state<string[]>([]);
+  let workspaceToolNames = $state<string[]>([]);
 
   // Tool picker
   let toolPickerOpen = $state(false);
@@ -103,8 +106,9 @@
     { id: 'mcp', label: 'MCP', items: mcpServers.map((s: any) => `mcp:${s.name || s}`) },
     { id: 'knowledge', label: 'Knowledge', items: knowledgeStores.map((s: any) => `knowledge:${s.name || s}`) },
     { id: 'function', label: 'Functions', items: functions.map((f: any) => `function:${f.name || f}`) },
-    { id: 'builtin', label: 'Builtin', items: ['builtin:ask_user'] },
-    { id: 'sandbox', label: 'Sandbox', items: ['sandbox:shell','sandbox:exec','sandbox:web_fetch','sandbox:web_search','sandbox:browser_navigate','sandbox:browser_observe','sandbox:browser_click','sandbox:browser_type','sandbox:browser_screenshot','sandbox:browser_evaluate','sandbox:file_read','sandbox:file_write','sandbox:file_edit','sandbox:file_insert','sandbox:file_replace_lines'] },
+    { id: 'builtin', label: 'Builtin', items: builtinToolNames.map((n) => `builtin:${n}`) },
+    { id: 'sandbox', label: 'Sandbox', items: sandboxToolNames.map((n) => `sandbox:${n}`) },
+    { id: 'workspace', label: 'Workspace', items: workspaceToolNames.map((n) => `workspace:${n}`) },
   ]);
 
   let activePickerTab = $derived(toolPickerTabs.find(t => t.id === toolPickerTab) || toolPickerTabs[0]);
@@ -119,18 +123,24 @@
   // Load external data
   async function loadExternalData() {
     try {
-      const [llms, mcpRes, knowledgeRes, functionsRes, skillsRes] = await Promise.all([
+      const [llms, mcpRes, knowledgeRes, functionsRes, skillsRes, toolsRes] = await Promise.all([
         api.getLLMs().catch(() => []),
         api.getMCPServers().catch(() => []),
         api.getKnowledgeStores().catch(() => []),
         api.getFunctions().catch(() => []),
         api.getSkills().catch(() => []),
+        api.getTools().catch(() => null),
       ]);
       llmOptions = Array.isArray(llms) ? llms : (llms.models || []);
       mcpServers = Array.isArray(mcpRes) ? mcpRes : (mcpRes.servers || []);
       knowledgeStores = Array.isArray(knowledgeRes) ? knowledgeRes : (knowledgeRes.stores || []);
       functions = Array.isArray(functionsRes) ? functionsRes : (functionsRes.functions || []);
       availableSkills = Array.isArray(skillsRes) ? skillsRes : (skillsRes.skills || []);
+      if (toolsRes) {
+        builtinToolNames = (toolsRes.builtin || []).map((t: any) => t.name);
+        sandboxToolNames = (toolsRes.sandbox || []).map((t: any) => t.name);
+        workspaceToolNames = (toolsRes.workspace || []).map((t: any) => t.name);
+      }
     } catch { /* silent */ }
   }
 

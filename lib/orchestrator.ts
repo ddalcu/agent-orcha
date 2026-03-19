@@ -132,7 +132,7 @@ export class Orchestrator {
     await this.checkLlmReadiness();
 
     await this.loadMCPConfig();
-    await this.mcpClient.initialize();
+    this.mcpClient.initialize(); // non-blocking — connects in background
 
     // Load function tools and skills
     await this.functionLoader.loadAll();
@@ -404,6 +404,12 @@ export class Orchestrator {
     };
   }
 
+  get tools(): ToolsAccessor {
+    return {
+      getRegistry: () => this.toolRegistry,
+    };
+  }
+
   get agents(): AgentAccessor {
     return {
       list: () => this.agentLoader.list(),
@@ -622,7 +628,7 @@ export class Orchestrator {
     if (relativePath === 'mcp.json') {
       await this.mcpClient.close();
       await this.loadMCPConfig();
-      await this.mcpClient.initialize();
+      this.mcpClient.initialize(); // non-blocking — connects in background
       this.toolRegistry = new ToolRegistry(
         this.mcpClient,
         this.knowledgeStoreManager,
@@ -1071,4 +1077,8 @@ interface SandboxAccessor {
   getConfig: () => SandboxConfig | null;
   getVmExecutor: () => VmExecutor | null;
   isEnabled: () => boolean;
+}
+
+interface ToolsAccessor {
+  getRegistry: () => ToolRegistry;
 }

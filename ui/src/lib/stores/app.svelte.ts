@@ -1,10 +1,11 @@
 import type { Agent, Workflow, LLM, TabId } from '../types/index.js';
 
-const VALID_TABS: TabId[] = ['agents', 'knowledge', 'graph', 'mcp', 'monitor', 'llm', 'ide'];
+const VALID_TABS: TabId[] = ['agents', 'knowledge', 'graph', 'tools', 'monitor', 'llm', 'ide'];
 
 function getInitialTab(): TabId {
-  const hash = window.location.hash.replace('#', '') as TabId;
-  return VALID_TABS.includes(hash) ? hash : 'agents';
+  let hash = window.location.hash.replace('#', '') as string;
+  if (hash === 'mcp') hash = 'tools';
+  return VALID_TABS.includes(hash as TabId) ? hash as TabId : 'agents';
 }
 
 class AppStore {
@@ -20,9 +21,10 @@ class AppStore {
 
   constructor() {
     window.addEventListener('hashchange', () => {
-      const hash = window.location.hash.replace('#', '') as TabId;
-      if (VALID_TABS.includes(hash) && hash !== this.activeTab) {
-        this.activeTab = hash;
+      let hash = window.location.hash.replace('#', '') as string;
+      if (hash === 'mcp') hash = 'tools';
+      if (VALID_TABS.includes(hash as TabId) && hash !== this.activeTab) {
+        this.activeTab = hash as TabId;
       }
     });
   }

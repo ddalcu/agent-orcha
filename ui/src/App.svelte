@@ -6,7 +6,7 @@
   import AgentsPage from './pages/AgentsPage.svelte';
   import KnowledgePage from './pages/KnowledgePage.svelte';
   import GraphPage from './pages/GraphPage.svelte';
-  import McpPage from './pages/McpPage.svelte';
+  import ToolsPage from './pages/ToolsPage.svelte';
   import MonitorPage from './pages/MonitorPage.svelte';
   import LocalLlmPage from './pages/LocalLlmPage.svelte';
   import IdePage from './pages/IdePage.svelte';
@@ -149,8 +149,8 @@
         <KnowledgePage />
       {:else if appStore.activeTab === 'graph'}
         <GraphPage />
-      {:else if appStore.activeTab === 'mcp'}
-        <McpPage />
+      {:else if appStore.activeTab === 'tools'}
+        <ToolsPage />
       {:else if appStore.activeTab === 'monitor'}
         <MonitorPage />
       {:else if appStore.activeTab === 'llm'}

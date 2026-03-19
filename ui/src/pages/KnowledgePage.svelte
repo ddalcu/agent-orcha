@@ -48,6 +48,7 @@
   let searchResults = $state<SearchResult[] | null>(null);
   let searchError = $state('');
   let searching = $state(false);
+  let reindexingAll = $state(false);
 
   const isIndexing = $derived(
     selectedStore != null && (selectedStore.isIndexing === true || selectedStore.status === 'indexing')
@@ -177,6 +178,46 @@
     }
   }
 
+  async function reindexAll() {
+    if (reindexingAll || stores.length === 0) return;
+    reindexingAll = true;
+
+    // Mark all stores as indexing in the UI immediately
+    stores = stores.map(s => ({ ...s, isIndexing: true, status: 'indexing' }));
+    if (selectedStore) {
+      selectedStore = stores.find(s => s.name === selectedStore!.name) ?? selectedStore;
+    }
+
+    try {
+      await Promise.all(stores.map(s => api.indexKnowledgeStore(s.name)));
+      await Promise.all(stores.map(s => new Promise<void>((resolve) => {
+        const sse = api.indexKnowledgeStoreStream(s.name);
+        const done = (status: string) => {
+          sse.close();
+          stores = stores.map(st => st.name === s.name ? { ...st, isIndexing: false, status } : st);
+          if (selectedStore?.name === s.name) {
+            selectedStore = stores.find(st => st.name === s.name) ?? selectedStore;
+          }
+          resolve();
+        };
+        sse.addEventListener('progress', ((event: MessageEvent) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.phase === 'done') done('indexed');
+            else if (data.phase === 'error') done('error');
+          } catch { /* malformed SSE */ }
+        }) as EventListener);
+        sse.addEventListener('error', (() => done('error')) as EventListener);
+        sse.onerror = () => done('error');
+      })));
+    } catch (e) {
+      console.error('Failed to re-index all stores:', e);
+    } finally {
+      reindexingAll = false;
+      await loadStores();
+    }
+  }
+
   async function startIndexing() {
     if (!selectedStore) return;
     const name = selectedStore.name;
@@ -270,9 +311,18 @@
   <div class="kb-sidebar" class:visible={sidebarVisible}>
     <div class="flex items-center justify-between mb-3">
       <h3 class="section-title">Stores</h3>
-      <button class="btn-ghost text-xs" aria-label="Refresh stores" onclick={() => loadStores()}>
-        <i class="fas fa-sync-alt"></i>
-      </button>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-accent btn-sm" disabled={reindexingAll || stores.length === 0} onclick={reindexAll}>
+          {#if reindexingAll}
+            <span class="spinner-sm"></span> Re-indexing...
+          {:else}
+            <i class="fas fa-sync-alt"></i> Re-index all
+          {/if}
+        </button>
+        <button class="btn-ghost text-xs" aria-label="Refresh stores" onclick={() => loadStores()}>
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
     </div>
 
     <div class="space-y-2">

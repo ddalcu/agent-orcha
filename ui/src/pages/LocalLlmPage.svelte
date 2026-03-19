@@ -384,6 +384,21 @@
   // Cloud config
   let defaultProvider = $derived(resolveDefault('models')?._provider || 'local');
 
+  let settingDefault = $state<string | null>(null);
+
+  async function setDefaultProvider(configName: string) {
+    settingDefault = configName;
+    try {
+      const entry = llmConfig?.models?.[configName];
+      if (entry?.active === false) await api.toggleLlmActive(configName, true);
+      await api.saveLlmModel('default', { _pointer: configName });
+      await loadLlmConfig();
+    } catch (e: any) {
+      console.error('Failed to set default:', e);
+    } finally {
+      settingDefault = null;
+    }
+  }
 
   // Cloud config - model entry for current provider
   let cloudModelEntry = $derived(() => {
@@ -735,7 +750,6 @@
       };
 
       await api.saveLlmModel(provider, config);
-      await api.saveLlmModel('default', { _pointer: provider });
 
       const embModel = cloudEmbModel || cloudEmbModelCustom.trim();
       if (embModel) {
@@ -745,7 +759,6 @@
           ...(apiKey ? { apiKey } : {}),
           ...(cloudBaseUrl.trim() ? { baseUrl: cloudBaseUrl.trim() } : {}),
         });
-        await api.saveLlmEmbedding('default', { _pointer: provider });
       }
 
       await loadLlmConfig();
@@ -937,11 +950,45 @@
   <div class="flex items-center justify-between border-b pb-4">
     <div>
       <h2 class="text-lg font-semibold text-primary">LLM Configuration</h2>
-      <p class="text-xs text-muted mt-1">Configure your AI model provider</p>
+      <p class="text-xs text-muted mt-1">Manage providers, set your default model</p>
     </div>
-    <button class="btn-ghost" title="Refresh" onclick={async () => { await loadLlmConfig(); await refresh(); }}>
-      <i class="fas fa-sync-alt text-sm"></i>
-    </button>
+  </div>
+
+  <!-- Provider Management Strip -->
+  <div class="llm-provider-mgmt">
+    {#each engineList as eng}
+      {@const entry = llmConfig?.models?.[eng]}
+      {@const isEngActive = entry?.active !== false}
+      {@const isEngDefault = resolveDefault('models')?.engine === eng && !['openai', 'anthropic', 'gemini'].includes(defaultProvider)}
+      <div class="llm-provider-chip {isEngActive ? '' : 'disabled'}">
+        <span class="llm-chip-label">{ENGINE_LABELS[eng]}</span>
+        <Toggle active={isEngActive} disabled={togglingActive === eng} onchange={() => toggleModelActive(eng)} />
+        {#if isEngDefault}
+          <span class="badge badge-green text-2xs">default</span>
+        {:else}
+          <button class="llm-chip-default-btn" title="Set as default" disabled={settingDefault === eng} onclick={() => setDefaultProvider(eng)}>
+            default
+          </button>
+        {/if}
+      </div>
+    {/each}
+    {#each ['openai', 'anthropic', 'gemini'] as p}
+      {@const meta = PROVIDER_META[p]}
+      {@const entry = llmConfig?.models?.[p]}
+      {@const isCloudActive = entry?.active !== false}
+      {@const isCloudDefault = defaultProvider === p}
+      <div class="llm-provider-chip {isCloudActive ? '' : 'disabled'}">
+        <span class="llm-chip-label">{meta.label}</span>
+        <Toggle active={isCloudActive} disabled={togglingActive === p} onchange={() => toggleModelActive(p)} />
+        {#if isCloudDefault}
+          <span class="badge badge-green text-2xs">default</span>
+        {:else}
+          <button class="llm-chip-default-btn" title="Set as default" disabled={settingDefault === p} onclick={() => setDefaultProvider(p)}>
+            default
+          </button>
+        {/if}
+      </div>
+    {/each}
   </div>
 
   <!-- Provider Tabs -->
@@ -949,20 +996,21 @@
     {#each PROVIDERS as p}
       {@const meta = PROVIDER_META[p]}
       {@const isActive = activeProvider === p}
-      {@const isDefault = defaultProvider === p}
-      <button class="llm-provider-tab {isActive ? 'active' : ''}" onclick={() => selectProvider(p)}>
-        <span class="text-{meta.color}">
-          {#if BRAND_SVGS[p]}
-            {@html BRAND_SVGS[p]}
-          {:else}
-            <i class="fas fa-server"></i>
-          {/if}
-        </span>
-        <span>{meta.label}</span>
-        {#if isDefault}
-          <span class="default-dot" title="Default provider"></span>
-        {/if}
-      </button>
+      {@const isEnabled = p === 'local'
+        ? engineList.some(eng => llmConfig?.models?.[eng]?.active !== false)
+        : llmConfig?.models?.[p]?.active !== false}
+      {#if isEnabled}
+        <button class="llm-provider-tab {isActive ? 'active' : ''}" onclick={() => selectProvider(p)}>
+          <span class="text-{meta.color}">
+            {#if BRAND_SVGS[p]}
+              {@html BRAND_SVGS[p]}
+            {:else}
+              <i class="fas fa-server"></i>
+            {/if}
+          </span>
+          <span>{meta.label}</span>
+        </button>
+      {/if}
     {/each}
   </div>
 
@@ -973,8 +1021,6 @@
     {@const popularModels = POPULAR_MODELS[provider] || []}
     {@const popularEmbs = POPULAR_EMBEDDINGS[provider] || []}
     {@const { entry: modelEntry } = cloudModelEntry()}
-    {@const isDefault = resolveDefault('models')?._provider === provider}
-    {@const isActive = modelEntry?.active !== false}
     {@const hasEnvKey = modelEntry?._hasEnvKey || false}
     {@const isEnvRef = modelEntry?.apiKey && /^\$\{.+\}$/.test(modelEntry.apiKey)}
     {@const hasConfigKey = isEnvRef ? false : (modelEntry?.apiKey && !modelEntry.apiKey.startsWith('••••') ? false : !!modelEntry?.apiKey)}
@@ -991,12 +1037,6 @@
             {/if}
           </span>
           <span class="font-semibold text-primary">{meta.label} Configuration</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <Toggle active={isActive} disabled={togglingActive === provider} onchange={() => toggleModelActive(provider)} />
-          {#if isDefault}
-            <span class="badge badge-green"><i class="fas fa-check mr-1"></i>Default</span>
-          {/if}
         </div>
       </div>
 
@@ -1117,20 +1157,19 @@
           {@const available = engines[eng]?.available}
           {@const isActive = selectedEngine === eng}
           {@const isExternal = EXTERNAL_ENGINES.includes(eng)}
-          {@const isDefaultEng = eng === configDefaultEngine}
-          <button class="llm-engine-tab {isActive ? 'active' : ''}" onclick={() => selectEngine(eng)}>
-            <i class="{eng === 'mlx-serve' ? 'fab' : 'fas'} {ENGINE_ICONS[eng]}"></i>
-            <span>{ENGINE_LABELS[eng]}</span>
-            {#if eng === 'mlx-serve'}
-              <span class="badge badge-amber text-2xs">experimental</span>
-            {/if}
-            {#if isDefaultEng}
-              <span class="badge badge-green text-2xs">default</span>
-            {/if}
-            {#if isExternal}
-              <span class="engine-status {available ? 'connected' : 'disconnected'}"></span>
-            {/if}
-          </button>
+          {@const isEngEnabled = llmConfig?.models?.[eng]?.active !== false}
+          {#if isEngEnabled}
+            <button class="llm-engine-tab {isActive ? 'active' : ''}" onclick={() => selectEngine(eng)}>
+              <i class="{eng === 'mlx-serve' ? 'fab' : 'fas'} {ENGINE_ICONS[eng]}"></i>
+              <span>{ENGINE_LABELS[eng]}</span>
+              {#if eng === 'mlx-serve'}
+                <span class="badge badge-amber text-2xs">experimental</span>
+              {/if}
+              {#if isExternal}
+                <span class="engine-status {available ? 'connected' : 'disconnected'}"></span>
+              {/if}
+            </button>
+          {/if}
         {/each}
       </div>
     {/if}
@@ -1149,7 +1188,6 @@
               <span class="text-xs {extAvailable ? 'text-green' : 'text-red'}">{extAvailable ? 'Connected' : 'Not detected / Not running'}</span>
             </div>
             <div class="flex items-center gap-2">
-              <Toggle active={selectedEngineActive} disabled={togglingActive === selectedEngine} onchange={() => toggleModelActive(selectedEngine!)} />
               <button class="btn-ghost text-xs flex-shrink-0" onclick={loadEngines}>
                 <i class="fas fa-sync-alt mr-1"></i>Refresh
               </button>
@@ -1300,9 +1338,7 @@
               {#if versionLabel}<span class="text-xs text-muted font-mono">{versionLabel}</span>{/if}
               <span class="{chatRunning ? 'llm-pulse llm-pulse-green' : 'llm-pulse-off'}"></span>
               <span class="text-xs {chatRunning ? 'text-green' : 'text-muted'}">{chatRunning ? 'Running' : 'Stopped'}</span>
-              {#if isDefaultEngine}<span class="badge badge-green text-2xs">default</span>{/if}
             </div>
-            <Toggle active={selectedEngineActive} disabled={togglingActive === selectedEngine} onchange={() => toggleModelActive(selectedEngine!)} />
           </div>
 
           <!-- Server details -->

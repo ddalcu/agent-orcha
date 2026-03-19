@@ -2066,12 +2066,47 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
   background: var(--accent-10);
   color: var(--text-1);
 }
-.llm-provider-tab .default-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--green-400);
-  flex-shrink: 0;
+/* ─── Provider Management Strip ─── */
+.llm-provider-mgmt {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.llm-provider-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: opacity 0.15s;
+}
+.llm-provider-chip.disabled {
+  opacity: 0.45;
+}
+.llm-chip-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.llm-chip-default-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  padding: 1px 5px;
+  font-size: 0.6rem;
+  color: var(--text-3);
+  transition: all 0.15s;
+}
+.llm-chip-default-btn:hover:not(:disabled) {
+  border-color: var(--green);
+  color: var(--green);
+}
+.llm-chip-default-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 @media (max-width: 640px) {
   .llm-provider-tabs { flex-wrap: wrap; }

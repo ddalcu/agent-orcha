@@ -134,4 +134,4 @@ export interface TaskMetrics {
   outputTokens?: number;
 }
 
-export type TabId = 'agents' | 'knowledge' | 'graph' | 'mcp' | 'monitor' | 'llm' | 'ide';
+export type TabId = 'agents' | 'knowledge' | 'graph' | 'tools' | 'monitor' | 'llm' | 'ide';

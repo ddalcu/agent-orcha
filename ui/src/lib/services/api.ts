@@ -66,6 +66,9 @@ export const api = {
     return (await _fetch(`/api/mcp/${serverName}/call`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool: toolName, arguments: args }) })).json();
   },
 
+  // Tools (unified)
+  async getTools() { return (await _fetch('/api/tools')).json(); },
+
   // Functions
   async getFunctions() { return (await _fetch('/api/functions')).json(); },
   async getFunction(name: string) { return (await _fetch(`/api/functions/${name}`)).json(); },
