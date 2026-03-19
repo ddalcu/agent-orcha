@@ -239,68 +239,6 @@ describe('extractDocumentText', () => {
     });
   });
 
-  // ── Excel extraction ──
-
-  describe('Excel extraction', () => {
-    it('should throw helpful message when exceljs is not installed', async () => {
-      try {
-        await import('exceljs');
-        // exceljs available - test with invalid data
-        await assert.rejects(
-          extractDocumentText(
-            toBase64('not xlsx'),
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          ),
-          /Failed to extract Excel text/,
-        );
-      } catch (e: any) {
-        if (e.code === 'ERR_MODULE_NOT_FOUND' || e.code === 'MODULE_NOT_FOUND') {
-          await assert.rejects(
-            extractDocumentText(
-              toBase64('fake'),
-              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ),
-            /Excel support requires exceljs/,
-          );
-        }
-      }
-    });
-
-    it('should detect .xlsx by filename', async () => {
-      try {
-        await import('exceljs');
-        await assert.rejects(
-          extractDocumentText(toBase64('bad'), 'application/octet-stream', 'data.xlsx'),
-          /Failed to extract Excel text/,
-        );
-      } catch (e: any) {
-        if (e.code === 'ERR_MODULE_NOT_FOUND' || e.code === 'MODULE_NOT_FOUND') {
-          await assert.rejects(
-            extractDocumentText(toBase64('bad'), 'application/octet-stream', 'data.xlsx'),
-            /Excel support requires exceljs/,
-          );
-        }
-      }
-    });
-
-    it('should detect .XLSX case-insensitively', async () => {
-      try {
-        await import('exceljs');
-        await assert.rejects(
-          extractDocumentText(toBase64('bad'), 'application/octet-stream', 'DATA.XLSX'),
-          /Failed to extract Excel text/,
-        );
-      } catch (e: any) {
-        if (e.code === 'ERR_MODULE_NOT_FOUND' || e.code === 'MODULE_NOT_FOUND') {
-          await assert.rejects(
-            extractDocumentText(toBase64('bad'), 'application/octet-stream', 'DATA.XLSX'),
-            /Excel support requires exceljs/,
-          );
-        }
-      }
-    });
-  });
-
   // ── PowerPoint extraction ──
 
   describe('PowerPoint extraction', () => {
@@ -389,7 +327,7 @@ describe('extractDocumentText', () => {
       const base64 = binaryContent.toString('base64');
       await assert.rejects(
         extractDocumentText(base64, 'application/x-nope'),
-        /PDF, Word.*Excel.*PowerPoint.*text-based/,
+        /PDF, Word.*PowerPoint.*text-based/,
       );
     });
   });

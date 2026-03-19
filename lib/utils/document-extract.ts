@@ -93,35 +93,6 @@ export async function extractDocumentText(
     }
   }
 
-  // Excel (.xlsx)
-  if (
-    mediaType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-    fileName?.toLowerCase().endsWith('.xlsx')
-  ) {
-    try {
-      // @ts-ignore - exceljs is an optional runtime dependency
-      const ExcelJS = await import('exceljs');
-      const workbook = new ExcelJS.Workbook();
-      // @ts-expect-error ExcelJS types expect Buffer but Node 25 Buffer<ArrayBuffer> is compatible at runtime
-      await workbook.xlsx.load(buffer);
-      const sheets: string[] = [];
-      for (const worksheet of workbook.worksheets) {
-        const rows: string[] = [];
-        worksheet.eachRow((row) => {
-          const values = Array.isArray(row.values) ? row.values.slice(1) : [];
-          rows.push(values.map((v: any) => v ?? '').join(','));
-        });
-        sheets.push(`--- Sheet: ${worksheet.name} ---\n${rows.join('\n')}`);
-      }
-      return { text: sheets.join('\n\n'), format: 'xlsx' };
-    } catch (err: any) {
-      if (err.code === 'ERR_MODULE_NOT_FOUND' || err.code === 'MODULE_NOT_FOUND') {
-        throw new Error('Excel support requires exceljs. Install it with: npm install exceljs');
-      }
-      throw new Error(`Failed to extract Excel text: ${err.message}`);
-    }
-  }
-
   // PowerPoint (.pptx) — basic XML extraction without extra dependency
   if (
     mediaType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
@@ -165,5 +136,5 @@ export async function extractDocumentText(
     }
   } catch { /* not valid text */ }
 
-  throw new Error(`Unsupported file type: ${mediaType}. Supported: images, PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), and text-based files.`);
+  throw new Error(`Unsupported file type: ${mediaType}. Supported: images, PDF, Word (.docx), PowerPoint (.pptx), and text-based files.`);
 }
