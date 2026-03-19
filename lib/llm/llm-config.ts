@@ -38,6 +38,7 @@ export const ModelConfigSchema = z.object({
   reasoningBudget: z.number().optional(),
   contextSize: z.number().optional(),
   active: z.boolean().optional(),
+  p2p: z.boolean().optional(),
 });
 
 // Schema for individual embedding configuration

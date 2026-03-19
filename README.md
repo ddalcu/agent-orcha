@@ -46,6 +46,7 @@ Built-in web dashboard at `http://localhost:3000` with agent testing, knowledge 
 - **Monitor** — Real-time LLM call logs, ReAct loop metrics, and activity feed
 - **IDE** — File editor with syntax highlighting, hot-reload, and **visual agent composer** for `.agent.yaml` files
 - **Local LLM** — Download, activate, and manage local model engines (llama-cpp, MLX, Ollama, LM Studio)
+- **P2P** — Browse peers, test remote agents and LLMs on the P2P network
 
 ## Architecture
 
@@ -183,6 +184,10 @@ EXPERIMENTAL_VISION=false              # Enable vision browser tools
 BROWSER_SANDBOX=true                   # Enable browser sandbox (Docker)
 BROWSER_VERBOSE=false                  # Show Chromium logs
 MLX_MANUAL=false                       # Skip auto MLX binary download
+P2P_ENABLED=false                      # Enable P2P swarm network
+P2P_PEER_NAME=my-peer                 # Display name on the P2P network (default: hostname)
+P2P_NETWORK_KEY=agent-orcha-default   # Shared key for peer discovery
+P2P_SHARE_LLMS=false                   # Share all LLM models on P2P (overrides per-model flag)
 ```
 
 All config files (`.yaml`, `.json`, `.env`) support `${ENV_VAR}` substitution for secrets and environment-specific values.
@@ -243,6 +248,7 @@ publish: true              # Standalone chat at /chat/researcher (optional)
 | `integrations` | External integrations (collabnook, email) |
 | `triggers` | Cron or webhook triggers |
 | `publish` | Standalone chat page (`true` or `{ enabled, password }`) |
+| `p2p` | Share agent on P2P network (`true`) |
 
 ### Conversation Memory
 
@@ -341,6 +347,44 @@ sampleQuestions:                   # Example prompts shown in Studio UI
 output:
   analysis: "{{state.messages[-1].content}}"
 ```
+
+## P2P Network
+
+Share agents and LLM engines across instances using a peer-to-peer swarm network (powered by [Hyperswarm](https://github.com/holepunchto/hyperswarm)).
+
+```bash
+# Start with P2P enabled
+npm run dev:p2p
+
+# Or set the env var directly
+P2P_ENABLED=true npx agent-orcha start
+```
+
+### Sharing Agents
+
+Add `p2p: true` to any agent YAML:
+
+```yaml
+name: my-agent
+p2p: true
+```
+
+### Sharing LLM Engines
+
+Add `"p2p": true` to a model in `llm.json`:
+
+```json
+{
+  "llama-cpp": {
+    "provider": "local",
+    "engine": "llama-cpp",
+    "model": "Qwen3.5-9B-Q4_K_M",
+    "p2p": true
+  }
+}
+```
+
+Other instances can use remote LLMs by configuring agents with `llm: "p2p"` (auto-select) or `llm: "p2p:model-name"`. No API keys or secrets are shared — only the model name and provider.
 
 ## Knowledge Stores
 
@@ -504,6 +548,7 @@ Full API documentation is available at [agentorcha.com](https://agentorcha.com).
 | Local LLM | `/api/local-llm/*` | Engine management, model download/activation |
 | Graph | `/api/graph/*` | Multi-store graph aggregation |
 | Logs | `/api/logs/*` | Real-time log streaming |
+| P2P | `/api/p2p/*` | P2P network status, remote agents, remote LLMs |
 | VNC | `/api/vnc/*` | Browser sandbox VNC status |
 
 ## Directory Structure
@@ -524,6 +569,7 @@ my-project/
 
 ```bash
 npm run dev          # Dev server with auto-reload
+npm run dev:p2p      # Dev server with P2P enabled
 npm run build        # Build
 npm start            # Run build
 npm run lint         # ESLint

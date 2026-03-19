@@ -25,6 +25,7 @@ prompt:
 output:
   format: text
 memory: true
+p2p: true
 publish:
   enabled: true
 sampleQuestions:

@@ -85,6 +85,9 @@
   let pubEnabled = $derived(d.publish === true || (typeof d.publish === 'object' && d.publish?.enabled));
   let pubPassword = $derived((typeof d.publish === 'object' && d.publish?.password) || '');
 
+  // P2P
+  let p2pEnabled = $derived(d.p2p === true || (typeof d.p2p === 'object' && d.p2p?.enabled));
+
   // Questions
   let questions = $derived<string[]>(d.sampleQuestions || []);
 
@@ -211,6 +214,7 @@
     }
 
     if (d.publish) out.publish = d.publish;
+    if (d.p2p) out.p2p = d.p2p;
     if (d.maxIterations) out.maxIterations = d.maxIterations;
     if (d.sampleQuestions?.length) {
       const f = d.sampleQuestions.filter((q: string) => q.trim());
@@ -397,6 +401,12 @@
 
   function handlePublishPassword(value: string) {
     d.publish = value ? { enabled: true, password: value } : { enabled: true };
+    emitChange();
+  }
+
+  // --- P2P handlers ---
+  function handleP2PToggle(checked: boolean) {
+    d.p2p = checked ? true : undefined;
     emitChange();
   }
 
@@ -756,6 +766,13 @@
                  class="composer-input-field" />
         </div>
       {/if}
+
+      <h3 class="section-title mt-4">P2P</h3>
+      <label class="flex items-center gap-2 text-xs text-secondary cursor-pointer">
+        <input type="checkbox" checked={p2pEnabled}
+               onchange={(e: Event) => handleP2PToggle((e.target as HTMLInputElement).checked)} />
+        Share on P2P network
+      </label>
     </div>
   </div>
 

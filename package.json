@@ -1,6 +1,6 @@
 {
   "name": "agent-orcha",
-  "version": "0.1.1",
+  "version": "2026.319.0",
   "description": "TypeScript Agentic Orchestration http server and framework for building multi-agent workflows with MCP tools and vector stores",
   "keywords": [
     "ai",
@@ -35,6 +35,7 @@
   ],
   "scripts": {
     "dev": "NODE_ENV=development node --watch-path=src --watch-path=lib src/index.ts",
+    "dev:p2p": "P2P_ENABLED=true NODE_ENV=development node --watch-path=src --watch-path=lib src/index.ts",
     "build:ui": "cd ui && npm ci && npm run build",
     "build": "npm run build:ui && tsc && npm run copy-assets",
     "copy-assets": "node -e \"const fs=require('fs');fs.cpSync('public','dist/public',{recursive:true});fs.cpSync('templates','dist/templates',{recursive:true,filter:(s)=>!s.split('/').some(p=>p.startsWith('.')&&p!=='.'&&p!=='.env.example')})\"",
@@ -51,7 +52,8 @@
     "build:binary": "node scripts/build-sea.mjs",
     "sea": "node scripts/build-sea.mjs && ./dist/sea/agent-orcha",
     "test:e2e": "npx playwright test",
-    "prepare": "bash scripts/install-hooks.sh"
+    "prepare": "bash scripts/install-hooks.sh",
+    "postinstall": "npm install --prefix ui"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",
@@ -65,6 +67,7 @@
     "fastify": "^5.2.0",
     "fastify-plugin": "^5.1.0",
     "glob": "^11.0.0",
+    "hyperswarm": "^4.17.0",
     "imapflow": "^1.2.10",
     "jsdom": "^28.1.0",
     "mammoth": "^1.11.0",

@@ -38,6 +38,19 @@ export const AgentPublishConfigSchema = z.union([
 
 export type AgentPublishConfig = z.infer<typeof AgentPublishConfigSchema>;
 
+export const AgentP2PConfigSchema = z.union([
+  z.boolean(),
+  z.object({ enabled: z.boolean() }),
+]);
+
+export type AgentP2PConfig = z.infer<typeof AgentP2PConfigSchema>;
+
+export function resolveP2PConfig(config?: AgentP2PConfig): { enabled: boolean } {
+  if (config === undefined || config === false) return { enabled: false };
+  if (config === true) return { enabled: true };
+  return { enabled: config.enabled };
+}
+
 export function resolvePublishConfig(
   config?: AgentPublishConfig
 ): { enabled: boolean; password?: string } {
@@ -62,6 +75,7 @@ export const AgentDefinitionSchema = z.object({
   integrations: z.array(IntegrationSchema).optional(),
   triggers: z.array(TriggerSchema).optional(),
   publish: AgentPublishConfigSchema.optional(),
+  p2p: AgentP2PConfigSchema.optional(),
   maxIterations: z.number().int().positive().optional(),
   sampleQuestions: z.array(z.string()).optional(),
 });

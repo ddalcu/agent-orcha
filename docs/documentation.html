@@ -91,6 +91,7 @@
               </ul>
             </li>
             <li><a href="#published-agents">Published Agents</a></li>
+            <li><a href="#p2p-network">P2P Network</a></li>
           </ul>
 
           <h4>Knowledge Stores</h4>
@@ -123,6 +124,7 @@
                 <li><a href="#logs-api">Logs API</a></li>
                 <li><a href="#local-llm-api">Local LLM API</a></li>
                 <li><a href="#llm-config-api">LLM Config API</a></li>
+                <li><a href="#p2p-api">P2P API</a></li>
               </ul>
             </li>
           </ul>
@@ -498,6 +500,26 @@ output:
               <td>When <code>true</code>, disables automatic mlx-serve process management (use when running mlx-serve externally)</td>
               <td><code>false</code></td>
             </tr>
+            <tr>
+              <td><code>P2P_ENABLED</code></td>
+              <td>When <code>true</code>, enables the P2P swarm network for sharing agents and LLMs with other peers</td>
+              <td><code>false</code></td>
+            </tr>
+            <tr>
+              <td><code>P2P_PEER_NAME</code></td>
+              <td>Display name for this peer on the P2P network</td>
+              <td><em>hostname</em></td>
+            </tr>
+            <tr>
+              <td><code>P2P_NETWORK_KEY</code></td>
+              <td>Shared key that identifies the P2P network. Only peers with the same key discover each other.</td>
+              <td><code>agent-orcha-default</code></td>
+            </tr>
+            <tr>
+              <td><code>P2P_SHARE_LLMS</code></td>
+              <td>When <code>true</code>, shares all configured LLM models on the P2P network (overrides per-model <code>p2p</code> flag)</td>
+              <td><code>false</code></td>
+            </tr>
           </tbody>
         </table>
 
@@ -604,6 +626,8 @@ integrations:                   # External connectors (optional)
 publish: boolean | object       # Standalone chat page (optional)
   # Simple: publish: true
   # With password: publish: { enabled: true, password: "secret" }
+
+p2p: boolean                    # Share agent on P2P network (optional)
 
 maxIterations: number           # Override default 200 iteration limit (optional)
 
@@ -1701,6 +1725,102 @@ publish:
           <li>Sessions are ephemeral (per browser tab) and use <code>sessionStorage</code></li>
           <li>Unpublished agents and non-existent agents return a 404</li>
         </ul>
+
+        <!-- P2P Network -->
+        <h3 id="p2p-network" class="mt-xl">P2P Network</h3>
+        <p>Agent Orcha includes a peer-to-peer network powered by <a href="https://github.com/holepunchto/hyperswarm" target="_blank" rel="noopener">Hyperswarm</a> that lets multiple instances discover each other and share agents and LLM engines across the network.</p>
+
+        <h4>Enabling P2P</h4>
+        <p>Set the <code>P2P_ENABLED=true</code> environment variable, or use the convenience script:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">Bash</span>
+          </div>
+          <div class="code-content">
+            <pre><code>npm run dev:p2p</code></pre>
+          </div>
+        </div>
+
+        <h4>Sharing Agents</h4>
+        <p>Add <code>p2p: true</code> to any agent YAML to share it with connected peers:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+          </div>
+          <div class="code-content">
+            <pre><code>name: my-agent
+description: A shared agent
+llm: default
+prompt:
+  system: You are helpful.
+  inputVariables:
+    - query
+p2p: true</code></pre>
+          </div>
+        </div>
+
+        <h4>Sharing LLM Engines</h4>
+        <p>Add <code>"p2p": true</code> to a model entry in <code>llm.json</code> to share it with peers. Other instances can then use the remote LLM by configuring an agent with <code>llm: "p2p"</code> or <code>llm: "p2p:model-name"</code>.</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">JSON</span>
+          </div>
+          <div class="code-content">
+            <pre><code>{
+  "models": {
+    "llama-cpp": {
+      "provider": "local",
+      "engine": "llama-cpp",
+      "model": "Qwen3.5-9B-Q4_K_M",
+      "p2p": true
+    }
+  }
+}</code></pre>
+          </div>
+        </div>
+        <p>Alternatively, set <code>P2P_SHARE_LLMS=true</code> to share all configured models without marking them individually.</p>
+
+        <h4>Using Remote Resources</h4>
+        <ul>
+          <li>Remote agents and LLMs appear in the <strong>P2P</strong> tab in the Studio UI</li>
+          <li>Click on a remote agent or LLM to test it via the built-in chat interface</li>
+          <li>Agents can use a remote LLM with <code>llm: "p2p"</code> (auto-selects first available) or <code>llm: "p2p:model-name"</code></li>
+          <li>Conversation history for remote LLMs is managed on the caller side &mdash; the host peer is stateless</li>
+          <li>No API keys, base URLs, or engine details are shared &mdash; only the model name, provider, and model identifier</li>
+        </ul>
+
+        <h4>Environment Variables</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th>Description</th>
+              <th>Default</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>P2P_ENABLED</code></td>
+              <td>Enable the P2P swarm network</td>
+              <td><code>false</code></td>
+            </tr>
+            <tr>
+              <td><code>P2P_PEER_NAME</code></td>
+              <td>Display name for this peer</td>
+              <td><em>hostname</em></td>
+            </tr>
+            <tr>
+              <td><code>P2P_NETWORK_KEY</code></td>
+              <td>Shared key to scope peer discovery</td>
+              <td><code>agent-orcha-default</code></td>
+            </tr>
+            <tr>
+              <td><code>P2P_SHARE_LLMS</code></td>
+              <td>Share all LLM models (overrides per-model flag)</td>
+              <td><code>false</code></td>
+            </tr>
+          </tbody>
+        </table>
 
         <!-- Knowledge Stores -->
         <h2 id="knowledge-stores" class="mt-2xl">Knowledge Stores</h2>
@@ -2823,6 +2943,49 @@ Response (auth disabled):
               <td>POST</td>
               <td><code>/api/llm/:name/stream</code></td>
               <td>Stream chat with LLM (SSE)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="p2p-api" class="mt-xl">P2P API</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/p2p/status</code></td>
+              <td>P2P network status (enabled, connected, peer count)</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/p2p/peers</code></td>
+              <td>List connected peers</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/p2p/agents</code></td>
+              <td>List all remote agents across peers</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/p2p/llms</code></td>
+              <td>List all remote LLMs across peers</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/p2p/agents/:peerId/:agentName/stream</code></td>
+              <td>Stream response from a remote agent (SSE)</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/p2p/llms/:peerId/:modelName/stream</code></td>
+              <td>Stream chat with a remote LLM (SSE)</td>
             </tr>
           </tbody>
         </table>

@@ -77,6 +77,7 @@
     events: StreamEvent[];
     inputMessage: string;
     taskId: string | null;
+    threadId: string | null;
   }
 
   interface CanvasState {
@@ -1102,6 +1103,8 @@
     startStreamTimer(responseId);
 
     const abortController = new AbortController();
+    const existingWfState = workflowTasks.get(activeId);
+    const existingThreadId = existingWfState?.threadId || null;
     workflowTasks.set(activeId, {
       responseId,
       startTime: Date.now(),
@@ -1113,10 +1116,11 @@
       events: [],
       inputMessage: message,
       taskId: null,
+      threadId: existingThreadId,
     });
 
     try {
-      const response = await api.startWorkflowStream(workflow.name, inputObj, abortController.signal);
+      const response = await api.startWorkflowStream(workflow.name, inputObj, abortController.signal, existingThreadId || undefined);
       await processWorkflowStream(response, activeId, responseId);
     } catch (e: unknown) {
       const err = e as Error;
@@ -1245,12 +1249,17 @@
     }
 
     if (update.type === 'result') {
-      const result = update.data as { output?: Record<string, unknown> & { interrupted?: boolean; threadId?: string; question?: string }; error?: string };
+      const result = update.data as { output?: Record<string, unknown> & { interrupted?: boolean; threadId?: string; question?: string }; metadata?: { threadId?: string }; error?: string };
       if (result?.output?.interrupted && result?.output?.threadId) {
         handleWorkflowInterrupt(sessionId, responseId, result.output);
       } else if (result?.error) {
         finishWorkflowStream(sessionId, responseId, null, result.error, false);
       } else {
+        // Capture threadId for multi-turn continuations
+        const threadId = result?.metadata?.threadId;
+        if (threadId && wfState) {
+          wfState.threadId = threadId;
+        }
         finishWorkflowStream(sessionId, responseId, result, null, false);
       }
     }
@@ -1434,7 +1443,7 @@
     isLoading = false;
     refreshSessionList();
 
-    setTimeout(() => workflowTasks.delete(sessionId), 10000);
+    // Don't delete — keep threadId for multi-turn continuations
 
     tick().then(() => chatInputRef?.focus());
   }

@@ -22,7 +22,8 @@ export class AgentToolWrapper {
       async ({ input }) => {
         try {
           const instance = await executor.createInstance(definition);
-          const result = await instance.invoke({ input: { query: input } });
+          const inputKey = definition.prompt.inputVariables[0] || 'query';
+          const result = await instance.invoke({ input: { [inputKey]: input } });
 
           return typeof result.output === 'string'
             ? result.output

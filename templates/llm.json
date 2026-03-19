@@ -16,7 +16,8 @@
       "model": "Qwen3.5-9B-Q4_K_M",
       "contextSize": 32768,
       "reasoningBudget": 0,
-      "active": true
+      "active": true,
+      "p2p": true
     },
     "lmstudio": {
       "provider": "local",

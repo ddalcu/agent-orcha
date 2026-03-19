@@ -1,5 +1,6 @@
 <script lang="ts">
   import { appStore } from '../../lib/stores/app.svelte.js';
+  import { api } from '../../lib/services/api.js';
   import type { TabId } from '../../lib/types/index.js';
 
   interface Props {
@@ -7,7 +8,9 @@
   }
   let { onselect }: Props = $props();
 
-  const tabs: { id: TabId; label: string; icon: string }[] = [
+  let p2pEnabled = $state(false);
+
+  const baseTabs: { id: TabId; label: string; icon: string }[] = [
     { id: 'agents', label: 'Agents', icon: 'fa-robot' },
     { id: 'knowledge', label: 'Knowledge', icon: 'fa-brain' },
     { id: 'graph', label: 'Graph', icon: 'fa-network-wired' },
@@ -16,6 +19,15 @@
     { id: 'llm', label: 'LLM', icon: 'fa-microchip' },
     { id: 'ide', label: 'IDE', icon: 'fa-code' },
   ];
+
+  const tabs = $derived([
+    ...baseTabs,
+    ...(p2pEnabled ? [{ id: 'p2p' as TabId, label: 'P2P', icon: 'fa-share-nodes' }] : []),
+  ]);
+
+  $effect(() => {
+    api.getP2PStatus().then((s: any) => { p2pEnabled = s.enabled; }).catch(() => {});
+  });
 
   function selectTab(id: TabId) {
     appStore.setTab(id);

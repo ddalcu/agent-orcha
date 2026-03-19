@@ -6,6 +6,7 @@ interface WorkflowParams {
 
 interface RunBody {
   input: Record<string, unknown>;
+  threadId?: string;
 }
 
 interface ResumeBody {
@@ -112,7 +113,7 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
     '/:name/stream',
     async (request, reply) => {
       const { name } = request.params;
-      const { input } = request.body;
+      const { input, threadId } = request.body;
       const taskManager = fastify.orchestrator.tasks.getManager();
       const task = taskManager.track('workflow', name, input);
 
@@ -124,7 +125,7 @@ export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
       reply.raw.write(`data: ${JSON.stringify({ type: 'task_id', taskId: task.id })}\n\n`);
 
       try {
-        const stream = fastify.orchestrator.streamWorkflow(name, input);
+        const stream = fastify.orchestrator.streamWorkflow(name, input, threadId);
 
         for await (const update of stream) {
           reply.raw.write(`data: ${JSON.stringify(update)}\n\n`);
