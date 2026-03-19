@@ -50,6 +50,39 @@
     visible: boolean;
   }
 
+  interface ChatSession {
+    bubbles: ChatBubble[];
+    sessionId: string;
+  }
+
+  // --- Persistent chat store (survives tab switches) ---
+
+  const chatSessions = new Map<string, ChatSession>();
+  let lastSelectionKey: string | null = null;
+
+  function selectionKey(agent: P2PRemoteAgent | null, llm: P2PRemoteLLM | null): string | null {
+    if (agent) return `agent:${agent.peerId}:${agent.name}`;
+    if (llm) return `llm:${llm.peerId}:${llm.name}`;
+    return null;
+  }
+
+  function saveCurrentSession() {
+    const key = selectionKey(selectedAgent, selectedLLM);
+    if (key && bubbles.length > 0) {
+      chatSessions.set(key, { bubbles: [...bubbles], sessionId });
+    }
+  }
+
+  function restoreSession(key: string): boolean {
+    const session = chatSessions.get(key);
+    if (session && session.bubbles.length > 0) {
+      bubbles = [...session.bubbles];
+      sessionId = session.sessionId;
+      return true;
+    }
+    return false;
+  }
+
   // --- State ---
 
   let status = $state<P2PStatus>({ enabled: false, connected: false, peerCount: 0, peerName: '' });
@@ -72,9 +105,46 @@
   onMount(() => {
     loadStatus();
     pollTimer = setInterval(loadStatus, 5000);
+
+    // Restore last selection if we had one
+    if (lastSelectionKey) {
+      const session = chatSessions.get(lastSelectionKey);
+      if (session) {
+        // Find the matching agent or LLM once status loads
+        const restore = () => {
+          const [type, peerId, ...nameParts] = lastSelectionKey!.split(':');
+          const name = nameParts.join(':');
+          if (type === 'agent') {
+            const agent = remoteAgents.find(a => a.peerId === peerId && a.name === name);
+            if (agent) {
+              selectedAgent = agent;
+              selectedLLM = null;
+              restoreSession(lastSelectionKey!);
+            }
+          } else if (type === 'llm') {
+            const llm = remoteLLMs.find(l => l.peerId === peerId && l.name === name);
+            if (llm) {
+              selectedLLM = llm;
+              selectedAgent = null;
+              restoreSession(lastSelectionKey!);
+            }
+          }
+        };
+        // Try immediately and also after first poll
+        restore();
+        const unsubTimer = setInterval(() => {
+          if (remoteAgents.length > 0 || remoteLLMs.length > 0) {
+            restore();
+            clearInterval(unsubTimer);
+          }
+        }, 500);
+        setTimeout(() => clearInterval(unsubTimer), 10000);
+      }
+    }
   });
 
   onDestroy(() => {
+    saveCurrentSession();
     if (pollTimer) clearInterval(pollTimer);
     if (streamTimerInterval) clearInterval(streamTimerInterval);
     currentAbortController?.abort();
@@ -96,24 +166,47 @@
   }
 
   function selectAgent(agent: P2PRemoteAgent) {
+    saveCurrentSession();
     selectedLLM = null;
     selectedAgent = agent;
-    bubbles = [];
-    sessionId = `p2p-${agent.peerId.slice(0, 8)}-${Date.now()}`;
+    const key = selectionKey(agent, null)!;
+    lastSelectionKey = key;
+    if (!restoreSession(key)) {
+      bubbles = [];
+      sessionId = `p2p-${agent.peerId.slice(0, 8)}-${Date.now()}`;
+    }
   }
 
   function selectLLM(llm: P2PRemoteLLM) {
+    saveCurrentSession();
     selectedAgent = null;
     selectedLLM = llm;
-    bubbles = [];
-    sessionId = `p2p-llm-${llm.peerId.slice(0, 8)}-${Date.now()}`;
+    const key = selectionKey(null, llm)!;
+    lastSelectionKey = key;
+    if (!restoreSession(key)) {
+      bubbles = [];
+      sessionId = `p2p-llm-${llm.peerId.slice(0, 8)}-${Date.now()}`;
+    }
   }
 
   function deselectSelection() {
+    saveCurrentSession();
     currentAbortController?.abort();
     selectedAgent = null;
     selectedLLM = null;
     bubbles = [];
+  }
+
+  function resetChat() {
+    currentAbortController?.abort();
+    const key = selectionKey(selectedAgent, selectedLLM);
+    if (key) chatSessions.delete(key);
+    bubbles = [];
+    if (selectedAgent) {
+      sessionId = `p2p-${selectedAgent.peerId.slice(0, 8)}-${Date.now()}`;
+    } else if (selectedLLM) {
+      sessionId = `p2p-llm-${selectedLLM.peerId.slice(0, 8)}-${Date.now()}`;
+    }
   }
 
   // --- Chat ---
@@ -496,6 +589,11 @@
             <div class="text-2xs text-muted truncate">{selectedLLM.model} · <span class="badge badge-gray text-2xs">{selectedLLM.provider}</span> · <i class="fas fa-server text-2xs"></i> {selectedLLM.peerName}</div>
           {/if}
         </div>
+        {#if bubbles.length > 0 && !isStreaming}
+          <button class="btn-ghost text-sm text-muted" onclick={resetChat} title="New conversation">
+            <i class="fas fa-rotate-right"></i>
+          </button>
+        {/if}
       </div>
 
       <!-- Chat messages -->
