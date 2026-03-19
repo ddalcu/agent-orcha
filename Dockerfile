@@ -19,9 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --ignore-scripts
 
+# Build Svelte UI → public/
+COPY ui/ ./ui/
+RUN cd ui && npm ci && npm run build && cd .. && rm -rf ui
+
 COPY lib/ ./lib/
 COPY src/ ./src/
-COPY public/ ./public/
 COPY templates/ ./templates/
 
 COPY docker-entrypoint.sh /usr/local/bin/

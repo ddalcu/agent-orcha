@@ -25,7 +25,7 @@ function getEngineUrl(engine: string): string {
 async function fetchOllamaCapabilities(baseUrl: string, modelName: string): Promise<string[]> {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2000);
+    const timer = setTimeout(() => controller.abort(), 250);
     const res = await fetch(`${baseUrl}/api/show`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -44,7 +44,7 @@ async function fetchOllamaCapabilities(baseUrl: string, modelName: string): Prom
 async function fetchOllamaRunning(baseUrl: string): Promise<any[]> {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2000);
+    const timer = setTimeout(() => controller.abort(), 250);
     const res = await fetch(`${baseUrl}/api/ps`, { signal: controller.signal });
     clearTimeout(timer);
     if (!res.ok) return [];
@@ -91,7 +91,7 @@ async function unloadLmStudioModel(baseUrl: string, instanceId: string): Promise
 
 async function probeExternalEngine(engine: 'ollama' | 'lmstudio'): Promise<{ available: boolean; models: any[]; running: any[] }> {
   const baseUrl = getEngineUrl(engine);
-  const timeout = 2000;
+  const timeout = 250;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
@@ -285,15 +285,17 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         for (const e of engineRegistry.getAllEngines()) {
           if (e.getChatStatus().running) await e.unloadChat();
         }
-        // Preserve reasoningBudget from the current default entry
+        // Preserve reasoningBudget and active from the current entry
         const resolvedKey = resolveDefaultName('models');
         const currentDefault = typeof config.models[resolvedKey] === 'object' ? config.models[resolvedKey] as Record<string, any> : null;
+        const existingExt = typeof config.models[engine] === 'object' ? config.models[engine] as Record<string, any> : null;
         config.models[engine] = {
           provider: 'local' as const,
           engine: engine as 'ollama' | 'lmstudio',
           baseUrl,
           model,
           ...(currentDefault?.reasoningBudget != null ? { reasoningBudget: currentDefault.reasoningBudget } : {}),
+          ...(existingExt?.active != null ? { active: existingExt.active } : {}),
         };
         config.models['default'] = engine;
       }
@@ -596,12 +598,15 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       const chatStatus = engine.getChatStatus();
       const detectedCtx = chatStatus.contextSize;
       const modelName = model.type === 'mlx' ? model.fileName : model.fileName.replace(/\.gguf$/i, '');
+      const existingEntry = fullConfig?.models[engineName];
+      const existingActive = (existingEntry && typeof existingEntry !== 'string') ? existingEntry.active : undefined;
       const localEntry = {
         provider: 'local' as const,
         engine: engineName as 'llama-cpp' | 'mlx-serve',
         model: modelName,
         ...(detectedCtx ? { contextSize: detectedCtx } : {}),
         reasoningBudget: currentObj?.reasoningBudget ?? 0,
+        ...(existingActive != null ? { active: existingActive } : {}),
       };
 
       // Update llm.json — write to engine key and set default pointer
@@ -735,39 +740,4 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     return { ok: true };
   });
 
-  // GET /check-update — check for llama-cpp update
-  fastify.get('/check-update', async () => {
-    const engine = engineRegistry.getEngine('llama-cpp')!;
-    return engine.checkForUpdate();
-  });
-
-  // POST /update-binary — pull latest llama-server from GitHub
-  fastify.post('/update-binary', async (_request, reply) => {
-    const engine = engineRegistry.getEngine('llama-cpp')!;
-    if (engine.getBinarySource() === 'system') {
-      return reply.status(400).send({ error: 'llama-server is system-installed. Update it via your package manager.' });
-    }
-    if (engine.getChatStatus().running) await engine.unloadChat();
-    if (engine.getEmbeddingStatus().running) await engine.unloadEmbedding();
-    await engine.updateBinary();
-    return { ok: true, version: engine.getBinaryVersion() };
-  });
-
-  // GET /check-mlx-update — compare local mlx-serve version with latest GitHub release
-  fastify.get('/check-mlx-update', async () => {
-    const engine = engineRegistry.getEngine('mlx-serve')!;
-    return engine.checkForUpdate();
-  });
-
-  // POST /update-mlx-binary — pull latest mlx-serve from GitHub
-  fastify.post('/update-mlx-binary', async (_request, reply) => {
-    const engine = engineRegistry.getEngine('mlx-serve')!;
-    if (engine.getBinarySource() === 'system') {
-      return reply.status(400).send({ error: 'mlx-serve is system-installed. Update it manually.' });
-    }
-    if (engine.getChatStatus().running) await engine.unloadChat();
-    if (engine.getEmbeddingStatus().running) await engine.unloadEmbedding();
-    await engine.updateBinary();
-    return { ok: true, version: engine.getBinaryVersion() };
-  });
 };

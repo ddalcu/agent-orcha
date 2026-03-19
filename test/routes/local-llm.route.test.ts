@@ -33,8 +33,6 @@ function createMockEngine(overrides: Record<string, any> = {}) {
     killOrphans: mock.fn(() => {}),
     getBinaryVersion: () => overrides.binaryVersion ?? '1.0.0',
     getBinarySource: () => overrides.binarySource ?? 'managed',
-    checkForUpdate: mock.fn(async () => overrides.updateInfo ?? { updateAvailable: false }),
-    updateBinary: mock.fn(async () => {}),
     setBaseDir: mock.fn(() => {}),
   };
 }
@@ -1022,97 +1020,4 @@ describe('local-llm.route', () => {
     });
   });
 
-  // ==================== GET /check-update ====================
-  describe('GET /check-update', () => {
-    it('should return update check result', async () => {
-      await buildApp();
-      const res = await app.inject({ method: 'GET', url: '/api/local-llm/check-update' });
-      assert.equal(res.statusCode, 200);
-      assert.equal(JSON.parse(res.payload).updateAvailable, false);
-    });
-  });
-
-  // ==================== POST /update-binary ====================
-  describe('POST /update-binary', () => {
-    it('should return 400 when binary is system-installed', async () => {
-      mockLlamaEngine.getBinarySource = () => 'system';
-      await buildApp();
-      const res = await app.inject({ method: 'POST', url: '/api/local-llm/update-binary' });
-      assert.equal(res.statusCode, 400);
-    });
-
-    it('should update binary successfully', async () => {
-      await buildApp();
-      const res = await app.inject({ method: 'POST', url: '/api/local-llm/update-binary' });
-      assert.equal(res.statusCode, 200);
-      const body = JSON.parse(res.payload);
-      assert.equal(body.ok, true);
-      assert.equal(body.version, '1.0.0');
-      assert.equal(mockLlamaEngine.updateBinary.mock.callCount(), 1);
-    });
-
-    it('should unload running engines before updating', async () => {
-      mockLlamaEngine.getChatStatus = () => ({
-        running: true, activeModel: '/test', port: 8080,
-        contextSize: 4096, memoryEstimate: null, supportsVision: false,
-      });
-      mockLlamaEngine.getEmbeddingStatus = () => ({
-        running: true, activeModel: '/embed', port: 8081,
-        contextSize: null, memoryEstimate: null,
-      });
-
-      await buildApp();
-      const res = await app.inject({ method: 'POST', url: '/api/local-llm/update-binary' });
-      assert.equal(res.statusCode, 200);
-      assert.equal(mockLlamaEngine.unloadChat.mock.callCount(), 1);
-      assert.equal(mockLlamaEngine.unloadEmbedding.mock.callCount(), 1);
-    });
-  });
-
-  // ==================== GET /check-mlx-update ====================
-  describe('GET /check-mlx-update', () => {
-    it('should return MLX update check result', async () => {
-      await buildApp();
-      const res = await app.inject({ method: 'GET', url: '/api/local-llm/check-mlx-update' });
-      assert.equal(res.statusCode, 200);
-      assert.equal(JSON.parse(res.payload).updateAvailable, false);
-    });
-  });
-
-  // ==================== POST /update-mlx-binary ====================
-  describe('POST /update-mlx-binary', () => {
-    it('should return 400 when mlx binary is system-installed', async () => {
-      mockMlxEngine.getBinarySource = () => 'system';
-      await buildApp();
-      const res = await app.inject({ method: 'POST', url: '/api/local-llm/update-mlx-binary' });
-      assert.equal(res.statusCode, 400);
-    });
-
-    it('should update MLX binary successfully', async () => {
-      await buildApp();
-      const res = await app.inject({ method: 'POST', url: '/api/local-llm/update-mlx-binary' });
-      assert.equal(res.statusCode, 200);
-      const body = JSON.parse(res.payload);
-      assert.equal(body.ok, true);
-      assert.equal(body.version, '1.0.0');
-      assert.equal(mockMlxEngine.updateBinary.mock.callCount(), 1);
-    });
-
-    it('should unload running MLX engines before updating', async () => {
-      mockMlxEngine.getChatStatus = () => ({
-        running: true, activeModel: '/test', port: 8080,
-        contextSize: 4096, memoryEstimate: null, supportsVision: false,
-      });
-      mockMlxEngine.getEmbeddingStatus = () => ({
-        running: true, activeModel: '/embed', port: 8081,
-        contextSize: null, memoryEstimate: null,
-      });
-
-      await buildApp();
-      const res = await app.inject({ method: 'POST', url: '/api/local-llm/update-mlx-binary' });
-      assert.equal(res.statusCode, 200);
-      assert.equal(mockMlxEngine.unloadChat.mock.callCount(), 1);
-      assert.equal(mockMlxEngine.unloadEmbedding.mock.callCount(), 1);
-    });
-  });
 });

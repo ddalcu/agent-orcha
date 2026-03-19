@@ -16,31 +16,59 @@ interface MCPConnection {
 export class MCPClientManager {
   private config: MCPConfig;
   private connections: Map<string, MCPConnection> = new Map();
+  private connecting: Map<string, Promise<void>> = new Map();
+  private failedServers: Set<string> = new Set();
   private toolsCache: Map<string, StructuredTool[]> = new Map();
 
   constructor(config: MCPConfig) {
     this.config = config;
   }
 
-  async initialize(): Promise<void> {
+  /**
+   * Start connecting to all configured MCP servers in the background.
+   * Does not block — connections resolve asynchronously.
+   */
+  initialize(): void {
     for (const [name, serverConfig] of Object.entries(this.config.servers)) {
-      try {
-        const timeout = serverConfig.timeout ?? 10000;
-        const connection = await Promise.race([
-          this.connectToServer(name, serverConfig),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Connection timed out after ${timeout}ms`)), timeout)
-          ),
-        ]);
-        this.connections.set(name, connection);
-        logger.info(`Connected to MCP server "${name}"`);
-      } catch (error) {
-        if (this.config.globalOptions?.throwOnLoadError) {
-          throw error;
-        }
-        logger.warn(`Failed to connect to MCP server "${name}":`, error);
-      }
+      if (serverConfig.enabled === false) continue;
+
+      const connectPromise = this.connectWithTimeout(name, serverConfig)
+        .then((connection) => {
+          this.connections.set(name, connection);
+          logger.info(`Connected to MCP server "${name}"`);
+        })
+        .catch((error) => {
+          this.failedServers.add(name);
+          const msg = error instanceof Error ? error.message : String(error);
+          logger.error(`\n${'='.repeat(60)}\n  MCP SERVER FAILED: "${name}"\n  ${msg}\n${'='.repeat(60)}\n`);
+        })
+        .finally(() => {
+          this.connecting.delete(name);
+        });
+
+      this.connecting.set(name, connectPromise);
     }
+  }
+
+  /** Wait for a specific server to finish connecting (used internally). */
+  private async ensureConnected(serverName: string): Promise<void> {
+    const pending = this.connecting.get(serverName);
+    if (pending) await pending;
+  }
+
+  /** Wait for all servers to finish connecting. */
+  async waitForAll(): Promise<void> {
+    await Promise.all(this.connecting.values());
+  }
+
+  private async connectWithTimeout(name: string, serverConfig: MCPServerConfig): Promise<MCPConnection> {
+    const timeout = serverConfig.timeout ?? 10000;
+    return Promise.race([
+      this.connectToServer(name, serverConfig),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Connection timed out after ${timeout}ms`)), timeout)
+      ),
+    ]);
   }
 
   private async connectToServer(name: string, config: MCPServerConfig): Promise<MCPConnection> {
@@ -102,6 +130,7 @@ export class MCPClientManager {
       return cached;
     }
 
+    await this.ensureConnected(serverName);
     const connection = this.connections.get(serverName);
     if (!connection) {
       return [];
@@ -113,19 +142,34 @@ export class MCPClientManager {
   }
 
   getServerNames(): string[] {
-    return Array.from(this.connections.keys());
+    // Return all active servers (connected + still connecting + failed, excluding disabled)
+    return Object.entries(this.config.servers)
+      .filter(([, cfg]) => cfg.enabled !== false)
+      .map(([name]) => name);
   }
 
   getConfiguredServerNames(): string[] {
     return Object.keys(this.config.servers);
   }
 
+  isConnected(serverName: string): boolean {
+    return this.connections.has(serverName);
+  }
+
+  isFailed(serverName: string): boolean {
+    return this.failedServers.has(serverName);
+  }
+
+  isConnecting(serverName: string): boolean {
+    return this.connecting.has(serverName);
+  }
+
   getServerConfig(serverName: string): MCPServerConfig | undefined {
-    const connection = this.connections.get(serverName);
-    return connection?.config;
+    return this.config.servers[serverName] ?? this.connections.get(serverName)?.config;
   }
 
   async getServerToolSchemas(serverName: string): Promise<Array<{ name: string; description?: string; inputSchema: unknown }>> {
+    await this.ensureConnected(serverName);
     const connection = this.connections.get(serverName);
     if (!connection) {
       return [];
@@ -140,9 +184,10 @@ export class MCPClientManager {
   }
 
   async callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<string> {
+    await this.ensureConnected(serverName);
     const connection = this.connections.get(serverName);
     if (!connection) {
-      throw new Error(`MCP server "${serverName}" not found`);
+      throw new Error(`MCP server "${serverName}" not found or failed to connect`);
     }
 
     const result = await connection.client.callTool({

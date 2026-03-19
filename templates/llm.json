@@ -5,49 +5,56 @@
     "mlx-serve": {
       "provider": "local",
       "engine": "mlx-serve",
-      "model": "Qwen3.5-4B-4bit",
-      "contextSize": 32768,
-      "reasoningBudget": 0
+      "model": "Qwen3.5-4B-MLX-4bit",
+      "reasoningBudget": 128,
+      "contextSize": 86016,
+      "active": false
     },
     "llama-cpp": {
       "provider": "local",
       "engine": "llama-cpp",
-      "model": "Qwen3.5-4B-IQ4_NL",
+      "model": "Qwen3.5-9B-Q4_K_M",
       "contextSize": 32768,
-      "reasoningBudget": 0
+      "reasoningBudget": 0,
+      "active": true
     },
     "lmstudio": {
       "provider": "local",
       "engine": "lmstudio",
       "baseUrl": "http://localhost:1234/v1",
-      "model": "qwen3.5-9b",
-      "reasoningBudget": 0
+      "model": "qwen3.5-9b-mlx",
+      "reasoningBudget": 0,
+      "active": false
     },
     "ollama": {
       "provider": "local",
       "engine": "ollama",
       "baseUrl": "http://localhost:11434/v1",
       "model": "qwen3.5:latest",
-      "reasoningBudget": 0
+      "reasoningBudget": 0,
+      "active": false
     },
     "openai": {
       "provider": "openai",
       "apiKey": "${OPENAI_API_KEY}",
-      "model": "gpt-5.4"
+      "model": "gpt-4.1",
+      "active": false
     },
     "anthropic": {
       "provider": "anthropic",
       "apiKey": "${ANTHROPIC_API_KEY}",
-      "model": "claude-sonnet-4-6"
+      "model": "claude-sonnet-4-6",
+      "active": false
     },
     "gemini": {
       "provider": "gemini",
       "apiKey": "${GOOGLE_API_KEY}",
-      "model": "gemini-3.1-pro-preview"
+      "model": "gemini-3.1-pro-preview",
+      "active": false
     }
   },
   "embeddings": {
-    "default": "llama-cpp",
+    "default": "openai",
     "llama-cpp": {
       "provider": "local",
       "engine": "llama-cpp",

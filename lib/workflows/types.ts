@@ -188,6 +188,7 @@ export interface WorkflowStatus {
   interrupt?: WorkflowInterrupt;
   toolInput?: string;
   toolOutput?: string;
+  toolCallId?: string;
 }
 
 // Interrupt types for human-in-the-loop

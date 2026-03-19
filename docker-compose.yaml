@@ -8,6 +8,7 @@ services:
     environment:
       PORT: 3000
       NODE_ENV: development
+      VITE_DEV: "false"
       BROWSER_SANDBOX: "true"
       AUTH_PASSWORD: ${AUTH_PASSWORD:-}
     shm_size: "2gb"

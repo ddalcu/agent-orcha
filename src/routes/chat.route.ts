@@ -64,6 +64,12 @@ export const chatRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(404).send('Not Found');
     }
 
+    if (fastify.viteDevServer) {
+      const srcPath = path.join(__dirname, '..', '..', 'ui', 'chat.html');
+      const rawHtml = fs.readFileSync(srcPath, 'utf-8');
+      const html = await fastify.viteDevServer.transformIndexHtml('/chat.html', rawHtml);
+      return reply.type('text/html').send(html);
+    }
     const htmlPath = path.join(__dirname, '..', '..', 'public', 'chat.html');
     const html = fs.readFileSync(htmlPath, 'utf-8');
     reply.type('text/html').send(html);
@@ -180,7 +186,7 @@ export const chatRoutes: FastifyPluginAsync = async (fastify) => {
         for await (const chunk of stream) {
           if (abortController.signal.aborted) break;
           if (typeof chunk === 'string') {
-            reply.raw.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+            reply.raw.write(`data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`);
           } else {
             reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
           }

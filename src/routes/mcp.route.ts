@@ -23,6 +23,10 @@ export const mcpRoutes: FastifyPluginAsync = async (fastify) => {
         transport: config?.transport || 'unknown',
         command: config?.command || null,
         url: config?.url || null,
+        status: mcpManager.isConnected(name) ? 'connected'
+          : mcpManager.isConnecting(name) ? 'connecting'
+          : mcpManager.isFailed(name) ? 'failed'
+          : 'unknown',
       };
     });
   });

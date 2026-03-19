@@ -1,6 +1,6 @@
 {
   "name": "agent-orcha",
-  "version": "0.0.0-dev",
+  "version": "0.1.1",
   "description": "TypeScript Agentic Orchestration http server and framework for building multi-agent workflows with MCP tools and vector stores",
   "keywords": [
     "ai",
@@ -34,8 +34,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "dev": "node --watch src/index.ts",
-    "build": "tsc && npm run copy-assets",
+    "dev": "NODE_ENV=development node --watch-path=src --watch-path=lib src/index.ts",
+    "build:ui": "cd ui && npm ci && npm run build",
+    "build": "npm run build:ui && tsc && npm run copy-assets",
     "copy-assets": "node -e \"const fs=require('fs');fs.cpSync('public','dist/public',{recursive:true});fs.cpSync('templates','dist/templates',{recursive:true,filter:(s)=>!s.split('/').some(p=>p.startsWith('.')&&p!=='.'&&p!=='.env.example')})\"",
     "start": "node dist/src/index.js",
     "prepublishOnly": "npm run build",
@@ -43,11 +44,14 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-test-module-mocks --test --test-force-exit 'test/**/*.test.ts'",
     "test:coverage": "node --experimental-test-module-mocks --test --test-force-exit --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info --test-reporter=spec --test-reporter-destination=stdout 'test/**/*.test.ts'",
-    "docker": "docker compose up --build --watch",
+    "docker": "node scripts/detect-gpu.mjs --yes",
+    "docker:gpu": "node scripts/detect-gpu.mjs",
+    "docker:nvidia": "docker compose -f docker-compose.yaml -f docker-compose.nvidia.yaml up --build --watch",
+    "docker:amd": "docker compose -f docker-compose.yaml -f docker-compose.amd.yaml up --build --watch",
     "build:binary": "node scripts/build-sea.mjs",
     "sea": "node scripts/build-sea.mjs && ./dist/sea/agent-orcha",
     "test:e2e": "npx playwright test",
-    "prepare": "./scripts/install-hooks.sh"
+    "prepare": "bash scripts/install-hooks.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",
@@ -88,7 +92,8 @@
     "@types/ws": "^8.18.1",
     "esbuild": "^0.25.12",
     "eslint": "^9.17.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0"
   },
   "engines": {
     "node": ">=24.0.0"

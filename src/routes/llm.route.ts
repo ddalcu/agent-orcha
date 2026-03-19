@@ -168,7 +168,34 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       if (body.reasoningBudget == null) delete body.reasoningBudget;
       if (body.contextSize == null) delete body.contextSize;
 
+      // Preserve active flag from existing entry if not provided
+      if (body.active == null && existingObj?.active != null) {
+        body.active = existingObj.active;
+      }
+
       config.models[name] = ModelConfigSchema.parse(body);
+      await saveLLMConfig(llmJsonPath, config);
+      LLMFactory.clearCache();
+
+      return { ok: true };
+    },
+  );
+
+  // PATCH /config/models/:name/active — toggle active flag
+  fastify.patch<{ Params: { name: string }; Body: { active: boolean } }>(
+    '/config/models/:name/active',
+    async (request, reply) => {
+      const config = getLLMConfig();
+      if (!config) throw new Error('No llm.json loaded');
+
+      const { name } = request.params;
+      const { active } = request.body as any;
+      const entry = config.models[name];
+      if (!entry || typeof entry === 'string') {
+        return reply.status(404).send({ error: `Model "${name}" not found` });
+      }
+
+      entry.active = active;
       await saveLLMConfig(llmJsonPath, config);
       LLMFactory.clearCache();
 
@@ -272,18 +299,25 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
     return { ready: issues.length === 0, issues };
   });
 
-  // List all available LLM configs
+  // List all available LLM configs (only active ones)
   fastify.get('/', async () => {
     const names = listModelConfigs();
-    return names.map((name) => {
-      const config = getModelConfig(name);
-      return {
-        name,
-        model: config.model,
-        temperature: config.temperature,
-        baseUrl: config.baseUrl || null,
-      };
-    });
+    const fullConfig = getLLMConfig();
+    return names
+      .filter((name) => {
+        const entry = fullConfig?.models[name];
+        if (!entry || typeof entry === 'string') return true;
+        return entry.active !== false;
+      })
+      .map((name) => {
+        const config = getModelConfig(name);
+        return {
+          name,
+          model: config.model,
+          temperature: config.temperature,
+          baseUrl: config.baseUrl || null,
+        };
+      });
   });
 
   // Get a specific LLM config
@@ -412,7 +446,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
           const content = chunk.content;
           if (content) {
             accumulated += content;
-            reply.raw.write(`data: ${JSON.stringify({ content })}\n\n`);
+            reply.raw.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
           }
           if (chunk.reasoning) {
             reply.raw.write(`data: ${JSON.stringify({ type: 'thinking', content: chunk.reasoning })}\n\n`);

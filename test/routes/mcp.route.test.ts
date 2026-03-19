@@ -16,6 +16,9 @@ describe('mcp.route', () => {
         getManager: () => ({
           getServerNames: () => ['server1'],
           getServerConfig: () => ({ transport: 'stdio', command: 'npx' }),
+          isConnected: () => true,
+          isConnecting: () => false,
+          isFailed: () => false,
         }),
       },
     });

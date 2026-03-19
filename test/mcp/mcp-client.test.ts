@@ -61,7 +61,7 @@ describe('MCPClientManager', () => {
     });
     await assert.rejects(
       () => manager.callTool('nonexistent', 'tool', {}),
-      { message: 'MCP server "nonexistent" not found' },
+      { message: 'MCP server "nonexistent" not found or failed to connect' },
     );
   });
 
@@ -78,7 +78,8 @@ describe('MCPClientManager', () => {
       },
     });
 
-    await manager.initialize();
+    manager.initialize();
+    await manager.waitForAll();
     assert.deepEqual(manager.getServerNames(), []);
   });
 
@@ -104,12 +105,14 @@ describe('MCPClientManager', () => {
       },
     });
 
-    // Should not throw - logs warning instead
-    await manager.initialize();
-    assert.deepEqual(manager.getServerNames(), []);
+    // Should not throw - logs warning instead, server marked as failed
+    manager.initialize();
+    await manager.waitForAll();
+    assert.ok(manager.isFailed('broken'));
+    assert.ok(!manager.isConnected('broken'));
   });
 
-  it('should throw on connection failure with throwOnLoadError', async () => {
+  it('should track failed servers after connection failure', async () => {
     const manager = new MCPClientManager({
       version: '1.0.0',
       servers: {
@@ -120,15 +123,12 @@ describe('MCPClientManager', () => {
           timeout: 500,
         },
       },
-      globalOptions: {
-        throwOnLoadError: true,
-        prefixToolNameWithServerName: true,
-        additionalToolNamePrefix: '',
-        defaultToolTimeout: 30000,
-      },
     });
 
-    await assert.rejects(() => manager.initialize());
+    manager.initialize();
+    await manager.waitForAll();
+    assert.ok(manager.isFailed('broken'));
+    assert.deepEqual(manager.getServerNames(), ['broken']);
   });
 
   it('should get tools from injected connection', async () => {
@@ -156,10 +156,14 @@ describe('MCPClientManager', () => {
     assert.equal(toolsCached.length, 1);
   });
 
-  it('should get server names from connections', () => {
-    const manager = new MCPClientManager({ version: '1.0.0', servers: {} });
-    (manager as any).connections.set('s1', { client: {}, config: {} });
-    (manager as any).connections.set('s2', { client: {}, config: {} });
+  it('should get server names from config', () => {
+    const manager = new MCPClientManager({
+      version: '1.0.0',
+      servers: {
+        s1: { transport: 'streamable-http' as const, url: 'http://localhost:1' },
+        s2: { transport: 'streamable-http' as const, url: 'http://localhost:2' },
+      },
+    });
 
     const names = manager.getServerNames();
     assert.deepEqual(names.sort(), ['s1', 's2']);

@@ -8,6 +8,8 @@ export interface EngineServerStatus {
 
 export interface EngineChatStatus extends EngineServerStatus {
   supportsVision: boolean;
+  mmprojBytes: number;
+  processMemory: { rssBytes: number; gpuBytes: number | null } | null;
 }
 
 export interface EngineStatus {
@@ -49,6 +51,4 @@ export interface LocalEngine {
   // Binary management
   getBinaryVersion(): string | null;
   getBinarySource(): 'managed' | 'system' | null;
-  checkForUpdate(): Promise<any>;
-  updateBinary(): Promise<void>;
 }

@@ -106,6 +106,7 @@ export class LlamaServerProcess {
     this.role = isEmbedding ? 'embedding' : 'chat';
   }
 
+  get pid() { return this.proc?.pid ?? null; }
   get port() { return this._port; }
   get modelPath() { return this._modelPath; }
   get running() { return this._running; }
@@ -128,10 +129,10 @@ export class LlamaServerProcess {
 
     if (options.mmproj) args.push('--mmproj', options.mmproj);
     if (options.contextSize) args.push('--ctx-size', String(options.contextSize));
-    if (options.flashAttn !== false) args.push('--flash-attn', 'on');
-    if (options.threads) args.push('--threads', String(options.threads));
+    if (options.flashAttn !== false && !this.isEmbedding) args.push('--flash-attn', 'on');
     if (options.batchSize) args.push('--batch-size', String(options.batchSize));
     if (options.ubatchSize) args.push('--ubatch-size', String(options.ubatchSize));
+    if (options.threads) args.push('--threads', String(options.threads));
     if (options.cacheTypeK) args.push('--cache-type-k', options.cacheTypeK);
     if (options.cacheTypeV) args.push('--cache-type-v', options.cacheTypeV);
     if (options.mlock) args.push('--mlock');

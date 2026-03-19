@@ -16,16 +16,58 @@ interface ResumeBody {
 export const workflowsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/', async () => {
     const workflows = fastify.orchestrator.workflows.list();
-    return workflows.map((workflow) => ({
-      name: workflow.name,
-      description: workflow.description,
-      version: workflow.version,
-      type: workflow.type || 'steps',
-      chatOutputFormat: workflow.chatOutputFormat || 'json',
-      steps: workflow.type === 'react' ? 0 : workflow.steps.length,
-      inputSchema: workflow.input.schema,
-      sampleQuestions: workflow.sampleQuestions,
-    }));
+    const allAgentNames = fastify.orchestrator.agents.names();
+
+    return workflows.map((workflow) => {
+      let agents: string[] = [];
+      let tools: string[] = [];
+
+      if (workflow.type === 'react') {
+        // Resolve agent names from graph.agents config
+        const agentConfig = workflow.graph.agents;
+        if (agentConfig.mode === 'all') {
+          agents = agentConfig.exclude
+            ? allAgentNames.filter((n) => !agentConfig.exclude!.includes(n))
+            : [...allAgentNames];
+        } else if (agentConfig.mode === 'include' && agentConfig.include) {
+          agents = agentConfig.include.filter((n) => allAgentNames.includes(n));
+        } else if (agentConfig.mode === 'exclude') {
+          agents = agentConfig.exclude
+            ? allAgentNames.filter((n) => !agentConfig.exclude!.includes(n))
+            : [...allAgentNames];
+        }
+
+        // Collect tool info from graph.tools config
+        const toolConfig = workflow.graph.tools;
+        if (toolConfig.mode !== 'none') {
+          tools = toolConfig.include ? [...toolConfig.include] : [...toolConfig.sources];
+        }
+      } else {
+        // Step-based: extract unique agent names from steps
+        const stepAgents = new Set<string>();
+        for (const step of workflow.steps) {
+          if ('parallel' in step) {
+            for (const ps of step.parallel) stepAgents.add(ps.agent);
+          } else {
+            stepAgents.add(step.agent);
+          }
+        }
+        agents = [...stepAgents];
+      }
+
+      return {
+        name: workflow.name,
+        description: workflow.description,
+        version: workflow.version,
+        type: workflow.type || 'steps',
+        chatOutputFormat: workflow.chatOutputFormat || 'json',
+        steps: workflow.type === 'react' ? 0 : workflow.steps.length,
+        inputSchema: workflow.input.schema,
+        sampleQuestions: workflow.sampleQuestions,
+        agents,
+        tools,
+      };
+    });
   });
 
   fastify.get<{ Params: WorkflowParams }>('/:name', async (request, reply) => {

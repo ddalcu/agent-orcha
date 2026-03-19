@@ -1120,8 +1120,8 @@ describe('llm.route', () => {
     });
     assert.equal(res.statusCode, 200);
     const payload = res.payload;
-    assert.ok(payload.includes('data: {"content":"Hello"}'));
-    assert.ok(payload.includes('data: {"content":" World"}'));
+    assert.ok(payload.includes('data: {"type":"content","content":"Hello"}'));
+    assert.ok(payload.includes('data: {"type":"content","content":" World"}'));
     assert.ok(payload.includes('"type":"usage"'));
     assert.ok(payload.includes('"input_tokens":10'));
     assert.ok(payload.includes('[DONE]'));

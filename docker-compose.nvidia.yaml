@@ -1,0 +1,16 @@
+services:
+  agent-orcha:
+    build:
+      dockerfile: Dockerfile.nvidia
+      args:
+        CUDA_ARCHITECTURES: ${CUDA_ARCHITECTURES:-75;80;86;89;100;120}
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

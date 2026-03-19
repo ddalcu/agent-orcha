@@ -4,30 +4,32 @@ import { authenticate } from './helpers';
 test.beforeEach(async ({ context, page }) => {
   await authenticate(context);
   await page.goto('/#monitor', { waitUntil: 'domcontentloaded' });
-  await page.locator('monitor-view').waitFor({ state: 'attached', timeout: 10_000 });
+  await page.locator('.view-panel').waitFor({ state: 'attached', timeout: 10_000 });
 });
 
 test.describe('Monitor Tab', () => {
   test('monitor tab loads with header', async ({ page }) => {
-    const header = page.locator('monitor-view h2');
+    const header = page.locator('.view-panel h2');
     await expect(header).toContainText('Monitor');
   });
 
   test('filter controls are present', async ({ page }) => {
-    const statusFilter = page.locator('#filterStatus');
+    // Status filter (select with "All statuses" option)
+    const statusFilter = page.locator('.monitor-filters select', { hasText: 'All statuses' });
     await expect(statusFilter).toBeAttached();
 
-    const kindFilter = page.locator('#filterKind');
+    // Kind filter (select with "All kinds" option)
+    const kindFilter = page.locator('.monitor-filters select', { hasText: 'All kinds' });
     await expect(kindFilter).toBeAttached();
   });
 
   test('refresh button is present', async ({ page }) => {
-    const refreshBtn = page.locator('#refreshBtn');
+    const refreshBtn = page.locator('.monitor-filters button[title="Refresh"]');
     await expect(refreshBtn).toBeAttached();
   });
 
-  test('tasks list container exists', async ({ page }) => {
-    const container = page.locator('#tasksListContainer');
+  test('tasks list area exists', async ({ page }) => {
+    const container = page.locator('.view-panel');
     await expect(container).toBeAttached();
 
     // Wait for initial load
@@ -35,7 +37,7 @@ test.describe('Monitor Tab', () => {
   });
 
   test('tasks display or show empty state', async ({ page }) => {
-    const container = page.locator('#tasksListContainer');
+    const container = page.locator('.view-panel');
 
     // Wait for tasks to load (poll interval is 3s, give it time)
     await page.waitForTimeout(4_000);
@@ -50,12 +52,14 @@ test.describe('Monitor Tab', () => {
   });
 
   test('task detail area is hidden by default', async ({ page }) => {
-    const detailArea = page.locator('#taskDetailArea');
-    await expect(detailArea).toHaveClass(/hidden/);
+    // In the Svelte version, the detail panel is conditionally rendered (not present until a task is selected)
+    const detailArea = page.locator('.view-panel .border-t.pt-4');
+    await expect(detailArea).not.toBeAttached();
   });
 
   test('status filter has correct options', async ({ page }) => {
-    const options = page.locator('#filterStatus option');
+    const statusSelect = page.locator('.monitor-filters select', { hasText: 'All statuses' });
+    const options = statusSelect.locator('option');
     const optionTexts = await options.allTextContents();
     expect(optionTexts).toContain('All statuses');
     expect(optionTexts).toContain('Completed');
@@ -64,7 +68,8 @@ test.describe('Monitor Tab', () => {
   });
 
   test('kind filter has correct options', async ({ page }) => {
-    const options = page.locator('#filterKind option');
+    const kindSelect = page.locator('.monitor-filters select', { hasText: 'All kinds' });
+    const options = kindSelect.locator('option');
     const optionTexts = await options.allTextContents();
     expect(optionTexts).toContain('All kinds');
     expect(optionTexts).toContain('Agent');

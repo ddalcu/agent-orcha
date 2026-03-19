@@ -23,17 +23,17 @@ test.describe('Authentication', () => {
 
     // Use a fresh context without prior auth cookies
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await page.locator('app-root').waitFor({ state: 'attached', timeout: 10_000 });
+    await page.locator('.app-shell').waitFor({ state: 'attached', timeout: 10_000 });
 
     // Auth overlay should appear
-    const overlay = page.locator('#auth-overlay');
+    const overlay = page.locator('.auth-overlay');
     await expect(overlay).toBeVisible({ timeout: 10_000 });
 
     // Password input and submit button should be present
-    const passwordInput = page.locator('#auth-password');
+    const passwordInput = page.locator('.auth-card input[type="password"]');
     await expect(passwordInput).toBeVisible();
 
-    const submitBtn = page.locator('#auth-submit');
+    const submitBtn = page.locator('.auth-card button.btn');
     await expect(submitBtn).toBeVisible();
     await expect(submitBtn).toContainText('Sign In');
   });
@@ -48,17 +48,17 @@ test.describe('Authentication', () => {
     }
 
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await page.locator('app-root').waitFor({ state: 'attached', timeout: 10_000 });
+    await page.locator('.app-shell').waitFor({ state: 'attached', timeout: 10_000 });
 
     // Wait for the login form
-    await page.locator('#auth-overlay').waitFor({ state: 'visible', timeout: 10_000 });
+    await page.locator('.auth-overlay').waitFor({ state: 'visible', timeout: 10_000 });
 
     const password = process.env.AUTH_PASSWORD || 'ao2026';
-    await page.locator('#auth-password').fill(password);
-    await page.locator('#auth-submit').click();
+    await page.locator('.auth-card input[type="password"]').fill(password);
+    await page.locator('.auth-card button.btn').click();
 
     // Auth overlay should disappear
-    await expect(page.locator('#auth-overlay')).not.toBeAttached({ timeout: 10_000 });
+    await expect(page.locator('.auth-overlay')).not.toBeAttached({ timeout: 10_000 });
   });
 
   test('login with wrong password shows error', async ({ page, request }) => {
@@ -71,20 +71,20 @@ test.describe('Authentication', () => {
     }
 
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await page.locator('app-root').waitFor({ state: 'attached', timeout: 10_000 });
+    await page.locator('.app-shell').waitFor({ state: 'attached', timeout: 10_000 });
 
-    await page.locator('#auth-overlay').waitFor({ state: 'visible', timeout: 10_000 });
+    await page.locator('.auth-overlay').waitFor({ state: 'visible', timeout: 10_000 });
 
-    await page.locator('#auth-password').fill('wrong-password-12345');
-    await page.locator('#auth-submit').click();
+    await page.locator('.auth-card input[type="password"]').fill('wrong-password-12345');
+    await page.locator('.auth-card button.btn').click();
 
     // Error message should appear
-    const errorDiv = page.locator('#auth-error');
+    const errorDiv = page.locator('.auth-error');
     await expect(errorDiv).toContainText('Invalid password', { timeout: 10_000 });
     await expect(errorDiv).toHaveClass(/visible/);
 
     // Auth overlay should still be visible
-    await expect(page.locator('#auth-overlay')).toBeVisible();
+    await expect(page.locator('.auth-overlay')).toBeVisible();
   });
 
   test('logout button appears when authenticated', async ({ page, request }) => {
@@ -101,9 +101,9 @@ test.describe('Authentication', () => {
     await request.post('/api/auth/login', { data: { password } });
 
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await page.locator('app-root').waitFor({ state: 'attached', timeout: 10_000 });
+    await page.locator('.app-shell').waitFor({ state: 'attached', timeout: 10_000 });
 
-    const logoutBtn = page.locator('#auth-logout-btn');
+    const logoutBtn = page.locator('button[title="Logout"]');
     await expect(logoutBtn).toBeVisible({ timeout: 10_000 });
   });
 

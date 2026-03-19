@@ -90,6 +90,7 @@ export class MlxServerProcess {
     this.role = role;
   }
 
+  get pid() { return this.proc?.pid ?? null; }
   get port() { return this._port; }
   get modelPath() { return this._modelPath; }
   get running() { return this._running; }
