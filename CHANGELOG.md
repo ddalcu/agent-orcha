@@ -2,8 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
+
+## Release 2026.319
+
+### Added
+
+- **P2P Agent Sharing** — Peer-to-peer agent sharing via [Hyperswarm](https://github.com/holepunchto/hyperswarm). Agents with `p2p: true` are discoverable and invocable by other peers on the same network. Peers exchange agent catalogs on connection and broadcast updates on config changes. Enable with `P2P_ENABLED=true`.
+  - New files: `lib/p2p/p2p-manager.ts`, `lib/p2p/p2p-protocol.ts`, `lib/p2p/p2p-chat-model.ts`, `lib/p2p/types.ts`, `lib/p2p/hyperswarm.d.ts`
+  - New route: `src/routes/p2p.route.ts` — `GET /status`, `GET /peers`, `GET /agents`, `GET /llms`, `POST /agents/:peerId/:agentName/stream`, `POST /llms/:peerId/:modelName/stream`
+  - New env vars: `P2P_ENABLED`, `P2P_PEER_NAME`, `P2P_NETWORK_KEY`, `P2P_SHARE_LLMS`
+
+- **P2P LLM Engine Sharing** — Share local LLM engines across the P2P network. Add `"p2p": true` to a model in `llm.json` (or set `P2P_SHARE_LLMS=true` for all). Remote peers can use shared LLMs by configuring agents with `llm: "p2p"` (auto-select) or `llm: "p2p:model-name"`. Host peer is stateless; caller manages conversation history. No API keys or secrets are shared.
+  - `P2PChatModel` adapter implementing `ChatModel` interface
+  - `LLMFactory.setP2PManager()` / `createP2P()` for transparent P2P LLM resolution
+  - `ModelConfigSchema` gains `p2p: z.boolean().optional()` field
+
+- **P2P Studio Tab** — New P2P tab in the Studio UI showing connected peers, remote agents, and remote LLMs with a built-in chat interface for testing. Chat history persists across tab switches and supports a reset button for starting new conversations.
+  - New file: `ui/src/pages/P2PPage.svelte`
+  - NavBar conditionally shows P2P tab when `P2P_ENABLED=true`
+
+- **P2P Visual Editor Toggle** — Agent Composer (IDE visual editor) gains a P2P toggle checkbox under Publish for enabling/disabling P2P sharing per agent.
+
+- **ReAct Workflow Multi-Turn Continuations** — ReAct workflows now support multi-turn conversations. Thread state is preserved after completion with TTL-based cleanup (30 min, max 100 threads). `continueThread()` appends a user message and resumes the loop. Workflow stream endpoint accepts optional `threadId` for continuing existing threads. `WorkflowResult.metadata` includes `threadId`.
+
+- **`npm run dev:p2p`** — Convenience script that starts the dev server with `P2P_ENABLED=true`.
+
+- **P2P Test Suite** — Protocol serialization tests (21), route tests (14), and Hyperswarm integration tests (10) covering handshake, catalog exchange, agent/LLM invocation, and error handling.
+
+### Changed
+
+- **Agent Tool Wrapper** — Uses the agent's first `inputVariable` instead of hardcoded `query` when wrapping agents as tools.
+- **ReAct System Prompt** — Instructs the model to present agent responses directly without rewriting, improving multi-agent output quality.
+- **Template Agents** — `actor` and `simple-toolbox` (renamed from `functions`) agents default to `p2p: true`. Template `llm.json` `llama-cpp` entry defaults to `p2p: true`.
+- **Workflow Cleanup** — Workflow task state is no longer deleted after 10s, preserving `threadId` for multi-turn continuations.
+
+### Dependencies
+
+- **Added:** `hyperswarm`
 
 ## Release 0.1.1
 
