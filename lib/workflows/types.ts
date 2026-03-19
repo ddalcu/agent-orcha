@@ -159,6 +159,7 @@ export interface WorkflowResult {
     duration: number;
     stepsExecuted: number;
     success: boolean;
+    threadId?: string;
   };
   stepResults: Record<string, StepResult>;
 }

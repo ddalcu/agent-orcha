@@ -19,8 +19,10 @@ import { logger } from '../logger.ts';
 export class ReactWorkflowExecutor {
   private toolDiscovery: ToolDiscovery;
   private interruptManager: InterruptManager;
-  /** Stores thread message state for pause/resume */
-  private threadStates = new Map<string, BaseMessage[]>();
+  /** Stores thread message state for pause/resume and multi-turn continuations */
+  private threadStates = new Map<string, { messages: BaseMessage[]; timestamp: number }>();
+  private static readonly MAX_THREAD_STATES = 100;
+  private static readonly THREAD_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
   constructor(toolDiscovery: ToolDiscovery, interruptManager: InterruptManager) {
     this.toolDiscovery = toolDiscovery;
@@ -100,6 +102,9 @@ export class ReactWorkflowExecutor {
         startTime
       );
 
+      // Save thread state for multi-turn continuations (strip system message)
+      this.saveThreadState(actualThreadId, result.slice(1));
+
       // 7. Extract output
       const output = this.extractOutput(definition.output, result);
 
@@ -119,6 +124,7 @@ export class ReactWorkflowExecutor {
           duration,
           stepsExecuted: result.length,
           success: true,
+          threadId: actualThreadId,
         },
         stepResults: {},
       };
@@ -181,7 +187,7 @@ export class ReactWorkflowExecutor {
       const llm = await LLMFactory.create(definition.graph.model);
 
       // 3. Load saved thread state and append the user's answer
-      const savedMessages = this.threadStates.get(threadId) ?? [];
+      const savedMessages = this.threadStates.get(threadId)?.messages ?? [];
       // Add the answer as a tool result for the pending ask_user call
       const lastAiMsg = [...savedMessages].reverse().find(m => m.role === 'ai' && m.tool_calls?.length);
       const askUserCall = lastAiMsg?.tool_calls?.find(tc => tc.name === 'ask_user');
@@ -214,9 +220,9 @@ export class ReactWorkflowExecutor {
         elapsed: duration,
       });
 
-      // Clean up
+      // Clean up interrupt state (keep thread state for continuations)
       this.interruptManager.removeInterrupt(threadId);
-      this.threadStates.delete(threadId);
+      this.saveThreadState(threadId, result.slice(1));
 
       return {
         output,
@@ -270,8 +276,10 @@ export class ReactWorkflowExecutor {
     const toolMap = new Map(tools.map(t => [t.name, t]));
     const elapsed = () => Date.now() - (loopStartTime || Date.now());
 
+    const systemPrompt = definition.prompt.system + `\n\nWhen an agent returns a complete, well-formatted response, present it directly to the user without rewriting or summarizing. Only add your own commentary when combining outputs from multiple agents or when additional context is needed.`;
+
     const allMessages: BaseMessage[] = [
-      { role: 'system', content: definition.prompt.system },
+      { role: 'system', content: systemPrompt },
       ...initialMessages,
     ];
 
@@ -368,7 +376,7 @@ export class ReactWorkflowExecutor {
           return toolMessage(result, tc.id, tc.name);
         } catch (error) {
           if (error instanceof NodeInterrupt) {
-            this.threadStates.set(threadId, allMessages);
+            this.saveThreadState(threadId, allMessages);
             throw error;
           }
           const errMsg = error instanceof Error ? error.message : String(error);
@@ -385,6 +393,122 @@ export class ReactWorkflowExecutor {
     }
 
     return allMessages;
+  }
+
+  /**
+   * Continues a previously completed workflow thread with a new user message.
+   */
+  async continueThread(
+    definition: ReactWorkflowDefinition,
+    threadId: string,
+    message: string,
+    onStatus?: (status: WorkflowStatus) => void
+  ): Promise<WorkflowResult> {
+    const startTime = Date.now();
+
+    const saved = this.threadStates.get(threadId);
+    if (!saved) {
+      throw new Error(`No thread state found for thread ${threadId}`);
+    }
+
+    logger.info(`[ReactWorkflow] Continuing thread ${threadId} for workflow "${definition.name}"`);
+
+    onStatus?.({
+      type: 'workflow_start',
+      message: `Continuing ReAct workflow: ${definition.name}`,
+      elapsed: 0,
+    });
+
+    try {
+      const tools = await this.toolDiscovery.discoverAll(definition.graph.tools);
+      const agentTools = await this.toolDiscovery.discoverAgents(definition.graph.agents);
+      const allTools = [...tools, ...agentTools];
+
+      const llm = await LLMFactory.create(definition.graph.model);
+
+      // Append new user message to saved thread state
+      const messages = [...saved.messages, { role: 'human' as const, content: message }];
+
+      const result = await this.runReActLoop(
+        llm,
+        allTools,
+        definition,
+        messages,
+        threadId,
+        onStatus,
+        startTime
+      );
+
+      // Save updated thread state (strip system message)
+      this.saveThreadState(threadId, result.slice(1));
+
+      const output = this.extractOutput(definition.output, result);
+      const duration = Date.now() - startTime;
+
+      onStatus?.({
+        type: 'workflow_complete',
+        message: 'ReAct workflow continued and completed',
+        elapsed: duration,
+      });
+
+      return {
+        output,
+        metadata: {
+          duration,
+          stepsExecuted: result.length,
+          success: true,
+          threadId,
+        },
+        stepResults: {},
+      };
+    } catch (error) {
+      if (error instanceof NodeInterrupt) {
+        return this.handleInterrupt(error, definition, threadId, startTime, onStatus);
+      }
+
+      const duration = Date.now() - startTime;
+      onStatus?.({
+        type: 'workflow_error',
+        message: error instanceof Error ? error.message : String(error),
+        elapsed: duration,
+        error: String(error),
+      });
+      throw error;
+    }
+  }
+
+  hasThread(threadId: string): boolean {
+    const state = this.threadStates.get(threadId);
+    if (!state) return false;
+    // Check TTL
+    if (Date.now() - state.timestamp > ReactWorkflowExecutor.THREAD_TTL_MS) {
+      this.threadStates.delete(threadId);
+      return false;
+    }
+    return true;
+  }
+
+  private saveThreadState(threadId: string, messages: BaseMessage[]) {
+    this.threadStates.set(threadId, { messages, timestamp: Date.now() });
+    this.cleanupThreadStates();
+  }
+
+  private cleanupThreadStates() {
+    const now = Date.now();
+    // Remove expired entries
+    for (const [id, state] of this.threadStates) {
+      if (now - state.timestamp > ReactWorkflowExecutor.THREAD_TTL_MS) {
+        this.threadStates.delete(id);
+      }
+    }
+    // Evict oldest if over limit
+    if (this.threadStates.size > ReactWorkflowExecutor.MAX_THREAD_STATES) {
+      const sorted = [...this.threadStates.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+      const toRemove = sorted.slice(0, sorted.length - ReactWorkflowExecutor.MAX_THREAD_STATES);
+      for (const [id] of toRemove) {
+        this.threadStates.delete(id);
+      }
+    }
   }
 
   private handleInterrupt(

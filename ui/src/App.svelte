@@ -10,6 +10,7 @@
   import MonitorPage from './pages/MonitorPage.svelte';
   import LocalLlmPage from './pages/LocalLlmPage.svelte';
   import IdePage from './pages/IdePage.svelte';
+  import P2PPage from './pages/P2PPage.svelte';
 
   let showLogin = $state(false);
   let showLogout = $state(false);
@@ -157,6 +158,8 @@
         <LocalLlmPage />
       {:else if appStore.activeTab === 'ide'}
         <IdePage />
+      {:else if appStore.activeTab === 'p2p'}
+        <P2PPage />
       {/if}
     </div>
 

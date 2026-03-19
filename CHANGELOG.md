@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Release 0.1.1
+
+### Added
+
+- **Svelte 5 UI Rewrite** — Complete rewrite of the Studio UI from vanilla JS web components to Svelte 5 with Runes. New `ui/` directory with Vite + TypeScript build toolchain replacing the no-build-step `public/` approach. All pages rewritten: Agents, Knowledge, MCP, Monitor, IDE, Local LLM, Graph, Standalone Chat. Shared chat components (UserBubble, ResponseBubble, ToolPill, ThinkingPill, StreamStatsBar, CanvasPane, etc.). Svelte 5 `$state` runes for state management. Vite dev integration with HMR via `src/vite-dev-integration.ts`.
+
+- **GPU Docker Support** — NVIDIA and AMD GPU-accelerated Docker images with auto-detection. `Dockerfile.nvidia` (CUDA) and `Dockerfile.amd` (ROCm) with matching docker-compose files. `scripts/detect-gpu.mjs` auto-detects available GPUs and recommends the correct compose file.
+
+- **VRAM-Aware Context Recommendations** — Context slider in the Local LLM UI now estimates safe context sizes based on GPU memory, model weights, mmproj, embedding model, and driver overhead. Shows a green marker on the slider with a detailed tooltip breakdown. Warns when the selected context would spill from VRAM to CPU.
+
+- **Tools API** — New `GET /api/tools` endpoint (`src/routes/tools.route.ts`) with a dedicated ToolsPage in the Studio for browsing all available tools across MCP, knowledge, function, builtin, and sandbox sources.
+
+- **Standalone Chat Sessions** — Session persistence for published agent standalone chat pages.
+
+### Changed
+
+- **MCP Client Enhancements** — Extended MCP client with additional capabilities and updated route handling.
+- **LLM Route Refactoring** — Streamlined LLM and Local LLM routes with updated response handling.
+- **Workflow SSE Streaming** — Workflow routes updated with `type` field on all SSE stream events for Svelte UI compatibility.
+- **Accessibility Improvements** — WCAG AA contrast ratios, aria-labels on icon-only buttons, role/tabindex on interactive elements, label-control associations.
+- **E2E Tests Updated** — All Playwright tests updated for Svelte UI selectors, corrected API routes (`/api/mcp/servers` → `/api/mcp`, `/api/ide/tree` → `/api/files/tree`), headless mode enabled.
+
+### Fixed
+
+- **SSE Stream Events** — Content chunks were sent without a `type` field, breaking Svelte UI rendering. Added `type: 'content'` to all three SSE routes (agents, workflows, chat).
+- **Embedding Server Crash** — Batch size set to match nomic-embed-text's 2048 context window, preventing fatal crashes on documents exceeding the default 512-token ubatch.
+- **llama-server Pinned to b8280** — b8322 has a `ggml_can_mul_mat` assertion bug during auto memory-fitting with embedding models on CUDA. Flash-attn disabled for embedding servers as a safeguard.
+- **Range Slider Track** — Replaced custom `appearance:none` pseudo-element styling with native `accent-color` for reliable cross-browser rendering on LocalLlmPage.
+- **Windows Compatibility** — `prepare` script uses `bash` instead of `./` prefix so npm on Windows (cmd.exe) can invoke the hook installer.
+
+### Removed
+
+- **Vanilla JS Web Components** — All `public/src/` components, services, stores, and utilities replaced by Svelte 5 equivalents in `ui/src/`.
+
+### Dependencies
+
+- **Added:** `svelte`, `@sveltejs/vite-plugin-svelte`, `vite`, `typescript` (ui)
+
 ## Release 0.0.8
 
 ### Added

@@ -134,4 +134,36 @@ export interface TaskMetrics {
   outputTokens?: number;
 }
 
-export type TabId = 'agents' | 'knowledge' | 'graph' | 'tools' | 'monitor' | 'llm' | 'ide';
+export type TabId = 'agents' | 'knowledge' | 'graph' | 'tools' | 'monitor' | 'llm' | 'ide' | 'p2p';
+
+export interface P2PStatus {
+  enabled: boolean;
+  connected: boolean;
+  peerCount: number;
+  peerName: string;
+}
+
+export interface P2PPeer {
+  peerId: string;
+  peerName: string;
+  version: string;
+  agents: P2PRemoteAgent[];
+  connectedAt: number;
+}
+
+export interface P2PRemoteAgent {
+  name: string;
+  description: string;
+  inputVariables: string[];
+  sampleQuestions?: string[];
+  peerId: string;
+  peerName: string;
+}
+
+export interface P2PRemoteLLM {
+  name: string;
+  provider: string;
+  model: string;
+  peerId: string;
+  peerName: string;
+}

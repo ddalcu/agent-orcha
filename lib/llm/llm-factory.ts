@@ -1,15 +1,22 @@
 import { OpenAIChatModel } from './providers/openai-chat-model.ts';
 import { AnthropicChatModel } from './providers/anthropic-chat-model.ts';
 import { GeminiChatModel } from './providers/gemini-chat-model.ts';
+import { P2PChatModel } from '../p2p/p2p-chat-model.ts';
 import type { ChatModel } from '../types/llm-types.ts';
 import { getModelConfig, getLLMConfig, getLLMConfigPath, saveLLMConfig, resolveApiKey, type ModelConfig } from './llm-config.ts';
 import { resolveAgentLLMRef, type AgentLLMRef } from './types.ts';
 import { detectProvider, type LLMProvider } from './provider-detector.ts';
 import { engineRegistry } from '../local-llm/engine-registry.ts';
 import { logger } from '../logger.ts';
+import type { P2PManager } from '../p2p/p2p-manager.ts';
 
 export class LLMFactory {
   private static instances: Map<string, ChatModel> = new Map();
+  private static p2pManager: P2PManager | null = null;
+
+  static setP2PManager(manager: P2PManager): void {
+    this.p2pManager = manager;
+  }
 
   /**
    * Create an LLM instance from a config name (defined in llm.json)
@@ -17,6 +24,12 @@ export class LLMFactory {
    */
   static async create(ref: AgentLLMRef = 'default'): Promise<ChatModel> {
     const { name, temperature: tempOverride } = resolveAgentLLMRef(ref);
+
+    // Handle P2P LLM references: "p2p" or "p2p:model-name"
+    if (name === 'p2p' || name.startsWith('p2p:')) {
+      return this.createP2P(name, tempOverride);
+    }
+
     const config = getModelConfig(name);
     const provider = detectProvider(config);
 
@@ -127,6 +140,35 @@ export class LLMFactory {
 
   private static getCacheKey(name: string, temperature: number): string {
     return `${name}-${temperature}`;
+  }
+
+  private static createP2P(ref: string, temperature?: number): ChatModel {
+    if (!this.p2pManager) {
+      throw new Error('P2P is not enabled. Set P2P_ENABLED=true to use P2P LLMs.');
+    }
+
+    const remoteLLMs = this.p2pManager.getRemoteLLMs();
+    if (remoteLLMs.length === 0) {
+      throw new Error('No remote P2P LLMs available');
+    }
+
+    if (ref === 'p2p') {
+      // Auto-select first available remote LLM
+      const llm = remoteLLMs[0]!;
+      logger.info(`[LLMFactory] Auto-selected P2P LLM: ${llm.name} from ${llm.peerName}`);
+      return new P2PChatModel(this.p2pManager, llm.peerId, llm.name, temperature);
+    }
+
+    // "p2p:model-name" — find by name or model string
+    const modelRef = ref.slice(4); // strip "p2p:"
+    const match = remoteLLMs.find(l => l.name === modelRef || l.model === modelRef);
+    if (!match) {
+      const available = remoteLLMs.map(l => l.name).join(', ');
+      throw new Error(`P2P LLM "${modelRef}" not found. Available: ${available}`);
+    }
+
+    logger.info(`[LLMFactory] Using P2P LLM: ${match.name} from ${match.peerName}`);
+    return new P2PChatModel(this.p2pManager, match.peerId, match.name, temperature);
   }
 
   static clearCache(): void {

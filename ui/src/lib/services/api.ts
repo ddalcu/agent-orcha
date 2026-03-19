@@ -21,8 +21,8 @@ export const api = {
   // Workflows
   async getWorkflows() { return (await _fetch('/api/workflows')).json(); },
   async getWorkflow(name: string) { return (await _fetch(`/api/workflows/${name}`)).json(); },
-  async startWorkflowStream(name: string, input: unknown, signal?: AbortSignal) {
-    return _fetch(`/api/workflows/${name}/stream`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input }), signal });
+  async startWorkflowStream(name: string, input: unknown, signal?: AbortSignal, threadId?: string) {
+    return _fetch(`/api/workflows/${name}/stream`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, ...(threadId ? { threadId } : {}) }), signal });
   },
   async resumeWorkflowStream(name: string, threadId: string, answer: string, signal?: AbortSignal) {
     return _fetch(`/api/workflows/${name}/resume`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ threadId, answer }), signal });
@@ -166,6 +166,24 @@ export const api = {
 
   // Logs
   streamLogs() { return new EventSource('/api/logs/stream'); },
+
+  // P2P
+  async getP2PStatus() { return (await _fetch('/api/p2p/status')).json(); },
+  async getP2PPeers() { return (await _fetch('/api/p2p/peers')).json(); },
+  async getP2PAgents() { return (await _fetch('/api/p2p/agents')).json(); },
+  async getP2PLLMs() { return (await _fetch('/api/p2p/llms')).json(); },
+  async streamP2PAgent(peerId: string, agentName: string, input: unknown, sessionId: string, opts: { signal?: AbortSignal } = {}) {
+    return _fetch(`/api/p2p/agents/${encodeURIComponent(peerId)}/${encodeURIComponent(agentName)}/stream`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input, sessionId }), signal: opts.signal,
+    });
+  },
+  async streamP2PLLM(peerId: string, modelName: string, message: string, sessionId: string, opts: { signal?: AbortSignal } = {}) {
+    return _fetch(`/api/p2p/llms/${encodeURIComponent(peerId)}/${encodeURIComponent(modelName)}/stream`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, sessionId }), signal: opts.signal,
+    });
+  },
 
   // Graph
   async getGraphConfig() { return (await _fetch('/api/graph/config')).json(); },

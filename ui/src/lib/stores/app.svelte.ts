@@ -1,6 +1,6 @@
 import type { Agent, Workflow, LLM, TabId } from '../types/index.js';
 
-const VALID_TABS: TabId[] = ['agents', 'knowledge', 'graph', 'tools', 'monitor', 'llm', 'ide'];
+const VALID_TABS: TabId[] = ['agents', 'knowledge', 'graph', 'tools', 'monitor', 'llm', 'ide', 'p2p'];
 
 function getInitialTab(): TabId {
   let hash = window.location.hash.replace('#', '') as string;

@@ -38,6 +38,7 @@ import { IntegrationManager } from './integrations/integration-manager.ts';
 import type { IntegrationAccessor } from './integrations/types.ts';
 import { TriggerManager } from './triggers/trigger-manager.ts';
 import { createCanvasWriteTool, createCanvasAppendTool } from './tools/built-in/canvas-write.tool.ts';
+import { P2PManager } from './p2p/p2p-manager.ts';
 import type { SandboxConfig } from './sandbox/types.ts';
 import type { AgentDefinition, AgentResult } from './agents/types.ts';
 import type {
@@ -87,6 +88,8 @@ export class Orchestrator {
   private integrationManager: IntegrationManager | null = null;
   private triggerManager: TriggerManager | null = null;
   private sandboxContainer: SandboxContainer | null = null;
+  /** @internal — accessed by p2p routes via _p2pManager */
+  _p2pManager: P2PManager | null = null;
 
   private initialized = false;
 
@@ -178,6 +181,13 @@ export class Orchestrator {
     // Start integrations after initialization (non-blocking)
     this.integrationManager = new IntegrationManager();
     await this.integrationManager.start(this);
+
+    // Start P2P if enabled
+    if (process.env['P2P_ENABLED'] === 'true') {
+      this._p2pManager = new P2PManager(this);
+      await this._p2pManager.start();
+      LLMFactory.setP2PManager(this._p2pManager);
+    }
   }
 
   private async checkLlmReadiness(): Promise<void> {
@@ -540,6 +550,7 @@ export class Orchestrator {
         this.triggerManager?.removeAgentTriggers(name);
         await this.integrationManager?.syncAgent(this, name);
         await this.memoryManager.delete(name);
+        this._p2pManager?.broadcastCatalog();
         logger.info(`[Orchestrator] Unloaded agent: ${name}`);
       }
       return 'agent';
@@ -597,6 +608,7 @@ export class Orchestrator {
       }
       const agent = await this.agentLoader.loadOne(absolutePath);
       await this.integrationManager?.syncAgent(this, agent.name);
+      this._p2pManager?.broadcastCatalog();
       return 'agent';
     }
 
@@ -722,7 +734,8 @@ export class Orchestrator {
 
   async *streamWorkflow(
     name: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    threadId?: string
   ): AsyncGenerator<{ type: 'status' | 'result'; data: unknown }, void, unknown> {
     this.ensureInitialized();
 
@@ -735,7 +748,8 @@ export class Orchestrator {
     if (definition.type === 'react') {
       yield* this.streamReactWorkflow(
         definition as ReactWorkflowDefinition,
-        input
+        input,
+        threadId
       );
       return;
     }
@@ -796,7 +810,8 @@ export class Orchestrator {
 
   private async *streamReactWorkflow(
     definition: ReactWorkflowDefinition,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    threadId?: string
   ): AsyncGenerator<{ type: 'status' | 'result'; data: unknown }, void, unknown> {
     const statusQueue: Array<{ type: 'status' | 'result'; data: unknown }> = [];
     let resolveNext: ((value: void) => void) | null = null;
@@ -810,9 +825,17 @@ export class Orchestrator {
       }
     };
 
-    // Start execution in background
-    const executionPromise = this.reactWorkflowExecutor
-      .execute(definition, input, undefined, onStatus)
+    // Continue existing thread or start fresh
+    const shouldContinue = threadId && this.reactWorkflowExecutor.hasThread(threadId);
+    const execution = shouldContinue
+      ? this.reactWorkflowExecutor.continueThread(
+          definition,
+          threadId,
+          String(Object.values(input)[0] || ''),
+          onStatus
+        )
+      : this.reactWorkflowExecutor.execute(definition, input, undefined, onStatus);
+    const executionPromise = execution
       .then((result) => {
         isComplete = true;
         statusQueue.push({ type: 'result', data: result });
@@ -972,6 +995,10 @@ export class Orchestrator {
   }
 
   async close(): Promise<void> {
+    if (this._p2pManager) {
+      await this._p2pManager.close();
+    }
+
     // Stop all local engine processes before anything else
     await engineRegistry.unloadAll();
 
