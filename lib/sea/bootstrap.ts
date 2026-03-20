@@ -1,9 +1,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { fileURLToPath } from 'url';
 
-const ORCHA_DIR = path.join(os.homedir(), '.orcha');
-const DEFAULT_WORKSPACE = path.join(os.homedir(), 'agent-orcha-workspace');
+/**
+ * Base directory for all Agent Orcha SEA data: native binaries, public assets,
+ * logs, and the default workspace. Everything lives under ~/.orcha/.
+ */
+export function getOrchaDir(): string {
+  return path.join(os.homedir(), '.orcha');
+}
+
+const ORCHA_DIR = getOrchaDir();
+const DEFAULT_WORKSPACE = path.join(ORCHA_DIR, 'workspace');
 
 let _isSea: boolean | null = null;
 let _sea: any = null;
@@ -54,7 +63,7 @@ function getBinarySignature(): string {
 }
 
 /**
- * Extract embedded assets to ~/.orcha/ when the binary changes.
+ * Extract embedded assets to the ORCHA_DIR when the binary changes.
  * Uses the binary's file signature (size + mtime) so any rebuild triggers re-extraction.
  * Called once at startup. No-op if not running as SEA.
  */
@@ -101,7 +110,7 @@ export function seaBootstrap(): void {
 
 /**
  * Extract template files from embedded assets to a target directory.
- * Used by 'init' and 'start' (first-run scaffolding) in SEA mode.
+ * Used by scaffoldWorkspace() in SEA mode.
  */
 export function extractTemplates(targetDir: string): void {
   const seaMod = sea();
@@ -117,4 +126,65 @@ export function extractTemplates(targetDir: string): void {
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
     fs.writeFileSync(destPath, new Uint8Array(seaMod.getRawAsset(key)));
   }
+}
+
+/**
+ * Resolve the workspace directory. Uses WORKSPACE env var if set,
+ * otherwise defaults to ~/.orcha/workspace.
+ */
+export function resolveWorkspace(): string {
+  if (process.env.WORKSPACE) return path.resolve(process.env.WORKSPACE);
+  return getDefaultWorkspace();
+}
+
+/**
+ * Copy template files from the repo's templates/ directory to a target directory.
+ * Used by scaffoldWorkspace() in non-SEA mode.
+ */
+function copyTemplatesFromRepo(targetDir: string): void {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  // When running from source: lib/sea/ → project root
+  // When running from dist:   dist/lib/sea/ → dist/ (templates copied there by build)
+  const templatesDir = path.resolve(__dirname, '../../templates');
+
+  if (!fs.existsSync(templatesDir)) {
+    throw new Error(`Templates directory not found at ${templatesDir}. Ensure the package is properly installed.`);
+  }
+
+  const templateDirs = ['agents', 'functions', 'knowledge', 'skills', 'workflows'];
+  for (const dir of templateDirs) {
+    const src = path.join(templatesDir, dir);
+    const dest = path.join(targetDir, dir);
+    if (fs.existsSync(src)) {
+      fs.cpSync(src, dest, { recursive: true });
+    }
+  }
+
+  const configFiles = ['mcp.json', 'llm.json', '.env.example'];
+  for (const file of configFiles) {
+    const src = path.join(templatesDir, file);
+    const dest = path.join(targetDir, file);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, dest);
+    }
+  }
+}
+
+/**
+ * Scaffold a workspace at targetDir if it doesn't already have an agents/ directory.
+ * Works in both SEA and non-SEA modes.
+ */
+export function scaffoldWorkspace(targetDir: string): void {
+  if (fs.existsSync(path.join(targetDir, 'agents'))) return;
+
+  console.log(`\nCreating workspace at ${targetDir}...`);
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  if (isSea()) {
+    extractTemplates(targetDir);
+  } else {
+    copyTemplatesFromRepo(targetDir);
+  }
+
+  console.log('Workspace created with example configuration.\n');
 }

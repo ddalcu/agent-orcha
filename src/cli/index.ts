@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { seaBootstrap, isSea } from '../../lib/sea/bootstrap.ts';
+import { seaBootstrap } from '../../lib/sea/bootstrap.ts';
 seaBootstrap();
 
 const args = process.argv.slice(2);
@@ -11,17 +11,19 @@ function showHelp(): void {
 Agent Orcha CLI
 
 Usage:
-  npx agent-orcha <command> [options]
+  npx agent-orcha [start] [options]
 
 Commands:
-  init              Initialize a new Agent Orcha project
-  start             Start the Agent Orcha server
+  start             Start the Agent Orcha server (default)
   help, --help, -h  Show this help message
 
+Environment:
+  WORKSPACE         Path to workspace directory (default: ~/.orcha/workspace)
+
 Examples:
-  npx agent-orcha init
+  npx agent-orcha
   npx agent-orcha start
-  npx agent-orcha --help
+  WORKSPACE=./my-project npx agent-orcha
 
 Library Usage:
   import { Orchestrator } from 'agent-orcha';
@@ -36,12 +38,8 @@ Documentation: https://github.com/ddalcu/agent-orcha
 async function main(): Promise<void> {
   try {
     switch (command) {
-      case 'init': {
-        const { initCommand } = await import('./commands/init.ts');
-        await initCommand(args.slice(1));
-        break;
-      }
-      case 'start': {
+      case 'start':
+      case undefined: {
         const { startCommand } = await import('./commands/start.ts');
         await startCommand(args.slice(1));
         break;
@@ -51,16 +49,6 @@ async function main(): Promise<void> {
       case '-h':
         showHelp();
         break;
-      case undefined: {
-        // SEA binary with no args → start server directly
-        if (isSea()) {
-          const { startCommand } = await import('./commands/start.ts');
-          await startCommand([]);
-        } else {
-          showHelp();
-        }
-        break;
-      }
       default:
         console.error(`Unknown command: ${command}`);
         console.error('Run "npx agent-orcha --help" for usage information.');

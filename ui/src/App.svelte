@@ -15,12 +15,15 @@
   let showLogin = $state(false);
   let showLogout = $state(false);
   let vncUrl = $state<string | null>(null);
+  let sandboxStatus = $state<string>('idle');
+  let sandboxError = $state<string | null>(null);
   let version = $state('AgentOrcha');
   let loginError = $state('');
   let loginPassword = $state('');
   let loginSubmitting = $state(false);
   let sidebarOpen = $state(false);
   let llmSetupIssues = $state<string[] | null>(null);
+  let vncPollTimer = $state<ReturnType<typeof setInterval> | null>(null);
 
   $effect(() => {
     checkAuth();
@@ -44,6 +47,21 @@
       const res = await fetch('/api/vnc/status');
       const data = await res.json();
       if (data.enabled) vncUrl = data.url || '/vnc';
+      else vncUrl = null;
+
+      if (data.sandbox) {
+        sandboxStatus = data.sandbox.status;
+        sandboxError = data.sandbox.error;
+      }
+
+      // Poll while sandbox is still starting up
+      const isStarting = sandboxStatus === 'idle' || sandboxStatus === 'detecting' || sandboxStatus === 'pulling' || sandboxStatus === 'starting';
+      if (isStarting && !vncPollTimer) {
+        vncPollTimer = setInterval(checkVnc, 3000);
+      } else if (!isStarting && vncPollTimer) {
+        clearInterval(vncPollTimer);
+        vncPollTimer = null;
+      }
     } catch { /* ignore */ }
   }
 
@@ -119,8 +137,16 @@
     <NavBar onselect={() => toggleSidebar(true)} />
     <div class="sidebar-footer">
       <div id="header-actions" class="flex items-center gap-2">
-        {#if vncUrl}
-          <button class="btn-ghost" title="View Browser Desktop" onclick={openVnc}>
+        {#if sandboxStatus !== 'no-docker'}
+          <button
+            class="btn-ghost sandbox-btn"
+            class:sandbox-starting={sandboxStatus === 'idle' || sandboxStatus === 'detecting' || sandboxStatus === 'pulling' || sandboxStatus === 'starting'}
+            class:sandbox-running={sandboxStatus === 'running'}
+            class:sandbox-failed={sandboxStatus === 'failed'}
+            title={sandboxStatus === 'running' ? 'View Browser Desktop' : sandboxStatus === 'failed' ? `Sandbox failed: ${sandboxError || 'unknown error'}` : `Sandbox: ${sandboxStatus}...`}
+            onclick={openVnc}
+            disabled={sandboxStatus !== 'running'}
+          >
             <i class="fas fa-desktop"></i>
           </button>
         {/if}
@@ -214,3 +240,24 @@
     </div>
   </div>
 {/if}
+
+<style>
+  .sandbox-btn {
+    position: relative;
+  }
+  .sandbox-btn.sandbox-starting {
+    opacity: 0.5;
+    animation: sandbox-pulse 1.5s ease-in-out infinite;
+  }
+  .sandbox-btn.sandbox-running {
+    color: var(--green, #22c55e);
+  }
+  .sandbox-btn.sandbox-failed {
+    color: var(--red, #ef4444);
+    opacity: 0.7;
+  }
+  @keyframes sandbox-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+  }
+</style>

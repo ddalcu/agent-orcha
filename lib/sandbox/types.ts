@@ -21,3 +21,5 @@ export interface ShellResult {
   exitCode: number;
   error?: string;
 }
+
+export type SandboxStatus = 'idle' | 'detecting' | 'pulling' | 'starting' | 'running' | 'failed' | 'no-docker';
