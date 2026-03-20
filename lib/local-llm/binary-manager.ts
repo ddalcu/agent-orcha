@@ -190,7 +190,20 @@ function detectAnyGpu(): string | null {
     if (process.platform === 'linux') {
       const output = execFileSync('lspci', [], { encoding: 'utf-8', timeout: 5_000 });
       const match = output.match(/(?:VGA|3D|Display).*?:\s*(.+)/i);
-      return match ? match[1]!.trim() : null;
+      if (!match) return null;
+
+      const gpuName = match[1]!.trim();
+
+      // Only use Vulkan for GPUs known to support Vulkan compute reliably.
+      // AMD discrete GPUs and Intel Arc discrete GPUs work well.
+      // Intel integrated (UHD, HD, Iris), virtual GPUs (QEMU, VMware, VirtualBox),
+      // and unknown devices should fall back to CPU — the Vulkan build has no CPU
+      // backend so it crashes on GPUs that can't handle the compute workload.
+      if (/\b(AMD|ATI|Radeon)\b/i.test(gpuName)) return gpuName;
+      if (/\bIntel\b.*\bArc\b/i.test(gpuName)) return gpuName;
+
+      logger.info(`[BinaryManager] GPU "${gpuName}" not suitable for Vulkan compute, using CPU backend`);
+      return null;
     }
   } catch { /* detection failed */ }
   return null;

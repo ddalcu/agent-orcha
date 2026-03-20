@@ -346,7 +346,7 @@ describe('binary-manager', () => {
       assert.equal(info.name, 'AMD Radeon RX 7900 XTX');
     });
 
-    it('no NVIDIA, falls back to lspci on Linux', () => {
+    it('Intel integrated GPU on Linux falls back to CPU (no Vulkan compute)', () => {
       setPlatform('linux');
       execFileSyncFn = (cmd: string) => {
         if (cmd === 'nvidia-smi') throw new Error('not found');
@@ -356,8 +356,48 @@ describe('binary-manager', () => {
         throw new Error('not found');
       };
       const info = detectGpu();
+      assert.equal(info.accel, 'none');
+    });
+
+    it('AMD GPU on Linux uses Vulkan', () => {
+      setPlatform('linux');
+      execFileSyncFn = (cmd: string) => {
+        if (cmd === 'nvidia-smi') throw new Error('not found');
+        if (cmd === 'lspci') {
+          return '06:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Navi 31 [Radeon RX 7900 XTX]\n';
+        }
+        throw new Error('not found');
+      };
+      const info = detectGpu();
       assert.equal(info.accel, 'vulkan');
-      assert.ok(info.name?.includes('Intel'));
+      assert.ok(info.name?.includes('AMD'));
+    });
+
+    it('Intel Arc discrete GPU on Linux uses Vulkan', () => {
+      setPlatform('linux');
+      execFileSyncFn = (cmd: string) => {
+        if (cmd === 'nvidia-smi') throw new Error('not found');
+        if (cmd === 'lspci') {
+          return '03:00.0 VGA compatible controller: Intel Corporation Arc A770\n';
+        }
+        throw new Error('not found');
+      };
+      const info = detectGpu();
+      assert.equal(info.accel, 'vulkan');
+      assert.ok(info.name?.includes('Arc'));
+    });
+
+    it('virtual/unknown GPU on Linux falls back to CPU', () => {
+      setPlatform('linux');
+      execFileSyncFn = (cmd: string) => {
+        if (cmd === 'nvidia-smi') throw new Error('not found');
+        if (cmd === 'lspci') {
+          return '00:01.0 VGA compatible controller: Device 1234:1111 (rev 02)\n';
+        }
+        throw new Error('not found');
+      };
+      const info = detectGpu();
+      assert.equal(info.accel, 'none');
     });
 
     it('no GPU detected at all → accel: none', () => {
