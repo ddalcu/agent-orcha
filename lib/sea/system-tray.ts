@@ -53,6 +53,31 @@ function loadIconAsBase64(): string {
   return fs.readFileSync('scripts/favicon.png').toString('base64');
 }
 
+// Win32 console visibility toggle — uses PowerShell to call ShowWindow via P/Invoke.
+// SW_HIDE = 0, SW_SHOW = 5
+let consoleVisible = true;
+const WIN32_SHOWWINDOW_PS = 'Add-Type -Name W -Namespace N -MemberDefinition \'[DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int c);\';';
+
+function setConsoleVisible(show: boolean): void {
+  if (process.platform !== 'win32') return;
+  try {
+    const sw = show ? 5 : 0;
+    const child = execFile('powershell', ['-NoProfile', '-Command',
+      `${WIN32_SHOWWINDOW_PS}[N.W]::ShowWindow((Get-Process -Id ${process.pid}).MainWindowHandle,${sw})`],
+      { windowsHide: true });
+    child.unref();
+    consoleVisible = show;
+  } catch { /* best effort */ }
+}
+
+export function hideConsoleWindow(): void {
+  setConsoleVisible(false);
+}
+
+export function toggleConsoleWindow(): void {
+  setConsoleVisible(!consoleVisible);
+}
+
 export interface SystemTray {
   kill(): void;
 }
@@ -105,7 +130,7 @@ export function createSystemTray(url: string, onQuit: () => void): SystemTray | 
       { title: `Agent Orcha — ${url}`, enabled: false, __id: 0 },
       { title: 'Open in Browser', tooltip: 'Open the Studio UI', enabled: true, __id: OPEN_ID },
       { title: '<SEPARATOR>', enabled: false, __id: -1 },
-      { title: 'Show Console', tooltip: 'Show server logs', enabled: true, __id: CONSOLE_ID },
+      { title: process.platform === 'win32' ? 'Toggle Console' : 'Show Console', tooltip: 'Show server logs', enabled: true, __id: CONSOLE_ID },
       { title: 'Quit', tooltip: 'Stop the server', enabled: true, __id: QUIT_ID },
     ],
   };
@@ -157,12 +182,9 @@ function openInBrowser(url: string): void {
 
 function openConsole(logFile: string): void {
   if (process.platform === 'darwin') {
-    // Use `open` to launch Console.app filtered to the log file (no Automation permission needed)
     const child = execFile('open', ['-a', 'Console', logFile], { windowsHide: true });
     child.unref();
   } else if (process.platform === 'win32') {
-    const child = execFile('powershell', ['-NoProfile', '-Command',
-      `Start-Process powershell -ArgumentList '-NoProfile','-Command',"Get-Content ''${logFile}'' -Wait -Tail 100"`]);
-    child.unref();
+    toggleConsoleWindow();
   }
 }

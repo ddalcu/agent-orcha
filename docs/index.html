@@ -72,13 +72,20 @@
             <a href="https://github.com/ddalcu/agent-orcha/releases/latest/download/agent-orcha-win-x64.zip" class="btn btn-secondary"><i class="fa-brands fa-windows"></i> Windows</a>
             <a href="https://github.com/ddalcu/agent-orcha/releases/latest/download/agent-orcha-linux-x64.tar.gz" class="btn btn-secondary"><i class="fa-brands fa-linux"></i> Linux</a>
           </div>
+
+          <p class="fade-in" style="margin-top: 1.5rem; color: var(--color-text-muted); font-size: 0.9rem;">Or run via npx or Docker:</p>
+
           <div class="terminal fade-in">
             <div class="terminal-header">
               <span class="terminal-dot"></span>
               <span class="terminal-dot"></span>
               <span class="terminal-dot"></span>
+              <span class="terminal-tabs">
+                <button class="terminal-tab active" data-tab="npx">npx</button>
+                <button class="terminal-tab" data-tab="docker">Docker</button>
+              </span>
             </div>
-            <div class="terminal-content">
+            <div class="terminal-content" data-tab-content="npx">
               <div class="terminal-line">
                 <span class="terminal-prompt">$</span>
                 <span class="terminal-command">npx agent-orcha init my-project && cd my-project</span>
@@ -94,62 +101,69 @@
                 <span class="terminal-output"><i class="fa-solid fa-rocket"></i> Server running on http://localhost:3000</span>
               </div>
             </div>
+            <div class="terminal-content" data-tab-content="docker" style="display:none;">
+              <div class="terminal-line">
+                <span class="terminal-prompt">$</span>
+                <span class="terminal-command">docker run -p 3000:3000 \</span>
+              </div>
+              <div class="terminal-line">
+                <span class="terminal-command" style="margin-left:1.5rem;">-v ./my-project:/data \</span>
+              </div>
+              <div class="terminal-line">
+                <span class="terminal-command" style="margin-left:1.5rem;">ddalcu/agent-orcha</span>
+              </div>
+              <div class="terminal-line">
+                <span class="terminal-output"><i class="fa-solid fa-rocket"></i> Server running on http://localhost:3000</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Get Started -->
-  <section class="section" id="get-started">
+  <!-- P2P Network -->
+  <section class="section">
     <div class="container">
-      <h2 class="text-center mb-2xl fade-in">Get Started</h2>
-      <div class="steps-grid">
-        <div class="card fade-in">
-          <div class="card-icon">1</div>
-          <h3 class="card-title">Run with npx</h3>
-          <p class="card-description">Recommended for local inference. Runs directly on your machine with full access to your GPU and Apple Silicon for local models (llama-cpp, MLX, Ollama, LM Studio).</p>
+      <div class="split">
+        <div class="fade-in">
+          <h2 class="mb-md">Peer-to-Peer Agent Network</h2>
+          <p class="mb-lg">Share agents and LLM engines across machines with zero configuration. No cloud servers, no API keys to exchange, no port forwarding. Peers discover each other automatically over your local network using <a href="https://github.com/holepunchto/hyperswarm" target="_blank" rel="noopener">Hyperswarm</a> DHT.</p>
+          <ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.75rem;">
+            <li style="color: var(--color-text-secondary);"><i class="fa-solid fa-share-nodes" style="color: var(--color-accent-cyan); width: 1.5rem;"></i> Share agents across your team — one person runs the model, everyone uses it</li>
+            <li style="color: var(--color-text-secondary);"><i class="fa-solid fa-microchip" style="color: var(--color-accent-cyan); width: 1.5rem;"></i> Pool GPU resources — share your local LLM engines with peers who don't have hardware</li>
+            <li style="color: var(--color-text-secondary);"><i class="fa-solid fa-lock" style="color: var(--color-accent-cyan); width: 1.5rem;"></i> Fully encrypted, no data leaves your network. No API keys shared, ever</li>
+            <li style="color: var(--color-text-secondary);"><i class="fa-solid fa-plug" style="color: var(--color-accent-cyan); width: 1.5rem;"></i> Tools execute locally on the caller side — full MCP, knowledge, and function support over P2P</li>
+          </ul>
+        </div>
+        <div class="fade-in">
           <div class="code-block">
+            <div class="code-header">
+              <span class="code-language">YAML</span>
+            </div>
             <div class="code-content">
-              <pre><code>npx agent-orcha init my-project
-cd my-project
-npx agent-orcha start</code></pre>
+              <pre><code># Mark an agent as shared
+name: code-reviewer
+p2p: true
+llm:
+  name: default
+
+# Or use a remote peer's LLM
+name: my-agent
+llm: p2p          # auto-select best available
+llm: p2p:llama3   # specific remote model</code></pre>
             </div>
           </div>
-        </div>
-        <div class="card fade-in">
-          <div class="card-icon">2</div>
-          <h3 class="card-title">Or run with Docker</h3>
-          <p class="card-description">Best when using cloud LLM providers (OpenAI, Anthropic, Gemini). Docker does not have direct GPU access, so use an external LLM server for local inference.</p>
-          <div class="code-block">
-            <div class="code-content">
-              <pre><code>docker run -p 3000:3000 \
-  -e AUTH_PASSWORD=mypass \
-  -v ./my-project:/data \
-  ddalcu/agent-orcha</code></pre>
+          <div class="code-block mt-md">
+            <div class="code-header">
+              <span class="code-language">Bash</span>
             </div>
-          </div>
-        </div>
-        <div class="card fade-in">
-          <div class="card-icon">3</div>
-          <h3 class="card-title">Configure with AI</h3>
-          <p class="card-description">Use your favorite AI coding client (Claude Code, Cursor, VSCode) to edit and generate YAML configs. Point your AI assistant to <a href="https://github.com/ddalcu/agent-orcha/blob/main/templates/llm.md" target="_blank" rel="noopener"><code>llm.md</code></a> as the reference.</p>
-          <div class="code-block">
             <div class="code-content">
-              <pre><code>agents/
-  researcher.agent.yaml
-workflows/
-  research-paper.workflow.yaml</code></pre>
-            </div>
-          </div>
-        </div>
-        <div class="card fade-in">
-          <div class="card-icon">4</div>
-          <h3 class="card-title">Test in Studio</h3>
-          <p class="card-description">Test agents, workflows, and knowledge stores via the built-in web dashboard. Chat with agents, run workflows, and browse knowledge stores.</p>
-          <div class="code-block">
-            <div class="code-content">
-              <pre><code>http://localhost:3000</code></pre>
+              <pre><code># Start with P2P enabled
+P2P_ENABLED=true npx agent-orcha start
+
+# Peers on the same network discover
+# each other automatically</code></pre>
             </div>
           </div>
         </div>
@@ -170,27 +184,42 @@ workflows/
         <div class="card fade-in">
           <div class="card-icon"><i class="fa-solid fa-rotate"></i></div>
           <h3 class="card-title">Model Agnostic</h3>
-          <p class="card-description">Seamlessly swap between OpenAI, Gemini, Anthropic, or local LLMs (Ollama, LM Studio) without rewriting logic. Zero vendor lock-in.</p>
+          <p class="card-description">Seamlessly swap between OpenAI, Gemini, Anthropic, or local LLMs (llama-cpp, MLX, Ollama, LM Studio). Auto-download models and manage VRAM. Zero vendor lock-in.</p>
+        </div>
+        <div class="card fade-in">
+          <div class="card-icon"><i class="fa-solid fa-share-nodes"></i></div>
+          <h3 class="card-title">P2P Agent Sharing</h3>
+          <p class="card-description">Share agents and LLM engines across machines over an encrypted peer-to-peer network. Pool GPU resources with your team. No cloud required.</p>
         </div>
         <div class="card fade-in">
           <div class="card-icon"><i class="fa-solid fa-screwdriver-wrench"></i></div>
           <h3 class="card-title">Universal Tooling</h3>
-          <p class="card-description">Leverage the Model Context Protocol (MCP) to connect agents to any external service, API, or database instantly. Extensible by design.</p>
+          <p class="card-description">MCP servers, knowledge stores, custom functions, sandboxed shell/browser, email, and webhooks. Connect agents to anything.</p>
         </div>
         <div class="card fade-in">
           <div class="card-icon"><i class="fa-solid fa-brain"></i></div>
           <h3 class="card-title">Knowledge Stores</h3>
-          <p class="card-description">Built-in SQLite vector stores with optional direct graph mapping make semantic search and entity analysis first-class citizens. No external databases required.</p>
+          <p class="card-description">Built-in SQLite vector stores with graph mapping. Semantic search, entity analysis, and SQL querying. Supports files, databases, web APIs. No external dependencies.</p>
         </div>
         <div class="card fade-in">
-          <div class="card-icon"><i class="fa-solid fa-heart"></i></div>
-          <h3 class="card-title">Forever Open Source</h3>
-          <p class="card-description">No pricing, no commercial licenses, no vendor lock-in. MIT licensed and always will be. Built by developers, for developers, with complete transparency.</p>
+          <div class="card-icon"><i class="fa-solid fa-shield-halved"></i></div>
+          <h3 class="card-title">Sandboxed Execution</h3>
+          <p class="card-description">Agents execute code, browse the web, and run shell commands inside an isolated Docker sandbox. Vision browser support for pixel-level automation.</p>
+        </div>
+        <div class="card fade-in">
+          <div class="card-icon"><i class="fa-solid fa-desktop"></i></div>
+          <h3 class="card-title">Native Desktop App</h3>
+          <p class="card-description">Runs as a native app on macOS, Windows, and Linux. System tray, one-click launch, no terminal required. Download and double-click.</p>
         </div>
         <div class="card fade-in">
           <div class="card-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
           <h3 class="card-title">AI-First Design</h3>
-          <p class="card-description">Built so AI can build AI agents. YAML is perfect for LLMs to read and write. Use Claude, ChatGPT, or any AI to generate, modify, and maintain your agent configurations effortlessly.</p>
+          <p class="card-description">Built so AI can build AI agents. YAML is perfect for LLMs to read and write. Use Claude, Cursor, or any AI to generate and maintain your agent configs.</p>
+        </div>
+        <div class="card fade-in">
+          <div class="card-icon"><i class="fa-solid fa-heart"></i></div>
+          <h3 class="card-title">Forever Open Source</h3>
+          <p class="card-description">No pricing, no commercial licenses, no vendor lock-in. MIT licensed and always will be. Built by developers, for developers.</p>
         </div>
       </div>
     </div>
@@ -309,19 +338,19 @@ output:
       <div class="grid grid-4 fade-in">
         <div class="card">
           <h4 class="card-title">YAML Configs</h4>
-          <p class="card-description">Agents<br>Workflows<br>Knowledge Stores<br>Functions</p>
+          <p class="card-description">Agents<br>Workflows<br>Knowledge Stores<br>Functions &amp; Skills</p>
         </div>
         <div class="card">
           <h4 class="card-title">Orchestrator</h4>
-          <p class="card-description">Agent Executor<br>Workflow Engine<br>ReAct Runtime<br>LLM Factory</p>
+          <p class="card-description">Agent Executor<br>ReAct Runtime<br>LLM Factory<br>P2P Network</p>
         </div>
         <div class="card">
           <h4 class="card-title">LLM Providers</h4>
-          <p class="card-description">OpenAI<br>Anthropic<br>Gemini<br>Local (Ollama)</p>
+          <p class="card-description">OpenAI &middot; Anthropic<br>Gemini &middot; Ollama<br>llama-cpp &middot; MLX<br>LM Studio &middot; P2P</p>
         </div>
         <div class="card">
           <h4 class="card-title">Integrations</h4>
-          <p class="card-description">MCP Servers<br>Knowledge Stores<br>Custom Functions<br>Studio IDE</p>
+          <p class="card-description">MCP Servers<br>Sandbox (Shell/Browser)<br>Email &middot; Webhooks<br>Studio IDE</p>
         </div>
       </div>
     </div>
@@ -342,7 +371,7 @@ output:
   "openapi": "3.0.0",
   "info": {
     "title": "Agent Orcha API",
-    "version": "0.0.5",
+    "version": "2026.320",
     "description": "API for orchestrating agents, workflows, knowledge stores, functions, MCP servers, and LLMs."
   },
   "servers": [
@@ -421,7 +450,7 @@ output:
           <h4>About</h4>
           <ul class="footer-links">
             <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
-            <li>Version 0.0.5</li>
+            <li>Version 2026.320</li>
             <li>MIT License</li>
           </ul>
         </div>
@@ -478,6 +507,17 @@ output:
         }
       });
     })();
+  </script>
+  <script>
+    document.querySelectorAll('.terminal-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        var terminal = this.closest('.terminal');
+        terminal.querySelectorAll('.terminal-tab').forEach(function(t) { t.classList.remove('active'); });
+        terminal.querySelectorAll('[data-tab-content]').forEach(function(c) { c.style.display = 'none'; });
+        this.classList.add('active');
+        terminal.querySelector('[data-tab-content="' + this.dataset.tab + '"]').style.display = '';
+      });
+    });
   </script>
 </body>
 </html>

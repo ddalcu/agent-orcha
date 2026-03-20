@@ -607,8 +607,38 @@ pre {
 
 .terminal-header {
   display: flex;
+  align-items: center;
   gap: var(--space-xs);
   margin-bottom: var(--space-md);
+}
+
+.terminal-tabs {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+
+.terminal-tab {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.terminal-tab:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-light);
+}
+
+.terminal-tab.active {
+  background: var(--color-accent-cyan);
+  color: var(--color-bg-primary);
+  border-color: var(--color-accent-cyan);
 }
 
 .terminal-dot {

@@ -239,18 +239,20 @@ if (platform === 'darwin') {
   console.log('Signing binary...');
   execFileSync('codesign', ['--sign', '-', outputPath]);
 } else if (platform === 'win32') {
-  // Stamp icon onto the .exe so it shows in Explorer (requires .ico format)
+  // Stamp icon onto the .exe so it shows in Explorer
   const icoPath = 'scripts/AppIcon.ico';
-  if (fs.existsSync(icoPath)) {
-    try {
-      const { default: rcedit } = await import('rcedit');
-      await rcedit(outputPath, { icon: icoPath });
-      console.log('Stamped icon onto .exe');
-    } catch (e) {
-      console.warn(`rcedit failed: ${e.message} — .exe will use default Node icon`);
+  try {
+    const { rcedit } = await import('rcedit');
+    const opts = {};
+    if (fs.existsSync(icoPath)) {
+      opts.icon = icoPath;
+    } else {
+      console.warn(`${icoPath} not found — .exe will use default Node icon`);
     }
-  } else {
-    console.warn('scripts/AppIcon.ico not found — .exe will use default Node icon');
+    await rcedit(outputPath, opts);
+    console.log('Patched .exe' + (opts.icon ? ' (icon stamped)' : ''));
+  } catch (e) {
+    console.warn(`rcedit failed: ${e.message} — install with: npm i -D rcedit`);
   }
 }
 
