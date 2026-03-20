@@ -79,9 +79,8 @@ const inlineStaticReadsPlugin = {
 
 if (!fs.existsSync('public/index.html')) {
   console.log('Building Svelte UI...');
-  const npmCmd = platform === 'win32' ? 'npm.cmd' : 'npm';
-  execFileSync(npmCmd, ['ci'], { cwd: 'ui', stdio: 'inherit' });
-  execFileSync(npmCmd, ['run', 'build'], { cwd: 'ui', stdio: 'inherit' });
+  execFileSync('npm', ['ci'], { cwd: 'ui', stdio: 'inherit', shell: true });
+  execFileSync('npm', ['run', 'build'], { cwd: 'ui', stdio: 'inherit', shell: true });
 }
 
 console.log('Bundling application...');
