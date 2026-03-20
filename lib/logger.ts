@@ -88,7 +88,17 @@ function createPrettyDestination(): Writable {
         const time = obj.time ? new Date(obj.time).toLocaleTimeString('en-GB', { hour12: false }) : '';
         const comp = obj.component ? `${obj.component} ` : '';
         const msg = obj.msg || '';
-        process.stdout.write(`${color}${time} ${label.padEnd(5)}${RESET} ${comp}${msg}\n`);
+        let line = `${color}${time} ${label.padEnd(5)}${RESET} ${comp}${msg}`;
+        // Render error details when present (pino serialises errors under `err`)
+        if (obj.err) {
+          const errMsg = obj.err.message || obj.err.code || '';
+          if (errMsg && !msg.includes(errMsg)) line += ` ${errMsg}`;
+          if (obj.err.stack) {
+            const stackLines = obj.err.stack.split('\n').slice(1, 4).map((l: string) => `  ${l.trim()}`);
+            line += `\n${stackLines.join('\n')}`;
+          }
+        }
+        process.stdout.write(line + '\n');
       } catch {
         process.stdout.write(chunk);
       }

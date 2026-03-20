@@ -17,11 +17,26 @@ export class SandboxContainer {
    * Detect if Docker (or compatible runtime) is available.
    */
   detectDocker(): boolean {
-    const candidates = ['/usr/local/bin/docker', '/usr/bin/docker', 'docker'];
+    const home = process.env.HOME || process.env.USERPROFILE || '';
+    const isWin = process.platform === 'win32';
+    const candidates = isWin
+      ? [
+          `${process.env.ProgramFiles || 'C:\\Program Files'}\\Docker\\Docker\\resources\\bin\\docker.exe`,
+          `${home}\\.docker\\bin\\docker.exe`,
+          'docker',
+        ]
+      : [
+          '/usr/local/bin/docker',
+          '/usr/bin/docker',
+          `${home}/.docker/bin/docker`,
+          '/Applications/Docker.app/Contents/Resources/bin/docker',
+          '/opt/homebrew/bin/docker',
+          'docker',
+        ];
 
     for (const candidate of candidates) {
       try {
-        execFileSync(candidate, ['version'], { stdio: 'pipe', timeout: 5000 });
+        execFileSync(candidate, ['version'], { stdio: 'pipe', timeout: 5000, env: this.dockerEnv() });
         this.dockerPath = candidate;
         return true;
       } catch {
@@ -41,7 +56,7 @@ export class SandboxContainer {
     try {
       const output = execFileSync(this.dockerPath, [
         'container', 'inspect', '-f', '{{.State.Running}}', CONTAINER_NAME,
-      ], { stdio: 'pipe', timeout: 5000 }).toString().trim();
+      ], { stdio: 'pipe', timeout: 5000, env: this.dockerEnv() }).toString().trim();
       return output === 'true';
     } catch {
       return false;
@@ -83,7 +98,7 @@ export class SandboxContainer {
         '--cap-add', 'SYS_ADMIN',
         '--restart', 'unless-stopped',
         SANDBOX_IMAGE,
-      ], { timeout: 30_000 }, (error, _stdout, stderr) => {
+      ], { timeout: 30_000, env: this.dockerEnv() }, (error, _stdout, stderr) => {
         if (error) {
           logger.error(`[Sandbox] Failed to start container: ${error.message}`);
           if (stderr) logger.error(`[Sandbox] ${stderr}`);
@@ -113,7 +128,7 @@ export class SandboxContainer {
     return new Promise((resolve) => {
       execFile(this.dockerPath!, [
         'rm', '-f', CONTAINER_NAME,
-      ], { timeout: 30_000 }, (error) => {
+      ], { timeout: 30_000, env: this.dockerEnv() }, (error) => {
         if (error) {
           logger.warn(`[Sandbox] Failed to stop container: ${error.message}`);
         } else {
@@ -138,7 +153,7 @@ export class SandboxContainer {
       execFile(this.dockerPath!, [
         'exec', CONTAINER_NAME,
         'su', '-s', '/bin/sh', 'sandbox', '-c', command,
-      ], { timeout, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+      ], { timeout, maxBuffer: 10 * 1024 * 1024, env: this.dockerEnv() }, (error, stdout, stderr) => {
         let exitCode = 0;
         if (error && 'code' in error && typeof error.code === 'number') {
           exitCode = error.code;
@@ -166,10 +181,47 @@ export class SandboxContainer {
 
   private pullImage(image: string): Promise<boolean> {
     return new Promise((resolve) => {
-      execFile(this.dockerPath!, ['pull', image], { timeout: 120_000 }, (error) => {
+      execFile(this.dockerPath!, ['pull', image], {
+        timeout: 120_000,
+        env: this.dockerEnv(),
+      }, (error, _stdout, stderr) => {
+        if (error) {
+          logger.error(`[Sandbox] Pull failed: ${error.message}`);
+          if (stderr) logger.debug(`[Sandbox] ${stderr.trim()}`);
+        }
         resolve(!error);
       });
     });
+  }
+
+  /**
+   * Build env for Docker commands. macOS .app bundles and Windows native binaries
+   * get a minimal environment that may lack PATH entries and DOCKER_HOST.
+   */
+  private dockerEnv(): NodeJS.ProcessEnv {
+    const env = { ...process.env };
+
+    if (!env.DOCKER_HOST) {
+      if (process.platform === 'win32') {
+        // Docker Desktop on Windows uses a named pipe
+        env.DOCKER_HOST = 'npipe:////./pipe/docker_engine';
+      } else {
+        const home = env.HOME || '';
+        const candidates = [
+          `${home}/.docker/run/docker.sock`,
+          '/var/run/docker.sock',
+        ];
+        for (const sock of candidates) {
+          try {
+            require('fs').accessSync(sock);
+            env.DOCKER_HOST = `unix://${sock}`;
+            break;
+          } catch { /* not found */ }
+        }
+      }
+    }
+
+    return env;
   }
 
   private async waitForCDP(maxWait = 15_000): Promise<boolean> {

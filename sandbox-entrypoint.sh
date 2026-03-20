@@ -47,13 +47,14 @@ PREFS
 touch /tmp/.chromium/'First Run'
 chown sandbox:sandbox /tmp/.chromium/Default/Preferences /tmp/.chromium/'First Run'
 
-# Run Chromium as sandbox user — no --no-sandbox needed, so no warning banner.
+# Chrome flags — kiosk mode removes close/minimize buttons so users can't kill it via VNC.
 # Container must have SYS_ADMIN capability for Chrome's internal sandbox.
 # Flags chosen to look like a normal browser — no --test-type, --enable-automation, --headless.
-su -s /bin/sh sandbox -c 'chromium --disable-gpu --disable-dev-shm-usage \
+CHROME_FLAGS='--disable-gpu --disable-dev-shm-usage \
   --disable-software-rasterizer \
   --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
   --window-size=1280,720 \
+  --kiosk \
   --no-first-run --no-default-browser-check \
   --disable-background-networking \
   --disable-client-side-phishing-detection \
@@ -64,7 +65,9 @@ su -s /bin/sh sandbox -c 'chromium --disable-gpu --disable-dev-shm-usage \
   --disable-translate \
   --metrics-recording-only \
   --lang=en-US \
-  --user-data-dir=/tmp/.chromium about:blank 2>/dev/null' &
+  --user-data-dir=/tmp/.chromium about:blank'
+
+su -s /bin/sh sandbox -c "chromium $CHROME_FLAGS 2>/dev/null" &
 
 # Wait for Chromium CDP to be ready
 for i in $(seq 1 20); do

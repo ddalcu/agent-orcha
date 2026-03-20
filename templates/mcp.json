@@ -3,11 +3,6 @@
   "servers": {
     "htmlhost": {
       "url": "https://htmlhost.jax.workers.dev/mcp"
-    },
-    "isac-reports": {
-      "transport": "streamable-http",
-      "url": "https://security.deploy.dalcu.com/mcp",
-      "description": "OSINT threat intelligence aggregator — CVEs, advisories, malware"
     }
   },
   "globalOptions": {
