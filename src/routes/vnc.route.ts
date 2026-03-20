@@ -35,14 +35,16 @@ export const vncRoutes: FastifyPluginAsync<VncRouteDeps> = async (fastify, opts)
   };
 
   fastify.get('/api/vnc/status', async () => {
+    const sandboxInfo = fastify.orchestrator.sandbox.getStatus();
+
     if (inContainer && hasLocalNoVNC) {
-      return { enabled: true, mode: 'embedded', url: '/vnc/vnc.html?autoconnect=true&path=websockify' };
+      return { enabled: true, mode: 'embedded', url: '/vnc/vnc.html?autoconnect=true&path=websockify', sandbox: sandboxInfo };
     }
     const external = await sandboxContainerAvailable();
     if (external) {
-      return { enabled: true, mode: 'external', url: 'http://localhost:6080/vnc.html?autoconnect=true' };
+      return { enabled: true, mode: 'external', url: 'http://localhost:6080/vnc.html?autoconnect=true', sandbox: sandboxInfo };
     }
-    return { enabled: false };
+    return { enabled: false, sandbox: sandboxInfo };
   });
 
   // Serve noVNC static files and WebSocket proxy only when running inside Docker

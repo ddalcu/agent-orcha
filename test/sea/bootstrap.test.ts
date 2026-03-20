@@ -1,7 +1,6 @@
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert';
 import * as path from 'path';
-import * as os from 'os';
 
 // ─── Mock state ─────────────────────────────────────────────────────────────
 
@@ -17,6 +16,8 @@ mock.module('fs', {
     statSync: (...args: any[]) => fsMock.statSync(...args),
     readdirSync: (...args: any[]) => fsMock.readdirSync(...args),
     chmodSync: (...args: any[]) => fsMock.chmodSync(...args),
+    cpSync: (...args: any[]) => fsMock.cpSync(...args),
+    copyFileSync: (...args: any[]) => fsMock.copyFileSync(...args),
   },
 });
 
@@ -24,16 +25,19 @@ mock.module('fs', {
 const {
   isSea,
   getDefaultWorkspace,
+  getOrchaDir,
   getPublicDir,
   getSqliteVecPath,
   seaBootstrap,
   extractTemplates,
+  resolveWorkspace,
+  scaffoldWorkspace,
   _resetSeaCache,
   _setSeaMock,
 } = await import('../../lib/sea/bootstrap.ts');
 
-const ORCHA_DIR = path.join(os.homedir(), '.orcha');
-const DEFAULT_WORKSPACE = path.join(os.homedir(), 'agent-orcha-workspace');
+const ORCHA_DIR = getOrchaDir();
+const DEFAULT_WORKSPACE = path.join(ORCHA_DIR, 'workspace');
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
@@ -57,6 +61,8 @@ describe('sea/bootstrap', () => {
       statSync: () => ({ size: 1000, mtimeMs: 12345 }),
       readdirSync: () => [],
       chmodSync: () => {},
+      cpSync: () => {},
+      copyFileSync: () => {},
     };
   });
 
@@ -76,7 +82,7 @@ describe('sea/bootstrap', () => {
   // ─── getPublicDir ─────────────────────────────────────────────────────────
 
   describe('getPublicDir', () => {
-    it('returns public dir under ~/.orcha', () => {
+    it('returns public dir under ORCHA_DIR', () => {
       assert.strictEqual(getPublicDir(), path.join(ORCHA_DIR, 'public'));
     });
   });
@@ -406,6 +412,70 @@ describe('sea/bootstrap', () => {
 
       assert.strictEqual(writtenPaths.length, 1);
       assert.strictEqual(writtenPaths[0], path.join('/out', 'my-template.yaml'));
+    });
+  });
+
+  // ─── resolveWorkspace ────────────────────────────────────────────────────
+
+  describe('resolveWorkspace', () => {
+    it('returns WORKSPACE env var when set', () => {
+      const original = process.env.WORKSPACE;
+      try {
+        process.env.WORKSPACE = '/custom/workspace';
+        assert.strictEqual(resolveWorkspace(), '/custom/workspace');
+      } finally {
+        if (original === undefined) delete process.env.WORKSPACE;
+        else process.env.WORKSPACE = original;
+      }
+    });
+
+    it('returns default workspace when WORKSPACE env var is not set', () => {
+      const original = process.env.WORKSPACE;
+      try {
+        delete process.env.WORKSPACE;
+        assert.strictEqual(resolveWorkspace(), DEFAULT_WORKSPACE);
+      } finally {
+        if (original !== undefined) process.env.WORKSPACE = original;
+      }
+    });
+  });
+
+  // ─── scaffoldWorkspace ───────────────────────────────────────────────────
+
+  describe('scaffoldWorkspace', () => {
+    it('skips scaffolding when agents/ directory already exists', () => {
+      let mkdirCalled = false;
+      fsMock.existsSync = (p: string) => {
+        if (typeof p === 'string' && p.endsWith('agents')) return true;
+        return false;
+      };
+      fsMock.mkdirSync = () => { mkdirCalled = true; };
+
+      scaffoldWorkspace('/some/workspace');
+
+      assert.strictEqual(mkdirCalled, false, 'Should not create directories when agents/ exists');
+      assert.strictEqual(logCalls.length, 0, 'Should not log when workspace already exists');
+    });
+
+    it('scaffolds workspace in SEA mode using extractTemplates', () => {
+      const writtenPaths: string[] = [];
+      const mockSeaMod = {
+        isSea: () => true,
+        getAssetKeys: () => ['templates/agents/test.yaml'],
+        getRawAsset: () => new ArrayBuffer(5),
+      };
+
+      _setSeaMock(mockSeaMod);
+
+      fsMock.existsSync = () => false;
+      fsMock.mkdirSync = () => {};
+      fsMock.writeFileSync = (p: string) => { writtenPaths.push(p); };
+
+      scaffoldWorkspace('/test/workspace');
+
+      assert.ok(logCalls.some(l => l.includes('Creating workspace')), 'Should log creation message');
+      assert.ok(logCalls.some(l => l.includes('Workspace created')), 'Should log completion');
+      assert.ok(writtenPaths.length > 0, 'Should extract template files');
     });
   });
 });

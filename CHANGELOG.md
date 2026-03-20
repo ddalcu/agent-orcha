@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
 
+## Release 2026.320.2
+
+### Changed
+
+- **Unified Workspace Resolution** — All entry points (dev, CLI, SEA, Docker) now resolve the workspace through a single `resolveWorkspace()` function. Defaults to `~/.orcha/workspace`; overridable via `WORKSPACE` env var. Auto-scaffolds from templates on first run in every mode, not just SEA.
+  - New exports in `lib/sea/bootstrap.ts`: `resolveWorkspace()`, `scaffoldWorkspace()`
+  - Deleted `src/index.ts` — all modes go through `src/cli/index.ts`
+  - Deleted `src/cli/commands/init.ts` — scaffolding handled by `scaffoldWorkspace()`
+- **Lazy Sandbox Launch** — Sandbox container starts in the background so it doesn't block server startup. `sandbox_shell` tool receives a lazy getter instead of a direct reference, resolving the container at call time.
+- **Sandbox Status Tracking** — `SandboxContainer` tracks lifecycle status (`idle` → `detecting` → `pulling` → `starting` → `running` / `failed` / `no-docker`). New `SandboxStatus` type exported from `lib/sandbox/types.ts`. VNC route includes `sandbox` status in its response.
+- **Sandbox VNC Button** — Browser Desktop button in the navbar now shows sandbox lifecycle state with a pulsing animation while starting, green when running, and red on failure. Hidden entirely when Docker is not detected. Polls `/api/vnc` while the sandbox is still initializing.
+- **Docker Socket Discovery** — Removed `DOCKER_HOST` probing for `~/.docker/run/docker.sock` to avoid macOS "access data from other apps" permission prompts. Docker CLI handles its own socket discovery.
+- **System Tray** — Uses `getOrchaDir()` instead of duplicating `os.homedir()` + `.orcha` path.
+- **CLI** — Running with no args now starts the server in all modes (previously showed help in non-SEA mode). Help text updated to document `WORKSPACE` env var.
+- **`dev` / `start` Scripts** — Now route through `src/cli/index.ts start` instead of the removed `src/index.ts`.
+- **Docker Entrypoint** — Sets `WORKSPACE=/data` by default; removed `init` block (auto-scaffold handles it).
+
+### Removed
+
+- **`init` Command** — No longer needed; workspace is auto-scaffolded on first `start`.
+- **`src/index.ts`** — Redundant dev entry point; unified into CLI.
+- **`dev:p2p` Script** — Removed from `package.json`.
+
+---
+
 ## Release 2026.320
 
 ### Added

@@ -28,7 +28,7 @@ function isRunningInContainer(): boolean {
   return false;
 }
 
-export function createSandboxShellTool(config: SandboxConfig, sandboxContainer?: SandboxContainer): StructuredTool {
+export function createSandboxShellTool(config: SandboxConfig, getContainer: () => SandboxContainer | undefined): StructuredTool {
   const inDocker = isRunningInContainer();
   const allowUnsafe = process.env['ALLOW_UNSAFE_HOST_EXECUTION'] === 'true';
 
@@ -45,6 +45,7 @@ export function createSandboxShellTool(config: SandboxConfig, sandboxContainer?:
       }
 
       // Running locally with sandbox container — route through docker exec
+      const sandboxContainer = getContainer();
       if (sandboxContainer?.isRunning) {
         const result = await sandboxContainer.exec(command, effectiveTimeout);
         return truncateOutput(result, config.maxOutputChars);

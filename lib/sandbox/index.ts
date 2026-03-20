@@ -9,4 +9,4 @@ export type { PageSnapshot } from './page-readiness.ts';
 export { htmlToMarkdown } from './html-to-markdown.ts';
 export { SandboxContainer } from './sandbox-container.ts';
 export { SandboxConfigSchema } from './types.ts';
-export type { SandboxConfig, ExecResult } from './types.ts';
+export type { SandboxConfig, ExecResult, SandboxStatus } from './types.ts';

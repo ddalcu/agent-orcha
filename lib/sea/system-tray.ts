@@ -1,12 +1,11 @@
 import { spawn, execFile } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline';
-import { isSea } from './bootstrap.ts';
+import { isSea, getOrchaDir } from './bootstrap.ts';
 import { logger } from '../logger.ts';
 
-const ORCHA_DIR = path.join(os.homedir(), '.orcha');
+const ORCHA_DIR = getOrchaDir();
 
 interface TrayMenuItem {
   title: string;
