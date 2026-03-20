@@ -17,6 +17,7 @@ export class TaskStore {
 
     const interval = config.cleanupInterval ?? 60000; // 60s
     this.cleanupInterval = setInterval(() => this.cleanup(), interval);
+    this.cleanupInterval.unref(); // Don't keep the process alive for cleanup
   }
 
   create(kind: TaskKind, target: string, input: Record<string, unknown>, sessionId?: string): Task {
