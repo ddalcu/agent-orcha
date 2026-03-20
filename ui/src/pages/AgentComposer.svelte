@@ -579,9 +579,9 @@
           {#if p2pNetworkEnabled}
             <option disabled>──── P2P ────</option>
             <option value="p2p" selected={llmName === 'p2p'}>p2p (auto-select)</option>
-            {#each remoteLLMs as rl}
-              {@const p2pRef = `p2p:${rl.name}`}
-              <option value={p2pRef} selected={llmName === p2pRef}>p2p:{rl.name} ({rl.peerName})</option>
+            {#each [...new Map(remoteLLMs.map((rl: any) => [rl.name, remoteLLMs.filter((r: any) => r.name === rl.name).length])).entries()] as [name, count]}
+              {@const p2pRef = `p2p:${name}`}
+              <option value={p2pRef} selected={llmName === p2pRef}>p2p:{name} ({count} {count === 1 ? 'peer' : 'peers'})</option>
             {/each}
           {/if}
         </select>

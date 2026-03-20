@@ -75,6 +75,12 @@ function makeDeps(overrides: Partial<VncRouteDeps> = {}): VncRouteDeps {
 
 async function buildApp(deps: VncRouteDeps = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  // VNC route accesses fastify.orchestrator.sandbox.getStatus()
+  app.decorate('orchestrator', {
+    sandbox: {
+      getStatus: () => ({ status: 'idle', error: null }),
+    },
+  });
   await app.register(vncRoutes, makeDeps(deps));
   await app.ready();
   return app;

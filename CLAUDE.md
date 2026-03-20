@@ -1,5 +1,9 @@
 # Agent Orcha — Project Guide
 
+## Coding Rules
+
+- **Never swallow errors silently.** No empty `.catch(() => {})`, no empty `catch {}` blocks, no `catch { /* ignore */ }`. Always log the error with `logger.error()` / `logger.warn()` or re-throw it. If a catch block truly has nothing to handle, add a comment explaining *why* the error is safe to ignore (e.g., "file may not exist, that's expected").
+
 ## Architecture Overview
 
 Agent Orcha is a declarative multi-agent AI framework. Agents, workflows, knowledge stores, and functions are defined in YAML and loaded at startup by the `Orchestrator` class.

@@ -2,12 +2,10 @@ import dotenv from 'dotenv';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
-import { isSea, getDefaultWorkspace, extractTemplates } from '../../../lib/sea/bootstrap.ts';
+import { isSea, getOrchaDir, resolveWorkspace, scaffoldWorkspace } from '../../../lib/sea/bootstrap.ts';
 import { createSystemTray, type SystemTray } from '../../../lib/sea/system-tray.ts';
 
-const workspaceRoot = isSea()
-  ? (process.env.WORKSPACE ? path.resolve(process.env.WORKSPACE) : getDefaultWorkspace())
-  : process.cwd();
+const workspaceRoot = resolveWorkspace();
 
 // Load .env from the workspace root
 const cliEnvPath = path.join(workspaceRoot, '.env');
@@ -45,7 +43,7 @@ async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> 
     console.error('\nError: Required directories not found in current directory:');
     missingDirs.forEach(dir => console.error(`  - ${dir}/`));
     console.error('\nThis does not appear to be an Agent Orcha workspace.');
-    console.error('Run "npx agent-orcha init" to create a new workspace.\n');
+    console.error('Remove WORKSPACE env var to use the default workspace (~/.orcha/workspace).\n');
     throw new Error('Invalid workspace structure');
   }
 
@@ -76,7 +74,7 @@ async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> 
 export async function startCommand(_args: string[]): Promise<void> {
   // In SEA mode, tee stdout/stderr to a log file for the "View Logs" tray action
   if (isSea()) {
-    const orchaDir = path.join(require('os').homedir(), '.orcha');
+    const orchaDir = getOrchaDir();
     fsSync.mkdirSync(orchaDir, { recursive: true });
     const logStream = fsSync.createWriteStream(path.join(orchaDir, 'server.log'), { flags: 'w' });
     const origStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -91,13 +89,8 @@ export async function startCommand(_args: string[]): Promise<void> {
     };
   }
 
-  // In SEA mode, scaffold workspace on first run
-  if (isSea() && !fsSync.existsSync(path.join(workspaceRoot, 'agents'))) {
-    console.log(`\nCreating workspace at ${workspaceRoot}...`);
-    fsSync.mkdirSync(workspaceRoot, { recursive: true });
-    extractTemplates(workspaceRoot);
-    console.log('Workspace created with example configuration.\n');
-  }
+  // Scaffold workspace on first run (works for both SEA and non-SEA)
+  scaffoldWorkspace(workspaceRoot);
 
   console.log(`
                 ⠀⠀⠀⠀⠀⠀⢀⣀⣀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀

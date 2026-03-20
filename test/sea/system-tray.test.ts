@@ -34,6 +34,7 @@ mock.module('fs', {
 mock.module('../../lib/sea/bootstrap.ts', {
   namedExports: {
     isSea: () => isSeaFn(),
+    getOrchaDir: () => '/tmp/.orcha',
   },
 });
 

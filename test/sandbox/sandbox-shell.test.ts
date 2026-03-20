@@ -28,14 +28,14 @@ describe('createSandboxShellTool', () => {
   });
 
   it('should create a tool with correct name', () => {
-    const tool = createSandboxShellTool(createConfig());
+    const tool = createSandboxShellTool(createConfig(), () => undefined);
     assert.equal(tool.name, 'sandbox_shell');
     assert.ok(tool.description.includes('shell command'));
   });
 
   it('should block execution outside Docker without env var', async () => {
     delete process.env['ALLOW_UNSAFE_HOST_EXECUTION'];
-    const tool = createSandboxShellTool(createConfig());
+    const tool = createSandboxShellTool(createConfig(), () => undefined);
     const result = await tool.invoke({ command: 'echo hello' });
     const parsed = JSON.parse(result as string);
     assert.ok(parsed.error?.includes('Shell execution is disabled'));
@@ -44,7 +44,7 @@ describe('createSandboxShellTool', () => {
 
   it('should execute when ALLOW_UNSAFE_HOST_EXECUTION is set', async () => {
     process.env['ALLOW_UNSAFE_HOST_EXECUTION'] = 'true';
-    const tool = createSandboxShellTool(createConfig());
+    const tool = createSandboxShellTool(createConfig(), () => undefined);
     const result = await tool.invoke({ command: 'echo hello' });
     const parsed = JSON.parse(result as string);
     assert.equal(parsed.stdout.trim(), 'hello');
@@ -53,7 +53,7 @@ describe('createSandboxShellTool', () => {
 
   it('should return stderr and non-zero exit code on failure', async () => {
     process.env['ALLOW_UNSAFE_HOST_EXECUTION'] = 'true';
-    const tool = createSandboxShellTool(createConfig());
+    const tool = createSandboxShellTool(createConfig(), () => undefined);
     const result = await tool.invoke({ command: 'ls /nonexistent_dir_xyz_12345' });
     const parsed = JSON.parse(result as string);
     assert.ok(parsed.exitCode !== 0);
@@ -62,7 +62,7 @@ describe('createSandboxShellTool', () => {
 
   it('should truncate long output', async () => {
     process.env['ALLOW_UNSAFE_HOST_EXECUTION'] = 'true';
-    const tool = createSandboxShellTool(createConfig({ maxOutputChars: 50 }));
+    const tool = createSandboxShellTool(createConfig({ maxOutputChars: 50 }), () => undefined);
     const result = await tool.invoke({ command: 'yes | head -1000' });
     const parsed = JSON.parse(result as string);
     assert.equal(parsed._truncated, true);
@@ -70,7 +70,7 @@ describe('createSandboxShellTool', () => {
 
   it('should respect timeout', async () => {
     process.env['ALLOW_UNSAFE_HOST_EXECUTION'] = 'true';
-    const tool = createSandboxShellTool(createConfig({ commandTimeout: 1000 }));
+    const tool = createSandboxShellTool(createConfig({ commandTimeout: 1000 }), () => undefined);
     const result = await tool.invoke({ command: 'echo fast' });
     const parsed = JSON.parse(result as string);
     assert.equal(parsed.stdout.trim(), 'fast');

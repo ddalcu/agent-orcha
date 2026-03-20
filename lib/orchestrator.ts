@@ -39,7 +39,7 @@ import type { IntegrationAccessor } from './integrations/types.ts';
 import { TriggerManager } from './triggers/trigger-manager.ts';
 import { createCanvasWriteTool, createCanvasAppendTool } from './tools/built-in/canvas-write.tool.ts';
 import { P2PManager } from './p2p/p2p-manager.ts';
-import type { SandboxConfig } from './sandbox/types.ts';
+import type { SandboxConfig, SandboxStatus } from './sandbox/types.ts';
 import type { AgentDefinition, AgentResult } from './agents/types.ts';
 import type {
   WorkflowDefinition,
@@ -248,9 +248,12 @@ export class Orchestrator {
     if (this.sandboxConfig.enabled) {
       this.vmExecutor = new VmExecutor();
 
-      // When running locally (not in Docker), try to auto-launch the sandbox container
+      // When running locally (not in Docker), launch sandbox container in the background
+      // so it doesn't block server startup
       if (!this.isRunningInContainer()) {
-        await this.launchSandboxContainer();
+        this.launchSandboxContainer().catch((err) => {
+          logger.error(`[Sandbox] Failed to launch container: ${err.message}`);
+        });
       }
     } else {
       this.vmExecutor = null;
@@ -302,7 +305,7 @@ export class Orchestrator {
     tools.set('exec', createSandboxExecTool(this.vmExecutor, this.sandboxConfig));
     tools.set('web_fetch', createSandboxWebFetchTool(this.sandboxConfig));
     tools.set('web_search', createSandboxWebSearchTool());
-    tools.set('shell', createSandboxShellTool(this.sandboxConfig, this.sandboxContainer ?? undefined));
+    tools.set('shell', createSandboxShellTool(this.sandboxConfig, () => this.sandboxContainer ?? undefined));
 
     const fileTools = createFileTools(this.sandboxConfig);
     for (const ft of fileTools) {
@@ -411,6 +414,10 @@ export class Orchestrator {
       getConfig: () => this.sandboxConfig,
       getVmExecutor: () => this.vmExecutor,
       isEnabled: () => this.sandboxConfig?.enabled ?? false,
+      getStatus: () => ({
+        status: this.sandboxContainer?.status ?? (this.sandboxConfig?.enabled ? 'idle' : 'idle'),
+        error: this.sandboxContainer?.error ?? null,
+      }),
     };
   }
 
@@ -1104,6 +1111,7 @@ interface SandboxAccessor {
   getConfig: () => SandboxConfig | null;
   getVmExecutor: () => VmExecutor | null;
   isEnabled: () => boolean;
+  getStatus: () => { status: SandboxStatus; error: string | null };
 }
 
 interface ToolsAccessor {

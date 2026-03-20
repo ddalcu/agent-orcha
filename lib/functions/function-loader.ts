@@ -1,8 +1,10 @@
 import * as path from 'path';
+import * as fs from 'fs';
 import { glob } from 'glob';
 import { pathToFileURL } from 'url';
 import type { StructuredTool } from '../types/llm-types.ts';
 import { logger } from '../logger.ts';
+import { isSea } from '../sea/bootstrap.ts';
 import { wrapSimpleFunction, type SimpleFunctionDefinition } from './simple-function-wrapper.ts';
 
 export interface FunctionMetadata {
@@ -18,6 +20,30 @@ export interface LoadedFunction {
   tool: StructuredTool;
   metadata: FunctionMetadata;
   filePath: string;
+}
+
+/**
+ * Load an ESM function file by transforming its exports into plain JS and evaluating it.
+ * Used in SEA binaries where dynamic import() of external files is not supported.
+ * Exported for testing — not part of the public API.
+ */
+export function loadESMDirect(filePath: string): Record<string, any> {
+  const source = fs.readFileSync(filePath, 'utf-8');
+
+  // Transform ESM export syntax into plain variable declarations
+  const transformed = source
+    .replace(/^export\s+default\s+/m, 'var __default = ')
+    .replace(/^export\s+const\s+(\w+)/gm, 'var $1');
+
+  const wrapper = transformed +
+    '\nreturn { default: typeof __default !== "undefined" ? __default : undefined,' +
+    ' metadata: typeof metadata !== "undefined" ? metadata : undefined };';
+
+  const factory = new Function('Buffer', 'URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder',
+    'console', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'process', wrapper);
+
+  return factory(Buffer, URL, URLSearchParams, TextEncoder, TextDecoder,
+    console, setTimeout, clearTimeout, setInterval, clearInterval, process);
 }
 
 export class FunctionLoader {
@@ -45,8 +71,7 @@ export class FunctionLoader {
 
   async loadOne(filePath: string): Promise<LoadedFunction> {
     try {
-      const fileUrl = pathToFileURL(filePath).href;
-      const module = await import(fileUrl);
+      const module = await this.importModule(filePath);
 
       let tool: StructuredTool;
       let metadata: FunctionMetadata;
@@ -87,8 +112,30 @@ export class FunctionLoader {
 
       return loadedFunction;
     } catch (error) {
-      logger.error(`[FunctionLoader] Failed to load function from ${filePath}:`, error);
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error(`[FunctionLoader] Failed to load function from ${filePath}: ${msg}`);
       throw error;
+    }
+  }
+
+  /**
+   * Import a function module. Uses native import() first; in SEA mode
+   * falls back to evaluating the source directly (no import() needed).
+   */
+  private async importModule(filePath: string): Promise<Record<string, any>> {
+    const fileUrl = pathToFileURL(filePath).href;
+
+    try {
+      return await import(fileUrl);
+    } catch (importError) {
+      if (!isSea()) throw importError;
+
+      const importMsg = importError instanceof Error ? importError.message : String(importError);
+      logger.debug(
+        `[FunctionLoader] Native import() failed in SEA for ${filePath}: ${importMsg}, using direct eval`
+      );
+
+      return loadESMDirect(filePath);
     }
   }
 

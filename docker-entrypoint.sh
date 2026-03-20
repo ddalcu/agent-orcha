@@ -37,18 +37,15 @@ PREFS
     --lang=en-US \
     --user-data-dir=/tmp/.chromium"
   if [ "${BROWSER_VERBOSE:-false}" = "true" ]; then
-    su -s /bin/sh sandbox -c "chromium $CHROMIUM_FLAGS about:blank" &
+    su -s /bin/sh sandbox -c "chromium $CHROMIUM_FLAGS chrome://newtab" &
   else
-    su -s /bin/sh sandbox -c "chromium $CHROMIUM_FLAGS about:blank 2>/dev/null" &
+    su -s /bin/sh sandbox -c "chromium $CHROMIUM_FLAGS chrome://newtab 2>/dev/null" &
   fi
   echo "Browser sandbox ready (noVNC: http://localhost:6080/vnc.html, CDP: ws://localhost:9222)"
 fi
 
-# If workspace has no agents/ directory, initialize from templates
-if [ ! -d "/data/agents" ]; then
-  echo "Empty workspace detected. Running init..."
-  node /app/src/cli/index.ts init
-fi
+# Set default workspace for Docker
+export WORKSPACE="${WORKSPACE:-/data}"
 
 # Default to "start" when no command is given
 if [ -z "${1:-}" ]; then
@@ -57,7 +54,7 @@ fi
 
 # If first arg is a known subcommand, prepend the CLI
 case "$1" in
-  start|init|help)
+  start|help)
     if [ "${NODE_ENV:-}" = "development" ]; then
       exec node --watch-path=/app/lib --watch-path=/app/src /app/src/cli/index.ts "$@"
     else
