@@ -40,6 +40,10 @@ export function getSqliteVecPath(): string {
   return path.join(ORCHA_DIR, 'native', `vec0.${ext}`);
 }
 
+export function getNativeAddonPath(name: string): string {
+  return path.join(ORCHA_DIR, 'native', `${name}.node`);
+}
+
 /**
  * Build a fingerprint from the binary's size and mtime.
  * Changes on every rebuild without needing to hash the entire file.

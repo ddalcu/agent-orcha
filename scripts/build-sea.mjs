@@ -49,8 +49,40 @@ const inlineStaticReadsPlugin = {
       );
       return { contents, loader: 'js' };
     });
+
+    // Hyperswarm native addons (sodium-native, udx-native) use require-addon to load
+    // .node prebuilts, which breaks in SEA because __filename resolves to the binary path.
+    // Replace their binding.js with a shim that loads from the extracted ~/.orcha/native/ path
+    // using process.dlopen (esbuild's require can't load .node files directly).
+    build.onLoad({ filter: /(sodium-native|udx-native)[\\/]binding\.js$/ }, async (args) => {
+      const addonName = path.basename(path.dirname(args.path));
+      return {
+        contents: `
+          const { getNativeAddonPath, isSea } = require('./lib/sea/bootstrap.ts');
+          if (isSea()) {
+            const mod = { exports: {} };
+            process.dlopen(mod, getNativeAddonPath('${addonName}'));
+            module.exports = mod.exports;
+          } else {
+            require.addon = require('require-addon');
+            module.exports = require.addon('.', __filename);
+          }
+        `,
+        loader: 'js',
+        resolveDir: path.resolve('.'),
+      };
+    });
   },
 };
+
+// --- 0. Build Svelte UI (public/ is gitignored, must be built fresh) ---
+
+if (!fs.existsSync('public/index.html')) {
+  console.log('Building Svelte UI...');
+  const npmCmd = platform === 'win32' ? 'npm.cmd' : 'npm';
+  execFileSync(npmCmd, ['ci'], { cwd: 'ui', stdio: 'inherit' });
+  execFileSync(npmCmd, ['run', 'build'], { cwd: 'ui', stdio: 'inherit' });
+}
 
 console.log('Bundling application...');
 
@@ -65,9 +97,11 @@ await esbuild.build({
     'sqlite-vec': './lib/sea/sqlite-vec-shim.ts',
   },
   plugins: [inlineStaticReadsPlugin],
-  // Mark platform-specific sqlite-vec packages as external (not needed in SEA)
   external: [
     'sqlite-vec-*',
+    'vite',          // Dev-only (vite-dev-integration.ts, guarded by NODE_ENV check)
+    'lightningcss',  // Vite dependency, not needed at runtime
+    'fsevents',      // macOS-only native module from Vite's dep tree
   ],
   // Provide import.meta.url in CJS output — some code uses it for __dirname
   define: {
@@ -138,6 +172,16 @@ function findSqliteVecLib() {
 
 const vec = findSqliteVecLib();
 assets[`native/vec0.${vec.ext}`] = vec.libPath;
+
+// Hyperswarm native addon prebuilts (required for P2P)
+for (const addon of ['sodium-native', 'udx-native']) {
+  const prebuilt = path.join('node_modules', addon, 'prebuilds', `${platform}-${arch}`, `${addon}.node`);
+  if (fs.existsSync(prebuilt)) {
+    assets[`native/${addon}.node`] = prebuilt;
+  } else {
+    console.warn(`${addon} prebuilt not found: ${prebuilt} — P2P may not work in SEA binary`);
+  }
+}
 
 console.log(`Embedding ${Object.keys(assets).length} assets`);
 

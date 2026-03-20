@@ -576,6 +576,31 @@ my-project/
 └── .env               # Environment variables
 ```
 
+## FAQ
+
+### Local LLM fails on Linux with "no CPU backend found"
+
+On minimal Linux installations, the llama-cpp CPU backends require `libgomp` (GCC OpenMP runtime) which may not be installed by default. Install it with:
+
+```bash
+# Debian / Ubuntu
+sudo apt install libgomp1
+
+# Fedora / RHEL
+sudo dnf install libgomp
+
+# Arch
+sudo pacman -S gcc-libs
+```
+
+After installing, restart the server. You can verify the fix with:
+
+```bash
+ldd templates/.llama-server/linux-x64/libggml-cpu-x64.so | grep "not found"
+```
+
+If nothing is printed, all dependencies are satisfied.
+
 ## Development
 
 ```bash
