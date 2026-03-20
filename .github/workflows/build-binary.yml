@@ -66,6 +66,10 @@ jobs:
         if: runner.os == 'macOS'
         run: swiftc -O -o scripts/tray-helper scripts/tray-helper.swift
 
+      - name: Install rcedit (Windows)
+        if: runner.os == 'Windows'
+        run: npm i -D rcedit
+
       - name: Build SEA binary
         run: node scripts/build-sea.mjs
 

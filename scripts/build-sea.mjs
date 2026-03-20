@@ -183,34 +183,26 @@ for (const addon of ['sodium-native', 'udx-native']) {
   }
 }
 
-// System tray binary
+// System tray binary (macOS + Windows only; Linux is console-only)
 if (platform === 'darwin') {
-  // Native Swift tray helper (compiled before build-sea.mjs runs)
   const trayHelperPath = path.join('scripts', 'tray-helper');
   if (fs.existsSync(trayHelperPath)) {
     assets['native/tray-helper'] = trayHelperPath;
   } else {
     console.warn('tray-helper not found — run: swiftc -O -o scripts/tray-helper scripts/tray-helper.swift');
   }
-} else {
-  // Linux/Windows: systray2 Go binary
-  const trayBinNames = {
-    win32: 'tray_windows_release.exe',
-    linux: 'tray_linux_release',
-  };
-  const trayBinName = trayBinNames[platform];
-  if (trayBinName) {
-    const trayBinPath = path.join('node_modules', 'systray2', 'traybin', trayBinName);
-    if (fs.existsSync(trayBinPath)) {
-      assets[`native/${trayBinName}`] = trayBinPath;
-    } else {
-      console.warn(`systray2 binary not found: ${trayBinPath} — system tray won't work`);
-    }
+} else if (platform === 'win32') {
+  const trayBinName = 'tray_windows_release.exe';
+  const trayBinPath = path.join('node_modules', 'systray2', 'traybin', trayBinName);
+  if (fs.existsSync(trayBinPath)) {
+    assets[`native/${trayBinName}`] = trayBinPath;
+  } else {
+    console.warn(`systray2 binary not found: ${trayBinPath} — system tray won't work`);
   }
 }
 
 // Tray icon
-const trayIconPath = 'docs/favicon.png';
+const trayIconPath = 'scripts/favicon.png';
 if (fs.existsSync(trayIconPath)) {
   assets['tray-icon'] = trayIconPath;
 }
@@ -241,11 +233,25 @@ execFileSync(process.execPath, ['--build-sea', 'dist/sea/sea-config.json'], {
   stdio: 'inherit',
 });
 
-// --- 5. Sign on macOS ---
+// --- 5. Platform-specific post-processing ---
 
 if (platform === 'darwin') {
   console.log('Signing binary...');
   execFileSync('codesign', ['--sign', '-', outputPath]);
+} else if (platform === 'win32') {
+  // Stamp icon onto the .exe so it shows in Explorer (requires .ico format)
+  const icoPath = 'scripts/AppIcon.ico';
+  if (fs.existsSync(icoPath)) {
+    try {
+      const { default: rcedit } = await import('rcedit');
+      await rcedit(outputPath, { icon: icoPath });
+      console.log('Stamped icon onto .exe');
+    } catch (e) {
+      console.warn(`rcedit failed: ${e.message} — .exe will use default Node icon`);
+    }
+  } else {
+    console.warn('scripts/AppIcon.ico not found — .exe will use default Node icon');
+  }
 }
 
 // --- 6. Report ---

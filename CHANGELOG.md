@@ -19,7 +19,7 @@ Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
 - **Monitor P2P Badges** — Monitor page shows P2P direction badges (incoming/outgoing) on tasks with a dedicated P2P detail panel in the task inspector.
 - **SEA Console Logging** — In SEA mode, stdout/stderr are tee'd to `~/.orcha/server.log` for the tray "Show Console" action.
 - **CI Native Binary Releases** — `build-binary.yml` builds SEA binaries for all three platforms (macOS arm64, Linux x64, Windows x64). macOS builds compile the Swift tray helper, package the `.app` bundle, code-sign with a Developer ID certificate, and notarize with Apple. Archives are uploaded as release assets (`.zip` for macOS/Windows, `.tar.gz` for Linux).
-- **`docs/favicon.png`** — Favicon for documentation site.
+- **App Icons** — `scripts/favicon.png` (tray icon source), `scripts/AppIcon.ico` (Windows executable icon), `scripts/AppIcon.icns` (macOS app bundle icon).
 
 ### Changed
 

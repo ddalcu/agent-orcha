@@ -31,18 +31,16 @@ function getTrayBinPath(): string {
     return path.join('scripts', 'tray-helper');
   }
 
-  // Linux/Windows: systray2 Go binary
-  const binName: Record<string, string> = {
-    win32: 'tray_windows_release.exe',
-    linux: 'tray_linux_release',
-  };
-  const name = binName[process.platform];
-  if (!name) throw new Error(`Unsupported platform: ${process.platform}`);
-
-  if (isSea()) {
-    return path.join(ORCHA_DIR, 'native', name);
+  if (process.platform === 'win32') {
+    const name = 'tray_windows_release.exe';
+    if (isSea()) {
+      return path.join(ORCHA_DIR, 'native', name);
+    }
+    return path.join('node_modules', 'systray2', 'traybin', name);
   }
-  return path.join('node_modules', 'systray2', 'traybin', name);
+
+  // Linux: console-only, no system tray
+  throw new Error(`Unsupported platform: ${process.platform}`);
 }
 
 function loadIconAsBase64(): string {
@@ -52,7 +50,7 @@ function loadIconAsBase64(): string {
     const buf = sea.getRawAsset('tray-icon');
     return Buffer.from(buf).toString('base64');
   }
-  return fs.readFileSync('docs/favicon.png').toString('base64');
+  return fs.readFileSync('scripts/favicon.png').toString('base64');
 }
 
 export interface SystemTray {
@@ -147,7 +145,6 @@ export function createSystemTray(url: string, onQuit: () => void): SystemTray | 
 function openInBrowser(url: string): void {
   const cmds: Record<string, { cmd: string; args: string[] }> = {
     darwin: { cmd: 'open', args: [url] },
-    linux: { cmd: 'xdg-open', args: [url] },
     win32: { cmd: 'cmd', args: ['/c', 'start', url] },
   };
 
@@ -163,17 +160,9 @@ function openConsole(logFile: string): void {
     // Use `open` to launch Console.app filtered to the log file (no Automation permission needed)
     const child = execFile('open', ['-a', 'Console', logFile], { windowsHide: true });
     child.unref();
-  } else if (process.platform === 'linux') {
-    // Try common terminal emulators
-    for (const term of ['gnome-terminal', 'xterm', 'konsole']) {
-      try {
-        const child = execFile(term, ['--', 'tail', '-f', logFile]);
-        child.unref();
-        return;
-      } catch { continue; }
-    }
   } else if (process.platform === 'win32') {
-    const child = execFile('cmd', ['/c', 'start', 'cmd', '/k', `type "${logFile}" & echo. & echo Watching... & powershell -Command "Get-Content '${logFile}' -Wait -Tail 50"`]);
+    const child = execFile('powershell', ['-NoProfile', '-Command',
+      `Start-Process powershell -ArgumentList '-NoProfile','-Command',"Get-Content ''${logFile}'' -Wait -Tail 100"`]);
     child.unref();
   }
 }

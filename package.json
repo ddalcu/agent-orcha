@@ -34,7 +34,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "postinstall": "test -d ui && npm install --prefix ui || true",
+    "postinstall": "node -e \"const fs=require('fs');if(fs.existsSync('ui')){require('child_process').execSync('npm install --prefix ui',{stdio:'inherit'})}\"",
     "dev": "npm run --prefix ui build && NODE_ENV=development node --watch-path=src --watch-path=lib src/index.ts",
     "dev:p2p": "npm run --prefix ui build && P2P_ENABLED=true NODE_ENV=development node --watch-path=src --watch-path=lib src/index.ts",
     "build:ui": "cd ui && npm ci && npm run build",
