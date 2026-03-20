@@ -1350,6 +1350,22 @@
               </div>
             {/if}
           {/if}
+
+          {#if p2pEnabled && selectedEngine}
+            {@const engEntry = llmConfig?.models?.[selectedEngine]}
+            <div class="llm-server-section">
+              <div class="llm-section-content flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-share-nodes text-xs {engEntry?.p2p ? 'text-accent' : 'text-muted'}"></i>
+                  <span class="text-sm {engEntry?.p2p ? 'text-primary' : 'text-secondary'}">P2P Sharing</span>
+                  {#if engEntry?.p2p}
+                    <span class="badge badge-accent text-2xs">Shared</span>
+                  {/if}
+                </div>
+                <Toggle active={engEntry?.p2p === true} disabled={togglingP2P === selectedEngine} onchange={() => toggleModelP2P(selectedEngine!)} />
+              </div>
+            </div>
+          {/if}
         </div>
       {:else if isManagedEngine && status}
         <!-- Managed Engine Status Panel -->

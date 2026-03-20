@@ -37,9 +37,9 @@ PREFS
     --lang=en-US \
     --user-data-dir=/tmp/.chromium"
   if [ "${BROWSER_VERBOSE:-false}" = "true" ]; then
-    su -s /bin/sh sandbox -c "chromium $CHROMIUM_FLAGS about:blank" &
+    su -s /bin/sh sandbox -c "chromium $CHROMIUM_FLAGS chrome://newtab" &
   else
-    su -s /bin/sh sandbox -c "chromium $CHROMIUM_FLAGS about:blank 2>/dev/null" &
+    su -s /bin/sh sandbox -c "chromium $CHROMIUM_FLAGS chrome://newtab 2>/dev/null" &
   fi
   echo "Browser sandbox ready (noVNC: http://localhost:6080/vnc.html, CDP: ws://localhost:9222)"
 fi

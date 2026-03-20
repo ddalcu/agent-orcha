@@ -65,7 +65,7 @@ CHROME_FLAGS='--disable-gpu --disable-dev-shm-usage \
   --disable-translate \
   --metrics-recording-only \
   --lang=en-US \
-  --user-data-dir=/tmp/.chromium about:blank'
+  --user-data-dir=/tmp/.chromium chrome://newtab'
 
 su -s /bin/sh sandbox -c "chromium $CHROME_FLAGS 2>/dev/null" &
 
