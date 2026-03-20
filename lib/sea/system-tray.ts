@@ -50,7 +50,8 @@ function loadIconAsBase64(): string {
     const buf = sea.getRawAsset('tray-icon');
     return Buffer.from(buf).toString('base64');
   }
-  return fs.readFileSync('scripts/favicon.png').toString('base64');
+  const iconFile = process.platform === 'win32' ? 'scripts/AppIcon.ico' : 'scripts/favicon.png';
+  return fs.readFileSync(iconFile).toString('base64');
 }
 
 // Win32 console visibility toggle — uses PowerShell to call ShowWindow via P/Invoke.
@@ -185,6 +186,10 @@ function openConsole(logFile: string): void {
     const child = execFile('open', ['-a', 'Console', logFile], { windowsHide: true });
     child.unref();
   } else if (process.platform === 'win32') {
-    toggleConsoleWindow();
+    const child = execFile('powershell', [
+      '-NoProfile', '-Command',
+      `Start-Process powershell -ArgumentList '-NoProfile','-NoExit','-Command','Get-Content -Path "${logFile}" -Wait -Tail 50'`
+    ], { windowsHide: true });
+    child.unref();
   }
 }

@@ -35,8 +35,8 @@
   ],
   "scripts": {
     "postinstall": "node -e \"const fs=require('fs');if(fs.existsSync('ui')){require('child_process').execSync('npm install --prefix ui',{stdio:'inherit'})}\"",
-    "dev": "npm run --prefix ui build && NODE_ENV=development node --watch-path=src --watch-path=lib src/index.ts",
-    "dev:p2p": "npm run --prefix ui build && P2P_ENABLED=true NODE_ENV=development node --watch-path=src --watch-path=lib src/index.ts",
+    "dev": "npm run --prefix ui build && cross-env NODE_ENV=development node --watch-path=src --watch-path=lib src/index.ts",
+    "dev:p2p": "npm run --prefix ui build && cross-env P2P_ENABLED=true NODE_ENV=development node --watch-path=src --watch-path=lib src/index.ts",
     "build:ui": "cd ui && npm ci && npm run build",
     "build": "npm run build:ui && tsc && npm run copy-assets",
     "copy-assets": "node scripts/copy-assets.js",
@@ -53,7 +53,7 @@
     "build:binary": "node scripts/build-sea.mjs",
     "sea": "node scripts/build-sea.mjs && ./dist/sea/agent-orcha",
     "test:e2e": "npx playwright test",
-    "prepare": "test -f scripts/install-hooks.sh && bash scripts/install-hooks.sh || true"
+    "prepare": "node -e \"const fs=require('fs');if(fs.existsSync('scripts/install-hooks.sh')){require('child_process').execSync('bash scripts/install-hooks.sh',{stdio:'inherit'})}\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",
@@ -93,6 +93,7 @@
     "@types/nodemailer": "^7.0.11",
     "@types/pg": "^8.11.10",
     "@types/ws": "^8.18.1",
+    "cross-env": "^10.1.0",
     "esbuild": "^0.25.12",
     "eslint": "^9.17.0",
     "rcedit": "^5.0.2",
