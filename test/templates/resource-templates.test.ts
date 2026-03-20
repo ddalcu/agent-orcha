@@ -40,7 +40,7 @@ describe('generateResourceTemplate', () => {
   it('should generate function template', () => {
     const result = generateResourceTemplate('function', 'my-func');
     assert.ok(result);
-    assert.equal(result.path, 'functions/my-func.function.js');
+    assert.equal(result.path, 'functions/my-func.function.mjs');
     assert.ok(result.content.includes('my-func'));
     assert.ok(result.content.includes('execute'));
   });

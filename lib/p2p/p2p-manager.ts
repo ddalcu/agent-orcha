@@ -261,8 +261,12 @@ export class P2PManager {
     });
   }
 
+  private getPeerName(peerId: string): string {
+    return this.peers.get(peerId)?.info.peerName ?? peerId.slice(0, 8);
+  }
+
   private async handleInvokeRequest(
-    _peerId: string,
+    peerId: string,
     protocol: P2PProtocol,
     invoke: InvokeMessage,
   ): Promise<void> {
@@ -286,7 +290,14 @@ export class P2PManager {
       return;
     }
 
+    const taskManager = this.orchestrator.tasks.getManager();
+    const task = taskManager.trackP2P('agent', agentName, input, {
+      direction: 'incoming',
+      peerId,
+      peerName: this.getPeerName(peerId),
+    }, sessionId);
     const abortController = new AbortController();
+    taskManager.registerAbort(task.id, abortController);
 
     try {
       const stream = this.orchestrator.streamAgent(agentName, input, sessionId, abortController.signal);
@@ -294,17 +305,22 @@ export class P2PManager {
       for await (const chunk of stream) {
         if (protocol.isDestroyed) {
           abortController.abort();
+          taskManager.cancelTask(task.id);
           return;
         }
         protocol.send({ type: 'stream', requestId, chunk });
       }
 
       protocol.send({ type: 'stream_end', requestId });
+      taskManager.resolve(task.id, { output: 'p2p stream completed' });
     } catch (error) {
       if (!protocol.isDestroyed) {
         const message = error instanceof Error ? error.message : String(error);
         protocol.send({ type: 'stream_error', requestId, error: message });
       }
+      taskManager.reject(task.id, error);
+    } finally {
+      taskManager.unregisterAbort(task.id);
     }
   }
 
@@ -572,7 +588,7 @@ export class P2PManager {
   }
 
   private async handleLLMInvokeRequest(
-    _peerId: string,
+    peerId: string,
     protocol: P2PProtocol,
     invoke: LLMInvokeMessage,
   ): Promise<void> {
@@ -590,6 +606,13 @@ export class P2PManager {
       protocol.send({ type: 'llm_stream_error', requestId, error: `Model "${modelName}" not found or not shared via P2P` });
       return;
     }
+
+    const taskManager = this.orchestrator.tasks.getManager();
+    const task = taskManager.trackP2P('llm', modelName, { messageCount: messages.length }, {
+      direction: 'incoming',
+      peerId,
+      peerName: this.getPeerName(peerId),
+    });
 
     try {
       let llm = await LLMFactory.create(temperature !== undefined ? { name: modelName, temperature } : modelName);
@@ -615,7 +638,10 @@ export class P2PManager {
       }
 
       for await (const chunk of llm.stream(baseMessages)) {
-        if (protocol.isDestroyed) return;
+        if (protocol.isDestroyed) {
+          taskManager.cancelTask(task.id);
+          return;
+        }
 
         if (chunk.content) {
           protocol.send({ type: 'llm_stream', requestId, chunk: { type: 'content', content: chunk.content } });
@@ -632,11 +658,13 @@ export class P2PManager {
       }
 
       protocol.send({ type: 'llm_stream_end', requestId });
+      taskManager.resolve(task.id, { output: 'p2p llm stream completed' });
     } catch (error) {
       if (!protocol.isDestroyed) {
         const message = error instanceof Error ? error.message : String(error);
         protocol.send({ type: 'llm_stream_error', requestId, error: message });
       }
+      taskManager.reject(task.id, error);
     }
   }
 }

@@ -142,9 +142,11 @@ export class ToolDiscovery {
 
       for (const config of configs) {
         try {
-          let store = this.knowledgeStores.get(config.name);
+          // Only use already-initialized stores — don't trigger indexing during discovery
+          const store = this.knowledgeStores.get(config.name);
           if (!store) {
-            store = await this.knowledgeStores.initialize(config.name);
+            logger.debug(`Skipping knowledge discovery for "${config.name}" (not yet initialized)`);
+            continue;
           }
 
           const sqliteStore = this.knowledgeStores.getSqliteStore(config.name);

@@ -37,11 +37,74 @@ jobs:
 
       - run: npm install
 
+      # --- macOS: Import signing certificate ---
+      - name: Import signing certificate
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Compile tray helper (macOS)
+        if: runner.os == 'macOS'
+        run: swiftc -O -o scripts/tray-helper scripts/tray-helper.swift
+
       - name: Build SEA binary
         run: node scripts/build-sea.mjs
 
-      - name: Create archive (Unix)
-        if: runner.os != 'Windows'
+      # --- macOS: Package .app, sign, and notarize ---
+      - name: Package and sign .app bundle
+        if: runner.os == 'macOS'
+        env:
+          SIGNING_IDENTITY: "Developer ID Application: David Dalcu (${{ secrets.APPLE_TEAM_ID }})"
+        run: scripts/package-macos.sh "$SIGNING_IDENTITY"
+
+      - name: Notarize .app bundle
+        if: runner.os == 'macOS'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ditto -c -k --keepParent "dist/sea/Agent Orcha.app" dist/sea/agent-orcha-notarize.zip
+          xcrun notarytool submit dist/sea/agent-orcha-notarize.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "dist/sea/Agent Orcha.app"
+          rm dist/sea/agent-orcha-notarize.zip
+
+      - name: Cleanup keychain
+        if: runner.os == 'macOS' && always()
+        run: security delete-keychain $RUNNER_TEMP/signing.keychain-db || true
+
+      # --- Create archives ---
+      - name: Create archive (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd dist/sea
+          ditto -c -k --keepParent "Agent Orcha.app" agent-orcha-${{ matrix.target }}.zip
+
+      - name: Create archive (Linux)
+        if: runner.os == 'Linux'
         run: |
           cd dist/sea
           tar czf agent-orcha-${{ matrix.target }}.tar.gz agent-orcha

@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { isSea, getDefaultWorkspace, extractTemplates } from '../../../lib/sea/bootstrap.ts';
-import { openAppWindow } from '../../../lib/sea/app-window.ts';
+import { createSystemTray, type SystemTray } from '../../../lib/sea/system-tray.ts';
 
 const workspaceRoot = isSea()
   ? (process.env.WORKSPACE ? path.resolve(process.env.WORKSPACE) : getDefaultWorkspace())
@@ -74,6 +74,23 @@ async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> 
 }
 
 export async function startCommand(_args: string[]): Promise<void> {
+  // In SEA mode, tee stdout/stderr to a log file for the "Show Console" tray action
+  if (isSea()) {
+    const orchaDir = path.join(require('os').homedir(), '.orcha');
+    fsSync.mkdirSync(orchaDir, { recursive: true });
+    const logStream = fsSync.createWriteStream(path.join(orchaDir, 'server.log'), { flags: 'w' });
+    const origStdoutWrite = process.stdout.write.bind(process.stdout);
+    const origStderrWrite = process.stderr.write.bind(process.stderr);
+    process.stdout.write = (chunk: any, ...args: any[]) => {
+      logStream.write(chunk);
+      return origStdoutWrite(chunk, ...args);
+    };
+    process.stderr.write = (chunk: any, ...args: any[]) => {
+      logStream.write(chunk);
+      return origStderrWrite(chunk, ...args);
+    };
+  }
+
   // In SEA mode, scaffold workspace on first run
   if (isSea() && !fsSync.existsSync(path.join(workspaceRoot, 'agents'))) {
     console.log(`\nCreating workspace at ${workspaceRoot}...`);
@@ -115,7 +132,7 @@ export async function startCommand(_args: string[]): Promise<void> {
   }
 
   const port = parseInt(process.env['PORT'] ?? '3000', 10);
-  const host = process.env['HOST'] ?? '0.0.0.0';
+  const host = process.env['HOST'] ?? (isSea() ? '127.0.0.1' : '0.0.0.0');
 
   logger.info('Initializing Agent Orcha...');
 
@@ -131,6 +148,7 @@ export async function startCommand(_args: string[]): Promise<void> {
 
   const server = await createServer(orchestrator);
 
+  let tray: SystemTray | null = null;
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
     if (shuttingDown) {
@@ -139,6 +157,7 @@ export async function startCommand(_args: string[]): Promise<void> {
     }
     shuttingDown = true;
     logger.info('\nShutting down...');
+    tray?.kill();
     await server.close();
     await orchestrator.close();
     process.exit(0);
@@ -152,8 +171,11 @@ export async function startCommand(_args: string[]): Promise<void> {
     const url = `http://localhost:${port}`;
     logger.info(`\nServer running at ${url}`);
 
-    if (isSea() && !_args.includes('--no-window')) {
-      openAppWindow(url);
+    if (isSea()) {
+      tray = createSystemTray(url, shutdown);
+      if (!tray) {
+        logger.info(`Open ${url} in your browser`);
+      }
     } else {
       logger.info(`Open ${url} in your browser`);
     }

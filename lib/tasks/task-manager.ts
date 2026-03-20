@@ -1,5 +1,5 @@
 import type { Orchestrator } from '../orchestrator.ts';
-import type { SubmitAgentParams, SubmitWorkflowParams, Task, TaskEvent, TaskKind, TaskMetrics, TaskStoreConfig } from './types.ts';
+import type { SubmitAgentParams, SubmitWorkflowParams, Task, TaskEvent, TaskKind, TaskMetrics, TaskP2PMeta, TaskStoreConfig } from './types.ts';
 import { TaskStore } from './task-store.ts';
 import { logger } from '../logger.ts';
 
@@ -177,6 +177,12 @@ export class TaskManager {
   track(kind: TaskKind, target: string, input: Record<string, unknown>, sessionId?: string): Task {
     const task = this.store.create(kind, target, input, sessionId);
     this.store.update(task.id, { status: 'working' });
+    return task;
+  }
+
+  trackP2P(kind: TaskKind, target: string, input: Record<string, unknown>, p2p: TaskP2PMeta, sessionId?: string): Task {
+    const task = this.store.create(kind, target, input, sessionId);
+    this.store.update(task.id, { status: 'working', p2p });
     return task;
   }
 

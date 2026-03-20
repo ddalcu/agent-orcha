@@ -24,6 +24,12 @@
     outputTokens?: number;
   }
 
+  interface TaskP2PMeta {
+    direction: 'incoming' | 'outgoing';
+    peerId: string;
+    peerName: string;
+  }
+
   interface Task {
     id: string;
     target: string;
@@ -38,6 +44,7 @@
     inputRequest?: { question: string };
     events?: TaskEvent[];
     metrics?: TaskMetrics;
+    p2p?: TaskP2PMeta;
   }
 
   const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
@@ -275,6 +282,11 @@
                 <div class="flex items-center gap-2">
                   <span class="font-medium text-primary truncate">{task.target}</span>
                   <span class="badge badge-{kindBadgeVariant(task.kind)}">{task.kind}</span>
+                  {#if task.p2p}
+                    <span class="badge badge-{task.p2p.direction === 'incoming' ? 'amber' : 'cyan'}" title="{task.p2p.direction === 'incoming' ? 'From' : 'To'} {task.p2p.peerName}">
+                      <i class="fas fa-{task.p2p.direction === 'incoming' ? 'arrow-down' : 'arrow-up'} mr-1"></i>P2P {task.p2p.peerName}
+                    </span>
+                  {/if}
                 </div>
                 <div class="text-xs text-muted mt-1 truncate">{task.id}</div>
               </div>
@@ -329,6 +341,33 @@
           </div>
         </div>
       </div>
+
+      <!-- P2P Info -->
+      {#if selectedTask.p2p}
+        <div class="panel-dim">
+          <div class="flex items-center gap-2 mb-3">
+            <i class="fas fa-network-wired text-accent text-sm"></i>
+            <span class="text-sm font-medium text-secondary">P2P</span>
+          </div>
+          <div class="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <span class="text-muted block text-xs">Direction</span>
+              <span class="text-primary">
+                <i class="fas fa-{selectedTask.p2p.direction === 'incoming' ? 'arrow-down text-amber' : 'arrow-up text-cyan'} mr-1"></i>
+                {selectedTask.p2p.direction === 'incoming' ? 'Incoming' : 'Outgoing'}
+              </span>
+            </div>
+            <div>
+              <span class="text-muted block text-xs">Peer</span>
+              <span class="text-primary">{selectedTask.p2p.peerName}</span>
+            </div>
+            <div>
+              <span class="text-muted block text-xs">Peer ID</span>
+              <span class="text-primary font-mono text-xs">{selectedTask.p2p.peerId.slice(0, 12)}...</span>
+            </div>
+          </div>
+        </div>
+      {/if}
 
       <!-- React-Loop Metrics -->
       {#if selectedTask.metrics}

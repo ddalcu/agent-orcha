@@ -4,24 +4,30 @@ import { existsSync } from 'fs';
 interface BrowserCandidate {
   cmd: string;
   args: (url: string) => string[];
+  appPath?: string; // macOS: check this path exists instead of cmd
 }
 
+// macOS: use `open -a` to launch via Launch Services (avoids Automation permission dialogs)
 const MACOS_BROWSERS: BrowserCandidate[] = [
   {
-    cmd: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    args: (url) => [`--app=${url}`, '--new-window'],
+    cmd: 'open',
+    args: (url) => ['-a', 'Google Chrome', url, '--args', `--app=${url}`],
+    appPath: '/Applications/Google Chrome.app',
   },
   {
-    cmd: '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-    args: (url) => [`--app=${url}`, '--new-window'],
+    cmd: 'open',
+    args: (url) => ['-a', 'Microsoft Edge', url, '--args', `--app=${url}`],
+    appPath: '/Applications/Microsoft Edge.app',
   },
   {
-    cmd: '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    args: (url) => [`--app=${url}`, '--new-window'],
+    cmd: 'open',
+    args: (url) => ['-a', 'Chromium', url, '--args', `--app=${url}`],
+    appPath: '/Applications/Chromium.app',
   },
   {
-    cmd: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-    args: (url) => [`--app=${url}`, '--new-window'],
+    cmd: 'open',
+    args: (url) => ['-a', 'Brave Browser', url, '--args', `--app=${url}`],
+    appPath: '/Applications/Brave Browser.app',
   },
 ];
 
@@ -68,8 +74,9 @@ function getCandidates(): BrowserCandidate[] {
 
 function findBrowser(): BrowserCandidate | null {
   for (const candidate of getCandidates()) {
-    if (candidate.cmd.includes('/') || candidate.cmd.includes('\\')) {
-      if (existsSync(candidate.cmd)) return candidate;
+    const checkPath = candidate.appPath || candidate.cmd;
+    if (checkPath.includes('/') || checkPath.includes('\\')) {
+      if (existsSync(checkPath)) return candidate;
     } else {
       return candidate;
     }

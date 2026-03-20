@@ -17,6 +17,7 @@ export class TaskStore {
 
     const interval = config.cleanupInterval ?? 60000; // 60s
     this.cleanupInterval = setInterval(() => this.cleanup(), interval);
+    this.cleanupInterval.unref(); // Don't keep the process alive for cleanup
   }
 
   create(kind: TaskKind, target: string, input: Record<string, unknown>, sessionId?: string): Task {
@@ -47,7 +48,7 @@ export class TaskStore {
     return this.tasks.get(id);
   }
 
-  update(id: string, updates: Partial<Pick<Task, 'status' | 'result' | 'error' | 'inputRequest' | 'metrics' | 'completedAt'>>): Task | undefined {
+  update(id: string, updates: Partial<Pick<Task, 'status' | 'result' | 'error' | 'inputRequest' | 'metrics' | 'completedAt' | 'p2p'>>): Task | undefined {
     const task = this.tasks.get(id);
     if (!task) return undefined;
 

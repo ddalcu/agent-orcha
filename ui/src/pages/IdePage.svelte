@@ -30,7 +30,7 @@
 
   const RESOURCE_TYPES: Record<string, { label: string; icon: string; color: string; folder: string; suffix: string }> = {
     agent: { label: 'Agent', icon: 'fa-robot', color: 'text-blue', folder: 'agents/', suffix: '.agent.yaml' },
-    function: { label: 'Function', icon: 'fa-bolt', color: 'text-yellow', folder: 'functions/', suffix: '.function.js' },
+    function: { label: 'Function', icon: 'fa-bolt', color: 'text-yellow', folder: 'functions/', suffix: '.function.mjs' },
     knowledge: { label: 'Knowledge', icon: 'fa-database', color: 'text-purple', folder: 'knowledge/', suffix: '.knowledge.yaml' },
     skill: { label: 'Skill', icon: 'fa-wand-magic-sparkles', color: 'text-green', folder: 'skills/', suffix: '/SKILL.md' },
     workflow: { label: 'Workflow', icon: 'fa-diagram-project', color: 'text-orange', folder: 'workflows/', suffix: '.workflow.yaml' },

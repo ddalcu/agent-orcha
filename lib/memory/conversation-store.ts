@@ -15,7 +15,8 @@ export class ConversationStore {
 
     // Start periodic cleanup if TTL is configured
     if (this.sessionTTL) {
-      this.cleanupInterval = setInterval(() => this.cleanup(), 60000); // Run every minute
+      this.cleanupInterval = setInterval(() => this.cleanup(), 60000);
+      this.cleanupInterval.unref(); // Don't keep the process alive for cleanup
     }
   }
 
