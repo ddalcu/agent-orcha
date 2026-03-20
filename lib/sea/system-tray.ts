@@ -186,10 +186,6 @@ function openConsole(logFile: string): void {
     const child = execFile('open', ['-a', 'Console', logFile], { windowsHide: true });
     child.unref();
   } else if (process.platform === 'win32') {
-    const child = execFile('powershell', [
-      '-NoProfile', '-Command',
-      `Start-Process powershell -ArgumentList '-NoProfile','-NoExit','-Command','Get-Content -Path "${logFile}" -Wait -Tail 50'`
-    ], { windowsHide: true });
-    child.unref();
+    toggleConsoleWindow();
   }
 }
