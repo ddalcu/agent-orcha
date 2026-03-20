@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { isSea, getDefaultWorkspace, extractTemplates } from '../../../lib/sea/bootstrap.ts';
-import { createSystemTray, hideConsoleWindow, type SystemTray } from '../../../lib/sea/system-tray.ts';
+import { createSystemTray, type SystemTray } from '../../../lib/sea/system-tray.ts';
 
 const workspaceRoot = isSea()
   ? (process.env.WORKSPACE ? path.resolve(process.env.WORKSPACE) : getDefaultWorkspace())
@@ -74,12 +74,7 @@ async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> 
 }
 
 export async function startCommand(_args: string[]): Promise<void> {
-  // On Windows SEA, hide the console window — users interact via the system tray
-  if (isSea() && process.platform === 'win32') {
-    hideConsoleWindow();
-  }
-
-  // In SEA mode, tee stdout/stderr to a log file for the "Show Console" tray action
+  // In SEA mode, tee stdout/stderr to a log file for the "View Logs" tray action
   if (isSea()) {
     const orchaDir = path.join(require('os').homedir(), '.orcha');
     fsSync.mkdirSync(orchaDir, { recursive: true });
@@ -88,11 +83,11 @@ export async function startCommand(_args: string[]): Promise<void> {
     const origStderrWrite = process.stderr.write.bind(process.stderr);
     process.stdout.write = (chunk: any, ...args: any[]) => {
       logStream.write(chunk);
-      return origStdoutWrite(chunk, ...args);
+      try { return origStdoutWrite(chunk, ...args); } catch { return true; }
     };
     process.stderr.write = (chunk: any, ...args: any[]) => {
       logStream.write(chunk);
-      return origStderrWrite(chunk, ...args);
+      try { return origStderrWrite(chunk, ...args); } catch { return true; }
     };
   }
 

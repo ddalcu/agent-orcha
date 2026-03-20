@@ -1,4 +1,4 @@
-import { execFile } from 'child_process';
+import { execFile } from '../utils/child-process.ts';
 import { existsSync } from 'fs';
 
 interface BrowserCandidate {
@@ -93,7 +93,7 @@ export function openAppWindow(url: string): void {
   const browser = findBrowser();
 
   if (browser) {
-    const child = execFile(browser.cmd, browser.args(url), { windowsHide: true });
+    const child = execFile(browser.cmd, browser.args(url));
     child.unref();
     return;
   }
@@ -107,7 +107,7 @@ export function openAppWindow(url: string): void {
 
   const fb = fallback[process.platform];
   if (fb) {
-    const child = execFile(fb.cmd, fb.args, { windowsHide: true });
+    const child = execFile(fb.cmd, fb.args);
     child.unref();
   }
 }
