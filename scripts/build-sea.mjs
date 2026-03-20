@@ -202,7 +202,7 @@ if (platform === 'darwin') {
 }
 
 // Tray icon
-const trayIconPath = 'scripts/favicon.png';
+const trayIconPath = platform === 'win32' ? 'scripts/AppIcon.ico' : 'scripts/favicon.png';
 if (fs.existsSync(trayIconPath)) {
   assets['tray-icon'] = trayIconPath;
 }

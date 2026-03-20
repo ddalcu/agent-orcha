@@ -49,7 +49,8 @@ function loadIconAsBase64(): string {
     const buf = sea.getRawAsset('tray-icon');
     return Buffer.from(buf).toString('base64');
   }
-  return fs.readFileSync('scripts/favicon.png').toString('base64');
+  const iconFile = process.platform === 'win32' ? 'scripts/AppIcon.ico' : 'scripts/favicon.png';
+  return fs.readFileSync(iconFile).toString('base64');
 }
 
 // Win32 console visibility toggle — uses PowerShell to call ShowWindow via P/Invoke.
