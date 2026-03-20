@@ -199,7 +199,7 @@ graph:                                # optional — works with database, csv, j
 
 Web sources support all loader types. Use `loader.type: json` for APIs, `text` for raw content, `html` (default) for web pages with optional `selector`. Add `headers` for authenticated endpoints. Use `jsonPath` (e.g., `items` or `data.results`) to extract a nested array from the JSON response before parsing.
 
-## Custom Functions (`functions/<name>.function.js`)
+## Custom Functions (`functions/<name>.function.mjs`)
 
 ```javascript
 export const metadata = { name: "my-function", description: "What it does" };

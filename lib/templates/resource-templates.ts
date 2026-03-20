@@ -133,7 +133,7 @@ const resources: Record<string, {
     content: (name) => stringify(knowledgeExample(name)),
   },
   function: {
-    path: (name) => `functions/${name}.function.js`,
+    path: (name) => `functions/${name}.function.mjs`,
     content: functionTemplate,
   },
   skill: {

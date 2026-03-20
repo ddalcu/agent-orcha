@@ -25,3 +25,4 @@ agent-orcha-*.tgz
 .memory
 test-results
 public
+.DS_Store

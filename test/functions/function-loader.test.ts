@@ -57,7 +57,7 @@ describe('FunctionLoader', () => {
 
   it('should load a single function by path', async () => {
     const newLoader = new FunctionLoader(fixturesDir);
-    const func = await newLoader.loadOne(path.join(fixturesDir, 'hello.function.js'));
+    const func = await newLoader.loadOne(path.join(fixturesDir, 'hello.function.mjs'));
 
     assert.equal(func.name, 'hello');
     assert.ok(func.tool);
@@ -93,7 +93,7 @@ describe('FunctionLoader', () => {
 
   it('should track file path to name mapping', async () => {
     const newLoader = new FunctionLoader(fixturesDir);
-    const filePath = path.join(fixturesDir, 'hello.function.js');
+    const filePath = path.join(fixturesDir, 'hello.function.mjs');
     await newLoader.loadOne(filePath);
 
     const name = newLoader.nameForPath(path.resolve(filePath));

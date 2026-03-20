@@ -47,7 +47,7 @@ export class TaskStore {
     return this.tasks.get(id);
   }
 
-  update(id: string, updates: Partial<Pick<Task, 'status' | 'result' | 'error' | 'inputRequest' | 'metrics' | 'completedAt'>>): Task | undefined {
+  update(id: string, updates: Partial<Pick<Task, 'status' | 'result' | 'error' | 'inputRequest' | 'metrics' | 'completedAt' | 'p2p'>>): Task | undefined {
     const task = this.tasks.get(id);
     if (!task) return undefined;
 

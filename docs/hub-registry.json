@@ -72,14 +72,6 @@
     "tags": ["security", "network", "scanning"]
   },
   {
-    "name": "transport-security",
-    "type": "agent",
-    "description": "Cross-references transport OT/ICS systems with cybersecurity threat intelligence and CVEs.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/transport-security.agent.yaml",
-    "tags": ["security", "ics", "ot"]
-  },
-  {
     "name": "web-engineer",
     "type": "agent",
     "description": "Web software engineer that builds and publishes web applications using sandbox shell and htmlhost.",
@@ -206,22 +198,6 @@
     "author": "Agent Orcha",
     "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/music-store.knowledge.yaml",
     "tags": ["graph", "music"]
-  },
-  {
-    "name": "security-incidents",
-    "type": "knowledge",
-    "description": "CVEs, advisories, malware, and threat intelligence from CISA, NVD, and other security feeds.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/security-incidents.knowledge.yaml",
-    "tags": ["security", "cve"]
-  },
-  {
-    "name": "transport-ot",
-    "type": "knowledge",
-    "description": "ICS/SCADA/IoT system inventory for rail, transit, and transport with vendor, protocol, and CPE data.",
-    "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/knowledge/transport-ot.knowledge.yaml",
-    "tags": ["ics", "ot", "transport"]
   },
   {
     "name": "web-docs",

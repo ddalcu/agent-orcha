@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
 
+## Release 2026.320
+
+### Added
+
+- **Native macOS App Bundle** — SEA binary can now be packaged as a proper `Agent Orcha.app` with `scripts/package-macos.sh`. Includes `Info.plist`, entitlements, and ad-hoc or identity-based code signing. Run `open "dist/sea/Agent Orcha.app"` to launch.
+  - New files: `scripts/package-macos.sh`, `scripts/entitlements.plist`, `scripts/AppIcon.icns`
+- **System Tray** — Cross-platform system tray with Open in Browser, Show Console, and Quit actions. macOS uses a native Swift helper (`scripts/tray-helper.swift`); Windows and Linux use `systray2` Go binaries. Communicates with the Node process over JSON stdin/stdout. Tray binary is embedded into SEA builds.
+  - New files: `lib/sea/system-tray.ts`, `scripts/tray-helper.swift`, `scripts/tray-helper`
+- **P2P Task Tracking** — Incoming and outgoing P2P agent/LLM invocations are now tracked as tasks in the Monitor. Tasks show direction (incoming/outgoing), peer name, and peer ID. Abort controllers are registered for cancellation support.
+  - New type: `TaskP2PMeta` in `lib/tasks/types.ts`
+  - `TaskManager.trackP2P()` method for creating tracked P2P tasks
+- **Monitor P2P Badges** — Monitor page shows P2P direction badges (incoming/outgoing) on tasks with a dedicated P2P detail panel in the task inspector.
+- **SEA Console Logging** — In SEA mode, stdout/stderr are tee'd to `~/.orcha/server.log` for the tray "Show Console" action.
+- **CI Native Binary Releases** — `build-binary.yml` builds SEA binaries for all three platforms (macOS arm64, Linux x64, Windows x64). macOS builds compile the Swift tray helper, package the `.app` bundle, code-sign with a Developer ID certificate, and notarize with Apple. Archives are uploaded as release assets (`.zip` for macOS/Windows, `.tar.gz` for Linux).
+- **`docs/favicon.png`** — Favicon for documentation site.
+
+### Changed
+
+- **ESM Functions** — Custom functions now use `.function.mjs` extension instead of `.function.js`. Function loader glob updated to `**/*.function.{js,mjs}`, orchestrator file watcher handles both extensions, IDE composer and resource templates emit `.mjs`. Existing `.js` functions continue to load.
+- **`dev` / `dev:p2p` Scripts** — Now run `npm run --prefix ui build` before starting the dev server so the Svelte UI is always fresh.
+- **`postinstall` Script** — Automatically runs `npm install --prefix ui` if the `ui/` directory exists.
+- **App Window (macOS)** — Browser launch uses `open -a` via Launch Services instead of direct binary paths, avoiding macOS Automation permission dialogs. `appPath` field added to `BrowserCandidate` for existence checks.
+- **Tool Discovery** — No longer triggers knowledge store initialization during discovery; skips uninitialized stores with a debug log instead of force-initializing them.
+- **Tools Route** — `/api/tools` lists knowledge tool names from config without initializing stores, preventing side-effect indexing on page load.
+- **Orchestrator Shutdown** — Uses optional chaining (`?.close`) for safer teardown of P2P manager, trigger manager, and other subsystems.
+- **LocalLlmPage** — Recommended models section only shows when no models are loaded yet.
+- **`systray2`** added as a dependency (cross-platform tray fallback).
+
+### Removed
+
+- **Transport/Security Templates** — Removed `transport-security.agent.yaml`, `transport-ot.knowledge.yaml`, `security-incidents.knowledge.yaml` and associated data files (56k+ lines of incident JSON, systems CSV). Hub registry entries updated accordingly.
+- **Music Store Customer Data** — Simplified `music-store.knowledge.yaml` by removing customer purchase tracking (Customer entity, PURCHASED relationship, customer columns).
+
+### Fixed
+
+- **P2P Rate Limit Peer Name** — `handleInvokeRequest` and `handleLLMInvokeRequest` now receive `peerId` (previously `_peerId`) for proper peer name resolution and task tracking.
+
+---
+
 ## Release 2026.319
 
 ### Added

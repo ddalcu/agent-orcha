@@ -17,7 +17,7 @@ const mockToolRegistry = {
 /*describe('FunctionLoader', () => {
     it('should load a single function file directly', async () => {
         const loader = new FunctionLoader(fixturesDir);
-        const filePath = path.join(fixturesDir, 'hello.function.js');
+        const filePath = path.join(fixturesDir, 'hello.function.mjs');
 
         const func = await loader.loadOne(filePath);
 

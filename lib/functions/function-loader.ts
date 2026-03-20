@@ -30,7 +30,7 @@ export class FunctionLoader {
 
   async loadAll(): Promise<void> {
     try {
-      const files = await glob('**/*.function.js', { cwd: this.functionsDir });
+      const files = await glob('**/*.function.{js,mjs}', { cwd: this.functionsDir });
 
       for (const file of files) {
         const filePath = path.join(this.functionsDir, file);

@@ -35,6 +35,12 @@ export interface TaskEvent {
   content?: string;
 }
 
+export interface TaskP2PMeta {
+  direction: 'incoming' | 'outgoing';
+  peerId: string;
+  peerName: string;
+}
+
 export interface Task {
   id: string;
   kind: TaskKind;
@@ -47,6 +53,7 @@ export interface Task {
   inputRequest?: TaskInputRequest;
   metrics?: TaskMetrics;
   events?: TaskEvent[];
+  p2p?: TaskP2PMeta;
   createdAt: number;
   updatedAt: number;
   completedAt?: number;

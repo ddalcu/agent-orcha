@@ -574,7 +574,7 @@ export class Orchestrator {
       return 'knowledge';
     }
 
-    if (relativePath.endsWith('.function.js')) {
+    if (relativePath.endsWith('.function.js') || relativePath.endsWith('.function.mjs')) {
       const name = this.functionLoader.nameForPath(absolutePath);
       if (name) {
         this.functionLoader.remove(name);
@@ -627,7 +627,7 @@ export class Orchestrator {
       return 'knowledge';
     }
 
-    if (relativePath.endsWith('.function.js')) {
+    if (relativePath.endsWith('.function.js') || relativePath.endsWith('.function.mjs')) {
       await this.functionLoader.loadOne(absolutePath);
       return 'function';
     }
@@ -995,35 +995,35 @@ export class Orchestrator {
   }
 
   async close(): Promise<void> {
-    if (this._p2pManager) {
+    if (this._p2pManager?.close) {
       await this._p2pManager.close();
     }
 
     // Stop all local engine processes before anything else
     await engineRegistry.unloadAll();
 
-    if (this.triggerManager) {
+    if (this.triggerManager?.close) {
       this.triggerManager.close();
     }
-    if (this.integrationManager) {
+    if (this.integrationManager?.close) {
       this.integrationManager.close();
     }
-    if (this.vmExecutor) {
+    if (this.vmExecutor?.close) {
       this.vmExecutor.close();
     }
-    if (this.mcpClient) {
+    if (this.mcpClient?.close) {
       await this.mcpClient.close();
     }
-    if (this.conversationStore) {
+    if (this.conversationStore?.destroy) {
       this.conversationStore.destroy();
     }
-    if (this.taskManager) {
+    if (this.taskManager?.destroy) {
       this.taskManager.destroy();
     }
-    if (this.knowledgeStoreManager) {
+    if (this.knowledgeStoreManager?.close) {
       this.knowledgeStoreManager.close();
     }
-    if (this.sandboxContainer) {
+    if (this.sandboxContainer?.stop) {
       await this.sandboxContainer.stop();
     }
   }

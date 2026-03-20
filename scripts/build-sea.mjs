@@ -183,6 +183,38 @@ for (const addon of ['sodium-native', 'udx-native']) {
   }
 }
 
+// System tray binary
+if (platform === 'darwin') {
+  // Native Swift tray helper (compiled before build-sea.mjs runs)
+  const trayHelperPath = path.join('scripts', 'tray-helper');
+  if (fs.existsSync(trayHelperPath)) {
+    assets['native/tray-helper'] = trayHelperPath;
+  } else {
+    console.warn('tray-helper not found — run: swiftc -O -o scripts/tray-helper scripts/tray-helper.swift');
+  }
+} else {
+  // Linux/Windows: systray2 Go binary
+  const trayBinNames = {
+    win32: 'tray_windows_release.exe',
+    linux: 'tray_linux_release',
+  };
+  const trayBinName = trayBinNames[platform];
+  if (trayBinName) {
+    const trayBinPath = path.join('node_modules', 'systray2', 'traybin', trayBinName);
+    if (fs.existsSync(trayBinPath)) {
+      assets[`native/${trayBinName}`] = trayBinPath;
+    } else {
+      console.warn(`systray2 binary not found: ${trayBinPath} — system tray won't work`);
+    }
+  }
+}
+
+// Tray icon
+const trayIconPath = 'docs/favicon.png';
+if (fs.existsSync(trayIconPath)) {
+  assets['tray-icon'] = trayIconPath;
+}
+
 console.log(`Embedding ${Object.keys(assets).length} assets`);
 
 // --- 3. Generate sea-config.json ---

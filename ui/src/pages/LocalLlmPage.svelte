@@ -1808,7 +1808,7 @@
     {/if}
 
     <!-- Recommended Models -->
-    {#if isManagedEngine && pendingRecommended.length > 0}
+    {#if isManagedEngine && pendingRecommended.length > 0 && models.length === 0}
       <div class="mb-6">
         <h3 class="section-title mb-3">Recommended Models</h3>
         <div class="llm-rec-grid">

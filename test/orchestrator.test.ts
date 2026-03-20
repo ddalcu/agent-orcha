@@ -7,6 +7,14 @@ import { Orchestrator } from '../lib/orchestrator.ts';
 
 describe('Orchestrator', () => {
   let tempDir: string;
+  const orchestrators: Orchestrator[] = [];
+
+  /** Create an Orchestrator and track it for cleanup. */
+  function createOrch(config: ConstructorParameters<typeof Orchestrator>[0]): Orchestrator {
+    const orch = new Orchestrator(config);
+    orchestrators.push(orch);
+    return orch;
+  }
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'orch-test-'));
@@ -19,16 +27,20 @@ describe('Orchestrator', () => {
   });
 
   afterEach(async () => {
+    for (const orch of orchestrators) {
+      await orch.close();
+    }
+    orchestrators.length = 0;
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
   it('should construct with workspaceRoot', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.ok(orch);
   });
 
   it('should construct with custom dirs', () => {
-    const orch = new Orchestrator({
+    const orch = createOrch({
       workspaceRoot: tempDir,
       agentsDir: path.join(tempDir, 'agents'),
       workflowsDir: path.join(tempDir, 'workflows'),
@@ -40,34 +52,34 @@ describe('Orchestrator', () => {
   });
 
   it('should expose agents accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.ok(orch.agents);
     assert.ok(typeof orch.agents.list === 'function');
   });
 
   it('should expose workflows accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.ok(orch.workflows);
     assert.ok(typeof orch.workflows.list === 'function');
   });
 
   it('should expose knowledge accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.ok(orch.knowledge);
   });
 
   it('should expose memory accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.ok(orch.memory);
   });
 
   it('should expose functions accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.ok(orch.functions);
   });
 
   it('should expose skills accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.ok(orch.skills);
   });
 
@@ -84,7 +96,7 @@ describe('Orchestrator', () => {
     };
     await fs.writeFile(path.join(tempDir, 'llm.json'), JSON.stringify(llmConfig));
 
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     await orch.initialize();
 
     // After initialization, tasks should be accessible
@@ -105,7 +117,7 @@ describe('Orchestrator', () => {
     };
     await fs.writeFile(path.join(tempDir, 'llm.json'), JSON.stringify(llmConfig));
 
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     await orch.initialize();
     await orch.initialize(); // should be no-op
 
@@ -113,18 +125,18 @@ describe('Orchestrator', () => {
   });
 
   it('should list empty resources before initialization', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const agents = orch.agents.list();
     assert.deepEqual(agents, []);
   });
 
   it('should expose workspaceRoot', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.equal(orch.workspaceRoot, tempDir);
   });
 
   it('should expose sandbox accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const sandbox = orch.sandbox;
     assert.ok(sandbox);
     assert.equal(sandbox.isEnabled(), false);
@@ -133,7 +145,7 @@ describe('Orchestrator', () => {
   });
 
   it('should expose integrations accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const integrations = orch.integrations;
     assert.ok(integrations);
     assert.equal(integrations.getChannelContext('agent1'), '');
@@ -143,35 +155,35 @@ describe('Orchestrator', () => {
   });
 
   it('should expose triggers accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const triggers = orch.triggers;
     assert.ok(triggers);
     assert.equal(triggers.getManager(), null);
   });
 
   it('should expose longTermMemory accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const ltm = orch.longTermMemory;
     assert.ok(ltm);
     assert.ok(typeof ltm.load === 'function');
   });
 
   it('should list empty workflows', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.deepEqual(orch.workflows.list(), []);
     assert.deepEqual(orch.workflows.names(), []);
     assert.equal(orch.workflows.get('nonexistent'), undefined);
   });
 
   it('should list empty functions', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.deepEqual(orch.functions.list(), []);
     assert.deepEqual(orch.functions.names(), []);
     assert.equal(orch.functions.get('nonexistent'), undefined);
   });
 
   it('should list empty skills', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.deepEqual(orch.skills.list(), []);
     assert.deepEqual(orch.skills.names(), []);
     assert.equal(orch.skills.get('nonexistent'), undefined);
@@ -179,7 +191,7 @@ describe('Orchestrator', () => {
   });
 
   it('should expose knowledge accessor methods', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const k = orch.knowledge;
     assert.deepEqual(k.list(), []);
     assert.deepEqual(k.listConfigs(), []);
@@ -190,7 +202,7 @@ describe('Orchestrator', () => {
   });
 
   it('should expose memory accessor methods', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const m = orch.memory;
     assert.ok(m.getStore());
     assert.equal(m.getSessionCount(), 0);
@@ -201,14 +213,14 @@ describe('Orchestrator', () => {
   });
 
   it('should expose triggers.setManager', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const mockManager = { close: () => {} } as any;
     orch.triggers.setManager(mockManager);
     assert.equal(orch.triggers.getManager(), mockManager);
   });
 
   it('should expose mcp accessor', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     // mcp accessor exists even before initialization (mcpClient not set yet)
     const mcpAccessor = orch.mcp;
     assert.ok(mcpAccessor);
@@ -216,7 +228,7 @@ describe('Orchestrator', () => {
   });
 
   it('should throw when calling ensureInitialized methods before init', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.throws(
       () => (orch as any).ensureInitialized(),
       /not initialized/,
@@ -224,13 +236,13 @@ describe('Orchestrator', () => {
   });
 
   it('should close cleanly without initialization', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     // close() should not throw even if never initialized
     await orch.close();
   });
 
   it('should construct with all custom dir paths', () => {
-    const orch = new Orchestrator({
+    const orch = createOrch({
       workspaceRoot: tempDir,
       agentsDir: path.join(tempDir, 'agents'),
       workflowsDir: path.join(tempDir, 'workflows'),
@@ -246,23 +258,23 @@ describe('Orchestrator', () => {
   });
 
   it('should expose agents.names and agents.get', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.deepEqual(orch.agents.names(), []);
     assert.equal(orch.agents.get('nonexistent'), undefined);
   });
 
   it('should expose knowledge.isIndexing', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.equal(orch.knowledge.isIndexing('test'), false);
   });
 
   it('should expose functions.getTool', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.equal(orch.functions.getTool('nonexistent'), undefined);
   });
 
   it('should throw ensureInitialized for runAgent', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     await assert.rejects(
       () => orch.runAgent('test', {}),
       /not initialized/,
@@ -270,7 +282,7 @@ describe('Orchestrator', () => {
   });
 
   it('should throw ensureInitialized for runWorkflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     await assert.rejects(
       () => orch.runWorkflow('test', {}),
       /not initialized/,
@@ -278,7 +290,7 @@ describe('Orchestrator', () => {
   });
 
   it('should throw ensureInitialized for searchKnowledge', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     await assert.rejects(
       () => orch.searchKnowledge('test', 'query'),
       /not initialized/,
@@ -286,19 +298,19 @@ describe('Orchestrator', () => {
   });
 
   it('should throw ensureInitialized for streamAgent', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const gen = orch.streamAgent('test', {});
     await assert.rejects(() => gen.next(), /not initialized/);
   });
 
   it('should throw ensureInitialized for streamWorkflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const gen = orch.streamWorkflow('test', {});
     await assert.rejects(() => gen.next(), /not initialized/);
   });
 
   it('should throw ensureInitialized for reloadFile', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     await assert.rejects(
       () => orch.reloadFile('test.agent.yaml'),
       /not initialized/,
@@ -306,7 +318,7 @@ describe('Orchestrator', () => {
   });
 
   it('should throw ensureInitialized for unloadFile', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     await assert.rejects(
       () => orch.unloadFile('test.agent.yaml'),
       /not initialized/,
@@ -314,7 +326,7 @@ describe('Orchestrator', () => {
   });
 
   it('should throw ensureInitialized for getReactWorkflowInterrupts', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.throws(
       () => orch.getReactWorkflowInterrupts('test'),
       /not initialized/,
@@ -322,7 +334,7 @@ describe('Orchestrator', () => {
   });
 
   it('should throw ensureInitialized for getReactWorkflowInterrupt', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.throws(
       () => orch.getReactWorkflowInterrupt('thread-1'),
       /not initialized/,
@@ -330,7 +342,7 @@ describe('Orchestrator', () => {
   });
 
   it('should throw ensureInitialized for resumeReactWorkflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     await assert.rejects(
       () => orch.resumeReactWorkflow('test', 'thread-1', 'answer'),
       /not initialized/,
@@ -338,7 +350,7 @@ describe('Orchestrator', () => {
   });
 
   it('should handle reloadFile after manual initialization', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
 
     // Manually set initialized and inject required deps
     (orch as any).initialized = true;
@@ -351,13 +363,13 @@ describe('Orchestrator', () => {
     assert.equal(await orch.reloadFile('test.agent.yaml'), 'agent');
     assert.equal(await orch.reloadFile('test.workflow.yaml'), 'workflow');
     assert.equal(await orch.reloadFile('test.knowledge.yaml'), 'knowledge');
-    assert.equal(await orch.reloadFile('test.function.js'), 'function');
+    assert.equal(await orch.reloadFile('test.function.mjs'), 'function');
     assert.equal(await orch.reloadFile('skills/SKILL.md'), 'skill');
     assert.equal(await orch.reloadFile('unknown.txt'), 'none');
   });
 
   it('should handle unloadFile after manual initialization', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
 
     let agentRemoved = false;
@@ -407,7 +419,7 @@ describe('Orchestrator', () => {
     assert.equal(await orch.unloadFile('knowledge/my-kb.knowledge.yaml'), 'knowledge');
     assert.ok(knowledgeEvicted);
 
-    assert.equal(await orch.unloadFile('functions/my-func.function.js'), 'function');
+    assert.equal(await orch.unloadFile('functions/my-func.function.mjs'), 'function');
     assert.ok(functionRemoved);
 
     assert.equal(await orch.unloadFile('skills/my-skill/SKILL.md'), 'skill');
@@ -417,7 +429,7 @@ describe('Orchestrator', () => {
   });
 
   it('should handle unloadFile when resource name not found', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
 
     (orch as any).agentLoader = { nameForPath: () => undefined };
@@ -430,7 +442,7 @@ describe('Orchestrator', () => {
     assert.equal(await orch.unloadFile('agents/gone.agent.yaml'), 'agent');
     assert.equal(await orch.unloadFile('workflows/gone.workflow.yaml'), 'workflow');
     assert.equal(await orch.unloadFile('knowledge/gone.knowledge.yaml'), 'knowledge');
-    assert.equal(await orch.unloadFile('functions/gone.function.js'), 'function');
+    assert.equal(await orch.unloadFile('functions/gone.function.mjs'), 'function');
     assert.equal(await orch.unloadFile('skills/gone/SKILL.md'), 'skill');
   });
 
@@ -447,7 +459,7 @@ describe('Orchestrator', () => {
     };
     await fs.writeFile(path.join(tempDir, 'llm.json'), JSON.stringify(llmConfig));
 
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
 
     const result = await orch.reloadFile('llm.json');
@@ -455,7 +467,7 @@ describe('Orchestrator', () => {
   });
 
   it('should handle reloadFile for sandbox.json', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).vmExecutor = null;
     (orch as any).sandboxConfig = null;
@@ -472,7 +484,7 @@ describe('Orchestrator', () => {
   });
 
   it('should close with trigger and integration managers', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     let triggerClosed = false;
     let integrationClosed = false;
 
@@ -485,7 +497,7 @@ describe('Orchestrator', () => {
   });
 
   it('runAgent should throw when agent not found', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).agentLoader = { get: () => undefined };
 
@@ -496,7 +508,7 @@ describe('Orchestrator', () => {
   });
 
   it('runWorkflow should throw when workflow not found', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = { get: () => undefined };
 
@@ -507,7 +519,7 @@ describe('Orchestrator', () => {
   });
 
   it('streamAgent should throw when agent not found', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).agentLoader = { get: () => undefined };
 
@@ -516,7 +528,7 @@ describe('Orchestrator', () => {
   });
 
   it('streamWorkflow should throw when workflow not found', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = { get: () => undefined };
 
@@ -525,7 +537,7 @@ describe('Orchestrator', () => {
   });
 
   it('searchKnowledge should initialize store on demand', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
 
     const mockStore = {
@@ -542,7 +554,7 @@ describe('Orchestrator', () => {
   });
 
   it('searchKnowledge should use existing store', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
 
     const mockStore = {
@@ -558,7 +570,7 @@ describe('Orchestrator', () => {
   });
 
   it('resumeReactWorkflow should throw for non-react workflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'sequential' }),
@@ -571,7 +583,7 @@ describe('Orchestrator', () => {
   });
 
   it('resumeReactWorkflow should throw for unknown workflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = { get: () => undefined };
 
@@ -582,7 +594,7 @@ describe('Orchestrator', () => {
   });
 
   it('getReactWorkflowInterrupts should return interrupts', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).interruptManager = {
       getInterruptsByWorkflow: () => [{ threadId: 't1', question: 'q1' }],
@@ -593,7 +605,7 @@ describe('Orchestrator', () => {
   });
 
   it('getReactWorkflowInterrupt should return single interrupt', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).interruptManager = {
       getInterrupt: (tid: string) => tid === 't1' ? { threadId: 't1' } : undefined,
@@ -604,7 +616,7 @@ describe('Orchestrator', () => {
   });
 
   it('should close all resources including task manager', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     let taskManagerDestroyed = false;
     let conversationStoreDestroyed = false;
     let mcpClosed = false;
@@ -623,7 +635,7 @@ describe('Orchestrator', () => {
   });
 
   it('should close vm executor', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     let vmClosed = false;
 
     (orch as any).vmExecutor = { close: () => { vmClosed = true; } };
@@ -638,7 +650,7 @@ describe('Orchestrator', () => {
   });
 
   it('should run step-based workflow with mock executor', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'sequential', steps: [] }),
@@ -656,7 +668,7 @@ describe('Orchestrator', () => {
   });
 
   it('should route react workflow to reactWorkflowExecutor', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'react' }),
@@ -674,7 +686,7 @@ describe('Orchestrator', () => {
   });
 
   it('should run agent with mock executor', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).agentLoader = {
       get: () => ({ name: 'test-agent', description: 'test', prompt: { system: 'test', inputVariables: ['message'] }, tools: [] }),
@@ -690,7 +702,7 @@ describe('Orchestrator', () => {
   });
 
   it('should stream step-based workflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'sequential', steps: [] }),
@@ -716,7 +728,7 @@ describe('Orchestrator', () => {
   });
 
   it('should stream react workflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'react' }),
@@ -742,7 +754,7 @@ describe('Orchestrator', () => {
   });
 
   it('should handle workflow execution error in streamWorkflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'sequential', steps: [] }),
@@ -759,7 +771,7 @@ describe('Orchestrator', () => {
   });
 
   it('should handle langgraph execution error in streamWorkflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'react' }),
@@ -776,7 +788,7 @@ describe('Orchestrator', () => {
   });
 
   it('should stream agent with mock executor', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).agentLoader = {
       get: () => ({ name: 'test-agent', description: 'test', prompt: { system: 'test', inputVariables: ['message'] }, tools: [] }),
@@ -796,7 +808,7 @@ describe('Orchestrator', () => {
   });
 
   it('should resume react workflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'react' }),
@@ -814,12 +826,12 @@ describe('Orchestrator', () => {
   });
 
   it('should expose llmConfigPath', () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     assert.equal(orch.llmConfigPath, path.join(tempDir, 'llm.json'));
   });
 
   it('should stream resume react workflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'react' }),
@@ -845,7 +857,7 @@ describe('Orchestrator', () => {
   });
 
   it('should throw in streamResumeReactWorkflow for unknown workflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = { get: () => undefined };
 
@@ -854,7 +866,7 @@ describe('Orchestrator', () => {
   });
 
   it('should throw in streamResumeReactWorkflow for non-react workflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'sequential' }),
@@ -865,7 +877,7 @@ describe('Orchestrator', () => {
   });
 
   it('should handle error in streamResumeReactWorkflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).workflowLoader = {
       get: () => ({ name: 'test', type: 'react' }),
@@ -885,7 +897,7 @@ describe('Orchestrator', () => {
     const mcpConfig = { version: '1.0.0', servers: {} };
     await fs.writeFile(path.join(tempDir, 'mcp.json'), JSON.stringify(mcpConfig));
 
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
     (orch as any).mcpClient = {
       close: async () => {},
@@ -907,7 +919,7 @@ describe('Orchestrator', () => {
   });
 
   it('should throw ensureInitialized for streamResumeReactWorkflow', async () => {
-    const orch = new Orchestrator({ workspaceRoot: tempDir });
+    const orch = createOrch({ workspaceRoot: tempDir });
     const gen = orch.streamResumeReactWorkflow('test', 'thread-1', 'yes');
     await assert.rejects(() => gen.next(), /not initialized/);
   });

@@ -120,7 +120,16 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       const { input, sessionId } = request.body;
       const sid = sessionId || `p2p-${peerId}-${Date.now()}`;
 
+      const taskManager = fastify.orchestrator.tasks.getManager();
+      const peerName = manager.getPeers().find(p => p.peerId === peerId)?.peerName ?? peerId.slice(0, 8);
+      const task = taskManager.trackP2P('agent', agentName, input, {
+        direction: 'outgoing',
+        peerId,
+        peerName,
+      }, sid);
+
       const abortController = new AbortController();
+      taskManager.registerAbort(task.id, abortController);
 
       reply.raw.setHeader('Content-Type', 'text/event-stream');
       reply.raw.setHeader('Cache-Control', 'no-cache');
@@ -146,17 +155,24 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         if (!abortController.signal.aborted) {
+          taskManager.resolve(task.id, { output: 'p2p remote agent stream completed' });
           reply.raw.write('data: [DONE]\n\n');
+        } else {
+          taskManager.cancelTask(task.id);
         }
         reply.raw.end();
       } catch (error) {
         if (abortController.signal.aborted) {
+          taskManager.cancelTask(task.id);
           reply.raw.end();
           return;
         }
         const message = error instanceof Error ? error.message : String(error);
+        taskManager.reject(task.id, error);
         reply.raw.write(`data: ${JSON.stringify({ error: message })}\n\n`);
         reply.raw.end();
+      } finally {
+        taskManager.unregisterAbort(task.id);
       }
     }
   );
@@ -181,6 +197,14 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       const { message, sessionId } = request.body;
       const sid = sessionId || `p2p-llm-${peerId}-${Date.now()}`;
 
+      const taskManager = fastify.orchestrator.tasks.getManager();
+      const peerName = manager.getPeers().find(p => p.peerId === peerId)?.peerName ?? peerId.slice(0, 8);
+      const task = taskManager.trackP2P('llm', modelName, { message }, {
+        direction: 'outgoing',
+        peerId,
+        peerName,
+      }, sid);
+
       // Manage conversation history on caller side
       const store = fastify.orchestrator.memory.getStore();
       store.addMessage(sid, { role: 'human', content: message });
@@ -192,6 +216,7 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       }));
 
       const abortController = new AbortController();
+      taskManager.registerAbort(task.id, abortController);
 
       reply.raw.setHeader('Content-Type', 'text/event-stream');
       reply.raw.setHeader('Cache-Control', 'no-cache');
@@ -227,17 +252,24 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         if (!abortController.signal.aborted) {
+          taskManager.resolve(task.id, { output: 'p2p remote llm stream completed' });
           reply.raw.write('data: [DONE]\n\n');
+        } else {
+          taskManager.cancelTask(task.id);
         }
         reply.raw.end();
       } catch (error) {
         if (abortController.signal.aborted) {
+          taskManager.cancelTask(task.id);
           reply.raw.end();
           return;
         }
-        const message = error instanceof Error ? error.message : String(error);
-        reply.raw.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+        const errMsg = error instanceof Error ? error.message : String(error);
+        taskManager.reject(task.id, error);
+        reply.raw.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
         reply.raw.end();
+      } finally {
+        taskManager.unregisterAbort(task.id);
       }
     }
   );
