@@ -7,7 +7,7 @@
 import * as esbuild from 'esbuild';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFileSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 
 const nodeVersion = parseInt(process.versions.node.split('.')[0]);
 if (nodeVersion < 25) {
@@ -79,8 +79,8 @@ const inlineStaticReadsPlugin = {
 
 if (!fs.existsSync('public/index.html')) {
   console.log('Building Svelte UI...');
-  execFileSync('npm', ['ci'], { cwd: 'ui', stdio: 'inherit', shell: true });
-  execFileSync('npm', ['run', 'build'], { cwd: 'ui', stdio: 'inherit', shell: true });
+  execSync('npm ci', { cwd: 'ui', stdio: 'inherit' });
+  execSync('npm run build', { cwd: 'ui', stdio: 'inherit' });
 }
 
 console.log('Bundling application...');
@@ -155,8 +155,9 @@ addDirectory('templates', 'templates', [
 
 // sqlite-vec native extension
 function findSqliteVecLib() {
-  // sqlite-vec uses Node.js platform/arch names: darwin-arm64, linux-x64, win32-x64
-  const pkgName = `sqlite-vec-${platform}-${arch}`;
+  // sqlite-vec packages use 'windows' not 'win32': sqlite-vec-windows-x64, sqlite-vec-darwin-arm64, etc.
+  const vecPlatform = platform === 'win32' ? 'windows' : platform;
+  const pkgName = `sqlite-vec-${vecPlatform}-${arch}`;
   const ext = platform === 'win32' ? 'dll' : platform === 'darwin' ? 'dylib' : 'so';
   const libPath = path.join('node_modules', pkgName, `vec0.${ext}`);
 
