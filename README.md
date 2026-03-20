@@ -1,29 +1,36 @@
-![alt text](https://github.com/ddalcu/agent-orcha/raw/main/docs/assets/images/logo.png "Agent Orcha Logo")
+<p align="center">
+  <img src="docs/assets/images/screenshots/p2p.png" alt="Agent Orcha — P2P Network" width="100%" />
+</p>
 
 # Agent Orcha
 
-Agent Orcha is a declarative framework designed to build, manage, and scale multi-agent AI systems with ease. It combines the flexibility of TypeScript with the simplicity of YAML to orchestrate complex workflows, manage diverse tools via MCP, and integrate semantic search seamlessly. Built for developers and operators who demand reliability, extensibility, and clarity in their AI operations.
+Agent Orcha is a declarative framework for building, managing, and scaling multi-agent AI systems. Define agents, workflows, and knowledge stores in YAML — Orcha handles the rest. Run locally on bare metal for maximum performance, in Docker for cloud providers, or download a native desktop app for macOS, Windows, and Linux.
 
-**[Documentation](https://agentorcha.com)** | **[NPM Package](https://www.npmjs.com/package/agent-orcha)** | **[Docker Hub](https://hub.docker.com/r/ddalcu/agent-orcha)**
+**[Documentation](https://agentorcha.com)** | **[NPM Package](https://www.npmjs.com/package/agent-orcha)** | **[Docker Hub](https://hub.docker.com/r/ddalcu/agent-orcha)** | **[Native Apps](https://github.com/ddalcu/agent-orcha/releases)**
 
 ```bash
-# With Docker (cloud LLM providers)
-docker run -p 3000:3000 -v ./my-workspace:/data -e AUTH_PASSWORD=your-secret-password ddalcu/agent-orcha start
+# Native app (macOS, Windows, Linux) — download from Releases
+# https://github.com/ddalcu/agent-orcha/releases
 
 # With npx (local inference — uses your GPU / Apple Silicon directly)
-npx agent-orcha init my-workspace && cd my-workspace && npx agent-orcha start
+npx agent-orcha
+
+# With Docker (cloud LLM providers)
+docker run -p 3000:3000 -v ./my-workspace:/data ddalcu/agent-orcha
 ```
 
 ## Why Agent Orcha?
 
 - **Declarative AI**: Define agents, workflows, and infrastructure in clear, version-controlled YAML files
+- **P2P Agent & LLM Sharing**: Share agents and LLM engines across your team or organization over an encrypted peer-to-peer network — no API keys exposed, no central server required, with per-peer rate limiting and private network keys
+- **Native Desktop Apps**: Download pre-built binaries for macOS (.app), Windows (.exe), and Linux from [GitHub Releases](https://github.com/ddalcu/agent-orcha/releases) — system tray, auto-updates, zero setup
+- **Model Agnostic**: Seamlessly swap between OpenAI, Gemini, Anthropic, or local LLMs (llama-cpp, MLX, Ollama, LM Studio) without rewriting logic
 - **Published Agents**: Share agents via standalone chat pages at `/chat/<name>` with optional per-agent password protection
-- **Model Agnostic**: Seamlessly swap between OpenAI, Gemini, Anthropic, or local LLMs (Ollama, LM Studio) without rewriting logic
 - **Universal Tooling**: Leverage the **Model Context Protocol (MCP)** to connect agents to any external service, API, or database
 - **Knowledge Stores**: Built-in SQLite-based vector store with optional **direct mapping** for knowledge graphs — semantic search and graph analysis as a first-class citizen
-- **Robust Workflow Engine**: Orchestrate complex multi-agent sequences with parallel execution, conditional logic, and state management — or use **ReAct** for autonomous prompt-driven workflows
-- **Conversation Memory**: Built-in session-based memory for multi-turn dialogues with automatic message management and TTL cleanup
+- **Robust Workflow Engine**: Orchestrate complex multi-agent sequences with parallel execution, conditional logic, and state management — or use **ReAct** for autonomous prompt-driven workflows with multi-turn continuations
 - **Browser Sandbox**: Full Chromium browser with CDP control, Xvfb, and noVNC — plus an experimental **Vision Browser** for pixel-coordinate control with vision LLMs
+- **Conversation Memory**: Built-in session-based memory for multi-turn dialogues with automatic message management and TTL cleanup
 - **Security**: Rate limiting on auth endpoints, SSRF protection, SQL injection hardening, sandboxed execution
 - **Extensible Functions**: Drop in simple JavaScript functions to extend agent capabilities with zero boilerplate
 
@@ -39,14 +46,18 @@ Built-in web dashboard at `http://localhost:3000` with agent testing, knowledge 
   <img src="docs/assets/images/screenshots/0.0.7-agentedit.png" alt="Agent Orcha Studio — Visual Agent Composer" width="100%" />
 </p>
 
+<p align="center">
+  <img src="docs/assets/images/screenshots/llm.png" alt="Agent Orcha Studio — Local LLM Management" width="100%" />
+</p>
+
 - **Agents** — Browse, invoke, stream responses, manage sessions
 - **Knowledge** — Browse, search, view entities and graph structure
 - **MCP** — Browse servers, view and call tools
 - **Skills** — Browse and inspect skills
-- **Monitor** — Real-time LLM call logs, ReAct loop metrics, and activity feed
+- **Monitor** — Real-time LLM call logs, P2P task tracking, ReAct loop metrics, and activity feed
 - **IDE** — File editor with syntax highlighting, hot-reload, and **visual agent composer** for `.agent.yaml` files
 - **Local LLM** — Download, activate, and manage local model engines (llama-cpp, MLX, Ollama, LM Studio)
-- **P2P** — Browse peers, test remote agents and LLMs on the P2P network
+- **P2P** — Browse peers, test remote agents and LLMs, configure sharing and rate limits
 
 ## Architecture
 
@@ -64,29 +75,32 @@ Built-in web dashboard at `http://localhost:3000` with agent testing, knowledge 
 
 Agent Orcha can be used in multiple ways:
 
-1. **Docker Image** — Official image at [ddalcu/agent-orcha](https://hub.docker.com/r/ddalcu/agent-orcha)
-2. **CLI Tool** — `npx agent-orcha` to initialize and run projects
-3. **Backend API Server** — REST API for your existing frontends
-4. **Library** — Import programmatically in TypeScript/JavaScript
+1. **Native Desktop App** — Download from [GitHub Releases](https://github.com/ddalcu/agent-orcha/releases) (macOS .app, Windows .exe, Linux binary) with system tray integration
+2. **CLI Tool** — `npx agent-orcha` to start the server (auto-scaffolds workspace on first run)
+3. **Docker Image** — Official image at [ddalcu/agent-orcha](https://hub.docker.com/r/ddalcu/agent-orcha)
+4. **Backend API Server** — REST API for your existing frontends
 
-**Requirements:** Node.js >= 24.0.0 (or Docker)
+**Requirements:** Node.js >= 24.0.0 (for CLI/library) or Docker
 
 ## Quick Start
 
-### CLI (Recommended for Local Inference)
+### Native App (Recommended)
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/ddalcu/agent-orcha/releases). Launch the app — it auto-scaffolds a workspace at `~/.orcha/workspace` with example agents and configurations. A system tray icon provides quick access to the Studio UI.
+
+### CLI
 
 Run directly on your machine to take advantage of bare metal GPU / Apple Silicon performance for local models (llama-cpp, MLX, Ollama, LM Studio).
 
 ```bash
-# Initialize a project
-npx agent-orcha init my-project
-cd my-project
+# Start the server (auto-scaffolds ~/.orcha/workspace on first run)
+npx agent-orcha
 
-# Start the server
-npx agent-orcha start
+# Or point to a custom workspace
+WORKSPACE=./my-project npx agent-orcha
 ```
 
-### Docker (Recommended with External LLM Providers)
+### Docker
 
 Best when using cloud LLM providers (OpenAI, Anthropic, Gemini) or connecting to an LLM server running on the host. Docker does not have direct access to the host GPU, so local inference engines will not be available inside the container.
 
@@ -95,23 +109,6 @@ docker run -p 3000:3000 -e AUTH_PASSWORD=mypass -v ./my-project:/data ddalcu/age
 ```
 
 An empty workspace is automatically scaffolded with example agents, workflows, and configurations.
-
-
-### Library
-
-```typescript
-import { Orchestrator } from 'agent-orcha';
-
-const orchestrator = new Orchestrator({ workspaceRoot: './my-project' });
-await orchestrator.initialize();
-
-const result = await orchestrator.agents.invoke('researcher', {
-  topic: 'machine learning'
-});
-
-console.log(result.output);
-await orchestrator.close();
-```
 
 ## Configuration
 
@@ -129,7 +126,8 @@ All LLM and embedding configs are defined in `llm.json`. Agents and knowledge st
       "engine": "llama-cpp",
       "model": "Qwen3.5-4B-IQ4_NL",
       "reasoningBudget": 0,
-      "contextSize": 32768
+      "contextSize": 32768,
+      "p2p": true
     },
     "ollama": {
       "provider": "local",
@@ -168,6 +166,7 @@ All LLM and embedding configs are defined in `llm.json`. Agents and knowledge st
 - **`provider`** — `local`, `openai`, `anthropic`, or `gemini`
 - **`contextSize`** — Context window size (local engines)
 - **`reasoningBudget`** / **`thinkingBudget`** — Token budget for reasoning (0 to disable)
+- **`p2p`** — Share this model on the P2P network (`true`)
 - **`engineUrls`** — Base URLs for engines running on remote hosts
 - **`${ENV_VAR}`** — Environment variable substitution (works in all config files)
 
@@ -175,8 +174,8 @@ All LLM and embedding configs are defined in `llm.json`. Agents and knowledge st
 
 ```bash
 PORT=3000                              # Server port
-HOST=0.0.0.0                          # Server host
-WORKSPACE=/path/to/project             # Base directory for config files
+HOST=0.0.0.0                          # Server host (SEA default: 127.0.0.1)
+WORKSPACE=/path/to/project             # Workspace directory (default: ~/.orcha/workspace)
 AUTH_PASSWORD=your-secret-password     # Password auth for all API routes and Studio
 CORS_ORIGIN=https://your-frontend.com # Cross-origin policy (default: same-origin)
 LOG_LEVEL=debug                        # Pino log level (default: info)
@@ -227,29 +226,8 @@ memory: true               # Enable persistent memory (optional)
 skills:                    # Skills to attach (optional)
   - skill-name
 publish: true              # Standalone chat at /chat/researcher (optional)
+p2p: true                  # Share on P2P network (optional)
 ```
-
-### Agent Schema Reference
-
-| Field | Description |
-|-------|-------------|
-| `name` | Unique identifier (required) |
-| `description` | Human-readable description (required) |
-| `version` | Semantic version (default: "1.0.0") |
-| `llm` | LLM config reference — string or `{ name, temperature }` |
-| `prompt.system` | System message/instructions |
-| `prompt.inputVariables` | Variables to interpolate in the prompt |
-| `tools` | Tool references: `mcp:`, `knowledge:`, `function:`, `builtin:`, `sandbox:`, `workspace:` |
-| `output.format` | `text` or `structured` |
-| `output.schema` | JSON Schema (required when format is `structured`) |
-| `maxIterations` | Override default 200 iteration limit |
-| `sampleQuestions` | Example prompts shown in Studio UI |
-| `skills` | Skills to attach (list or `{ mode: all }`) |
-| `memory` | Enable persistent memory |
-| `integrations` | External integrations (collabnook, email) |
-| `triggers` | Cron or webhook triggers |
-| `publish` | Standalone chat page (`true` or `{ enabled, password }`) |
-| `p2p` | Share agent on P2P network (`true`) |
 
 ### Conversation Memory
 
@@ -312,7 +290,7 @@ output:
 
 ### ReAct
 
-Autonomous, prompt-driven workflows. The agent decides which tools and agents to call.
+Autonomous, prompt-driven workflows with multi-turn conversation support. The agent decides which tools and agents to call. Thread state is preserved after completion for follow-up questions.
 
 ```yaml
 name: react-research
@@ -351,7 +329,9 @@ output:
 
 ## P2P Network
 
-Share agents and LLM engines across instances using a peer-to-peer swarm network (powered by [Hyperswarm](https://github.com/holepunchto/hyperswarm)). P2P is enabled by default — set `P2P_ENABLED=false` to disable.
+Share agents and LLM engines across machines using an encrypted peer-to-peer swarm network powered by [Hyperswarm](https://github.com/holepunchto/hyperswarm). No central server, no cloud dependency — peers discover each other directly using a shared network key. P2P is enabled by default; set `P2P_ENABLED=false` to disable.
+
+All communication is encrypted end-to-end via Noise protocol handshakes. No API keys, secrets, or model weights are ever transmitted — only inference requests and responses flow over the wire. Per-peer rate limiting protects against abuse.
 
 The **P2P tab** in Studio provides a settings panel to enable/disable P2P, change the machine name, set a private network key, configure rate limiting, and view what you're sharing.
 
@@ -465,7 +445,7 @@ Stores with entities get additional graph tools: `entity_lookup`, `traverse`, `g
 Custom JavaScript tools in `functions/`:
 
 ```javascript
-// functions/fibonacci.function.js
+// functions/fibonacci.function.mjs
 export default {
   name: 'fibonacci',
   description: 'Returns the nth Fibonacci number',
@@ -512,7 +492,7 @@ Reference in agents with `mcp:fetch`.
 | `mcp:<server>` | External tools from MCP servers |
 | `knowledge:<store>` | Semantic search on knowledge stores |
 | `function:<name>` | Custom JavaScript functions |
-| `builtin:<name>` | Framework tools (`ask_user`, `memory_save`) |
+| `builtin:<name>` | Framework tools (`ask_user`, `memory_save`, `canvas_write`, `canvas_append`) |
 | `sandbox:exec` | JavaScript execution in sandboxed VM |
 | `sandbox:shell` | Shell commands (non-root sandbox user) |
 | `sandbox:web_fetch` | URL fetching with SSRF protection |
@@ -565,11 +545,11 @@ Full API documentation is available at [agentorcha.com](https://agentorcha.com).
 ## Directory Structure
 
 ```
-my-project/
+~/.orcha/workspace/
 ├── agents/            # Agent definitions (YAML)
 ├── workflows/         # Workflow definitions (YAML)
 ├── knowledge/         # Knowledge store configs and data
-├── functions/         # Custom function tools (JavaScript)
+├── functions/         # Custom function tools (JavaScript .mjs)
 ├── skills/            # Skill prompt files (Markdown)
 ├── llm.json           # LLM and embedding configurations
 ├── mcp.json           # MCP server configuration
@@ -604,8 +584,8 @@ If nothing is printed, all dependencies are satisfied.
 ## Development
 
 ```bash
-npm run dev          # Dev server with auto-reload
-npm run dev:p2p      # Dev server with P2P enabled
+npm run dev          # Dev server with auto-reload (uses ~/.orcha/workspace)
+WORKSPACE=./templates npm run dev   # Dev with local templates
 npm run build        # Build
 npm start            # Run build
 npm run lint         # ESLint
