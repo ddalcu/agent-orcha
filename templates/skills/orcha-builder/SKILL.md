@@ -60,12 +60,14 @@ triggers:
     input:
       query: "Task"
 publish: true                         # or { enabled: true, password: "secret" }
+p2p: true                             # share this agent on the P2P network
 sampleQuestions:                       # optional — clickable chips shown in chat UI on initial load
   - "What can you help me with?"
   - "Summarize the latest report"
 ```
 
 Published agents are accessible at `/chat/<agent-name>` with optional per-agent password.
+Agents with `p2p: true` are shared on the P2P network (enabled by default). P2P settings (peer name, network key, rate limit) are configurable in the P2P tab UI or via environment variables.
 
 ## Step-Based Workflows (`workflows/<name>.workflow.yaml`)
 

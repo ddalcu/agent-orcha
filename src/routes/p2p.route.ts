@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { P2PManager } from '../../lib/p2p/p2p-manager.ts';
+import { P2PManager } from '../../lib/p2p/p2p-manager.ts';
+import { LLMFactory } from '../../lib/llm/index.ts';
 
 interface InvokeParams {
   peerId: string;
@@ -26,12 +27,59 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
     return (fastify.orchestrator as any)._p2pManager ?? null;
   }
 
+  const disabledByEnv = process.env['P2P_ENABLED'] === 'false';
+
   // GET /api/p2p/status
   fastify.get('/status', async () => {
     const manager = getManager();
     if (!manager) {
-      return { enabled: false, connected: false, peerCount: 0, peerName: '' };
+      return { enabled: false, connected: false, peerCount: 0, peerName: '', networkKey: '', rateLimit: 0, disabledByEnv };
     }
+    return { ...manager.getStatus(), disabledByEnv: false };
+  });
+
+  // POST /api/p2p/toggle — enable or disable P2P at runtime
+  fastify.post<{ Body: { enabled: boolean } }>('/toggle', async (request, reply) => {
+    if (disabledByEnv) {
+      return reply.status(403).send({ error: 'P2P was disabled at startup via P2P_ENABLED=false. Remove or change the environment variable and restart to enable P2P.' });
+    }
+    const { enabled } = request.body as any;
+    const orch = fastify.orchestrator as any;
+
+    if (enabled) {
+      if (!orch._p2pManager) {
+        orch._p2pManager = new P2PManager(fastify.orchestrator);
+        await orch._p2pManager.start();
+        LLMFactory.setP2PManager(orch._p2pManager);
+      }
+    } else {
+      if (orch._p2pManager) {
+        await orch._p2pManager.close();
+        orch._p2pManager = null;
+        LLMFactory.setP2PManager(null as any);
+      }
+    }
+
+    const manager = getManager();
+    return manager ? manager.getStatus() : { enabled: false, connected: false, peerCount: 0, peerName: '', networkKey: '', rateLimit: 0 };
+  });
+
+  // PATCH /api/p2p/settings — update peer name, network key, and/or rate limit
+  fastify.patch<{ Body: { peerName?: string; networkKey?: string; rateLimit?: number } }>('/settings', async (request, reply) => {
+    const manager = getManager();
+    if (!manager) return reply.status(503).send({ error: 'P2P not enabled' });
+
+    const { peerName, networkKey, rateLimit } = request.body as any;
+    if (peerName && typeof peerName === 'string') {
+      manager.setPeerName(peerName.trim());
+    }
+    if (networkKey && typeof networkKey === 'string') {
+      await manager.setNetworkKey(networkKey.trim());
+    }
+    if (rateLimit !== undefined && typeof rateLimit === 'number') {
+      manager.setRateLimit(rateLimit);
+    }
+
     return manager.getStatus();
   });
 
@@ -40,6 +88,16 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
     const manager = getManager();
     if (!manager) return reply.status(200).send([]);
     return manager.getPeers();
+  });
+
+  // GET /api/p2p/config — what this instance is sharing
+  fastify.get('/config', async () => {
+    const manager = getManager();
+    if (!manager) return { sharedAgents: [], sharedLLMs: [] };
+    return {
+      sharedAgents: manager.getLocalP2PAgents(),
+      sharedLLMs: manager.getLocalP2PLLMs(),
+    };
   });
 
   // GET /api/p2p/agents

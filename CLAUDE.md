@@ -74,6 +74,24 @@ Skills are prompt augmentation files (`skills/*/SKILL.md`) with YAML frontmatter
 **Vision Browser:** `vision-browser.ts` — Pixel-coordinate browser control using CDP Input events. Tools: `sandbox_vision_screenshot`, `sandbox_vision_navigate`, `sandbox_vision_click`, `sandbox_vision_type`, `sandbox_vision_scroll`, `sandbox_vision_key`, `sandbox_vision_drag`. Every action tool auto-captures a JPEG screenshot (quality 55) and returns it as a `ContentPart[]` image, cutting the screenshot→infer→act loop to one call per action. Designed for use with vision LLMs (e.g., Qwen3-VL via LM Studio). Uses its own CDPClient/PageReadiness instances independent of the existing DOM-based browser tools.
 **Config:** `SandboxConfig` in `types.ts` with `browserCdpUrl` field (default: `http://localhost:9222`)
 
+### P2P Network
+
+`lib/p2p/p2p-manager.ts` manages Hyperswarm-based peer-to-peer sharing. P2P is **enabled by default** (`P2P_ENABLED !== 'false'`). Agents with `p2p: true` and LLMs with `p2p: true` + `active !== false` are shared.
+
+**Key files:**
+- `lib/p2p/p2p-manager.ts` — `P2PManager` class (swarm lifecycle, catalog broadcast, rate limiting)
+- `lib/p2p/p2p-protocol.ts` — Wire protocol over Hyperswarm sockets
+- `lib/p2p/types.ts` — Message types, `P2PStatus`, `PeerInfo`, `P2PAgentInfo`, `P2PLLMInfo`
+- `src/routes/p2p.route.ts` — REST API (`/api/p2p/*`)
+
+**Runtime configuration** (all configurable via `PATCH /api/p2p/settings` or the P2P tab UI):
+- Peer name (`P2P_PEER_NAME` env var, default: hostname)
+- Network key (`P2P_NETWORK_KEY` env var, default: `agent-orcha-default`) — SHA-256 hashed for topic
+- Rate limit (`P2P_RATE_LIMIT` env var, default: 60 req/min, 0 = unlimited) — sliding window, applies to all incoming agent + LLM invoke requests
+- Enable/disable toggle (`POST /api/p2p/toggle`) — creates/destroys `P2PManager` at runtime
+
+**LLM sharing:** `P2P_SHARE_LLMS=true` blanket-shares all active models. Otherwise per-model `p2p: true` in `llm.json`. The LLM tab UI has a Toggle per provider. `PATCH /api/llm/config/models/:name/p2p` toggles the flag and broadcasts catalog.
+
 ### Published Agents
 
 Agents with `publish: true` (or `publish: { enabled: true, password: "..." }`) get standalone chat pages at `/chat/<agent-name>`. Handled by `src/routes/chat.route.ts` with per-agent token auth (independent of global `AUTH_PASSWORD`). UI: `public/chat.html` + `public/src/components/StandaloneChat.js`.

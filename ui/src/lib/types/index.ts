@@ -141,6 +141,9 @@ export interface P2PStatus {
   connected: boolean;
   peerCount: number;
   peerName: string;
+  networkKey: string;
+  rateLimit: number;
+  disabledByEnv?: boolean;
 }
 
 export interface P2PPeer {

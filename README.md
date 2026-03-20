@@ -184,10 +184,11 @@ EXPERIMENTAL_VISION=false              # Enable vision browser tools
 BROWSER_SANDBOX=true                   # Enable browser sandbox (Docker)
 BROWSER_VERBOSE=false                  # Show Chromium logs
 MLX_MANUAL=false                       # Skip auto MLX binary download
-P2P_ENABLED=false                      # Enable P2P swarm network
+P2P_ENABLED=false                      # Disable P2P swarm network (enabled by default)
 P2P_PEER_NAME=my-peer                 # Display name on the P2P network (default: hostname)
-P2P_NETWORK_KEY=agent-orcha-default   # Shared key for peer discovery
-P2P_SHARE_LLMS=false                   # Share all LLM models on P2P (overrides per-model flag)
+P2P_NETWORK_KEY=agent-orcha-default   # Shared key for peer discovery (configurable in UI)
+P2P_SHARE_LLMS=true                    # Share all active LLM models on P2P (overrides per-model flag)
+P2P_RATE_LIMIT=60                      # Max incoming P2P requests per minute (0 = unlimited)
 ```
 
 All config files (`.yaml`, `.json`, `.env`) support `${ENV_VAR}` substitution for secrets and environment-specific values.
@@ -350,15 +351,9 @@ output:
 
 ## P2P Network
 
-Share agents and LLM engines across instances using a peer-to-peer swarm network (powered by [Hyperswarm](https://github.com/holepunchto/hyperswarm)).
+Share agents and LLM engines across instances using a peer-to-peer swarm network (powered by [Hyperswarm](https://github.com/holepunchto/hyperswarm)). P2P is enabled by default — set `P2P_ENABLED=false` to disable.
 
-```bash
-# Start with P2P enabled
-npm run dev:p2p
-
-# Or set the env var directly
-P2P_ENABLED=true npx agent-orcha start
-```
+The **P2P tab** in Studio provides a settings panel to enable/disable P2P, change the machine name, set a private network key, configure rate limiting, and view what you're sharing.
 
 ### Sharing Agents
 
@@ -371,7 +366,7 @@ p2p: true
 
 ### Sharing LLM Engines
 
-Add `"p2p": true` to a model in `llm.json`:
+Add `"p2p": true` to a model in `llm.json`, or use the P2P share toggle on each provider in the LLM tab. Only active models with `p2p: true` are shared:
 
 ```json
 {
@@ -384,7 +379,23 @@ Add `"p2p": true` to a model in `llm.json`:
 }
 ```
 
-Other instances can use remote LLMs by configuring agents with `llm: "p2p"` (auto-select) or `llm: "p2p:model-name"`. No API keys or secrets are shared — only the model name and provider.
+No API keys or secrets are shared — only the model name and provider.
+
+### Using Remote Resources
+
+There are three ways to use remote P2P resources:
+
+1. **Direct LLM chat (P2P tab)** — Select a remote peer's LLM from the P2P tab and chat with it directly. Pure LLM inference with no agent or tools involved.
+2. **Remote agent invocation (P2P tab)** — Invoke a peer's shared agent. The agent runs entirely on the host — their LLM, their tools, their knowledge stores. You receive the streamed output.
+3. **Local agent with remote LLM** — Configure your agent with `llm: "p2p"` (auto-select) or `llm: "p2p:model-name"`. The agent runs locally with your tools, react loop, memory, and knowledge stores, while only the LLM inference happens on the remote peer. Tool calling is fully supported — the remote LLM generates `tool_calls`, your local agent executes them, and results feed back over the wire.
+
+### Rate Limiting
+
+Incoming P2P requests are rate-limited to 60 requests/minute by default. Configure via `P2P_RATE_LIMIT` env var or the P2P tab UI. Set to `0` for unlimited.
+
+### Private Networks
+
+By default all instances join the same public network. To create a private network, set `P2P_NETWORK_KEY` to a custom value (or configure in the P2P tab). The key is SHA-256 hashed before joining — only peers with the same key can discover each other.
 
 ## Knowledge Stores
 
@@ -548,7 +559,7 @@ Full API documentation is available at [agentorcha.com](https://agentorcha.com).
 | Local LLM | `/api/local-llm/*` | Engine management, model download/activation |
 | Graph | `/api/graph/*` | Multi-store graph aggregation |
 | Logs | `/api/logs/*` | Real-time log streaming |
-| P2P | `/api/p2p/*` | P2P network status, remote agents, remote LLMs |
+| P2P | `/api/p2p/*` | P2P network status, settings, config, remote agents/LLMs |
 | VNC | `/api/vnc/*` | Browser sandbox VNC status |
 
 ## Directory Structure

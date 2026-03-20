@@ -203,6 +203,31 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  // PATCH /config/models/:name/p2p — toggle p2p flag
+  fastify.patch<{ Params: { name: string }; Body: { p2p: boolean } }>(
+    '/config/models/:name/p2p',
+    async (request, reply) => {
+      const config = getLLMConfig();
+      if (!config) throw new Error('No llm.json loaded');
+
+      const { name } = request.params;
+      const { p2p } = request.body as any;
+      const entry = config.models[name];
+      if (!entry || typeof entry === 'string') {
+        return reply.status(404).send({ error: `Model "${name}" not found` });
+      }
+
+      entry.p2p = p2p;
+      await saveLLMConfig(llmJsonPath, config);
+
+      // Broadcast updated catalog so peers see the change
+      const manager = (fastify.orchestrator as any)._p2pManager;
+      manager?.broadcastCatalog();
+
+      return { ok: true };
+    },
+  );
+
   // DELETE /config/models/:name — delete a model config entry
   fastify.delete<{ Params: { name: string } }>(
     '/config/models/:name',

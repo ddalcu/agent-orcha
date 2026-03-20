@@ -3,8 +3,8 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { tool } from '../types/tool-factory.ts';
-import { z } from 'zod';
 import type { StructuredTool } from '../types/llm-types.ts';
+import { convertJsonSchemaToZod } from '../utils/json-schema-to-zod.ts';
 import type { MCPConfig, MCPServerConfig } from './types.ts';
 import { logger } from '../logger.ts';
 
@@ -207,7 +207,7 @@ export class MCPClientManager {
     const prefix = this.config.globalOptions?.prefixToolNameWithServerName ? `${serverName}_` : '';
 
     return mcpTools.map((mcpTool) => {
-      const inputSchema = this.convertJsonSchemaToZod(mcpTool.inputSchema);
+      const inputSchema = convertJsonSchemaToZod(mcpTool.inputSchema);
 
       return tool(
         async (input) => {
@@ -229,47 +229,6 @@ export class MCPClientManager {
         }
       );
     });
-  }
-
-  private convertJsonSchemaToZod(schema: unknown): z.ZodObject<Record<string, z.ZodTypeAny>> {
-    const jsonSchema = schema as { properties?: Record<string, { type?: string; description?: string }>; required?: string[] };
-    const properties = jsonSchema.properties ?? {};
-    const required = new Set(jsonSchema.required ?? []);
-
-    const zodShape: Record<string, z.ZodTypeAny> = {};
-
-    for (const [key, prop] of Object.entries(properties)) {
-      let zodType: z.ZodTypeAny;
-
-      switch (prop.type) {
-        case 'string':
-          zodType = z.string();
-          break;
-        case 'number':
-        case 'integer':
-          zodType = z.number();
-          break;
-        case 'boolean':
-          zodType = z.boolean();
-          break;
-        case 'array':
-          zodType = z.array(z.unknown());
-          break;
-        case 'object':
-          zodType = z.record(z.unknown());
-          break;
-        default:
-          zodType = z.unknown();
-      }
-
-      if (prop.description) {
-        zodType = zodType.describe(prop.description);
-      }
-
-      zodShape[key] = required.has(key) ? zodType : zodType.optional();
-    }
-
-    return z.object(zodShape);
   }
 
   private extractContent(content: unknown): string {

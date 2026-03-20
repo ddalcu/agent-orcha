@@ -203,6 +203,8 @@
   let stoppingChat = $state(false);
   let stoppingEmb = $state(false);
   let togglingActive = $state<string | null>(null);
+  let togglingP2P = $state<string | null>(null);
+  let p2pEnabled = $state(false);
   let activatingModelId = $state<string | null>(null);
   let activateErrors = $state<Record<string, string>>({});
   let activatingEmbId = $state<string | null>(null);
@@ -787,6 +789,20 @@
     }
   }
 
+  async function toggleModelP2P(configName: string) {
+    togglingP2P = configName;
+    try {
+      const entry = llmConfig?.models?.[configName];
+      const currentP2P = entry?.p2p === true;
+      await api.toggleLlmP2P(configName, !currentP2P);
+      llmConfig = await api.getLlmConfig();
+    } catch (e: any) {
+      console.error('Failed to toggle P2P:', e);
+    } finally {
+      togglingP2P = null;
+    }
+  }
+
   // External engine actions
   async function activateExtChat(model: string) {
     activatingExtChat = model;
@@ -919,6 +935,7 @@
     pollActiveDownloads();
     loadInterruptedDownloads();
     await loadEngines();
+    try { p2pEnabled = (await api.getP2PStatus()).enabled; } catch {}
     // Default format for Apple Silicon
     if (status?.platform === 'darwin' && status?.arch === 'arm64') {
       browseFormat = 'mlx';
@@ -1134,7 +1151,7 @@
           {/if}
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-3">
           <button class="btn btn-accent" disabled={cloudSaving} onclick={saveCloudConfig}>
             {#if cloudSaving}
               <i class="fas fa-spinner fa-spin mr-1"></i>Saving...
@@ -1142,6 +1159,14 @@
               <i class="fas fa-save mr-1"></i>Save Configuration
             {/if}
           </button>
+          {#if p2pEnabled}
+            {@const pEntry = llmConfig?.models?.[provider]}
+            <div class="flex items-center gap-2">
+              <i class="fas fa-share-nodes text-xs {pEntry?.p2p ? 'text-accent' : 'text-muted'}"></i>
+              <span class="text-xs {pEntry?.p2p ? 'text-accent' : 'text-muted'}">P2P</span>
+              <Toggle active={pEntry?.p2p === true} disabled={togglingP2P === provider} onchange={() => toggleModelP2P(provider)} />
+            </div>
+          {/if}
         </div>
       </div>
     </div>
@@ -1523,6 +1548,22 @@
                     <i class="fas fa-stop mr-1"></i>Stop
                   {/if}
                 </button>
+              </div>
+            </div>
+          {/if}
+
+          {#if p2pEnabled && selectedEngine}
+            {@const engEntry = llmConfig?.models?.[selectedEngine]}
+            <div class="llm-server-section">
+              <div class="llm-section-content flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-share-nodes text-xs {engEntry?.p2p ? 'text-accent' : 'text-muted'}"></i>
+                  <span class="text-sm {engEntry?.p2p ? 'text-primary' : 'text-secondary'}">P2P Sharing</span>
+                  {#if engEntry?.p2p}
+                    <span class="badge badge-accent text-2xs">Shared</span>
+                  {/if}
+                </div>
+                <Toggle active={engEntry?.p2p === true} disabled={togglingP2P === selectedEngine} onchange={() => toggleModelP2P(selectedEngine!)} />
               </div>
             </div>
           {/if}

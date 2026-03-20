@@ -4,6 +4,7 @@
   import { formatElapsedTime, estimateTokens } from '../lib/utils/format.js';
   import type { P2PStatus, P2PPeer, P2PRemoteAgent, P2PRemoteLLM, StreamEvent } from '../lib/types/index.js';
 
+  import Toggle from '../components/Toggle.svelte';
   import ChatInput from '../components/chat/ChatInput.svelte';
   import ChatMessages from '../components/chat/ChatMessages.svelte';
   import UserBubble from '../components/chat/UserBubble.svelte';
@@ -85,7 +86,7 @@
 
   // --- State ---
 
-  let status = $state<P2PStatus>({ enabled: false, connected: false, peerCount: 0, peerName: '' });
+  let status = $state<P2PStatus>({ enabled: false, connected: false, peerCount: 0, peerName: '', networkKey: '', rateLimit: 0, disabledByEnv: false });
   let peers = $state<P2PPeer[]>([]);
   let remoteAgents = $state<P2PRemoteAgent[]>([]);
   let remoteLLMs = $state<P2PRemoteLLM[]>([]);
@@ -101,9 +102,37 @@
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let chatInputRef = $state<ChatInput | null>(null);
   let chatMessagesRef = $state<ChatMessages | null>(null);
+  let sidebarFilter = $state('');
 
-  onMount(() => {
-    loadStatus();
+  let filteredPeers = $derived(sidebarFilter
+    ? peers.filter(p => p.peerName.toLowerCase().includes(sidebarFilter.toLowerCase()))
+    : peers);
+  let filteredAgents = $derived(sidebarFilter
+    ? remoteAgents.filter(a => a.name.toLowerCase().includes(sidebarFilter.toLowerCase()) || a.peerName.toLowerCase().includes(sidebarFilter.toLowerCase()))
+    : remoteAgents);
+  let filteredLLMs = $derived(sidebarFilter
+    ? remoteLLMs.filter(l => l.name.toLowerCase().includes(sidebarFilter.toLowerCase()) || l.model.toLowerCase().includes(sidebarFilter.toLowerCase()) || l.peerName.toLowerCase().includes(sidebarFilter.toLowerCase()))
+    : remoteLLMs);
+  let p2pConfig = $state<{ sharedAgents: any[]; sharedLLMs: any[] }>({ sharedAgents: [], sharedLLMs: [] });
+  let togglingP2P = $state(false);
+  let peerNameInput = $state('');
+  let peerNameSaving = $state(false);
+  let peerNameSaved = $state(false);
+  let networkKeyInput = $state('');
+  let networkKeySaving = $state(false);
+  let networkKeySaved = $state(false);
+  let useCustomKey = $state(false);
+  let rateLimitInput = $state(0);
+  let rateLimitSaving = $state(false);
+  let rateLimitSaved = $state(false);
+
+  onMount(async () => {
+    await loadStatus();
+    peerNameInput = status.peerName;
+    networkKeyInput = status.networkKey;
+    useCustomKey = status.networkKey !== 'agent-orcha-default';
+    rateLimitInput = status.rateLimit;
+    loadP2PConfig();
     pollTimer = setInterval(loadStatus, 5000);
 
     // Restore last selection if we had one
@@ -163,6 +192,75 @@
       remoteAgents = a;
       remoteLLMs = l;
     } catch { /* ignore */ }
+  }
+
+  async function loadP2PConfig() {
+    try { p2pConfig = await api.getP2PConfig(); } catch { /* ignore */ }
+  }
+
+  async function toggleP2PEnabled() {
+    togglingP2P = true;
+    try {
+      status = await api.toggleP2P(!status.enabled);
+      if (status.enabled) {
+        peerNameInput = status.peerName;
+        await loadP2PConfig();
+        await loadStatus();
+      } else {
+        peers = [];
+        remoteAgents = [];
+        remoteLLMs = [];
+        p2pConfig = { sharedAgents: [], sharedLLMs: [] };
+      }
+    } catch { /* ignore */ }
+    finally { togglingP2P = false; }
+  }
+
+  async function savePeerName() {
+    if (!peerNameInput.trim() || peerNameInput.trim() === status.peerName) return;
+    peerNameSaving = true;
+    try {
+      status = await api.updateP2PSettings({ peerName: peerNameInput.trim() });
+      peerNameSaved = true;
+      setTimeout(() => { peerNameSaved = false; }, 2000);
+    } catch { /* ignore */ }
+    finally { peerNameSaving = false; }
+  }
+
+  async function saveNetworkKey() {
+    const key = useCustomKey ? networkKeyInput.trim() : 'agent-orcha-default';
+    if (!key || key === status.networkKey) return;
+    networkKeySaving = true;
+    try {
+      status = await api.updateP2PSettings({ networkKey: key });
+      networkKeyInput = status.networkKey;
+      networkKeySaved = true;
+      setTimeout(() => { networkKeySaved = false; }, 2000);
+      // Reload peers since we joined a new network
+      await loadStatus();
+      await loadP2PConfig();
+    } catch { /* ignore */ }
+    finally { networkKeySaving = false; }
+  }
+
+  async function saveRateLimit() {
+    if (rateLimitInput === status.rateLimit) return;
+    rateLimitSaving = true;
+    try {
+      status = await api.updateP2PSettings({ rateLimit: Math.max(0, rateLimitInput) });
+      rateLimitInput = status.rateLimit;
+      rateLimitSaved = true;
+      setTimeout(() => { rateLimitSaved = false; }, 2000);
+    } catch { /* ignore */ }
+    finally { rateLimitSaving = false; }
+  }
+
+  function toggleCustomKey() {
+    useCustomKey = !useCustomKey;
+    if (!useCustomKey) {
+      networkKeyInput = 'agent-orcha-default';
+      saveNetworkKey();
+    }
   }
 
   function selectAgent(agent: P2PRemoteAgent) {
@@ -489,13 +587,29 @@
         <span class="text-xs text-muted">Waiting to join swarm...</span>
       </div>
     {:else}
+      <!-- Search filter -->
+      <div class="p2p-filter">
+        <i class="fas fa-search text-2xs text-muted"></i>
+        <input
+          type="text"
+          class="p2p-filter-input"
+          placeholder="Filter..."
+          bind:value={sidebarFilter}
+        />
+        {#if sidebarFilter}
+          <button class="p2p-filter-clear" title="Clear filter" onclick={() => { sidebarFilter = ''; }}>
+            <i class="fas fa-xmark text-2xs"></i>
+          </button>
+        {/if}
+      </div>
+
       <!-- Peers section -->
       <div class="p2p-section">
-        <div class="section-title">Peers ({peers.length})</div>
-        {#if peers.length === 0}
+        <div class="section-title">Peers ({filteredPeers.length})</div>
+        {#if filteredPeers.length === 0}
           <div class="text-xs text-muted p-3">No peers discovered yet</div>
         {:else}
-          {#each peers as peer}
+          {#each filteredPeers as peer}
             <div class="p2p-peer-card">
               <div class="flex items-center gap-2">
                 <span class="status-dot status-dot-active"></span>
@@ -509,11 +623,11 @@
 
       <!-- Remote agents section -->
       <div class="p2p-section">
-        <div class="section-title">Remote Agents ({remoteAgents.length})</div>
-        {#if remoteAgents.length === 0}
-          <div class="text-xs text-muted p-3">No shared agents available</div>
+        <div class="section-title">Remote Agents ({filteredAgents.length})</div>
+        {#if filteredAgents.length === 0}
+          <div class="text-xs text-muted p-3">{sidebarFilter ? 'No matches' : 'No shared agents available'}</div>
         {:else}
-          {#each remoteAgents as agent}
+          {#each filteredAgents as agent}
             <button
               class="p2p-agent-card"
               class:active={selectedAgent?.name === agent.name && selectedAgent?.peerId === agent.peerId}
@@ -523,7 +637,7 @@
                 <i class="fas fa-robot text-xs text-accent"></i>
                 <span class="text-sm font-medium text-primary">{agent.name}</span>
               </div>
-              <span class="text-2xs text-muted truncate">{agent.description}</span>
+              <span class="text-2xs text-muted p2p-desc">{agent.description}</span>
               <span class="text-2xs text-muted"><i class="fas fa-server text-2xs"></i> {agent.peerName}</span>
             </button>
           {/each}
@@ -532,11 +646,11 @@
 
       <!-- Remote LLMs section -->
       <div class="p2p-section">
-        <div class="section-title">Remote LLMs ({remoteLLMs.length})</div>
-        {#if remoteLLMs.length === 0}
-          <div class="text-xs text-muted p-3">No shared LLMs available</div>
+        <div class="section-title">Remote LLMs ({filteredLLMs.length})</div>
+        {#if filteredLLMs.length === 0}
+          <div class="text-xs text-muted p-3">{sidebarFilter ? 'No matches' : 'No shared LLMs available'}</div>
         {:else}
-          {#each remoteLLMs as llm}
+          {#each filteredLLMs as llm}
             <button
               class="p2p-agent-card"
               class:active={selectedLLM?.name === llm.name && selectedLLM?.peerId === llm.peerId}
@@ -546,7 +660,7 @@
                 <i class="fas fa-microchip text-xs text-accent"></i>
                 <span class="text-sm font-medium text-primary">{llm.name}</span>
               </div>
-              <span class="text-2xs text-muted truncate">{llm.model}</span>
+              <span class="text-2xs text-muted p2p-desc">{llm.model}</span>
               <div class="flex items-center gap-2">
                 <span class="badge badge-gray text-2xs">{llm.provider}</span>
                 <span class="text-2xs text-muted"><i class="fas fa-server text-2xs"></i> {llm.peerName}</span>
@@ -561,18 +675,196 @@
   <!-- Main chat area -->
   <div class="p2p-main">
     {#if !selectedAgent && !selectedLLM}
-      <div class="p2p-empty-state">
-        <i class="fas fa-share-nodes text-4xl text-accent opacity-50"></i>
-        <div class="text-lg font-semibold text-primary mt-4">P2P Agent Network</div>
-        <div class="text-sm text-muted mt-2">
-          {#if !status.connected}
-            Connecting to the P2P swarm...
-          {:else if remoteAgents.length === 0 && remoteLLMs.length === 0}
-            No remote agents or LLMs discovered yet. Other peers will appear when they share resources with <code class="text-xs bg-surface px-1 rounded">p2p: true</code>.
-          {:else}
-            Select a remote agent or LLM from the sidebar to start chatting.
+      <div class="p2p-config-panel">
+        <!-- P2P Settings -->
+        <div class="p2p-config-section">
+          <h3 class="text-sm font-semibold text-primary mb-3"><i class="fas fa-gear text-accent mr-2"></i>P2P Settings</h3>
+
+          <div class="p2p-setting-row">
+            <div class="flex-1">
+              <div class="text-sm text-primary">Enable P2P</div>
+              {#if status.disabledByEnv}
+                <div class="text-xs text-amber">P2P was disabled at startup via <code>P2P_ENABLED=false</code>. Remove or change the environment variable and restart to enable.</div>
+              {:else}
+                <div class="text-xs text-muted">Connect to the Hyperswarm DHT to discover and share with peers</div>
+              {/if}
+            </div>
+            <Toggle active={status.enabled} disabled={togglingP2P || !!status.disabledByEnv} onchange={toggleP2PEnabled} />
+          </div>
+
+          {#if status.enabled}
+            <div class="p2p-setting-row">
+              <div class="flex-1">
+                <div class="text-sm text-primary">Machine Name</div>
+                <div class="text-xs text-muted">How this instance appears to other peers</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  class="input p2p-name-input"
+                  bind:value={peerNameInput}
+                  placeholder="Peer name"
+                  onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') savePeerName(); }}
+                />
+                <button
+                  class="btn btn-sm btn-accent"
+                  disabled={peerNameSaving || !peerNameInput.trim() || peerNameInput.trim() === status.peerName}
+                  onclick={savePeerName}
+                >
+                  {#if peerNameSaved}
+                    <i class="fas fa-check"></i>
+                  {:else if peerNameSaving}
+                    <i class="fas fa-spinner fa-spin"></i>
+                  {:else}
+                    Save
+                  {/if}
+                </button>
+              </div>
+            </div>
+
+            <div class="p2p-setting-row">
+              <div class="flex-1">
+                <div class="text-sm text-primary">Network Key</div>
+                <div class="text-xs text-muted">
+                  {#if useCustomKey}
+                    Private network — only peers with the same key can discover each other
+                  {:else}
+                    Default public network — all ORCHA instances can discover each other
+                  {/if}
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs {useCustomKey ? 'text-amber' : 'text-muted'}">{useCustomKey ? 'Private' : 'Default'}</span>
+                <Toggle active={useCustomKey} disabled={networkKeySaving} onchange={toggleCustomKey} />
+              </div>
+            </div>
+
+            {#if useCustomKey}
+              <div class="p2p-setting-row">
+                <div class="flex-1">
+                  <div class="text-xs text-muted">Key is SHA-256 hashed before joining the swarm</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <input
+                    type="text"
+                    class="input p2p-name-input"
+                    bind:value={networkKeyInput}
+                    placeholder="my-private-network"
+                    onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveNetworkKey(); }}
+                  />
+                  <button
+                    class="btn btn-sm btn-accent"
+                    disabled={networkKeySaving || !networkKeyInput.trim() || networkKeyInput.trim() === status.networkKey}
+                    onclick={saveNetworkKey}
+                  >
+                    {#if networkKeySaved}
+                      <i class="fas fa-check"></i>
+                    {:else if networkKeySaving}
+                      <i class="fas fa-spinner fa-spin"></i>
+                    {:else}
+                      Save
+                    {/if}
+                  </button>
+                </div>
+              </div>
+            {/if}
+
+            <div class="p2p-setting-row">
+              <div class="flex-1">
+                <div class="text-sm text-primary">Rate Limit</div>
+                <div class="text-xs text-muted">Max incoming requests per minute across all shared resources. 0 = unlimited.</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <input
+                  type="number"
+                  class="input p2p-rate-input"
+                  min="0"
+                  bind:value={rateLimitInput}
+                  placeholder="0"
+                  onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') saveRateLimit(); }}
+                />
+                <button
+                  class="btn btn-sm btn-accent"
+                  disabled={rateLimitSaving || rateLimitInput === status.rateLimit}
+                  onclick={saveRateLimit}
+                >
+                  {#if rateLimitSaved}
+                    <i class="fas fa-check"></i>
+                  {:else if rateLimitSaving}
+                    <i class="fas fa-spinner fa-spin"></i>
+                  {:else}
+                    Save
+                  {/if}
+                </button>
+              </div>
+            </div>
           {/if}
         </div>
+
+        <!-- Sharing Status -->
+        {#if status.enabled}
+        <div class="p2p-config-section">
+          <h3 class="text-sm font-semibold text-primary mb-3"><i class="fas fa-share-nodes text-accent mr-2"></i>What You're Sharing</h3>
+
+          <div class="p2p-sharing-group">
+            <div class="text-xs font-medium text-muted mb-1">Shared Agents ({p2pConfig.sharedAgents.length})</div>
+            {#if p2pConfig.sharedAgents.length === 0}
+              <div class="text-xs text-muted p2p-hint">No agents shared. Add <code>p2p: true</code> to an agent YAML to share it.</div>
+            {:else}
+              {#each p2pConfig.sharedAgents as agent}
+                <div class="p2p-shared-item">
+                  <i class="fas fa-robot text-xs text-accent"></i>
+                  <span class="text-sm text-primary">{agent.name}</span>
+                  {#if agent.description}<span class="text-xs text-muted">— {agent.description}</span>{/if}
+                </div>
+              {/each}
+            {/if}
+          </div>
+
+          <div class="p2p-sharing-group mt-3">
+            <div class="text-xs font-medium text-muted mb-1">Shared LLMs ({p2pConfig.sharedLLMs.length})</div>
+            {#if p2pConfig.sharedLLMs.length === 0}
+              <div class="text-xs text-muted p2p-hint">No LLMs shared. Toggle P2P on a provider in the LLM tab, or add <code>p2p: true</code> in llm.json.</div>
+            {:else}
+              {#each p2pConfig.sharedLLMs as llm}
+                <div class="p2p-shared-item">
+                  <i class="fas fa-microchip text-xs text-accent"></i>
+                  <span class="text-sm text-primary">{llm.name}</span>
+                  <span class="badge badge-gray text-2xs">{llm.provider}</span>
+                  <span class="text-xs text-muted">{llm.model}</span>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+
+        <!-- Help / How It Works -->
+        <div class="p2p-config-section">
+          <h3 class="text-sm font-semibold text-primary mb-3"><i class="fas fa-circle-question text-accent mr-2"></i>How P2P Works</h3>
+          <div class="p2p-help-grid">
+            <div class="p2p-help-item">
+              <div class="text-xs font-medium text-primary">Auto-Discovery</div>
+              <div class="text-xs text-muted">Peers find each other via Hyperswarm DHT. Your network key is SHA-256 hashed before joining — safe for private networks.</div>
+            </div>
+            <div class="p2p-help-item">
+              <div class="text-xs font-medium text-primary">Share an Agent</div>
+              <div class="text-xs text-muted">Add <code>p2p: true</code> to any agent YAML file, or toggle it in the IDE visual editor.</div>
+            </div>
+            <div class="p2p-help-item">
+              <div class="text-xs font-medium text-primary">Share an LLM</div>
+              <div class="text-xs text-muted">Click the <i class="fas fa-share-nodes"></i> icon on a provider in the LLM tab, or set <code>"p2p": true</code> in llm.json.</div>
+            </div>
+            <div class="p2p-help-item">
+              <div class="text-xs font-medium text-primary">Use Remote LLMs</div>
+              <div class="text-xs text-muted">Set <code>llm: "p2p"</code> or <code>llm: "p2p:model-name"</code> in an agent config to use a peer's LLM.</div>
+            </div>
+            <div class="p2p-help-item">
+              <div class="text-xs font-medium text-primary">Disable P2P</div>
+              <div class="text-xs text-muted">Set <code>P2P_ENABLED=false</code> as an environment variable to opt out entirely.</div>
+            </div>
+          </div>
+        </div>
+        {/if}
       </div>
     {:else}
       <!-- Chat header -->
@@ -669,6 +961,9 @@
     display: flex;
     height: 100%;
     overflow: hidden;
+    border: 1px solid var(--border-60);
+    border-radius: var(--radius-lg);
+    background: var(--bg);
   }
 
   .p2p-sidebar {
@@ -679,6 +974,47 @@
     flex-direction: column;
     overflow-y: auto;
     background: var(--sidebar);
+  }
+
+  .p2p-filter {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1h);
+    padding: var(--sp-1h) var(--sp-3);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .p2p-filter-input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-1);
+    font-size: 0.75rem;
+    padding: var(--sp-0h) 0;
+  }
+
+  .p2p-filter-input::placeholder {
+    color: var(--text-3);
+  }
+
+  .p2p-filter-clear {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-3);
+    padding: 2px;
+    line-height: 1;
+  }
+
+  .p2p-filter-clear:hover {
+    color: var(--text-1);
+  }
+
+  .p2p-desc {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.3;
   }
 
   .p2p-status-bar {
@@ -743,14 +1079,103 @@
     overflow: hidden;
   }
 
-  .p2p-empty-state {
+  .p2p-config-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-4) var(--sp-5);
     display: flex;
     flex-direction: column;
+    gap: var(--sp-4);
+  }
+
+  .p2p-config-section {
+    padding: var(--sp-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+
+  .p2p-setting-row {
+    display: flex;
     align-items: center;
-    justify-content: center;
-    flex: 1;
-    padding: var(--sp-8);
+    justify-content: space-between;
+    gap: var(--sp-4);
+    padding: var(--sp-2h) 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .p2p-setting-row:last-child {
+    border-bottom: none;
+  }
+
+  .p2p-name-input {
+    width: 180px;
+    font-size: 0.8rem;
+    padding: var(--sp-1) var(--sp-2);
+  }
+
+  .p2p-rate-input {
+    width: 80px;
+    font-size: 0.8rem;
+    padding: var(--sp-1) var(--sp-2);
     text-align: center;
+  }
+
+  .p2p-sharing-group {
+    padding: var(--sp-2) 0;
+  }
+
+  .p2p-shared-item {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    padding: var(--sp-1h) var(--sp-2);
+    border-radius: var(--radius);
+    flex-wrap: wrap;
+  }
+
+  .p2p-shared-item:hover {
+    background: var(--hover);
+  }
+
+  .p2p-hint {
+    padding: var(--sp-1) var(--sp-2);
+    font-style: italic;
+  }
+
+  .p2p-hint code {
+    font-size: 0.65rem;
+    background: var(--hover);
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+  }
+
+  .p2p-help-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-3);
+  }
+
+  .p2p-help-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    padding: var(--sp-2);
+    border-radius: var(--radius);
+    background: var(--bg);
+  }
+
+  .p2p-help-item code {
+    font-size: 0.65rem;
+    background: var(--hover);
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+  }
+
+  @media (max-width: 640px) {
+    .p2p-help-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   .p2p-chat-header {

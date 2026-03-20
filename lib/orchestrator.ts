@@ -183,7 +183,7 @@ export class Orchestrator {
     await this.integrationManager.start(this);
 
     // Start P2P if enabled
-    if (process.env['P2P_ENABLED'] === 'true') {
+    if (process.env['P2P_ENABLED'] !== 'false') {
       this._p2pManager = new P2PManager(this);
       await this._p2pManager.start();
       LLMFactory.setP2PManager(this._p2pManager);

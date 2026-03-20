@@ -38,6 +38,8 @@
   let builtinToolNames = $state<string[]>([]);
   let sandboxToolNames = $state<string[]>([]);
   let workspaceToolNames = $state<string[]>([]);
+  let p2pNetworkEnabled = $state(false);
+  let remoteLLMs = $state<any[]>([]);
 
   // Tool picker
   let toolPickerOpen = $state(false);
@@ -126,15 +128,19 @@
   // Load external data
   async function loadExternalData() {
     try {
-      const [llms, mcpRes, knowledgeRes, functionsRes, skillsRes, toolsRes] = await Promise.all([
+      const [llms, mcpRes, knowledgeRes, functionsRes, skillsRes, toolsRes, p2pStatus, p2pLlms] = await Promise.all([
         api.getLLMs().catch(() => []),
         api.getMCPServers().catch(() => []),
         api.getKnowledgeStores().catch(() => []),
         api.getFunctions().catch(() => []),
         api.getSkills().catch(() => []),
         api.getTools().catch(() => null),
+        api.getP2PStatus().catch(() => ({ enabled: false })),
+        api.getP2PLLMs().catch(() => []),
       ]);
       llmOptions = Array.isArray(llms) ? llms : (llms.models || []);
+      p2pNetworkEnabled = p2pStatus?.enabled || false;
+      remoteLLMs = Array.isArray(p2pLlms) ? p2pLlms : [];
       mcpServers = Array.isArray(mcpRes) ? mcpRes : (mcpRes.servers || []);
       knowledgeStores = Array.isArray(knowledgeRes) ? knowledgeRes : (knowledgeRes.stores || []);
       functions = Array.isArray(functionsRes) ? functionsRes : (functionsRes.functions || []);
@@ -570,6 +576,14 @@
             {@const name = typeof m === 'string' ? m : m.name}
             <option value={name} selected={name === llmName}>{name}</option>
           {/each}
+          {#if p2pNetworkEnabled}
+            <option disabled>──── P2P ────</option>
+            <option value="p2p" selected={llmName === 'p2p'}>p2p (auto-select)</option>
+            {#each remoteLLMs as rl}
+              {@const p2pRef = `p2p:${rl.name}`}
+              <option value={p2pRef} selected={llmName === p2pRef}>p2p:{rl.name} ({rl.peerName})</option>
+            {/each}
+          {/if}
         </select>
       </div>
       <div>

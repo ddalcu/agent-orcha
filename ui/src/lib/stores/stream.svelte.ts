@@ -139,6 +139,11 @@ class StreamManager {
               continue;
             }
 
+            // Normalize typeless error events (e.g. {"error":"..."})
+            if (!event.type && event.error) {
+              event.type = 'error';
+            }
+
             state.events.push(event);
 
             if (event.type === 'content' && event.content) state.content += event.content;

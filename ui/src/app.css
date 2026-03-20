@@ -2108,6 +2108,29 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
   opacity: 0.4;
   cursor: default;
 }
+.llm-p2p-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  padding: 2px 5px;
+  color: var(--text-3);
+  transition: all 0.15s;
+  line-height: 1;
+}
+.llm-p2p-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.llm-p2p-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.llm-p2p-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 @media (max-width: 640px) {
   .llm-provider-tabs { flex-wrap: wrap; }
   .llm-provider-tab { flex: 0 0 calc(50% - var(--sp-1)); }

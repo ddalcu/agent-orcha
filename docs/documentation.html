@@ -502,23 +502,28 @@ output:
             </tr>
             <tr>
               <td><code>P2P_ENABLED</code></td>
-              <td>When <code>true</code>, enables the P2P swarm network for sharing agents and LLMs with other peers</td>
-              <td><code>false</code></td>
+              <td>Set to <code>false</code> to disable P2P. Enabled by default.</td>
+              <td><code>true</code></td>
             </tr>
             <tr>
               <td><code>P2P_PEER_NAME</code></td>
-              <td>Display name for this peer on the P2P network</td>
+              <td>Display name for this peer on the P2P network. Also configurable in the P2P tab UI.</td>
               <td><em>hostname</em></td>
             </tr>
             <tr>
               <td><code>P2P_NETWORK_KEY</code></td>
-              <td>Shared key that identifies the P2P network. Only peers with the same key discover each other.</td>
+              <td>Shared key that identifies the P2P network. Only peers with the same key discover each other. Configurable in the P2P tab UI.</td>
               <td><code>agent-orcha-default</code></td>
             </tr>
             <tr>
               <td><code>P2P_SHARE_LLMS</code></td>
-              <td>When <code>true</code>, shares all configured LLM models on the P2P network (overrides per-model <code>p2p</code> flag)</td>
+              <td>When <code>true</code>, shares all active LLM models on the P2P network (overrides per-model <code>p2p</code> flag)</td>
               <td><code>false</code></td>
+            </tr>
+            <tr>
+              <td><code>P2P_RATE_LIMIT</code></td>
+              <td>Max incoming P2P requests per minute across all shared resources. <code>0</code> = unlimited. Configurable in the P2P tab UI.</td>
+              <td><code>60</code></td>
             </tr>
           </tbody>
         </table>
@@ -1731,15 +1736,7 @@ publish:
         <p>Agent Orcha includes a peer-to-peer network powered by <a href="https://github.com/holepunchto/hyperswarm" target="_blank" rel="noopener">Hyperswarm</a> that lets multiple instances discover each other and share agents and LLM engines across the network.</p>
 
         <h4>Enabling P2P</h4>
-        <p>Set the <code>P2P_ENABLED=true</code> environment variable, or use the convenience script:</p>
-        <div class="code-block">
-          <div class="code-header">
-            <span class="code-language">Bash</span>
-          </div>
-          <div class="code-content">
-            <pre><code>npm run dev:p2p</code></pre>
-          </div>
-        </div>
+        <p>P2P is enabled by default. To disable it, set <code>P2P_ENABLED=false</code> or toggle it off in the P2P tab in Studio. You can also enable/disable, change the machine name, set a private network key, and configure rate limiting from the P2P tab UI at runtime.</p>
 
         <h4>Sharing Agents</h4>
         <p>Add <code>p2p: true</code> to any agent YAML to share it with connected peers:</p>
@@ -1760,7 +1757,7 @@ p2p: true</code></pre>
         </div>
 
         <h4>Sharing LLM Engines</h4>
-        <p>Add <code>"p2p": true</code> to a model entry in <code>llm.json</code> to share it with peers. Other instances can then use the remote LLM by configuring an agent with <code>llm: "p2p"</code> or <code>llm: "p2p:model-name"</code>.</p>
+        <p>Add <code>"p2p": true</code> to a model entry in <code>llm.json</code>, or use the P2P share toggle on each provider in the LLM tab. Only active models with <code>p2p: true</code> are shared. Other instances can then use the remote LLM by configuring an agent with <code>llm: "p2p"</code> or <code>llm: "p2p:model-name"</code>.</p>
         <div class="code-block">
           <div class="code-header">
             <span class="code-language">JSON</span>
@@ -1778,15 +1775,28 @@ p2p: true</code></pre>
 }</code></pre>
           </div>
         </div>
-        <p>Alternatively, set <code>P2P_SHARE_LLMS=true</code> to share all configured models without marking them individually.</p>
+        <p>Alternatively, set <code>P2P_SHARE_LLMS=true</code> to share all active models without marking them individually.</p>
 
         <h4>Using Remote Resources</h4>
+        <p>There are three ways to use remote P2P resources:</p>
+        <ol>
+          <li><strong>Direct LLM chat (P2P tab)</strong> &mdash; Select a remote peer's LLM from the P2P tab and chat with it directly. Pure LLM inference with no agent or tools involved.</li>
+          <li><strong>Remote agent invocation (P2P tab)</strong> &mdash; Invoke a peer's shared agent. The agent runs entirely on the host &mdash; their LLM, their tools, their knowledge stores. You receive the streamed output.</li>
+          <li><strong>Local agent with remote LLM</strong> &mdash; Configure your agent with <code>llm: "p2p"</code> (auto-selects first available) or <code>llm: "p2p:model-name"</code>. The agent runs locally with your tools, react loop, memory, and knowledge stores, while only the LLM inference happens on the remote peer. Tool calling is fully supported &mdash; the remote LLM generates <code>tool_calls</code>, your local agent executes them, and results feed back over the wire.</li>
+        </ol>
         <ul>
-          <li>Remote agents and LLMs appear in the <strong>P2P</strong> tab in the Studio UI</li>
-          <li>Click on a remote agent or LLM to test it via the built-in chat interface</li>
-          <li>Agents can use a remote LLM with <code>llm: "p2p"</code> (auto-selects first available) or <code>llm: "p2p:model-name"</code></li>
           <li>Conversation history for remote LLMs is managed on the caller side &mdash; the host peer is stateless</li>
           <li>No API keys, base URLs, or engine details are shared &mdash; only the model name, provider, and model identifier</li>
+        </ul>
+
+        <h4>P2P Configuration UI</h4>
+        <p>The <strong>P2P</strong> tab in Studio provides a settings panel (shown when no agent/LLM is selected) where you can:</p>
+        <ul>
+          <li><strong>Enable/Disable P2P</strong> &mdash; toggle the swarm connection on or off at runtime</li>
+          <li><strong>Machine Name</strong> &mdash; change how this instance appears to peers</li>
+          <li><strong>Network Key</strong> &mdash; switch between the default public network and a private network key (SHA-256 hashed)</li>
+          <li><strong>Rate Limit</strong> &mdash; set max incoming requests per minute across all shared resources (default: 60, 0 = unlimited)</li>
+          <li><strong>Sharing Status</strong> &mdash; view which agents and LLMs you are currently sharing</li>
         </ul>
 
         <h4>Environment Variables</h4>
@@ -1801,8 +1811,8 @@ p2p: true</code></pre>
           <tbody>
             <tr>
               <td><code>P2P_ENABLED</code></td>
-              <td>Enable the P2P swarm network</td>
-              <td><code>false</code></td>
+              <td>Set to <code>false</code> to disable P2P</td>
+              <td><code>true</code></td>
             </tr>
             <tr>
               <td><code>P2P_PEER_NAME</code></td>
@@ -1816,8 +1826,13 @@ p2p: true</code></pre>
             </tr>
             <tr>
               <td><code>P2P_SHARE_LLMS</code></td>
-              <td>Share all LLM models (overrides per-model flag)</td>
+              <td>Share all active LLM models (overrides per-model flag)</td>
               <td><code>false</code></td>
+            </tr>
+            <tr>
+              <td><code>P2P_RATE_LIMIT</code></td>
+              <td>Max incoming requests per minute (0 = unlimited)</td>
+              <td><code>60</code></td>
             </tr>
           </tbody>
         </table>
@@ -2960,7 +2975,22 @@ Response (auth disabled):
             <tr>
               <td>GET</td>
               <td><code>/api/p2p/status</code></td>
-              <td>P2P network status (enabled, connected, peer count)</td>
+              <td>P2P network status (enabled, connected, peer count, rate limit)</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/p2p/toggle</code></td>
+              <td>Enable or disable P2P at runtime (<code>{ enabled: boolean }</code>)</td>
+            </tr>
+            <tr>
+              <td>PATCH</td>
+              <td><code>/api/p2p/settings</code></td>
+              <td>Update peer name, network key, and/or rate limit</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/p2p/config</code></td>
+              <td>List locally shared agents and LLMs</td>
             </tr>
             <tr>
               <td>GET</td>

@@ -52,6 +52,9 @@ export const api = {
   async toggleLlmActive(name: string, active: boolean) {
     return (await _fetch(`/api/llm/config/models/${encodeURIComponent(name)}/active`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active }) })).json();
   },
+  async toggleLlmP2P(name: string, p2p: boolean) {
+    return (await _fetch(`/api/llm/config/models/${encodeURIComponent(name)}/p2p`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p2p }) })).json();
+  },
   async saveLlmEmbedding(name: string, config: unknown) {
     return (await _fetch(`/api/llm/config/embeddings/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })).json();
   },
@@ -169,6 +172,13 @@ export const api = {
 
   // P2P
   async getP2PStatus() { return (await _fetch('/api/p2p/status')).json(); },
+  async getP2PConfig() { return (await _fetch('/api/p2p/config')).json(); },
+  async toggleP2P(enabled: boolean) {
+    return (await _fetch('/api/p2p/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) })).json();
+  },
+  async updateP2PSettings(settings: { peerName?: string; networkKey?: string; rateLimit?: number }) {
+    return (await _fetch('/api/p2p/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) })).json();
+  },
   async getP2PPeers() { return (await _fetch('/api/p2p/peers')).json(); },
   async getP2PAgents() { return (await _fetch('/api/p2p/agents')).json(); },
   async getP2PLLMs() { return (await _fetch('/api/p2p/llms')).json(); },

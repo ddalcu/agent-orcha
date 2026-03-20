@@ -8,14 +8,15 @@
       "model": "Qwen3.5-4B-MLX-4bit",
       "reasoningBudget": 128,
       "contextSize": 86016,
-      "active": false
+      "active": false,
+      "p2p": true
     },
     "llama-cpp": {
       "provider": "local",
       "engine": "llama-cpp",
       "model": "Qwen3.5-9B-Q4_K_M",
-      "contextSize": 32768,
       "reasoningBudget": 0,
+      "contextSize": 32768,
       "active": true,
       "p2p": true
     },
@@ -25,7 +26,8 @@
       "baseUrl": "http://localhost:1234/v1",
       "model": "qwen3.5-9b-mlx",
       "reasoningBudget": 0,
-      "active": false
+      "active": false,
+      "p2p": true
     },
     "ollama": {
       "provider": "local",
@@ -33,13 +35,15 @@
       "baseUrl": "http://localhost:11434/v1",
       "model": "qwen3.5:latest",
       "reasoningBudget": 0,
-      "active": false
+      "active": false,
+      "p2p": true
     },
     "openai": {
       "provider": "openai",
       "apiKey": "${OPENAI_API_KEY}",
       "model": "gpt-4.1",
-      "active": false
+      "active": false,
+      "p2p": false
     },
     "anthropic": {
       "provider": "anthropic",

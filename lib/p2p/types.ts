@@ -1,3 +1,23 @@
+import type { ToolCall } from '../types/llm-types.ts';
+
+// --- P2P Wire Tool Schema (JSON Schema representation of a tool) ---
+
+export interface P2PWireTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>; // JSON Schema
+}
+
+// --- P2P Wire Message (richer message format for tool-calling) ---
+
+export interface P2PWireMessage {
+  role: string;
+  content: string;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+  name?: string;
+}
+
 // --- P2P Agent Info (what peers share about their agents) ---
 
 export interface P2PAgentInfo {
@@ -43,6 +63,7 @@ export interface HandshakeMessage {
 
 export interface CatalogMessage {
   type: 'catalog';
+  peerName?: string;
   agents: P2PAgentInfo[];
   llms?: P2PLLMInfo[];
 }
@@ -78,14 +99,18 @@ export interface LLMInvokeMessage {
   type: 'llm_invoke';
   requestId: string;
   modelName: string;
-  messages: { role: string; content: string }[];
+  messages: P2PWireMessage[];
   temperature?: number;
+  tools?: P2PWireTool[];
 }
 
 export interface LLMStreamMessage {
   type: 'llm_stream';
   requestId: string;
-  chunk: { type: 'content' | 'thinking'; content: string } | { type: 'usage'; input_tokens: number; output_tokens: number; total_tokens: number };
+  chunk:
+    | { type: 'content' | 'thinking'; content: string }
+    | { type: 'usage'; input_tokens: number; output_tokens: number; total_tokens: number }
+    | { type: 'tool_calls'; tool_calls: ToolCall[] };
 }
 
 export interface LLMStreamEndMessage {
@@ -143,4 +168,6 @@ export interface P2PStatus {
   connected: boolean;
   peerCount: number;
   peerName: string;
+  networkKey: string;
+  rateLimit: number;
 }

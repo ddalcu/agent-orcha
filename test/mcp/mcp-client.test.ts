@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { MCPClientManager } from '../../lib/mcp/mcp-client.ts';
+import { convertJsonSchemaToZod } from '../../lib/utils/json-schema-to-zod.ts';
 
 describe('MCPClientManager', () => {
   it('should construct with empty config', () => {
@@ -238,7 +239,7 @@ describe('MCPClientManager', () => {
   });
 
   it('should convert JSON schema to Zod with various types', () => {
-    const manager = new MCPClientManager({ version: '1.0.0', servers: {} });
+    // Uses top-level import
     const schema = {
       properties: {
         name: { type: 'string', description: 'The name' },
@@ -251,7 +252,7 @@ describe('MCPClientManager', () => {
       required: ['name'],
     };
 
-    const zodSchema = (manager as any).convertJsonSchemaToZod(schema);
+    const zodSchema = convertJsonSchemaToZod(schema);
     assert.ok(zodSchema);
 
     // Verify required field validation
@@ -264,8 +265,8 @@ describe('MCPClientManager', () => {
   });
 
   it('should convert empty JSON schema to Zod', () => {
-    const manager = new MCPClientManager({ version: '1.0.0', servers: {} });
-    const zodSchema = (manager as any).convertJsonSchemaToZod({});
+    // Uses top-level import
+    const zodSchema = convertJsonSchemaToZod({});
     assert.ok(zodSchema);
     const parsed = zodSchema.safeParse({});
     assert.ok(parsed.success);

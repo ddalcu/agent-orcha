@@ -19,6 +19,12 @@ Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
   - `LLMFactory.setP2PManager()` / `createP2P()` for transparent P2P LLM resolution
   - `ModelConfigSchema` gains `p2p: z.boolean().optional()` field
 
+- **P2P Tool Calling** — Agents using `llm: "p2p"` now fully support tool calling (canvas_write, save_memory, MCP tools, functions, etc.). Tool schemas are serialized over the wire so the remote LLM can generate `tool_calls`; tools execute locally on the caller side. Multi-turn tool loops work identically to local/cloud providers. All new wire fields are optional for backward compatibility with older peers.
+  - `P2PChatModel.bindTools()` serializes Zod schemas to JSON and sends them with the invoke request
+  - Wire protocol extended with `P2PWireTool`, `P2PWireMessage`, and `tool_calls` chunk type
+  - Host handler reconstructs tool stubs via `convertJsonSchemaToZod()` and binds them to the local LLM
+  - Shared utility: `lib/utils/json-schema-to-zod.ts` (extracted from MCP client)
+
 - **P2P Studio Tab** — New P2P tab in the Studio UI showing connected peers, remote agents, and remote LLMs with a built-in chat interface for testing. Chat history persists across tab switches and supports a reset button for starting new conversations.
   - New file: `ui/src/pages/P2PPage.svelte`
   - NavBar conditionally shows P2P tab when `P2P_ENABLED=true`

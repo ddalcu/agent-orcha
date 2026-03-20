@@ -7,8 +7,9 @@ import type { Orchestrator } from '../orchestrator.ts';
 import { listModelConfigs, getModelConfig } from '../llm/llm-config.ts';
 import { detectProvider } from '../llm/provider-detector.ts';
 import { LLMFactory } from '../llm/llm-factory.ts';
-import { humanMessage, aiMessage, systemMessage } from '../types/llm-types.ts';
-import type { P2PLLMInfo, RemoteLLM, LLMInvokeMessage, LLMStreamMessage, LLMStreamEndMessage, LLMStreamErrorMessage } from './types.ts';
+import { humanMessage, aiMessage, systemMessage, toolMessage } from '../types/llm-types.ts';
+import { convertJsonSchemaToZod } from '../utils/json-schema-to-zod.ts';
+import type { P2PLLMInfo, P2PWireMessage, P2PWireTool, RemoteLLM, LLMInvokeMessage, LLMStreamMessage, LLMStreamEndMessage, LLMStreamErrorMessage } from './types.ts';
 import type {
   P2PAgentInfo,
   PeerInfo,
@@ -42,11 +43,34 @@ export class P2PManager {
   private peerId: string;
   private started = false;
 
+  // Rate limiting: sliding window of request timestamps
+  private requestTimestamps: number[] = [];
+  private _rateLimit = 60; // requests per minute, 0 = unlimited
+
   constructor(orchestrator: Orchestrator) {
     this.orchestrator = orchestrator;
     this.networkKey = process.env['P2P_NETWORK_KEY'] || 'agent-orcha-default';
     this.peerName = process.env['P2P_PEER_NAME'] || os.hostname();
     this.peerId = crypto.randomBytes(16).toString('hex');
+    const envLimit = process.env['P2P_RATE_LIMIT'];
+    if (envLimit !== undefined) this._rateLimit = Math.max(0, parseInt(envLimit, 10) || 0);
+  }
+
+  /** Check rate limit, returns true if request is allowed */
+  private checkRateLimit(): boolean {
+    if (this._rateLimit <= 0) return true;
+    const now = Date.now();
+    const windowStart = now - 60_000;
+    this.requestTimestamps = this.requestTimestamps.filter(t => t > windowStart);
+    if (this.requestTimestamps.length >= this._rateLimit) return false;
+    this.requestTimestamps.push(now);
+    return true;
+  }
+
+  get rateLimit(): number { return this._rateLimit; }
+
+  setRateLimit(limit: number): void {
+    this._rateLimit = Math.max(0, limit);
   }
 
   async start(): Promise<void> {
@@ -141,6 +165,7 @@ export class P2PManager {
       const catalog = msg as CatalogMessage;
       const peer = this.peers.get(peerId);
       if (peer) {
+        if (catalog.peerName) peer.info.peerName = catalog.peerName;
         peer.info.agents = catalog.agents;
         peer.info.llms = catalog.llms ?? [];
         logger.info(`[P2P] Catalog update from "${peer.info.peerName}": ${catalog.agents.length} agent(s), ${(catalog.llms ?? []).length} LLM(s)`);
@@ -243,6 +268,11 @@ export class P2PManager {
   ): Promise<void> {
     const { requestId, agentName, input, sessionId } = invoke;
 
+    if (!this.checkRateLimit()) {
+      protocol.send({ type: 'stream_error', requestId, error: 'Rate limit exceeded. Try again later.' });
+      return;
+    }
+
     // Validate the agent exists and has p2p enabled
     const agent = this.orchestrator.agents.get(agentName);
     if (!agent) {
@@ -286,6 +316,8 @@ export class P2PManager {
       connected: this.started,
       peerCount: this.peers.size,
       peerName: this.peerName,
+      networkKey: this.networkKey,
+      rateLimit: this._rateLimit,
     };
   }
 
@@ -395,9 +427,10 @@ export class P2PManager {
   async *invokeRemoteLLM(
     peerId: string,
     modelName: string,
-    messages: { role: string; content: string }[],
+    messages: P2PWireMessage[],
     temperature?: number,
     signal?: AbortSignal,
+    tools?: P2PWireTool[],
   ): AsyncGenerator<LLMStreamMessage['chunk'], void, unknown> {
     const peer = this.peers.get(peerId);
     if (!peer) throw new Error(`Peer "${peerId}" not connected`);
@@ -438,6 +471,7 @@ export class P2PManager {
       modelName,
       messages,
       ...(temperature !== undefined ? { temperature } : {}),
+      ...(tools?.length ? { tools } : {}),
     };
     peer.protocol.send(invokeMsg);
 
@@ -459,11 +493,26 @@ export class P2PManager {
     }
   }
 
+  setPeerName(name: string): void {
+    this.peerName = name;
+    this.broadcastCatalog();
+  }
+
+  async setNetworkKey(key: string): Promise<void> {
+    if (key === this.networkKey) return;
+    this.networkKey = key;
+    // Rejoin swarm with new topic
+    if (this.started) {
+      await this.close();
+      await this.start();
+    }
+  }
+
   /** Broadcast updated catalog to all connected peers */
   broadcastCatalog(): void {
     const agents = this.getLocalP2PAgents();
     const llms = this.getLocalP2PLLMs();
-    const msg: CatalogMessage = { type: 'catalog', agents, llms };
+    const msg: CatalogMessage = { type: 'catalog', peerName: this.peerName, agents, llms };
     for (const peer of this.peers.values()) {
       peer.protocol.send(msg);
     }
@@ -494,7 +543,7 @@ export class P2PManager {
     logger.info('[P2P] Shut down');
   }
 
-  private getLocalP2PAgents(): P2PAgentInfo[] {
+  getLocalP2PAgents(): P2PAgentInfo[] {
     return this.orchestrator.agents.list()
       .filter(a => resolveP2PConfig(a.p2p).enabled)
       .map(a => ({
@@ -505,13 +554,14 @@ export class P2PManager {
       }));
   }
 
-  private getLocalP2PLLMs(): P2PLLMInfo[] {
+  getLocalP2PLLMs(): P2PLLMInfo[] {
     const blanketShare = process.env['P2P_SHARE_LLMS'] === 'true';
     const names = listModelConfigs();
     const result: P2PLLMInfo[] = [];
     for (const name of names) {
       try {
         const config = getModelConfig(name);
+        if (config.active === false) continue;
         if (config.p2p || blanketShare) {
           const provider = detectProvider(config);
           result.push({ name, provider, model: config.model });
@@ -528,6 +578,11 @@ export class P2PManager {
   ): Promise<void> {
     const { requestId, modelName, messages, temperature } = invoke;
 
+    if (!this.checkRateLimit()) {
+      protocol.send({ type: 'llm_stream_error', requestId, error: 'Rate limit exceeded. Try again later.' });
+      return;
+    }
+
     // Validate the model exists and is shared
     const localLLMs = this.getLocalP2PLLMs();
     const match = localLLMs.find(l => l.name === modelName);
@@ -537,15 +592,27 @@ export class P2PManager {
     }
 
     try {
-      const llm = await LLMFactory.create(temperature !== undefined ? { name: modelName, temperature } : modelName);
+      let llm = await LLMFactory.create(temperature !== undefined ? { name: modelName, temperature } : modelName);
 
-      // Convert messages to BaseMessage format
+      // Convert wire messages to BaseMessage format (with tool context)
       const baseMessages = messages.map(m => {
         if (m.role === 'user' || m.role === 'human') return humanMessage(m.content);
-        if (m.role === 'assistant' || m.role === 'ai') return aiMessage(m.content);
+        if (m.role === 'assistant' || m.role === 'ai') return aiMessage(m.content, m.tool_calls);
         if (m.role === 'system') return systemMessage(m.content);
+        if (m.role === 'tool' && m.tool_call_id) return toolMessage(m.content, m.tool_call_id, m.name ?? '');
         return humanMessage(m.content);
       });
+
+      // Bind tools if provided — create stub StructuredTool objects from JSON schemas
+      if (invoke.tools?.length) {
+        const stubs = invoke.tools.map(t => ({
+          name: t.name,
+          description: t.description,
+          schema: convertJsonSchemaToZod(t.parameters),
+          invoke: async () => { throw new Error('P2P tool stub — execution happens on caller side'); },
+        }));
+        llm = llm.bindTools(stubs);
+      }
 
       for await (const chunk of llm.stream(baseMessages)) {
         if (protocol.isDestroyed) return;
@@ -555,6 +622,9 @@ export class P2PManager {
         }
         if (chunk.reasoning) {
           protocol.send({ type: 'llm_stream', requestId, chunk: { type: 'thinking', content: chunk.reasoning } });
+        }
+        if (chunk.tool_calls?.length) {
+          protocol.send({ type: 'llm_stream', requestId, chunk: { type: 'tool_calls', tool_calls: chunk.tool_calls } });
         }
         if (chunk.usage_metadata) {
           protocol.send({ type: 'llm_stream', requestId, chunk: { type: 'usage', ...chunk.usage_metadata } });
