@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
 
+## Release 2026.321
+
+### Fixed
+
+- **P2P Flag Preserved on Model Activation** — Activating a local model (llama-cpp, mlx-serve, ollama, lmstudio) or saving a cloud model config no longer drops the `p2p: true` flag from `llm.json`. The `active` flag was preserved but `p2p` was not; now both are carried forward.
+- **macOS App Bundle P2P Slowness** — Added `NSAppNapDisabled` to the `.app` Info.plist. macOS was aggressively throttling the windowless server app via App Nap, causing Hyperswarm UDP hole punching to take ~67s instead of ~3s.
+- **P2P Test Mock** — Added missing `workspaceRoot` to the P2P manager test mock.
+
+### Added
+
+- **Persistent P2P Settings** — Peer name, network key, rate limit, and the P2P enabled toggle are now saved to `.p2p-settings.json` in the workspace root and restored on restart. Environment variables still take priority over persisted settings.
+- **Persistent DHT Identity** — A 32-byte Hyperswarm seed is generated on first run and saved to `.p2p-seed`. Reusing the same DHT keypair across restarts lets the distributed hash table remember the node, significantly speeding up peer discovery.
+- **Windows Taskbar Fix** — Centralized `windowsHide: true` into a `child-process.ts` wrapper so all spawned processes use it by default. Patched the PE subsystem from Console to GUI so no console window appears on launch. Replaced the "Toggle Console" tray action with a "View Logs" action that opens a PowerShell log tail window.
+- **iOS BareKit Bridge** — Added `IPC.swift`, `Worklet.swift`, and bridging header for native BareKit integration.
+
+### Changed
+
+- **P2P Peer ID Stability** — `peerId` is now derived from the persisted seed (SHA-256) instead of random bytes, so the same node presents a consistent identity across restarts.
+
+---
+
 ## Release 2026.320.2
 
 ### Changed
