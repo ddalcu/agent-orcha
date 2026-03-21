@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO Meta Tags -->
+  <title>Privacy Policy - Agent Orcha</title>
+  <meta name="description" content="Privacy Policy for Agent Orcha and the AgentOrcha iOS app. Learn how we handle your data.">
+  <meta name="author" content="Agent Orcha">
+
+  <!-- Open Graph Tags -->
+  <meta property="og:title" content="Privacy Policy - Agent Orcha">
+  <meta property="og:description" content="Privacy Policy for Agent Orcha and the AgentOrcha iOS app.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://agentorcha.com/privacy.html">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="assets/css/styles.css">
+
+  <style>
+    .privacy-content {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    .privacy-content h1 {
+      font-family: 'Lora', serif;
+      font-size: 2.2rem;
+      margin-bottom: 0.5rem;
+    }
+    .privacy-content .last-updated {
+      color: var(--text-secondary, #8b949e);
+      font-size: 0.9rem;
+      margin-bottom: 2.5rem;
+    }
+    .privacy-content h2 {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.3rem;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border, #30363d);
+    }
+    .privacy-content p,
+    .privacy-content li {
+      line-height: 1.7;
+      color: var(--text-secondary, #8b949e);
+    }
+    .privacy-content ul {
+      padding-left: 1.5rem;
+      margin: 0.75rem 0;
+    }
+    .privacy-content li {
+      margin-bottom: 0.4rem;
+    }
+    .privacy-content strong {
+      color: var(--text-primary, #e6edf3);
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-container">
+      <a href="index.html" class="nav-logo">
+        <img src="assets/images/logo-only.png" alt="Agent Orcha Logo">
+        <span>Agent Orcha</span>
+      </a>
+      <button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="hub.html">Hub</a></li>
+        <li><a href="https://github.com/ddalcu/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-npm"></i> NPM</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <section class="section">
+    <div class="privacy-content">
+      <h1>Privacy Policy</h1>
+      <p class="last-updated">Last updated: March 20, 2026</p>
+
+      <p>This Privacy Policy describes how Agent Orcha ("we", "us", or "our") handles information in connection with the Agent Orcha framework and the AgentOrcha iOS application (collectively, the "Service").</p>
+
+      <h2>Overview</h2>
+      <p>Agent Orcha is designed with privacy at its core. The AgentOrcha iOS app runs AI models entirely on your device and communicates with peers over a direct peer-to-peer network. <strong>We do not operate servers, collect user data, or track usage.</strong></p>
+
+      <h2>Information We Do Not Collect</h2>
+      <p>We do not collect, store, transmit, or have access to any of the following:</p>
+      <ul>
+        <li>Personal information (name, email, phone number, etc.)</li>
+        <li>Chat messages or conversations</li>
+        <li>AI model inputs or outputs</li>
+        <li>Device identifiers or analytics</li>
+        <li>Location data</li>
+        <li>Usage statistics or telemetry</li>
+      </ul>
+
+      <h2>On-Device AI (Local LLM)</h2>
+      <p>The AgentOrcha iOS app includes the ability to download and run AI language models directly on your device.</p>
+      <ul>
+        <li><strong>Model download:</strong> When you choose to download a model, the app connects to Hugging Face (huggingface.co) to retrieve the model files. This download is subject to <a href="https://huggingface.co/privacy" target="_blank" rel="noopener">Hugging Face's Privacy Policy</a>. We do not intermediate or log this connection.</li>
+        <li><strong>Model inference:</strong> All AI processing happens locally on your device. Your conversations and prompts are never sent to any server.</li>
+        <li><strong>Model storage:</strong> Downloaded models are stored in the app's private sandbox on your device and are removed when you delete the app.</li>
+      </ul>
+
+      <h2>Peer-to-Peer Network</h2>
+      <p>The app can connect to a peer-to-peer (P2P) network to discover and communicate with other Agent Orcha instances.</p>
+      <ul>
+        <li><strong>Direct connections:</strong> All P2P communication is direct between devices using the Hyperswarm protocol. No data passes through our servers.</li>
+        <li><strong>Peer name:</strong> The peer name you configure is shared with other peers on the same network key to enable discovery. You can set this to any name you choose.</li>
+        <li><strong>Network key:</strong> The network key you use determines which peers can discover your device. The default key is shared; you can use a custom key for private networks.</li>
+        <li><strong>Chat data:</strong> Messages sent to remote agents or LLMs travel directly to the peer hosting them. We have no ability to intercept or read these messages.</li>
+      </ul>
+
+      <h2>Local Storage</h2>
+      <p>The app stores the following data locally on your device using standard iOS storage (UserDefaults):</p>
+      <ul>
+        <li>Your configured peer name</li>
+        <li>Your network key preference (default or custom)</li>
+      </ul>
+      <p>This data is not transmitted anywhere and is removed when you delete the app.</p>
+
+      <h2>Third-Party Services</h2>
+      <p>The app connects to the following third-party services only when explicitly initiated by you:</p>
+      <ul>
+        <li><strong>Hugging Face (huggingface.co):</strong> To download AI model files when you tap "Download Model".</li>
+      </ul>
+      <p>We do not integrate any analytics, advertising, or tracking SDKs.</p>
+
+      <h2>AI-Generated Content</h2>
+      <p>Responses from both local and remote AI models are generated by artificial intelligence and may be inaccurate, incomplete, or misleading. AI-generated content should not be relied upon for critical decisions. We are not responsible for the accuracy or consequences of AI-generated outputs.</p>
+
+      <h2>Children's Privacy</h2>
+      <p>The Service is not directed at children under 13. We do not knowingly collect any information from children.</p>
+
+      <h2>Changes to This Policy</h2>
+      <p>We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated "Last updated" date.</p>
+
+      <h2>Contact</h2>
+      <p>If you have questions about this Privacy Policy, please open an issue on our <a href="https://github.com/ddalcu/agent-orcha/issues" target="_blank" rel="noopener">GitHub repository</a>.</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h4>Product</h4>
+          <ul class="footer-links">
+            <li><a href="documentation.html">Documentation</a></li>
+            <li><a href="documentation.html#quick-start">Quick Start</a></li>
+            <li><a href="documentation.html#examples">Examples</a></li>
+            <li><a href="documentation.html#api-reference">API Reference</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>Community</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/ddalcu/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/issues" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Issues</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/discussions" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Discussions</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>Legal</h4>
+          <ul class="footer-links">
+            <li><a href="privacy.html">Privacy Policy</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/blob/main/LICENSE" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> License</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>About</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
+            <li>MIT License</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Agent Orcha. Released under the MIT License. 100% open source and forever free.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="assets/js/main.js"></script>
+</body>
+</html>

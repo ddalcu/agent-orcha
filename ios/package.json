@@ -1,0 +1,15 @@
+{
+  "name": "orcha-p2p-ios",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agent Orcha iOS P2P client - JS bundle for Bare runtime",
+  "dependencies": {
+    "hyperswarm": "^4.17.0",
+    "b4a": "^1.6.0",
+    "bare-crypto": "^1.0.0"
+  },
+  "devDependencies": {
+    "bare-pack": "^2.0.0",
+    "bare-link": "^1.0.0"
+  }
+}

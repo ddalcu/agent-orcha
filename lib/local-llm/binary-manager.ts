@@ -184,7 +184,20 @@ function detectAnyGpu(): string | null {
         .map(l => l.trim())
         .filter(l => l && !l.includes('Microsoft Basic') && !l.includes('Remote Desktop'));
 
-      return gpus[0] || null;
+      // Only use Vulkan for GPUs known to support Vulkan compute reliably.
+      // AMD discrete GPUs and Intel Arc discrete GPUs work well.
+      // Intel integrated (UHD, HD, Iris) and unknown devices should fall back
+      // to CPU — the Vulkan build has no CPU backend so it crashes on GPUs
+      // that can't handle the compute workload.
+      const suitable = gpus.find(name =>
+        /\b(AMD|ATI|Radeon)\b/i.test(name) || /\bIntel\b.*\bArc\b/i.test(name)
+      );
+      if (suitable) return suitable;
+
+      if (gpus.length > 0) {
+        logger.info(`[BinaryManager] GPU "${gpus[0]}" not suitable for Vulkan compute, using CPU backend`);
+      }
+      return null;
     }
 
     if (process.platform === 'linux') {

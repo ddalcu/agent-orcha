@@ -1,0 +1,22 @@
+# Xcode
+*.xcodeproj
+*.xcworkspace
+DerivedData/
+build/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xccheckout
+*.moved-aside
+
+# Bare runtime artifacts
+js/p2p-client.bundle
+app/addons/*.xcframework
+node_modules/
+
+# Pre-built frameworks (download separately)
+app/frameworks/BareKit.xcframework
+
+# OS
+.DS_Store

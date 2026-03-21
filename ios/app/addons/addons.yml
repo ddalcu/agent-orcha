@@ -1,0 +1,27 @@
+targets:
+  AgentOrcha:
+    dependencies:
+      - framework: bare-buffer.3.6.0.xcframework
+        embed: true
+        codeSign: true
+      - framework: bare-crypto.1.13.4.xcframework
+        embed: true
+        codeSign: true
+      - framework: bare-inspect.3.1.4.xcframework
+        embed: true
+        codeSign: true
+      - framework: bare-os.3.8.0.xcframework
+        embed: true
+        codeSign: true
+      - framework: bare-type.1.1.0.xcframework
+        embed: true
+        codeSign: true
+      - framework: bare-url.2.4.0.xcframework
+        embed: true
+        codeSign: true
+      - framework: sodium-native.5.1.0.xcframework
+        embed: true
+        codeSign: true
+      - framework: udx-native.1.19.2.xcframework
+        embed: true
+        codeSign: true

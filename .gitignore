@@ -26,3 +26,7 @@ agent-orcha-*.tgz
 test-results
 public
 .DS_Store
+
+# iOS - generated/unnecessary
+ios/AgentOrcha.xcodeproj
+ios/app/frameworks/BareKit.xcframework/macos-arm64_x86_64
