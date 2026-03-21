@@ -182,8 +182,11 @@ export class Orchestrator {
     this.integrationManager = new IntegrationManager();
     await this.integrationManager.start(this);
 
-    // Start P2P if enabled
-    if (process.env['P2P_ENABLED'] !== 'false') {
+    // Start P2P if enabled — env var takes priority, then persisted setting, default on
+    const envP2P = process.env['P2P_ENABLED'];
+    const savedP2P = P2PManager.loadEnabledFlag(this.config.workspaceRoot);
+    const p2pEnabled = envP2P !== undefined ? envP2P !== 'false' : savedP2P !== false;
+    if (p2pEnabled) {
       this._p2pManager = new P2PManager(this);
       await this._p2pManager.start();
       LLMFactory.setP2PManager(this._p2pManager);

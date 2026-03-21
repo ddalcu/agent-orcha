@@ -18,6 +18,7 @@ function makeAgent(name: string, p2p: boolean): AgentDefinition {
 
 function createMockOrchestrator(agents: AgentDefinition[], streamChunks: unknown[] = []) {
   return {
+    workspaceRoot: '/tmp/orcha-test-p2p',
     agents: {
       list: () => agents,
       get: (name: string) => agents.find(a => a.name === name),

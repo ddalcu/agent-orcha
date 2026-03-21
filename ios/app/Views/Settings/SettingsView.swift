@@ -167,12 +167,15 @@ struct SettingsView: View {
                 Text("1.0.0")
                     .foregroundStyle(AppTheme.textSecondary)
             }
-            HStack {
-                Text("Runtime")
-                    .foregroundStyle(AppTheme.textPrimary)
-                Spacer()
-                Text(viewModel.connectionState != .starting ? "Bare (ready)" : "Bare (loading...)")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Build custom AI agents and share your own LLMs with this app. Set up Agent Orcha on your Mac, PC, or Linux machine.")
+                    .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
+                Link(destination: URL(string: "https://agentorcha.com")!) {
+                    Label("agentorcha.com", systemImage: "arrow.up.right.square")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.accent)
+                }
             }
             Text("AI-generated responses may be inaccurate or incomplete. Do not rely on them for critical decisions.")
                 .font(.caption)

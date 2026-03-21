@@ -10,9 +10,6 @@ include:
   - app/addons/addons.yml
 
 packages:
-  BareKit:
-    url: https://github.com/holepunchto/bare-kit-swift
-    branch: main
   MLXLM:
     url: https://github.com/ml-explore/mlx-swift-lm
     from: "2.29.1"
@@ -31,6 +28,7 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_OBJC_BRIDGING_HEADER: "app/BareKitBridge/BareKit-Bridging-Header.h"
     info:
       path: app/Info.plist
       properties:
@@ -54,13 +52,14 @@ targets:
     dependencies:
       - framework: app/frameworks/BareKit.xcframework
         embed: true
-      - package: BareKit
+        codeSign: true
       - package: MLXLM
         product: MLXLLM
     sources:
       - path: app/
         excludes:
           - "addons/**"
+          - "frameworks/**"
       - path: js/p2p-client.bundle
         optional: true
         buildPhase: resources

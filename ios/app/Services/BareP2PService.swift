@@ -1,6 +1,5 @@
 import Foundation
 import UIKit
-import BareKit
 
 /// Connection lifecycle state
 enum P2PConnectionState: Equatable {

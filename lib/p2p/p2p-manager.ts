@@ -1,5 +1,7 @@
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 import { P2PProtocol } from './p2p-protocol.ts';
 import { resolveP2PConfig } from '../agents/types.ts';
 import { logger } from '../logger.ts';
@@ -41,19 +43,34 @@ export class P2PManager {
   private networkKey: string;
   private peerName: string;
   private peerId: string;
+  private seed: Buffer;
   private started = false;
 
   // Rate limiting: sliding window of request timestamps
   private requestTimestamps: number[] = [];
   private _rateLimit = 60; // requests per minute, 0 = unlimited
 
+  /** Path to the JSON settings file persisted across restarts */
+  private get settingsPath(): string {
+    return path.join(this.orchestrator.workspaceRoot, '.p2p-settings.json');
+  }
+
   constructor(orchestrator: Orchestrator) {
     this.orchestrator = orchestrator;
-    this.networkKey = process.env['P2P_NETWORK_KEY'] || 'agent-orcha-default';
-    this.peerName = process.env['P2P_PEER_NAME'] || os.hostname();
-    this.peerId = crypto.randomBytes(16).toString('hex');
+
+    // Defaults (env vars take priority over persisted settings)
+    const saved = this.loadSettings();
+    this.networkKey = process.env['P2P_NETWORK_KEY'] || saved.networkKey || 'agent-orcha-default';
+    this.peerName = process.env['P2P_PEER_NAME'] || saved.peerName || os.hostname();
+    this.seed = this.loadOrCreateSeed();
+    this.peerId = crypto.createHash('sha256').update(this.seed).digest('hex').slice(0, 32);
+
     const envLimit = process.env['P2P_RATE_LIMIT'];
-    if (envLimit !== undefined) this._rateLimit = Math.max(0, parseInt(envLimit, 10) || 0);
+    if (envLimit !== undefined) {
+      this._rateLimit = Math.max(0, parseInt(envLimit, 10) || 0);
+    } else if (saved.rateLimit !== undefined) {
+      this._rateLimit = Math.max(0, saved.rateLimit);
+    }
   }
 
   /** Check rate limit, returns true if request is allowed */
@@ -71,13 +88,77 @@ export class P2PManager {
 
   setRateLimit(limit: number): void {
     this._rateLimit = Math.max(0, limit);
+    this.saveSettings();
+  }
+
+  private loadSettings(): Record<string, any> {
+    try {
+      return JSON.parse(fs.readFileSync(this.settingsPath, 'utf-8'));
+    } catch { return {}; }
+  }
+
+  /** Persist current settings to disk, preserving the enabled flag */
+  saveSettings(): void {
+    try {
+      const existing = this.loadSettings();
+      fs.writeFileSync(this.settingsPath, JSON.stringify({
+        ...existing,
+        peerName: this.peerName,
+        networkKey: this.networkKey,
+        rateLimit: this._rateLimit,
+      }, null, 2));
+    } catch (err: any) {
+      logger.warn('[P2P] Could not persist settings:', err.message);
+    }
+  }
+
+  /**
+   * Read the persisted `enabled` flag from the settings file.
+   * Called by the orchestrator BEFORE constructing a P2PManager to decide
+   * whether P2P should start. Returns `undefined` if no setting was saved.
+   */
+  static loadEnabledFlag(workspaceRoot: string): boolean | undefined {
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(workspaceRoot, '.p2p-settings.json'), 'utf-8'));
+      return typeof data.enabled === 'boolean' ? data.enabled : undefined;
+    } catch { return undefined; }
+  }
+
+  /** Persist just the enabled flag (called from toggle route when disabling) */
+  static saveEnabledFlag(workspaceRoot: string, enabled: boolean): void {
+    const settingsPath = path.join(workspaceRoot, '.p2p-settings.json');
+    let data: Record<string, any> = {};
+    try { data = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')); } catch { /* new file */ }
+    data.enabled = enabled;
+    try { fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2)); } catch { /* ignore */ }
+  }
+
+  /**
+   * Load or create a persistent 32-byte seed for Hyperswarm's DHT keypair.
+   * Reusing the same seed across restarts lets the DHT remember this node,
+   * dramatically speeding up peer discovery.
+   */
+  private loadOrCreateSeed(): Buffer {
+    const seedPath = path.join(this.orchestrator.workspaceRoot, '.p2p-seed');
+    try {
+      const existing = fs.readFileSync(seedPath);
+      if (existing.length === 32) return existing;
+    } catch { /* file doesn't exist yet */ }
+
+    const seed = crypto.randomBytes(32);
+    try {
+      fs.writeFileSync(seedPath, seed);
+    } catch (err: any) {
+      logger.warn('[P2P] Could not persist DHT seed:', err.message);
+    }
+    return seed;
   }
 
   async start(): Promise<void> {
     if (this.started) return;
 
     const Hyperswarm = (await import('hyperswarm')).default;
-    this.swarm = new Hyperswarm();
+    this.swarm = new Hyperswarm({ seed: this.seed });
 
     const topicBuffer = crypto.createHash('sha256').update(this.networkKey).digest();
 
@@ -511,12 +592,14 @@ export class P2PManager {
 
   setPeerName(name: string): void {
     this.peerName = name;
+    this.saveSettings();
     this.broadcastCatalog();
   }
 
   async setNetworkKey(key: string): Promise<void> {
     if (key === this.networkKey) return;
     this.networkKey = key;
+    this.saveSettings();
     // Rejoin swarm with new topic
     if (this.started) {
       await this.close();

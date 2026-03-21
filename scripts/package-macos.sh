@@ -63,6 +63,8 @@ cat > "$APP_DIR/Contents/Info.plist" << PLIST
     <string>13.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppNapDisabled</key>
+    <true/>
     <key>LSUIElement</key>
     <false/>
 </dict>

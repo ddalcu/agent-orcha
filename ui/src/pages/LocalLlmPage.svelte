@@ -433,12 +433,14 @@
     }
   }
 
-  async function loadLlmConfig() {
+  async function loadLlmConfig({ syncTab = false }: { syncTab?: boolean } = {}) {
     try {
       llmConfig = await api.getLlmConfig();
-      const defaultModel = resolveDefault('models');
-      if (defaultModel?._provider) {
-        activeProvider = defaultModel._provider;
+      if (syncTab) {
+        const defaultModel = resolveDefault('models');
+        if (defaultModel?._provider) {
+          activeProvider = defaultModel._provider;
+        }
       }
     } catch (e) {
       console.error('Failed to load LLM config:', e);
@@ -930,7 +932,7 @@
 
   // ─── Lifecycle ───
   onMount(async () => {
-    await loadLlmConfig();
+    await loadLlmConfig({ syncTab: true });
     await refresh();
     pollActiveDownloads();
     loadInterruptedDownloads();

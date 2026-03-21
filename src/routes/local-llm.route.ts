@@ -296,6 +296,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
           model,
           ...(currentDefault?.reasoningBudget != null ? { reasoningBudget: currentDefault.reasoningBudget } : {}),
           ...(existingExt?.active != null ? { active: existingExt.active } : {}),
+          ...(existingExt?.p2p != null ? { p2p: existingExt.p2p } : {}),
         };
         config.models['default'] = engine;
       }
@@ -599,14 +600,15 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       const detectedCtx = chatStatus.contextSize;
       const modelName = model.type === 'mlx' ? model.fileName : model.fileName.replace(/\.gguf$/i, '');
       const existingEntry = fullConfig?.models[engineName];
-      const existingActive = (existingEntry && typeof existingEntry !== 'string') ? existingEntry.active : undefined;
+      const existingObj = (existingEntry && typeof existingEntry !== 'string') ? existingEntry : null;
       const localEntry = {
         provider: 'local' as const,
         engine: engineName as 'llama-cpp' | 'mlx-serve',
         model: modelName,
         ...(detectedCtx ? { contextSize: detectedCtx } : {}),
         reasoningBudget: currentObj?.reasoningBudget ?? 0,
-        ...(existingActive != null ? { active: existingActive } : {}),
+        ...(existingObj?.active != null ? { active: existingObj.active } : {}),
+        ...(existingObj?.p2p != null ? { p2p: existingObj.p2p } : {}),
       };
 
       // Update llm.json — write to engine key and set default pointer

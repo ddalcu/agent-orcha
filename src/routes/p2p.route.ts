@@ -60,6 +60,8 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
+    P2PManager.saveEnabledFlag(fastify.orchestrator.workspaceRoot, enabled);
+
     const manager = getManager();
     return manager ? manager.getStatus() : { enabled: false, connected: false, peerCount: 0, peerName: '', networkKey: '', rateLimit: 0 };
   });

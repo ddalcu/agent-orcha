@@ -168,9 +168,12 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       if (body.reasoningBudget == null) delete body.reasoningBudget;
       if (body.contextSize == null) delete body.contextSize;
 
-      // Preserve active flag from existing entry if not provided
+      // Preserve active and p2p flags from existing entry if not provided
       if (body.active == null && existingObj?.active != null) {
         body.active = existingObj.active;
+      }
+      if (body.p2p == null && existingObj?.p2p != null) {
+        body.p2p = existingObj.p2p;
       }
 
       config.models[name] = ModelConfigSchema.parse(body);

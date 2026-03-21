@@ -23,6 +23,8 @@ Dockerfile.deploy
 templates/llm.json
 agent-orcha-*.tgz
 .memory
+.p2p-seed
+.p2p-settings.json
 test-results
 public
 .DS_Store
