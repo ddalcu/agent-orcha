@@ -22,6 +22,8 @@ let fetchFn: (...args: any[]) => Promise<any>;
 
 mock.module('child_process', {
   namedExports: {
+    spawn: () => ({ on: () => {} }),
+    execFile: () => ({ on: () => {} }),
     execFileSync: (...args: any[]) => execFileSyncFn(...args),
     spawnSync: (...args: any[]) => spawnSyncFn(...args),
   },

@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from 'child_process';
+import { execFileSync, spawnSync } from '../utils/child-process.ts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createWriteStream, existsSync } from 'fs';

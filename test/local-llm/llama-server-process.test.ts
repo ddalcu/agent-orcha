@@ -20,6 +20,9 @@ let processKillFn: (pid: number, signal?: string | number) => boolean;
 mock.module('child_process', {
   namedExports: {
     spawn: (...args: any[]) => spawnFn(...args),
+    execFile: () => ({ on: () => {} }),
+    execFileSync: () => '',
+    spawnSync: () => ({ stdout: '', stderr: '', status: 0 }),
   },
 });
 

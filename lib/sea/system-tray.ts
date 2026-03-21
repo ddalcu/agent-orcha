@@ -1,4 +1,4 @@
-import { spawn, execFile } from 'child_process';
+import { spawn, execFile } from '../utils/child-process.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
@@ -53,31 +53,6 @@ function loadIconAsBase64(): string {
   return fs.readFileSync(iconFile).toString('base64');
 }
 
-// Win32 console visibility toggle — uses PowerShell to call ShowWindow via P/Invoke.
-// SW_HIDE = 0, SW_SHOW = 5
-let consoleVisible = true;
-const WIN32_SHOWWINDOW_PS = 'Add-Type -Name W -Namespace N -MemberDefinition \'[DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int c);\';';
-
-function setConsoleVisible(show: boolean): void {
-  if (process.platform !== 'win32') return;
-  try {
-    const sw = show ? 5 : 0;
-    const child = execFile('powershell', ['-NoProfile', '-Command',
-      `${WIN32_SHOWWINDOW_PS}[N.W]::ShowWindow((Get-Process -Id ${process.pid}).MainWindowHandle,${sw})`],
-      { windowsHide: true });
-    child.unref();
-    consoleVisible = show;
-  } catch { /* best effort */ }
-}
-
-export function hideConsoleWindow(): void {
-  setConsoleVisible(false);
-}
-
-export function toggleConsoleWindow(): void {
-  setConsoleVisible(!consoleVisible);
-}
-
 export interface SystemTray {
   kill(): void;
 }
@@ -104,7 +79,6 @@ export function createSystemTray(url: string, onQuit: () => void): SystemTray | 
   } catch { /* ignore on Windows */ }
 
   const proc = spawn(binPath, [], {
-    windowsHide: true,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
@@ -130,7 +104,7 @@ export function createSystemTray(url: string, onQuit: () => void): SystemTray | 
       { title: `Agent Orcha — ${url}`, enabled: false, __id: 0 },
       { title: 'Open in Browser', tooltip: 'Open the Studio UI', enabled: true, __id: OPEN_ID },
       { title: '<SEPARATOR>', enabled: false, __id: -1 },
-      { title: process.platform === 'win32' ? 'Toggle Console' : 'Show Console', tooltip: 'Show server logs', enabled: true, __id: CONSOLE_ID },
+      { title: process.platform === 'win32' ? 'View Logs' : 'Show Console', tooltip: 'Show server logs', enabled: true, __id: CONSOLE_ID },
       { title: 'Quit', tooltip: 'Stop the server', enabled: true, __id: QUIT_ID },
     ],
   };
@@ -160,6 +134,7 @@ export function createSystemTray(url: string, onQuit: () => void): SystemTray | 
 
   return {
     kill() {
+      killLogViewer();
       try {
         proc.stdin!.write(JSON.stringify({ type: 'exit' }) + '\n');
       } catch { /* already dead */ }
@@ -170,21 +145,71 @@ export function createSystemTray(url: string, onQuit: () => void): SystemTray | 
 function openInBrowser(url: string): void {
   const cmds: Record<string, { cmd: string; args: string[] }> = {
     darwin: { cmd: 'open', args: [url] },
-    win32: { cmd: 'cmd', args: ['/c', 'start', url] },
+    win32: { cmd: 'rundll32', args: ['url.dll,FileProtocolHandler', url] },
   };
 
   const fb = cmds[process.platform];
   if (fb) {
-    const child = execFile(fb.cmd, fb.args, { windowsHide: true });
+    const child = execFile(fb.cmd, fb.args);
     child.unref();
   }
 }
 
+let logViewerPid: number | null = null;
+let logViewerOpening = false;
+
 function openConsole(logFile: string): void {
   if (process.platform === 'darwin') {
-    const child = execFile('open', ['-a', 'Console', logFile], { windowsHide: true });
+    const child = execFile('open', ['-a', 'Console', logFile]);
     child.unref();
   } else if (process.platform === 'win32') {
-    toggleConsoleWindow();
+    toggleLogViewer(logFile);
+  }
+}
+
+function toggleLogViewer(logFile: string): void {
+  // If a viewer is currently being launched, ignore rapid clicks
+  if (logViewerOpening) return;
+
+  // If viewer is running, kill it (toggle off)
+  if (logViewerPid !== null) {
+    try {
+      process.kill(logViewerPid, 0); // check if alive
+      const child = execFile('taskkill', ['/PID', String(logViewerPid), '/F']);
+      child.unref();
+    } catch { /* already dead */ }
+    logViewerPid = null;
+    return;
+  }
+
+  // Launch a hidden PowerShell that spawns a visible one via Start-Process
+  const escaped = logFile.replace(/'/g, "''");
+  const innerArgs = `'-NoProfile','-NoExit','-Command',"Get-Content -Path '${escaped}' -Wait -Tail 50"`;
+
+  logViewerOpening = true;
+  execFile('powershell', [
+    '-NoProfile', '-WindowStyle', 'Hidden', '-Command',
+    `$p = Start-Process powershell -ArgumentList @(${innerArgs}) -PassThru; Write-Output $p.Id`,
+  ], (err, stdout) => {
+    logViewerOpening = false;
+    if (err) {
+      logger.warn(`[SystemTray] Failed to open log viewer: ${err.message}`);
+      return;
+    }
+    const pid = parseInt(String(stdout).trim(), 10);
+    if (!isNaN(pid)) {
+      logViewerPid = pid;
+    }
+  });
+}
+
+function killLogViewer(): void {
+  if (logViewerPid !== null) {
+    try {
+      process.kill(logViewerPid, 0);
+      const child = execFile('taskkill', ['/PID', String(logViewerPid), '/F']);
+      child.unref();
+    } catch { /* already dead */ }
+    logViewerPid = null;
   }
 }

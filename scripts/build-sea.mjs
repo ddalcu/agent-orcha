@@ -254,6 +254,22 @@ if (platform === 'darwin') {
   } catch (e) {
     console.warn(`rcedit failed: ${e.message} — install with: npm i -D rcedit`);
   }
+
+  // Patch PE subsystem: Console (3) → GUI (2) so no console window is created on launch.
+  const buf = fs.readFileSync(outputPath);
+  const peOff = buf.readUInt32LE(0x3c);
+  if (buf.readUInt32LE(peOff) !== 0x00004550) {
+    throw new Error('Invalid PE signature in output binary');
+  }
+  const subsysOff = peOff + 0x5c;
+  const current = buf.readUInt16LE(subsysOff);
+  if (current === 3) {
+    buf.writeUInt16LE(2, subsysOff);
+    fs.writeFileSync(outputPath, buf);
+    console.log('Patched PE subsystem: Console → GUI');
+  } else {
+    console.warn(`PE subsystem is ${current}, expected 3 (Console) — skipping patch`);
+  }
 }
 
 // --- 6. Report ---
