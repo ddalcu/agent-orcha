@@ -78,6 +78,15 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
 
   fastify.decorate('orchestrator', orchestrator);
 
+  // Serve generated images from .generated/
+  const generatedDir = path.join(orchestrator.workspaceRoot, '.generated');
+  if (!fs.existsSync(generatedDir)) fs.mkdirSync(generatedDir, { recursive: true });
+  await fastify.register(fastifyStatic, {
+    root: generatedDir,
+    prefix: '/generated/',
+    decorateReply: false,
+  });
+
   fastify.get('/health', async () => {
     return { status: 'ok', version: PKG_VERSION, timestamp: new Date().toISOString() };
   });

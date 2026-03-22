@@ -45,6 +45,13 @@
     visible: boolean;
   }
 
+  interface ModelOutputEntry {
+    task: string;
+    input?: string;
+    image?: string;
+    error?: string;
+  }
+
   interface ChatBubble {
     type: 'user' | 'response' | 'system';
     id: string;
@@ -52,6 +59,7 @@
     attachments?: Attachment[] | null;
     tools: ToolEntry[];
     thinkingSections: ThinkingEntry[];
+    modelOutputs: ModelOutputEntry[];
     isLoading: boolean;
     error: string;
     stats: StatsData | null;
@@ -204,7 +212,7 @@
   }
 
   function addSystemBubble(text: string) {
-    bubbles = [...bubbles, { type: 'system', id: 'sys-' + Date.now(), content: text, tools: [], thinkingSections: [], isLoading: false, error: '', stats: null, showStatusBar: false, statusText: '', elapsedDisplay: '' }];
+    bubbles = [...bubbles, { type: 'system', id: 'sys-' + Date.now(), content: text, tools: [], thinkingSections: [], modelOutputs: [], isLoading: false, error: '', stats: null, showStatusBar: false, statusText: '', elapsedDisplay: '' }];
     requestAnimationFrame(scrollToBottom);
   }
 
@@ -230,7 +238,7 @@
   }
 
   function addUserBubble(content: string, attachments: Attachment[] | null) {
-    bubbles = [...bubbles, { type: 'user', id: 'user-' + Date.now(), content, attachments, tools: [], thinkingSections: [], isLoading: false, error: '', stats: null, showStatusBar: false, statusText: '', elapsedDisplay: '' }];
+    bubbles = [...bubbles, { type: 'user', id: 'user-' + Date.now(), content, attachments, tools: [], thinkingSections: [], modelOutputs: [], isLoading: false, error: '', stats: null, showStatusBar: false, statusText: '', elapsedDisplay: '' }];
     requestAnimationFrame(scrollToBottom);
   }
 
@@ -241,7 +249,7 @@
   async function doStream(message: string, attachments: Attachment[] | null) {
     isLoading = true;
     const responseId = 'response-' + Date.now();
-    bubbles = [...bubbles, { type: 'response', id: responseId, content: '', tools: [], thinkingSections: [], isLoading: true, error: '', stats: null, showStatusBar: true, statusText: 'Generating...', elapsedDisplay: '0.0s' }];
+    bubbles = [...bubbles, { type: 'response', id: responseId, content: '', tools: [], thinkingSections: [], modelOutputs: [], isLoading: true, error: '', stats: null, showStatusBar: true, statusText: 'Generating...', elapsedDisplay: '0.0s' }];
     currentAbortController = new AbortController();
     streamUsageData = null;
 
@@ -370,6 +378,20 @@
           try { canvasContent += JSON.parse(tool.input).content; } catch {}
         }
       }
+      // Intercept model tools
+      if (event.tool?.startsWith('model_') && typeof event.output === 'string') {
+        try {
+          const parsed = JSON.parse(event.output);
+          if (parsed.__modelTask) {
+            b.modelOutputs = [...b.modelOutputs, {
+              task: parsed.task,
+              input: parsed.input,
+              image: parsed.image,
+              error: parsed.error,
+            }];
+          }
+        } catch (err) { console.error('[StandaloneChatPage] Failed to parse model output:', err); }
+      }
     } else if (event.type === 'react_iteration') {
       b.statusText = `Iteration ${event.iteration} · ${((event.contextChars || 0) / 1024).toFixed(1)} KB context`;
     } else if (event.type === 'result') {
@@ -477,6 +499,7 @@
                 content={bubble.content}
                 tools={bubble.tools}
                 thinkingSections={bubble.thinkingSections}
+                modelOutputs={bubble.modelOutputs}
                 isLoading={bubble.isLoading}
                 error={bubble.error}
               >

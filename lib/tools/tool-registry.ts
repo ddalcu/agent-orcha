@@ -13,6 +13,7 @@ export class ToolRegistry {
   private builtInTools: Map<string, StructuredTool> = new Map();
   private sandboxTools: Map<string, StructuredTool>;
   private workspaceTools: Map<string, StructuredTool>;
+  private modelTools: Map<string, StructuredTool> = new Map();
 
   constructor(
     mcpClient: MCPClientManager,
@@ -104,6 +105,15 @@ export class ToolRegistry {
         return [workspaceTool];
       }
 
+      case 'models': {
+        const modelTool = this.modelTools.get(name);
+        if (!modelTool) {
+          logger.warn(`Model tool "${name}" not found (available: ${Array.from(this.modelTools.keys()).join(', ') || 'none'})`);
+          return [];
+        }
+        return [modelTool];
+      }
+
       default:
         logger.warn(`Unknown tool source: ${source}`);
         return [];
@@ -178,5 +188,13 @@ export class ToolRegistry {
 
   getAllWorkspaceTools(): StructuredTool[] {
     return Array.from(this.workspaceTools.values());
+  }
+
+  setModelTools(tools: Map<string, StructuredTool>): void {
+    this.modelTools = tools;
+  }
+
+  getAllModelTools(): StructuredTool[] {
+    return Array.from(this.modelTools.values());
   }
 }

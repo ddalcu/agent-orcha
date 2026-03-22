@@ -500,6 +500,9 @@ export function isSystemBinary(): boolean {
 }
 
 
+// Exported for reuse by other binary managers (sd-cpp, etc.)
+export { detectPlatform, downloadAndExtract, copyDirFiles, copyAllFiles, findFileRecursive };
+
 // Exported for testing — not part of the public API
 export { getAssetPatterns as _getAssetPatterns, getBinaryDirName as _getBinaryDirName };
 export type { Platform as _Platform };

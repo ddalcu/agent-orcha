@@ -26,6 +26,13 @@
     name: string;
   }
 
+  interface ModelOutputEntry {
+    task: string;
+    input?: string;
+    image?: string;
+    error?: string;
+  }
+
   interface ChatBubble {
     type: 'user' | 'response' | 'system' | 'session-reset';
     id: string;
@@ -33,6 +40,7 @@
     attachments?: Attachment[] | null;
     tools: ToolEntry[];
     thinkingSections: ThinkingEntry[];
+    modelOutputs: ModelOutputEntry[];
     isLoading: boolean;
     error: string;
     stats: StatsData | null;
@@ -388,6 +396,7 @@
       attachments,
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: false,
       error: '',
       stats: null,
@@ -405,6 +414,7 @@
       content: '',
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: true,
       error: '',
       stats: null,
@@ -422,6 +432,7 @@
       content,
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: false,
       error: '',
       stats: null,
@@ -471,6 +482,7 @@
       content: text,
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: false,
       error: '',
       stats: null,
@@ -488,6 +500,7 @@
       content: '',
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: false,
       error: '',
       stats: null,
@@ -896,6 +909,23 @@
             appendCanvas(parsed.content);
           } catch { /* ignore */ }
         }
+      }
+
+      // Intercept model tools
+      if (event.tool?.startsWith('model_') && typeof event.output === 'string') {
+        try {
+          const parsed = JSON.parse(event.output);
+          if (parsed.__modelTask) {
+            updateBubble(responseId, b => {
+              b.modelOutputs = [...b.modelOutputs, {
+                task: parsed.task,
+                input: parsed.input,
+                image: parsed.image,
+                error: parsed.error,
+              }];
+            });
+          }
+        } catch (err) { console.error('[AgentsPage] Failed to parse model output:', err); }
       }
 
       updateBubble(responseId, b => {
@@ -1793,6 +1823,7 @@
                   content={bubble.content}
                   tools={bubble.tools}
                   thinkingSections={bubble.thinkingSections}
+                  modelOutputs={bubble.modelOutputs}
                   isLoading={bubble.isLoading}
                   error={bubble.error}
                 >

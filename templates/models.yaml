@@ -1,0 +1,6 @@
+models:
+  image-gen:
+    type: text-to-image
+    engine: sd-cpp
+    modelPath: .models/sd_turbo.safetensors
+    description: SD Turbo — fast image generation from text prompts

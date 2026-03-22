@@ -2,6 +2,7 @@
   import { renderMarkdown, highlightCode } from '../../lib/services/markdown.js';
   import ToolPill from './ToolPill.svelte';
   import ThinkingPill from './ThinkingPill.svelte';
+  import ModelOutput from './ModelOutput.svelte';
   import type { Snippet } from 'svelte';
 
   interface ToolData {
@@ -17,11 +18,19 @@
     done: boolean;
   }
 
+  interface ModelOutputData {
+    task: string;
+    input?: string;
+    image?: string;
+    error?: string;
+  }
+
   interface Props {
     id: string;
     content?: string;
     tools?: ToolData[];
     thinkingSections?: ThinkingData[];
+    modelOutputs?: ModelOutputData[];
     isLoading?: boolean;
     error?: string;
     children?: Snippet;
@@ -31,6 +40,7 @@
     content = '',
     tools = [],
     thinkingSections = [],
+    modelOutputs = [],
     isLoading = false,
     error = '',
     children,
@@ -61,6 +71,11 @@
           <div></div>
           <div></div>
         </div>
+      {/if}
+      {#if modelOutputs.length > 0}
+        {#each modelOutputs as mo}
+          <ModelOutput task={mo.task} input={mo.input} image={mo.image} error={mo.error} />
+        {/each}
       {/if}
       {#if children}
         {@render children()}

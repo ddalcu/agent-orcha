@@ -38,6 +38,9 @@ import { IntegrationManager } from './integrations/integration-manager.ts';
 import type { IntegrationAccessor } from './integrations/types.ts';
 import { TriggerManager } from './triggers/trigger-manager.ts';
 import { createCanvasWriteTool, createCanvasAppendTool } from './tools/built-in/canvas-write.tool.ts';
+import { ModelConfigLoader } from './models/model-config-loader.ts';
+import { buildModelTools, setGeneratedDir, setWorkspaceRoot } from './tools/built-in/model-tool-factory.ts';
+import { setSdCppBaseDir } from './models/sd-cpp-runner.ts';
 import { P2PManager } from './p2p/p2p-manager.ts';
 import type { SandboxConfig, SandboxStatus } from './sandbox/types.ts';
 import type { AgentDefinition, AgentResult } from './agents/types.ts';
@@ -85,6 +88,7 @@ export class Orchestrator {
   private vmExecutor: VmExecutor | null = null;
   private sandboxConfig: SandboxConfig | null = null;
   private memoryManager: MemoryManager;
+  private modelConfigLoader: ModelConfigLoader;
   private integrationManager: IntegrationManager | null = null;
   private triggerManager: TriggerManager | null = null;
   private sandboxContainer: SandboxContainer | null = null;
@@ -119,6 +123,7 @@ export class Orchestrator {
       sessionTTL: 3600000, // 1 hour
     });
     this.memoryManager = new MemoryManager(config.workspaceRoot);
+    this.modelConfigLoader = new ModelConfigLoader(config.workspaceRoot);
   }
 
   async initialize(): Promise<void> {
@@ -137,9 +142,13 @@ export class Orchestrator {
     await this.loadMCPConfig();
     this.mcpClient.initialize(); // non-blocking — connects in background
 
-    // Load function tools and skills
+    // Load function tools, skills, and model configs
     await this.functionLoader.loadAll();
     await this.skillLoader.loadAll();
+    await this.modelConfigLoader.loadAll();
+    setGeneratedDir(path.join(this.config.workspaceRoot, '.generated'));
+    setWorkspaceRoot(this.config.workspaceRoot);
+    setSdCppBaseDir(this.config.workspaceRoot);
 
     // Load sandbox config
     await this.loadSandboxConfig();
@@ -153,6 +162,7 @@ export class Orchestrator {
       sandboxTools,
       workspaceTools,
     );
+    this.toolRegistry.setModelTools(buildModelTools(this.modelConfigLoader.list()));
     this.registerBuiltInTools();
     this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader, this.memoryManager, this.integrations);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
@@ -488,6 +498,13 @@ export class Orchestrator {
     };
   }
 
+  get models() {
+    return {
+      list: () => this.modelConfigLoader.list(),
+      get: (name: string) => this.modelConfigLoader.get(name),
+    };
+  }
+
   get tasks(): TaskAccessor {
     return {
       getManager: () => this.taskManager,
@@ -658,8 +675,15 @@ export class Orchestrator {
         this.buildSandboxTools(),
         this.buildWorkspaceToolsMap(),
       );
+      this.toolRegistry.setModelTools(buildModelTools(this.modelConfigLoader.list()));
       this.registerBuiltInTools();
       return 'mcp';
+    }
+
+    if (relativePath === 'models.yaml') {
+      await this.modelConfigLoader.loadAll();
+      this.toolRegistry.setModelTools(buildModelTools(this.modelConfigLoader.list()));
+      return 'models';
     }
 
     if (relativePath === 'llm.json') {
@@ -682,6 +706,7 @@ export class Orchestrator {
         sandboxTools,
         workspaceTools,
       );
+      this.toolRegistry.setModelTools(buildModelTools(this.modelConfigLoader.list()));
       this.registerBuiltInTools();
       return 'sandbox';
     }
