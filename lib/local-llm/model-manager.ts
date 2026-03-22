@@ -33,7 +33,6 @@ export class ModelManager {
     const results: InterruptedDownload[] = [];
 
     for (const entry of entries) {
-      // GGUF partial downloads
       if (entry.endsWith('.gguf.downloading')) {
         const fileName = entry.replace(/\.downloading$/, '');
         const isActive = [...this._activeDownloads.values()].some(d => d.fileName === fileName);
@@ -48,42 +47,12 @@ export class ModelManager {
           repo: meta?.repo,
           downloadedBytes: stat.size,
         });
-        continue;
       }
-
-      // MLX partial downloads (directories with .downloading marker)
-      const markerPath = path.join(this.modelsDir, entry, '.downloading');
-      try {
-        await fs.stat(markerPath);
-      } catch { continue; }
-
-      const isActive = [...this._activeDownloads.values()].some(d => d.fileName === entry);
-      if (isActive) continue;
-
-      const dirSize = await this.dirSize(path.join(this.modelsDir, entry));
-      const meta = await this.readMlxMeta(entry);
-
-      results.push({
-        fileName: entry,
-        repo: meta?.repo,
-        downloadedBytes: dirSize,
-      });
     }
     return results;
   }
 
   async deleteInterruptedDownload(fileName: string): Promise<void> {
-    // Check if it's an MLX directory with .downloading marker
-    const dirPath = path.join(this.modelsDir, fileName);
-    try {
-      const stat = await fs.stat(dirPath);
-      if (stat.isDirectory()) {
-        await fs.rm(dirPath, { recursive: true });
-        return;
-      }
-    } catch { /* not a directory */ }
-
-    // GGUF partial download
     const tempPath = path.join(this.modelsDir, `${fileName}.downloading`);
     await fs.unlink(tempPath).catch(() => {});
     await fs.unlink(this.metaPath(fileName)).catch(() => {});
@@ -113,25 +82,22 @@ export class ModelManager {
           sizeBytes: stat.size,
           repo: meta?.repo,
           downloadedAt: meta?.downloadedAt ?? stat.birthtime.toISOString(),
-          type: 'gguf',
         });
         continue;
       }
 
-      // MLX model directories (contain config.json)
+      // Directory-based models (TTS, etc.) — contain .meta.json
       if (stat.isDirectory()) {
-        const configPath = path.join(entryPath, 'config.json');
         try {
-          await fs.stat(configPath);
+          await fs.stat(path.join(entryPath, '.meta.json'));
         } catch { continue; }
-
-        // Skip directories with .downloading marker (incomplete)
+        // Skip incomplete downloads
         try {
           await fs.stat(path.join(entryPath, '.downloading'));
           continue;
         } catch { /* no marker = complete */ }
 
-        const meta = await this.readMlxMeta(entry);
+        const meta = await this.readDirMeta(entry);
         const sizeBytes = await this.dirSize(entryPath);
         models.push({
           id: entry,
@@ -140,7 +106,6 @@ export class ModelManager {
           sizeBytes,
           repo: meta?.repo,
           downloadedAt: meta?.downloadedAt ?? stat.birthtime.toISOString(),
-          type: 'mlx',
         });
       }
     }
@@ -193,10 +158,10 @@ export class ModelManager {
     }
   }
 
-  async findModelFile(modelName: string): Promise<{ filePath: string; type: 'gguf' | 'mlx' } | null> {
+  async findModelFile(modelName: string): Promise<{ filePath: string } | null> {
     const models = await this.listModels();
     const match = models.find((m) => m.id === modelName || m.fileName === modelName);
-    return match ? { filePath: match.filePath, type: match.type } : null;
+    return match ? { filePath: match.filePath } : null;
   }
 
   /** Find a multimodal projector (mmproj) file from the same repo as the given model. */
@@ -275,7 +240,6 @@ export class ModelManager {
           sizeBytes: stat.size,
           repo,
           downloadedAt: meta.downloadedAt,
-          type: 'gguf' as const,
         };
       }
 
@@ -338,59 +302,31 @@ export class ModelManager {
         sizeBytes: stat.size,
         repo,
         downloadedAt: meta.downloadedAt,
-        type: 'gguf' as const,
       };
     } finally {
       this._activeDownloads.delete(downloadKey);
     }
   }
 
-  async deleteModel(id: string): Promise<void> {
-    const model = await this.getModel(id);
-    if (!model) throw new Error(`Model "${id}" not found`);
-
-    if (model.type === 'mlx') {
-      // MLX: remove the entire directory
-      await fs.rm(model.filePath, { recursive: true });
-      logger.info(`[ModelManager] Deleted MLX model directory: ${model.fileName}`);
-      return;
-    }
-
-    // GGUF: Find and delete associated mmproj files from the same repo
-    if (model.repo) {
-      const entries = await fs.readdir(this.modelsDir);
-      for (const entry of entries) {
-        if (!entry.toLowerCase().includes('mmproj') || !entry.endsWith('.gguf')) continue;
-        const meta = await this.readMeta(entry);
-        if (meta?.repo === model.repo) {
-          await fs.unlink(path.join(this.modelsDir, entry)).catch(() => {});
-          await fs.unlink(this.metaPath(entry)).catch(() => {});
-          logger.info(`[ModelManager] Deleted associated mmproj: ${entry}`);
-        }
-      }
-    }
-
-    await fs.unlink(model.filePath);
-    try {
-      await fs.unlink(this.metaPath(model.fileName));
-    } catch {
-      // meta file may not exist
-    }
-  }
-
-  async downloadMlxModel(
+  /**
+   * Download a directory of files from a HuggingFace repo.
+   * Used for multi-file models (e.g. Qwen3 TTS needs 3 GGUFs in a directory).
+   * @param subdir Optional subdirectory within the repo to download (e.g. 'gguf_q5_k_m')
+   */
+  async downloadDirectory(
     repo: string,
     onProgress?: (progress: DownloadProgress) => void,
+    subdir?: string,
+    targetDir?: string,
   ): Promise<LocalModel> {
-    const downloadKey = `mlx:${repo}`;
+    const downloadKey = `dir:${repo}${subdir ? '/' + subdir : ''}`;
     if (this._activeDownloads.has(downloadKey)) {
-      throw new Error(`Already downloading ${repo}`);
+      throw new Error(`Already downloading ${downloadKey}`);
     }
 
     await this.ensureDir();
 
-    // Derive directory name from repo (e.g., "mlx-community/Qwen3.5-9B-4bit" → "Qwen3.5-9B-4bit")
-    const dirName = repo.split('/').pop()!;
+    const dirName = targetDir || subdir || repo.split('/').pop()!;
     const modelDir = path.join(this.modelsDir, dirName);
     await fs.mkdir(modelDir, { recursive: true });
 
@@ -398,7 +334,6 @@ export class ModelManager {
     const markerPath = path.join(modelDir, '.downloading');
     await fs.writeFile(markerPath, '');
 
-    // Write meta early
     const metaPath = path.join(modelDir, '.meta.json');
     await fs.writeFile(metaPath, JSON.stringify({ repo }, null, 2));
 
@@ -406,21 +341,31 @@ export class ModelManager {
     this._activeDownloads.set(downloadKey, { repo, fileName: dirName, progress: initialProgress });
 
     try {
-      // Fetch file list from HuggingFace API
       const apiRes = await fetch(`https://huggingface.co/api/models/${repo}?blobs=true`);
       if (!apiRes.ok) throw new Error(`HuggingFace API error: ${apiRes.status}`);
       const detail: any = await apiRes.json();
 
-      const siblings = (detail.siblings ?? []) as { rfilename: string; size?: number }[];
+      let siblings = (detail.siblings ?? []) as { rfilename: string; size?: number }[];
+
+      // Filter to subdir if specified
+      if (subdir) {
+        siblings = siblings.filter((s: { rfilename: string }) => s.rfilename.startsWith(subdir + '/'));
+      }
+
+      // Only download model files (gguf, safetensors, json, bin)
+      siblings = siblings.filter((s: { rfilename: string }) =>
+        /\.(gguf|safetensors|json|bin|txt)$/i.test(s.rfilename) && !s.rfilename.startsWith('.')
+      );
+
       const totalBytes = siblings.reduce((sum: number, s: any) => sum + (s.size ?? 0), 0);
       let downloadedBytes = 0;
 
-      // Download each file
       for (const sibling of siblings) {
-        const fileName = sibling.rfilename;
+        const fileName = subdir
+          ? sibling.rfilename.slice(subdir.length + 1) // strip subdir prefix
+          : sibling.rfilename;
         const filePath = path.join(modelDir, fileName);
 
-        // Create subdirectories if needed
         const fileDir = path.dirname(filePath);
         if (fileDir !== modelDir) {
           await fs.mkdir(fileDir, { recursive: true });
@@ -444,12 +389,12 @@ export class ModelManager {
           }
         } catch { /* file doesn't exist */ }
 
-        const url = `https://huggingface.co/${repo}/resolve/main/${fileName}`;
+        const url = `https://huggingface.co/${repo}/resolve/main/${sibling.rfilename}`;
         const response = await fetch(url, { redirect: 'follow' });
-        if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText} for ${fileName}`);
+        if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText} for ${sibling.rfilename}`);
 
         const body = response.body;
-        if (!body) throw new Error(`No response body for ${fileName}`);
+        if (!body) throw new Error(`No response body for ${sibling.rfilename}`);
 
         const fileStream = createWriteStream(filePath);
         const activeDownloads = this._activeDownloads;
@@ -479,7 +424,6 @@ export class ModelManager {
       // Remove .downloading marker
       await fs.unlink(markerPath).catch(() => {});
 
-      // Update meta
       const meta = { repo, downloadedAt: new Date().toISOString() };
       await fs.writeFile(metaPath, JSON.stringify(meta, null, 2));
 
@@ -491,37 +435,57 @@ export class ModelManager {
         sizeBytes,
         repo,
         downloadedAt: meta.downloadedAt,
-        type: 'mlx',
       };
     } finally {
       this._activeDownloads.delete(downloadKey);
     }
   }
 
-  async browseHuggingFace(query: string, limit = 10, format: 'gguf' | 'mlx' = 'gguf'): Promise<HuggingFaceModelResult[]> {
-    // Strip HuggingFace URL prefixes so users can paste links directly
-    let cleaned = query.replace(/^https?:\/\/huggingface\.co\//, '').replace(/\/$/, '');
+  async deleteModel(id: string): Promise<void> {
+    const model = await this.getModel(id);
+    if (!model) throw new Error(`Model "${id}" not found`);
 
-    const searches: string[] = [];
-    if (format === 'mlx') {
-      // For MLX: search mlx-community first, then general
-      if (!cleaned.includes('/')) {
-        searches.push(`mlx-community/${cleaned}`);
+    // Find and delete associated mmproj files from the same repo
+    if (model.repo) {
+      const entries = await fs.readdir(this.modelsDir);
+      for (const entry of entries) {
+        if (!entry.toLowerCase().includes('mmproj') || !entry.endsWith('.gguf')) continue;
+        const meta = await this.readMeta(entry);
+        if (meta?.repo === model.repo) {
+          await fs.unlink(path.join(this.modelsDir, entry)).catch(() => {});
+          await fs.unlink(this.metaPath(entry)).catch(() => {});
+          logger.info(`[ModelManager] Deleted associated mmproj: ${entry}`);
+        }
       }
-      searches.push(cleaned);
+    }
+
+    const stat = await fs.stat(model.filePath);
+    if (stat.isDirectory()) {
+      await fs.rm(model.filePath, { recursive: true });
+      logger.info(`[ModelManager] Deleted directory model: ${model.fileName}`);
     } else {
-      // GGUF: existing behavior
-      searches.push(cleaned);
-      if (/^[^/]+\/[^/]+$/.test(cleaned) && !cleaned.toLowerCase().includes('gguf')) {
-        searches.push(cleaned.split('/')[1]!);
+      await fs.unlink(model.filePath);
+      try {
+        await fs.unlink(this.metaPath(model.fileName));
+      } catch {
+        // meta file may not exist
       }
+    }
+  }
+
+  async browseHuggingFace(query: string, limit = 10): Promise<HuggingFaceModelResult[]> {
+    // Strip HuggingFace URL prefixes so users can paste links directly
+    const cleaned = query.replace(/^https?:\/\/huggingface\.co\//, '').replace(/\/$/, '');
+
+    const searches: string[] = [cleaned];
+    if (/^[^/]+\/[^/]+$/.test(cleaned) && !cleaned.toLowerCase().includes('gguf')) {
+      searches.push(cleaned.split('/')[1]!);
     }
 
     const seen = new Set<string>();
     let models: any[] = [];
     for (const q of searches) {
-      const filter = format === 'gguf' ? '&filter=gguf' : '&filter=mlx';
-      const url = `https://huggingface.co/api/models?search=${encodeURIComponent(q)}${filter}&sort=downloads&direction=-1&limit=${limit}`;
+      const url = `https://huggingface.co/api/models?search=${encodeURIComponent(q)}&filter=gguf&sort=downloads&direction=-1&limit=${limit}`;
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HuggingFace API error: ${response.status}`);
@@ -535,22 +499,11 @@ export class ModelManager {
         }
       }
     }
-    // Re-sort merged results: MLX prioritizes mlx-community repos, then by downloads
-    if (format === 'mlx') {
-      models.sort((a: any, b: any) => {
-        const aIsMlx = (a.modelId ?? a.id ?? '').startsWith('mlx-community/') ? 1 : 0;
-        const bIsMlx = (b.modelId ?? b.id ?? '').startsWith('mlx-community/') ? 1 : 0;
-        if (aIsMlx !== bIsMlx) return bIsMlx - aIsMlx;
-        return (b.downloads ?? 0) - (a.downloads ?? 0);
-      });
-    } else {
-      models.sort((a: any, b: any) => (b.downloads ?? 0) - (a.downloads ?? 0));
-    }
+    models.sort((a: any, b: any) => (b.downloads ?? 0) - (a.downloads ?? 0));
     models = models.slice(0, limit);
     const results: HuggingFaceModelResult[] = [];
 
     for (const model of models) {
-      // Fetch detailed info (file list + pipeline_tag) for each model
       let ggufFiles: { fileName: string; sizeBytes: number }[] = [];
       let pipelineTag = model.pipeline_tag ?? '';
       let detailTags: string[] = [];
@@ -563,21 +516,12 @@ export class ModelManager {
           detailTags = Array.isArray(detail.tags) ? detail.tags : [];
           const siblings = detail.siblings ?? [];
 
-          if (format === 'mlx') {
-            // For MLX: check for safetensors files, report total repo size as single entry
-            const hasSafetensors = siblings.some((s: any) => s.rfilename?.endsWith('.safetensors'));
-            if (hasSafetensors) {
-              const totalSize = siblings.reduce((sum: number, s: any) => sum + (s.size ?? 0), 0);
-              ggufFiles = [{ fileName: '__mlx_repo__', sizeBytes: totalSize }];
-            }
-          } else {
-            ggufFiles = siblings
-              .filter((s: any) => s.rfilename?.endsWith('.gguf'))
-              .map((s: any) => ({
-                fileName: s.rfilename,
-                sizeBytes: s.size ?? 0,
-              }));
-          }
+          ggufFiles = siblings
+            .filter((s: any) => s.rfilename?.endsWith('.gguf'))
+            .map((s: any) => ({
+              fileName: s.rfilename,
+              sizeBytes: s.size ?? 0,
+            }));
         }
       } catch {
         // Skip on error
@@ -586,9 +530,6 @@ export class ModelManager {
       // Merge tags from list and detail responses
       const listTags: string[] = Array.isArray(model.tags) ? model.tags : [];
       const allTags = [...new Set([...listTags, ...detailTags])];
-
-      // For MLX format, skip repos without safetensors (no ggufFiles means no MLX content)
-      if (format === 'mlx' && ggufFiles.length === 0) continue;
 
       results.push({
         repoId: model.modelId ?? model.id,
@@ -639,7 +580,7 @@ export class ModelManager {
     }
   }
 
-  private async readMlxMeta(dirName: string): Promise<{ repo?: string; downloadedAt?: string } | null> {
+  private async readDirMeta(dirName: string): Promise<{ repo?: string; downloadedAt?: string } | null> {
     try {
       const content = await fs.readFile(path.join(this.modelsDir, dirName, '.meta.json'), 'utf-8');
       return JSON.parse(content);

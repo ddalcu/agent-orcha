@@ -461,6 +461,7 @@ describe('Orchestrator', () => {
 
     const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
+    (orch as any).toolRegistry = { setModelTools: () => {} };
 
     const result = await orch.reloadFile('llm.json');
     assert.equal(result, 'llm');

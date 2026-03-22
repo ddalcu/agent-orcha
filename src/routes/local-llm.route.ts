@@ -1,7 +1,7 @@
 import * as os from 'os';
 import type { FastifyPluginAsync } from 'fastify';
 import { ModelManager } from '../../lib/local-llm/index.ts';
-import { engineRegistry } from '../../lib/local-llm/engine-registry.ts';
+import { OmniModelCache } from '../../lib/llm/providers/omni-model-cache.ts';
 import {
   getLLMConfig,
   saveLLMConfig,
@@ -9,7 +9,6 @@ import {
   resolveDefaultName,
 } from '../../lib/llm/index.ts';
 import { detectProvider } from '../../lib/llm/provider-detector.ts';
-import { detectGpu, queryNvidiaVram } from '../../lib/local-llm/binary-manager.ts';
 import { logger } from '../../lib/logger.ts';
 
 const DEFAULT_ENGINE_URLS: Record<string, string> = {
@@ -190,8 +189,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /engines — probe availability of all local engines
   fastify.get('/engines', async () => {
-    const llamaEngine = engineRegistry.getEngine('llama-cpp')!;
-    const mlxEngine = engineRegistry.getEngine('mlx-serve')!;
+    const omniStatus = OmniModelCache.getStatus();
 
     const [ollama, lmstudio] = await Promise.all([
       probeExternalEngine('ollama'),
@@ -199,8 +197,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     ]);
 
     return {
-      'llama-cpp': { available: llamaEngine.isAvailable() },
-      'mlx-serve': { available: mlxEngine.isAvailable() },
+      omni: { available: true, gpu: omniStatus.gpu, models: omniStatus },
       ollama: { available: ollama.available, models: ollama.models, running: ollama.running },
       lmstudio: { available: lmstudio.available, models: lmstudio.models, running: lmstudio.running },
     };
@@ -269,10 +266,8 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       if (role === 'embedding') {
-        // Stop any managed embedding engines
-        for (const e of engineRegistry.getAllEngines()) {
-          if (e.getEmbeddingStatus().running) await e.unloadEmbedding();
-        }
+        // Unload any omni embedding model
+        await OmniModelCache.unloadLlmEmbed();
         config.embeddings[engine] = {
           provider: 'local' as const,
           engine: engine as 'ollama' | 'lmstudio',
@@ -281,10 +276,8 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         };
         config.embeddings['default'] = engine;
       } else {
-        // Stop any managed chat engines
-        for (const e of engineRegistry.getAllEngines()) {
-          if (e.getChatStatus().running) await e.unloadChat();
-        }
+        // Unload any omni chat model
+        await OmniModelCache.unloadLlmChat();
         // Preserve reasoningBudget and active from the current entry
         const resolvedKey = resolveDefaultName('models');
         const currentDefault = typeof config.models[resolvedKey] === 'object' ? config.models[resolvedKey] as Record<string, any> : null;
@@ -417,7 +410,9 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
               const found = (d.models || []).find((m: any) => m.key === model && m.loaded_instances?.length);
               iid = found?.loaded_instances?.[0]?.id;
             }
-          } catch { /* ignore */ }
+          } catch {
+            logger.warn('[LocalLLM] Failed to probe LM Studio for instance ID');
+          }
         }
         if (!iid) {
           return reply.status(400).send({ error: `No loaded instance found for ${model}` });
@@ -434,9 +429,9 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // GET /status — return per-engine status
+  // GET /status — return status including GPU info from node-omni-orcha
   fastify.get('/status', async () => {
-    const gpu = detectGpu();
+    const omniStatus = OmniModelCache.getStatus();
     const state = await manager.getState();
     const config = getLLMConfig();
     const resolvedKey = resolveDefaultName('models');
@@ -444,26 +439,17 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     const defaultProvider = (defaultModel && typeof defaultModel !== 'string') ? detectProvider(defaultModel) : null;
     const defaultEngine = (defaultModel && typeof defaultModel !== 'string') ? (defaultModel.engine || null) : null;
 
-    const llamaEngine = engineRegistry.getEngine('llama-cpp')!;
-    const mlxEngine = engineRegistry.getEngine('mlx-serve')!;
-
     return {
-      engines: engineRegistry.getAllStatus(),
+      omni: omniStatus,
       available: true,
       lastActiveModel: state.lastActiveModel,
       systemRamBytes: os.totalmem(),
       freeRamBytes: os.freemem(),
-      gpu,
-      gpuVram: gpu.accel?.startsWith('cuda') || gpu.accel === 'vulkan' ? queryNvidiaVram() : null,
+      gpu: omniStatus.gpu,
       defaultProvider,
       defaultEngine,
       platform: process.platform,
       arch: process.arch,
-      // Per-engine binary info for frontend compatibility
-      llamaVersion: llamaEngine.getBinaryVersion(),
-      binarySource: llamaEngine.getBinarySource() ?? 'managed',
-      mlxVersion: mlxEngine.getBinaryVersion(),
-      mlxBinarySource: mlxEngine.getBinarySource() ?? 'managed',
     };
   });
 
@@ -491,16 +477,16 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // GET /models/download?repo=...&fileName=...&type=gguf|mlx  (SSE stream)
-  fastify.get<{ Querystring: { repo: string; fileName: string; type?: string } }>(
+  // GET /models/download?repo=...&fileName=...&type=gguf|dir&subdir=...&targetDir=...  (SSE stream)
+  fastify.get<{ Querystring: { repo: string; fileName?: string; type?: string; subdir?: string; targetDir?: string } }>(
     '/models/download',
     async (request, reply) => {
-      const { repo, fileName, type } = request.query;
+      const { repo, fileName, type, subdir, targetDir } = request.query;
       if (!repo) {
         return reply.status(400).send({ error: 'repo is required' });
       }
-      if (type !== 'mlx' && !fileName) {
-        return reply.status(400).send({ error: 'fileName is required for GGUF downloads' });
+      if (type !== 'dir' && !fileName) {
+        return reply.status(400).send({ error: 'fileName is required for single-file downloads' });
       }
 
       reply.raw.setHeader('Content-Type', 'text/event-stream');
@@ -513,21 +499,23 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         let model;
 
-        if (type === 'mlx') {
-          // MLX: download entire repo
-          model = await manager.downloadMlxModel(
+        if (type === 'dir') {
+          // Directory download (multi-file models like TTS)
+          model = await manager.downloadDirectory(
             repo,
             (progress) => {
               if (!clientDisconnected) {
                 reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
               }
             },
+            subdir,
+            targetDir,
           );
         } else {
-          // GGUF: download single file
+          // Single GGUF file download
           model = await manager.downloadModel(
             repo,
-            fileName,
+            fileName!,
             (progress) => {
               if (!clientDisconnected) {
                 reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
@@ -535,8 +523,8 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
             },
           );
 
-          // Auto-download mmproj for vision models (skip if user downloaded an mmproj directly)
-          if (!clientDisconnected && !fileName.toLowerCase().includes('mmproj')) {
+          // Auto-download mmproj for vision models
+          if (!clientDisconnected && !fileName!.toLowerCase().includes('mmproj')) {
             const mmproj = await manager.autoDownloadMmproj(
               repo,
               (progress) => {
@@ -565,7 +553,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // POST /models/:id/activate — route to correct engine, NO cross-engine kill
+  // POST /models/:id/activate — load model via OmniModelCache
   fastify.post<{ Params: { id: string } }>(
     '/models/:id/activate',
     async (request, reply) => {
@@ -580,43 +568,33 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       const currentDefault = fullConfig?.models[resolvedKey];
       const currentObj = (currentDefault && typeof currentDefault !== 'string') ? currentDefault : null;
 
-      const engineName = model.type === 'mlx' ? 'mlx-serve' : 'llama-cpp';
-      const engine = engineRegistry.getEngine(engineName);
-      if (!engine) {
-        return reply.status(500).send({ error: `Engine ${engineName} not available` });
-      }
-
       try {
-        await engine.swapChat(model.filePath, {
-          ...(currentObj?.contextSize !== undefined ? { contextSize: currentObj.contextSize } : {}),
-          ...(currentObj?.reasoningBudget !== undefined ? { reasoningBudget: currentObj.reasoningBudget } : {}),
+        await OmniModelCache.getLlmChat(model.filePath, {
+          contextSize: currentObj?.contextSize,
         });
       } catch (err: any) {
         logger.error('[LocalLLM] Failed to load model:', err);
         return reply.status(500).send({ error: `Failed to load: ${err.message}` });
       }
 
-      const chatStatus = engine.getChatStatus();
-      const detectedCtx = chatStatus.contextSize;
-      const modelName = model.type === 'mlx' ? model.fileName : model.fileName.replace(/\.gguf$/i, '');
-      const existingEntry = fullConfig?.models[engineName];
+      const modelName = model.fileName.replace(/\.gguf$/i, '');
+      const existingEntry = fullConfig?.models['omni'];
       const existingObj = (existingEntry && typeof existingEntry !== 'string') ? existingEntry : null;
-      const localEntry = {
-        provider: 'local' as const,
-        engine: engineName as 'llama-cpp' | 'mlx-serve',
+      const omniEntry = {
+        provider: 'omni' as const,
         model: modelName,
-        ...(detectedCtx ? { contextSize: detectedCtx } : {}),
+        ...(currentObj?.contextSize ? { contextSize: currentObj.contextSize } : {}),
         reasoningBudget: currentObj?.reasoningBudget ?? 0,
         ...(existingObj?.active != null ? { active: existingObj.active } : {}),
         ...(existingObj?.p2p != null ? { p2p: existingObj.p2p } : {}),
       };
 
-      // Update llm.json — write to engine key and set default pointer
+      // Update llm.json — write to omni key and set default pointer
       try {
         const config = getLLMConfig();
         if (config) {
-          config.models[engineName] = localEntry;
-          config.models['default'] = engineName;
+          config.models['omni'] = omniEntry;
+          config.models['default'] = 'omni';
           await saveLLMConfig(llmJsonPath, config);
           LLMFactory.clearCache();
         }
@@ -627,7 +605,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       // Save state
       await manager.saveState({ lastActiveModel: model.id });
 
-      return { ok: true, status: engine.getStatus() };
+      return { ok: true, status: OmniModelCache.getStatus() };
     },
   );
 
@@ -640,37 +618,30 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(404).send({ error: 'Model not found' });
       }
 
-      const engineName = model.type === 'mlx' ? 'mlx-serve' : 'llama-cpp';
-      const engine = engineRegistry.getEngine(engineName);
-      if (!engine) {
-        return reply.status(500).send({ error: `Engine ${engineName} not available` });
-      }
-
       try {
-        await engine.loadEmbedding(model.filePath);
+        await OmniModelCache.getLlmEmbed(model.filePath);
       } catch (err: any) {
         logger.error('[LocalLLM] Failed to load embedding model:', err);
         return reply.status(500).send({ error: `Failed to load: ${err.message}` });
       }
 
-      // Update llm.json — write to engine key and set default pointer
+      // Update llm.json — write to omni key and set default pointer
       try {
         const config = getLLMConfig();
         if (config) {
-          const embModelName = model.type === 'mlx' ? model.fileName : model.fileName.replace(/\.gguf$/i, '');
-          config.embeddings[engineName] = {
-            provider: 'local' as const,
-            engine: engineName as 'llama-cpp' | 'mlx-serve',
+          const embModelName = model.fileName.replace(/\.gguf$/i, '');
+          config.embeddings['omni'] = {
+            provider: 'omni' as const,
             model: embModelName,
           };
-          config.embeddings['default'] = engineName;
+          config.embeddings['default'] = 'omni';
           await saveLLMConfig(llmJsonPath, config);
         }
       } catch (err: any) {
         logger.error('[LocalLLM] Failed to update llm.json:', err);
       }
 
-      return { ok: true, status: engine.getEmbeddingStatus() };
+      return { ok: true, status: OmniModelCache.getStatus() };
     },
   );
 
@@ -683,16 +654,13 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(404).send({ error: 'Model not found' });
       }
 
-      // Don't delete if currently active in any engine (chat or embedding)
-      for (const engine of engineRegistry.getAllEngines()) {
-        const chatStatus = engine.getChatStatus();
-        if (chatStatus.running && chatStatus.activeModel === model.filePath) {
-          return reply.status(409).send({ error: 'Cannot delete the currently active model. Stop it first.' });
-        }
-        const embStatus = engine.getEmbeddingStatus();
-        if (embStatus.running && embStatus.activeModel === model.filePath) {
-          return reply.status(409).send({ error: 'Cannot delete the active embedding model. Stop it first.' });
-        }
+      // Don't delete if currently loaded in OmniModelCache
+      const status = OmniModelCache.getStatus();
+      if (status.llmChat.modelPath === model.filePath) {
+        return reply.status(409).send({ error: 'Cannot delete the currently active model. Stop it first.' });
+      }
+      if (status.llmEmbed.modelPath === model.filePath) {
+        return reply.status(409).send({ error: 'Cannot delete the active embedding model. Stop it first.' });
       }
 
       await manager.deleteModel(request.params.id);
@@ -700,45 +668,27 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // GET /browse?q=...&limit=10&format=gguf|mlx
-  fastify.get<{ Querystring: { q: string; limit?: string; format?: string } }>(
+  // GET /browse?q=...&limit=10
+  fastify.get<{ Querystring: { q: string; limit?: string } }>(
     '/browse',
     async (request, reply) => {
-      const { q, limit, format } = request.query;
+      const { q, limit } = request.query;
       if (!q) {
         return reply.status(400).send({ error: 'q (query) is required' });
       }
-      const fmt = format === 'mlx' ? 'mlx' : 'gguf';
-      return manager.browseHuggingFace(q, Number(limit) || 10, fmt);
+      return manager.browseHuggingFace(q, Number(limit) || 10);
     },
   );
 
-  // POST /stop — accept optional engine param to stop specific engine
-  fastify.post<{ Body: { engine?: string } }>('/stop', async (request) => {
-    const engineName = (request.body as any)?.engine;
-    if (engineName) {
-      const engine = engineRegistry.getEngine(engineName);
-      if (engine) await engine.unloadChat();
-    } else {
-      // Legacy: stop all managed chat engines
-      for (const engine of engineRegistry.getAllEngines()) {
-        await engine.unloadChat();
-      }
-    }
+  // POST /stop — unload omni chat model
+  fastify.post('/stop', async () => {
+    await OmniModelCache.unloadLlmChat();
     return { ok: true };
   });
 
-  // POST /stop-embedding — accept optional engine param
-  fastify.post<{ Body: { engine?: string } }>('/stop-embedding', async (request) => {
-    const engineName = (request.body as any)?.engine;
-    if (engineName) {
-      const engine = engineRegistry.getEngine(engineName);
-      if (engine) await engine.unloadEmbedding();
-    } else {
-      for (const engine of engineRegistry.getAllEngines()) {
-        await engine.unloadEmbedding();
-      }
-    }
+  // POST /stop-embedding — unload omni embedding model
+  fastify.post('/stop-embedding', async () => {
+    await OmniModelCache.unloadLlmEmbed();
     return { ok: true };
   });
 

@@ -49,6 +49,7 @@
     task: string;
     input?: string;
     image?: string;
+    audio?: string;
     error?: string;
   }
 
@@ -387,6 +388,7 @@
               task: parsed.task,
               input: parsed.input,
               image: parsed.image,
+              audio: parsed.audio,
               error: parsed.error,
             }];
           }

@@ -38,6 +38,7 @@
 
   const PROVIDER_META: Record<string, { label: string; color: string }> = {
     local:     { label: 'Local',     color: 'amber' },
+    omni:      { label: 'Local',     color: 'amber' },
     openai:    { label: 'OpenAI',    color: 'green' },
     anthropic: { label: 'Anthropic', color: 'purple' },
     gemini:    { label: 'Google',    color: 'blue' },
@@ -58,29 +59,24 @@
   };
 
   const RECOMMENDED_MODELS_GGUF = [
-    { repo: 'unsloth/Qwen3.5-9B-GGUF', file: 'Qwen3.5-9B-Q4_K_M.gguf', label: 'Qwen3.5-9B-Q4_K_M', desc: 'Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.', size: '~5.3 GB', icon: 'fa-comments', color: 'amber', type: 'gguf' },
-    { repo: 'nomic-ai/nomic-embed-text-v1.5-GGUF', file: 'nomic-embed-text-v1.5.Q4_K_M.gguf', label: 'nomic-embed-text-v1.5-Q4_K_M', desc: 'Embedding model for knowledge stores. Required for local RAG pipelines.', size: '~80 MB', icon: 'fa-vector-square', color: 'blue', type: 'gguf' },
+    { repo: 'unsloth/Qwen3.5-9B-GGUF', file: 'Qwen3.5-9B-Q4_K_M.gguf', label: 'Qwen3.5-9B-Q4_K_M', desc: 'Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.', size: '~5.3 GB', icon: 'fa-comments', color: 'amber', type: 'gguf', category: 'llm' },
+    { repo: 'nomic-ai/nomic-embed-text-v1.5-GGUF', file: 'nomic-embed-text-v1.5.Q4_K_M.gguf', label: 'nomic-embed-text-v1.5-Q4_K_M', desc: 'Embedding model for knowledge stores. Required for local RAG pipelines.', size: '~80 MB', icon: 'fa-vector-square', color: 'blue', type: 'gguf', category: 'embed' },
+    { repo: 'unsloth/FLUX.2-klein-4B-GGUF', file: 'flux-2-klein-4b-Q4_K_M.gguf', label: 'FLUX.2 Klein 4B Q4_K_M', desc: 'Fast image generation model (FLUX.2 Klein). Requires VAE and text encoder models (see docs).', size: '~2.5 GB', icon: 'fa-image', color: 'purple', type: 'gguf', category: 'image' },
+    { repo: 'Volko76/Qwen3-TTS-12Hz-0.6B-Base-Qwen3tts.cpp_quants-GGUF', file: 'qwen3-tts', label: 'Qwen3 TTS 0.6B', desc: 'Text-to-speech with voice cloning. Upload a 5-10s audio sample to clone any voice.', size: '~2.0 GB', icon: 'fa-microphone', color: 'green', type: 'dir', category: 'tts' },
   ];
-  const RECOMMENDED_MODELS_MLX = [
-    { repo: 'mlx-community/Qwen3.5-9B-4bit', file: '__mlx_repo__', label: 'Qwen3.5-9B-4bit (MLX)', desc: 'MLX-optimized for Apple Silicon. Recommended for Mac.', size: '~5 GB', icon: 'fa-apple', color: 'amber', type: 'mlx' },
-    { repo: 'mlx-community/all-MiniLM-L6-v2-4bit', file: '__mlx_repo__', label: 'all-MiniLM-L6-v2-4bit (MLX)', desc: 'Fast, lightweight embedding model (22M params, 384 dims). Recommended for local RAG.', size: '~15 MB', icon: 'fa-vector-square', color: 'blue', type: 'mlx' },
-  ];
-
   const ENGINE_LABELS: Record<string, string> = {
-    'llama-cpp': 'llama-cpp',
-    'mlx-serve': 'mlx-serve',
+    'omni': 'Omni',
     'ollama': 'Ollama',
     'lmstudio': 'LM Studio',
   };
   const ENGINE_ICONS: Record<string, string> = {
-    'llama-cpp': 'fa-server',
-    'mlx-serve': 'fa-apple',
+    'omni': 'fa-microchip',
     'ollama': 'fa-cube',
     'lmstudio': 'fa-flask',
   };
-  const MANAGED_ENGINES = ['llama-cpp', 'mlx-serve'];
+  const MANAGED_ENGINES = ['omni'];
   const EXTERNAL_ENGINES = ['ollama', 'lmstudio'];
-  const ACCEL_LABELS: Record<string, string> = { 'none': 'CPU', 'metal': 'Metal', 'vulkan': 'Vulkan', 'cuda-12.4': 'CUDA 12.4', 'cuda-13.1': 'CUDA 13.1' };
+  const BACKEND_LABELS: Record<string, string> = { 'cpu': 'CPU', 'metal': 'Metal', 'cuda': 'CUDA' };
 
   // ─── Capability detection ───
   function detectCapabilities(result: any) {
@@ -133,15 +129,15 @@
     } catch { return false; }
   }
 
-  function getRecommendedModels(engine: string) {
-    return engine === 'mlx-serve' ? RECOMMENDED_MODELS_MLX : RECOMMENDED_MODELS_GGUF;
+  function getRecommendedModels(_engine: string) {
+    return RECOMMENDED_MODELS_GGUF;
   }
 
   function isModelDownloaded(models: any[], repoId: string, fileName: string) {
-    if (fileName === '__mlx_repo__') {
-      return models.some((m: any) => m.repo === repoId && m.type === 'mlx');
-    }
-    return models.some((m: any) => m.repo === repoId && m.fileName === fileName);
+    return models.some((m: any) =>
+      (m.repo === repoId && m.fileName === fileName) ||
+      (m.repo === repoId && m.id === fileName) // directory-based models use subdir as id
+    );
   }
 
   // ─── State ───
@@ -234,7 +230,6 @@
   // ─── Derived state ───
   let isExternalEngine = $derived(EXTERNAL_ENGINES.includes(selectedEngine || ''));
   let isManagedEngine = $derived(MANAGED_ENGINES.includes(selectedEngine || ''));
-  let isMlx = $derived(selectedEngine === 'mlx-serve');
   let isMacHost = $derived(status?.platform === 'darwin');
 
   let configDefaultEngine = $derived(resolveDefault('models')?.engine || status?.defaultEngine || null);
@@ -245,33 +240,30 @@
 
   // Engine list to show
   let engineList = $derived(
-    (['llama-cpp', 'mlx-serve', 'ollama', 'lmstudio'] as string[])
-      .filter(eng => eng !== 'mlx-serve' || isMacHost)
+    (['omni', 'ollama', 'lmstudio'] as string[])
   );
 
-  // Current engine status for managed engines
-  let engineStatus = $derived(status?.engines?.[selectedEngine || '']);
-  let chatStatus = $derived(engineStatus?.chat || {});
-  let embeddingStatus = $derived(engineStatus?.embedding || {});
-  let chatRunning = $derived(chatStatus?.running || false);
-  let activeModelPath = $derived(chatRunning ? chatStatus?.activeModel : null);
-  let embRunning = $derived(embeddingStatus?.running || false);
-  let activeEmbModelPath = $derived(embRunning ? embeddingStatus?.activeModel : null);
+  // Current engine status for managed omni engine
+  let omniStatus = $derived(status?.omni || {});
+  let chatRunning = $derived(omniStatus?.llmChat?.loaded || false);
+  let activeModelPath = $derived(chatRunning ? omniStatus?.llmChat?.modelPath : null);
+  let embRunning = $derived(omniStatus?.llmEmbed?.loaded || false);
+  let activeEmbModelPath = $derived(embRunning ? omniStatus?.llmEmbed?.modelPath : null);
 
   // Version info for managed engines
-  let version = $derived(isMlx ? status?.mlxVersion : status?.llamaVersion);
+  let version = $derived(null);
   let versionLabel = $derived(
-    isMlx
+    false
       ? (version ? `v${version}` : '')
       : (version ? `b${version?.match?.(/^(\d+)/)?.[1] || version}` : '')
   );
   // GPU & runtime
+  let gpuBackend = $derived(status?.gpu?.backend || 'cpu');
   let gpuName = $derived(status?.gpu?.name);
-  let gpuAccel = $derived(status?.gpu?.accel || 'none');
   let runtimeLabel = $derived(
     gpuName
-      ? `${gpuName} (${ACCEL_LABELS[gpuAccel] || gpuAccel})`
-      : (ACCEL_LABELS[gpuAccel] || gpuAccel)
+      ? `${gpuName} (${BACKEND_LABELS[gpuBackend] || gpuBackend})`
+      : (BACKEND_LABELS[gpuBackend] || gpuBackend)
   );
 
   // RAM
@@ -279,13 +271,9 @@
 
   // Chat model details for managed engine
   let activeModelName = $derived(activeModelPath ? activeModelPath.split('/').pop() : null);
-  let mem = $derived(chatStatus?.memoryEstimate);
-  let procMem = $derived(chatStatus?.processMemory);
-  let actualBytes = $derived(procMem ? (procMem.rssBytes + (procMem.gpuBytes ?? 0)) : 0);
-  let ctxSize = $derived(chatStatus?.contextSize);
-  let memPct = $derived(actualBytes && totalRam ? Math.round((actualBytes / totalRam) * 100) : null);
+  let ctxSize = $derived(resolveDefault('models')?.contextSize);
+  let memPct = $state<number | null>(null);
   let memBarCls = $derived((memPct ?? 0) > 80 ? 'llm-mem-red' : (memPct ?? 0) > 60 ? 'llm-mem-amber' : 'llm-mem-green');
-  let kvPerToken = $derived(mem && ctxSize ? mem.kvCacheBytes / ctxSize : 0);
   let resolvedDefaultModel = $derived(resolveDefault('models'));
   let currentMaxTokensConfig = $derived(resolvedDefaultModel?.maxTokens || 4096);
   let currentReasoningBudget = $derived(resolvedDefaultModel?.reasoningBudget || 0);
@@ -306,9 +294,9 @@
   let anySliderChanged = $derived(sliderCtxChanged || sliderMaxTokChanged || sliderThinkingChanged);
 
   // Computed RAM estimate for context slider
-  let estimatedKvCache = $derived(ctxSliderValue * kvPerToken);
-  let estimatedTotal = $derived((mem?.modelBytes || 0) + estimatedKvCache);
-  let estimatedPct = $derived(totalRam ? Math.round(estimatedTotal / totalRam * 100) : 0);
+  let estimatedKvCache = $derived(0);
+  let estimatedTotal = $derived(0);
+  let estimatedPct = $derived(0);
 
   // Slider fill color based on RAM usage
   let ctxRangeColor = $derived(
@@ -352,12 +340,11 @@
   let extMaxTokChanged = $derived(extMaxTokSliderValue !== extMaxTokSliderOrig);
   let extAnyChanged = $derived(extCtxChanged || extMaxTokChanged);
 
-  // Models filtered by current engine
+  // Models filtered by current engine — omni supports all GGUF models
   let filteredModels = $derived(
-    models.filter((model: any) => {
+    models.filter((_model: any) => {
       if (!selectedEngine || !MANAGED_ENGINES.includes(selectedEngine)) return true;
-      const modelEngine = model.type === 'mlx' ? 'mlx-serve' : 'llama-cpp';
-      return modelEngine === selectedEngine;
+      return true; // omni loads any GGUF
     })
   );
 
@@ -379,12 +366,12 @@
 
   // Recommended models not yet downloaded
   let pendingRecommended = $derived(
-    getRecommendedModels(selectedEngine || 'llama-cpp')
+    getRecommendedModels(selectedEngine || 'omni')
       .filter(r => !isModelDownloaded(models, r.repo, r.file))
   );
 
   // Cloud config
-  let defaultProvider = $derived(resolveDefault('models')?._provider || 'local');
+  let defaultProvider = $derived(resolveDefault('models')?.provider || resolveDefault('models')?._provider || 'local');
 
   let settingDefault = $state<string | null>(null);
 
@@ -439,7 +426,8 @@
       if (syncTab) {
         const defaultModel = resolveDefault('models');
         if (defaultModel?._provider) {
-          activeProvider = defaultModel._provider;
+          // 'omni' is a local provider — show the local engine panel
+          activeProvider = defaultModel._provider === 'omni' ? 'local' : defaultModel._provider;
         }
       }
     } catch (e) {
@@ -454,7 +442,7 @@
       engineUrls = urls || {};
       if (!selectedEngine) {
         const configEngine = status?.defaultEngine || resolveDefault('models')?.engine;
-        selectedEngine = configEngine || 'llama-cpp';
+        selectedEngine = configEngine || 'omni';
       }
       syncEngineUrlInput();
     } catch (e) {
@@ -531,12 +519,11 @@
     }
   });
 
-  // Browse format auto-matches engine
+  // Browse format auto-matches engine — omni only uses GGUF
   $effect(() => {
     if (isManagedEngine) {
-      const newFormat = selectedEngine === 'mlx-serve' ? 'mlx' : 'gguf';
-      if (browseFormat !== newFormat) {
-        browseFormat = newFormat;
+      if (browseFormat !== 'gguf') {
+        browseFormat = 'gguf';
         searchResults = [];
       }
     }
@@ -699,11 +686,11 @@
     }
   }
 
-  function downloadModel(repo: string, fileName: string, type = 'gguf') {
-    const downloadId = type === 'mlx' ? `mlx:${repo}` : `${repo}/${fileName}`;
+  function downloadModel(repo: string, fileName: string, type = 'gguf', subdir?: string, targetDir?: string) {
+    const downloadId = type === 'dir' ? `dir:${repo}${subdir ? '/' + subdir : ''}` : `${repo}/${fileName}`;
     if (activeDownloads.has(downloadId)) return;
 
-    const es = api.downloadLocalModel(repo, fileName, type);
+    const es = api.downloadLocalModel(repo, fileName, type, subdir, targetDir);
     activeDownloads.set(downloadId, es);
     activeDownloads = new Map(activeDownloads);
 
@@ -978,7 +965,7 @@
     {#each engineList as eng}
       {@const entry = llmConfig?.models?.[eng]}
       {@const isEngActive = entry?.active !== false}
-      {@const isEngDefault = resolveDefault('models')?.engine === eng && !['openai', 'anthropic', 'gemini'].includes(defaultProvider)}
+      {@const isEngDefault = (resolveDefault('models')?.engine === eng || resolveDefault('models')?.provider === eng) && !['openai', 'anthropic', 'gemini'].includes(defaultProvider)}
       <div class="llm-provider-chip {isEngActive ? '' : 'disabled'}">
         <span class="llm-chip-label">{ENGINE_LABELS[eng]}</span>
         <Toggle active={isEngActive} disabled={togglingActive === eng} onchange={() => toggleModelActive(eng)} />
@@ -1187,11 +1174,8 @@
           {@const isEngEnabled = llmConfig?.models?.[eng]?.active !== false}
           {#if isEngEnabled}
             <button class="llm-engine-tab {isActive ? 'active' : ''}" onclick={() => selectEngine(eng)}>
-              <i class="{eng === 'mlx-serve' ? 'fab' : 'fas'} {ENGINE_ICONS[eng]}"></i>
+              <i class="{'fas'} {ENGINE_ICONS[eng]}"></i>
               <span>{ENGINE_LABELS[eng]}</span>
-              {#if eng === 'mlx-serve'}
-                <span class="badge badge-amber text-2xs">experimental</span>
-              {/if}
               {#if isExternal}
                 <span class="engine-status {available ? 'connected' : 'disconnected'}"></span>
               {/if}
@@ -1209,7 +1193,7 @@
           <!-- Header -->
           <div class="llm-server-header">
             <div class="flex items-center gap-2">
-              <i class="{selectedEngine === 'mlx-serve' ? 'fab' : 'fas'} {ENGINE_ICONS[selectedEngine || '']}"></i>
+              <i class="{'fas'} {ENGINE_ICONS[selectedEngine || '']}"></i>
               <span class="text-sm font-semibold text-primary">{extLabel}</span>
               <span class="{extAvailable ? 'llm-pulse llm-pulse-green' : 'llm-pulse-off'}"></span>
               <span class="text-xs {extAvailable ? 'text-green' : 'text-red'}">{extAvailable ? 'Connected' : 'Not detected / Not running'}</span>
@@ -1377,7 +1361,7 @@
           <div class="llm-server-header">
             <div class="flex items-center gap-2">
               <i class="fas fa-server text-amber text-xs"></i>
-              <span class="text-sm font-semibold text-primary">{isMlx ? 'mlx-serve' : 'llama-server'}</span>
+              <span class="text-sm font-semibold text-primary">Omni</span>
               {#if versionLabel}<span class="text-xs text-muted font-mono">{versionLabel}</span>{/if}
               <span class="{chatRunning ? 'llm-pulse llm-pulse-green' : 'llm-pulse-off'}"></span>
               <span class="text-xs {chatRunning ? 'text-green' : 'text-muted'}">{chatRunning ? 'Running' : 'Stopped'}</span>
@@ -1388,15 +1372,8 @@
           <div class="llm-server-details">
             <span title="Runtime"><i class="fas fa-bolt mr-1 llm-icon-dim"></i>{runtimeLabel}</span>
             <span title="Server type"><i class="fas fa-comments mr-1 llm-icon-dim"></i>Chat Completions</span>
-            {#if chatRunning && chatStatus.port}
-              <span class="flex items-center gap-1" title="OpenAI-compatible API endpoint">
-                <i class="fas fa-link mr-1 llm-icon-dim"></i>
-                <code class="font-mono text-secondary">http://127.0.0.1:{chatStatus.port}/v1</code>
-                <button class="copy-url-btn text-muted transition-colors" title="Copy URL"
-                  onclick={(e: MouseEvent) => copyUrl(`http://127.0.0.1:${chatStatus.port}/v1`, e)}>
-                  <i class="fas fa-copy text-2xs"></i>
-                </button>
-              </span>
+            {#if chatRunning}
+              <span class="text-green"><i class="fas fa-microchip mr-1"></i>In-process</span>
             {:else}
               <span><i class="fas fa-link mr-1 llm-icon-dim"></i><span class="text-muted">Not running</span></span>
             {/if}
@@ -1423,18 +1400,12 @@
                 </div>
 
                 <!-- Memory bar -->
-                {#if procMem}
+                {#if chatRunning}
                   <div class="flex items-center gap-3"
-                    title={mem ? `Estimate: ${formatBytes(mem.modelBytes)} model + ${formatBytes(mem.kvCacheBytes)} KV cache = ${formatBytes(mem.totalBytes)}` : ''}>
-                    <div class="llm-mem-bar">
-                      <div class="llm-mem-fill {memBarCls}" style:width="{memPct}%"></div>
-                    </div>
+                    title="Model loaded in-process via {runtimeLabel}">
                     <div class="flex items-center gap-3 text-xs text-muted flex-shrink-0">
-                      <span><i class="fas fa-memory mr-1"></i>{formatBytes(actualBytes)}</span>
-                      {#if procMem.gpuBytes != null}
-                        <span class="text-2xs">({formatBytes(procMem.rssBytes)} RAM + {formatBytes(procMem.gpuBytes)} VRAM)</span>
-                      {/if}
-                      <span>/ {formatBytes(totalRam)}</span>
+                      <span><i class="fas fa-microchip mr-1"></i>Loaded in-process</span>
+                      <span class="text-green"><i class="fas fa-circle text-2xs mr-1"></i>{runtimeLabel}</span>
                     </div>
                   </div>
                 {/if}
@@ -1454,7 +1425,7 @@
                       style:--range-fill={ctxRangeFill} />
                     <div class="llm-slider-meta">
                       <span>2K</span>
-                      <span class="font-mono">{formatBytes(estimatedKvCache)} KV + {formatBytes(mem?.modelBytes || 0)} model = {formatBytes(estimatedTotal)} / {formatBytes(totalRam)}</span>
+                      <span class="font-mono">{ctxSliderValue.toLocaleString()} tokens</span>
                       <span>128K</span>
                     </div>
                   </div>
@@ -1738,7 +1709,7 @@
           {#if filteredModels.length === 0}
             <div class="col-span-full text-muted text-center py-8">
               <i class="fas fa-box-open text-4xl mb-4 block text-muted"></i>
-              <p class="text-lg mb-2">No {selectedEngine === 'mlx-serve' ? 'MLX' : 'GGUF'} models downloaded</p>
+              <p class="text-lg mb-2">No {'GGUF'} models downloaded</p>
               <p class="text-sm">Search HuggingFace below, or download a recommended model</p>
             </div>
           {:else}
@@ -1748,8 +1719,11 @@
               {@const isChat = gActiveChat && gActiveChat === model.filePath}
               {@const isEmb = gActiveEmb && gActiveEmb === model.filePath}
               {@const looksLikeEmbedding = /embed|MiniLM/i.test(model.fileName)}
+              {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models\//, '')))}
+              {@const looksLikeTTS = /tts|speech|qwen3.*tts|kokoro|parler/i.test(model.fileName) || /tts/i.test(model.repo || '') || Object.values(llmConfig?.tts || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models\//, '')))}
+              {@const modelRole = looksLikeImage ? 'image' : looksLikeTTS ? 'tts' : looksLikeEmbedding ? 'embed' : 'llm'}
               {@const cardCls = isChat ? 'llm-model-card active-chat' : isEmb ? 'llm-model-card active-emb' : 'llm-model-card'}
-              {@const caps = looksLikeEmbedding ? null : detectCapabilitiesFromFile(model)}
+              {@const caps = modelRole === 'llm' ? detectCapabilitiesFromFile(model) : null}
 
               <div class={cardCls} data-model-id={model.id}>
                 <div class="flex items-start justify-between mb-3">
@@ -1758,7 +1732,15 @@
                       {#if isChat}<i class="fas fa-circle text-amber text-2xs"></i>{/if}
                       {#if isEmb}<i class="fas fa-circle text-blue text-2xs"></i>{/if}
                       <span class="font-medium text-primary text-sm truncate">{model.fileName}</span>
-                      <span class="badge badge-{model.type === 'mlx' ? 'green' : 'amber'} text-2xs">{(model.type || 'gguf').toUpperCase()}</span>
+                      {#if modelRole === 'image'}
+                        <span class="badge badge-purple text-2xs">IMAGE</span>
+                      {:else if modelRole === 'tts'}
+                        <span class="badge badge-green text-2xs">TTS</span>
+                      {:else if modelRole === 'embed'}
+                        <span class="badge badge-blue text-2xs">EMBED</span>
+                      {:else}
+                        <span class="badge badge-amber text-2xs">LLM</span>
+                      {/if}
                     </div>
                     {#if model.repo}<div class="text-xs text-muted truncate">{model.repo}</div>{/if}
                     {#if caps && (caps.tools || caps.vision || caps.reasoning)}
@@ -1776,7 +1758,7 @@
                     <span>{timeAgo(model.downloadedAt)}</span>
                   </div>
                   <div class="flex items-center gap-2">
-                    {#if looksLikeEmbedding}
+                    {#if modelRole === 'embed'}
                       {#if isEmb}
                         <span class="badge badge-blue">Embedding</span>
                       {:else}
@@ -1790,6 +1772,10 @@
                           {/if}
                         </button>
                       {/if}
+                    {:else if modelRole === 'image'}
+                      <span class="badge badge-purple"><i class="fas fa-image mr-1"></i>Image Gen</span>
+                    {:else if modelRole === 'tts'}
+                      <span class="badge badge-green"><i class="fas fa-microphone mr-1"></i>Voice</span>
                     {:else}
                       {#if isChat}
                         <span class="badge badge-amber">Active</span>
@@ -1826,24 +1812,24 @@
     {/if}
 
     <!-- Recommended Models -->
-    {#if isManagedEngine && pendingRecommended.length > 0 && models.length === 0}
+    {#if isManagedEngine && pendingRecommended.length > 0}
       <div class="mb-6">
         <h3 class="section-title mb-3">Recommended Models</h3>
         <div class="llm-rec-grid">
           {#each pendingRecommended as r}
-            {@const downloadId = r.type === 'mlx' ? `mlx:${r.repo}` : `${r.repo}/${r.file}`}
+            {@const downloadId = r.type === 'dir' ? `dir:${r.repo}${r.subdir ? '/' + r.subdir : ''}` : `${r.repo}/${r.file}`}
             {@const isDownloading = activeDownloads.has(downloadId)}
             <div class="llm-rec-card llm-rec-card-{r.color}">
               <div class="flex items-center gap-2 mb-2">
-                <i class="{r.icon === 'fa-apple' ? 'fab' : 'fas'} {r.icon} text-{r.color} text-sm"></i>
+                <i class="fas {r.icon} text-{r.color} text-sm"></i>
                 <span class="font-medium text-primary text-sm">{r.label}</span>
-                <span class="badge badge-{r.type === 'mlx' ? 'green' : 'amber'} text-2xs">{r.type.toUpperCase()}</span>
+                <span class="badge badge-amber text-2xs">{r.category?.toUpperCase() || 'GGUF'}</span>
               </div>
               <p class="text-xs text-muted mb-3">{r.desc}</p>
               <div class="flex items-center justify-between">
                 <span class="text-xs text-muted">{r.size}</span>
                 <button class="btn btn-{r.color} btn-sm" disabled={isDownloading}
-                  onclick={() => downloadModel(r.repo, r.file, r.type)}>
+                  onclick={() => downloadModel(r.repo, r.file, r.type, r.subdir, r.type === 'dir' ? r.file : undefined)}>
                   {#if isDownloading}
                     <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
                   {:else}
@@ -1893,9 +1879,7 @@
               Search HuggingFace to find and download {browseFormat.toUpperCase()} models
             </div>
           {:else}
-            {@const filterGguf = (files: any[]) => selectedEngine === 'llama-cpp'
-              ? files.filter((f: any) => !/mmproj|bf16/i.test(f.fileName))
-              : files}
+            {@const filterGguf = (files: any[]) => files.filter((f: any) => !/mmproj|bf16/i.test(f.fileName))}
             {@const resultsWithFiles = searchResults.filter((r: any) => filterGguf(r.ggufFiles).length > 0)}
             {#if resultsWithFiles.length === 0}
               <div class="text-muted text-center py-8">No {browseFormat.toUpperCase()} files found in the results.</div>
@@ -1904,50 +1888,8 @@
                 {#each searchResults as result, idx}
                   {#if filterGguf(result.ggufFiles).length > 0}
                     {@const caps = detectCapabilities(result)}
-                    {@const isMlxFormat = browseFormat === 'mlx'}
-                    {#if isMlxFormat}
-                      <!-- MLX result row -->
-                      {@const totalSize = result.ggufFiles[0]?.sizeBytes || 0}
-                      {@const downloaded = isModelDownloaded(models, result.repoId, '__mlx_repo__')}
-                      {@const tooLarge = systemRamBytes > 0 && totalSize > systemRamBytes}
-                      {@const dlId = `mlx:${result.repoId}`}
-                      {@const isDownloading = activeDownloads.has(dlId)}
-                      <div class="hf-result-row">
-                        <div class="min-w-0 flex-shrink-0">
-                          <div class="font-medium text-primary text-sm truncate" title={result.repoId}>{result.modelName}</div>
-                          <div class="text-xs text-muted truncate">{result.author}</div>
-                        </div>
-                        <div class="flex items-center gap-2 text-xs flex-shrink-0">
-                          <span class="text-muted" title="Downloads"><i class="fas fa-download mr-1"></i>{result.downloads?.toLocaleString() ?? 0}</span>
-                          <span class="flex items-center gap-1">
-                            <i class="fas fa-wrench {caps.tools ? 'text-green' : 'text-muted'}" title={caps.tools ? 'Tool calling' : 'No tool calling'}></i>
-                            <i class="fas fa-eye {caps.vision ? 'text-blue' : 'text-muted'}" title={caps.vision ? 'Vision' : 'No vision'}></i>
-                            <i class="fas fa-brain {caps.reasoning ? 'text-purple' : 'text-muted'}" title={caps.reasoning ? 'Reasoning / Thinking' : 'No reasoning'}></i>
-                          </span>
-                        </div>
-                        <span class="text-xs text-muted">{formatBytes(totalSize)}</span>
-                        {#if tooLarge}
-                          <span class="ram-warning-badge" title="Exceeds system RAM"><i class="fas fa-memory mr-1"></i>won't fit</span>
-                        {/if}
-                        <div class="flex items-center gap-2 flex-shrink-0">
-                          <button class="btn btn-sm {downloaded ? 'btn-green cursor-not-allowed' : 'btn-amber'}"
-                            disabled={downloaded || isDownloading}
-                            onclick={() => downloadModel(result.repoId, '__mlx_repo__', 'mlx')}>
-                            {#if downloaded}
-                              <i class="fas fa-check mr-1"></i>Downloaded
-                            {:else if isDownloading}
-                              <i class="fas fa-spinner fa-spin"></i>
-                            {:else}
-                              <i class="fas fa-download mr-1"></i>Download
-                            {/if}
-                          </button>
-                        </div>
-                      </div>
-                    {:else}
                       <!-- GGUF result row -->
-                      {@const filteredFiles = selectedEngine === 'llama-cpp'
-                        ? result.ggufFiles.filter((f: any) => !/mmproj|bf16/i.test(f.fileName))
-                        : result.ggufFiles}
+                      {@const filteredFiles = result.ggufFiles.filter((f: any) => !/mmproj|bf16/i.test(f.fileName))}
                       {@const firstFile = filteredFiles[0]}
                       {@const selectedFileName = result._selectedFile || firstFile?.fileName}
                       {@const selectedFile = filteredFiles.find((f: any) => f.fileName === selectedFileName) || firstFile}
@@ -1994,7 +1936,6 @@
                           </button>
                         </div>
                       </div>
-                    {/if}
                   {/if}
                 {/each}
               </div>

@@ -5,15 +5,7 @@ export interface LocalModel {
   sizeBytes: number;
   repo?: string;
   downloadedAt: string;
-  type: 'gguf' | 'mlx';
-}
-
-export interface LocalLlmStatus {
-  running: boolean;
-  port?: number;
-  activeModel: string | null;
-  available: boolean;
-  contextSize?: number | null;
+  modelType?: 'llm' | 'image' | 'tts' | 'stt';
 }
 
 export interface HuggingFaceGgufFile {

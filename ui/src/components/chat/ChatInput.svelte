@@ -19,7 +19,7 @@
   let textareaEl = $state<HTMLTextAreaElement | null>(null);
   let fileInputEl = $state<HTMLInputElement | null>(null);
 
-  const FILE_ACCEPT = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.go,.rs,.rb,.php,.sql,.sh,.log,.ini,.toml,.env";
+  const FILE_ACCEPT = "image/*,audio/*,.wav,.mp3,.ogg,.flac,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.go,.rs,.rb,.php,.sql,.sh,.log,.ini,.toml,.env";
 
   function handleInput() {
     if (!textareaEl) return;

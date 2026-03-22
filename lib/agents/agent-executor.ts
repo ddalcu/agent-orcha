@@ -1,3 +1,5 @@
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { createReActAgent } from './react-loop.ts';
 import { humanMessage, aiMessage, contentToText } from '../types/llm-types.ts';
 import type { ChatModel, BaseMessage, MessageContent, ContentPart } from '../types/llm-types.ts';
@@ -367,6 +369,18 @@ export class AgentExecutor {
 
       if (att.mediaType.startsWith('image/')) {
         parts.push({ type: 'image', data: att.data, mediaType: att.mediaType });
+      } else if (att.mediaType.startsWith('audio/')) {
+        // Save audio to disk so tools (like TTS voice cloning) can reference it by path
+        try {
+          const generatedDir = path.join(process.cwd(), '.generated');
+          await fs.mkdir(generatedDir, { recursive: true });
+          const fileName = `ref_${Date.now()}_${att.name || 'audio.wav'}`;
+          const filePath = path.join(generatedDir, fileName);
+          await fs.writeFile(filePath, Buffer.from(att.data, 'base64'));
+          parts.push({ type: 'text', text: `[Uploaded audio file saved at: ${filePath}]\nUse this as referenceAudio path for voice cloning.` });
+        } catch (err: any) {
+          parts.push({ type: 'text', text: `[Failed to save audio ${att.name ?? 'attachment'}: ${err.message}]` });
+        }
       } else {
         try {
           const doc = await extractDocumentText(att.data, att.mediaType, att.name);

@@ -4,11 +4,12 @@
   interface Props {
     task: string;
     image?: string;
+    audio?: string;
     error?: string;
     input?: string;
   }
 
-  let { task, image, error: initError, input }: Props = $props();
+  let { task, image, audio, error: initError, input }: Props = $props();
 
   let status = $state<'done' | 'error'>('done');
   let errorMsg = $state('');
@@ -26,6 +27,19 @@
     <div class="model-output-error">{errorMsg}</div>
   {:else if image}
     <img src={image} alt={input ?? 'Generated image'} class="model-output-image" />
+  {:else if audio}
+    <div class="model-output-audio">
+      <div class="audio-header">
+        <i class="fas fa-microphone"></i>
+        <span>Generated Audio</span>
+      </div>
+      <audio controls src={audio} preload="auto" class="audio-player"></audio>
+      <div class="audio-actions">
+        <a href={audio} download class="audio-download" title="Download audio">
+          <i class="fas fa-download"></i> Download WAV
+        </a>
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -42,5 +56,46 @@
     max-width: 100%;
     border-radius: 8px;
     margin: 0.25rem 0;
+  }
+  .model-output-audio {
+    background: var(--surface, #1e1e2e);
+    border: 1px solid var(--border, #333);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 400px;
+  }
+  .audio-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted, #888);
+  }
+  .audio-header i {
+    color: var(--green, #22c55e);
+  }
+  .audio-player {
+    width: 100%;
+    height: 36px;
+    border-radius: 6px;
+  }
+  .audio-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .audio-download {
+    font-size: 0.75rem;
+    color: var(--text-muted, #888);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    transition: color 0.15s;
+  }
+  .audio-download:hover {
+    color: var(--green, #22c55e);
   }
 </style>

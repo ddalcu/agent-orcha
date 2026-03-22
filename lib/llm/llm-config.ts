@@ -9,6 +9,7 @@ const PROVIDER_ENV_VARS: Record<LLMProvider, string> = {
   gemini: 'GOOGLE_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   local: 'OPENAI_API_KEY',
+  omni: 'OPENAI_API_KEY', // omni doesn't need an API key, but satisfies the record type
 };
 
 /**
@@ -27,7 +28,7 @@ export function resolveApiKey(provider: LLMProvider, apiKey?: string): string | 
 
 // Schema for individual model configuration
 export const ModelConfigSchema = z.object({
-  provider: z.enum(['openai', 'gemini', 'anthropic', 'local']).optional(),
+  provider: z.enum(['openai', 'gemini', 'anthropic', 'local', 'omni']).optional(),
   engine: z.enum(['llama-cpp', 'mlx-serve', 'ollama', 'lmstudio']).optional(),
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
@@ -43,7 +44,7 @@ export const ModelConfigSchema = z.object({
 
 // Schema for individual embedding configuration
 export const EmbeddingModelConfigSchema = z.object({
-  provider: z.enum(['openai', 'gemini', 'anthropic', 'local']).optional(),
+  provider: z.enum(['openai', 'gemini', 'anthropic', 'local', 'omni']).optional(),
   engine: z.enum(['llama-cpp', 'mlx-serve', 'ollama', 'lmstudio']).optional(),
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
@@ -52,12 +53,38 @@ export const EmbeddingModelConfigSchema = z.object({
   eosToken: z.string().optional(), // EOS token to append to text (e.g., for Nomic models)
 });
 
+// Schema for image model configuration (FLUX.2, SD, etc.)
+export const ImageModelConfigSchema = z.object({
+  modelPath: z.string().optional().describe('Path to diffusion model'),
+  clipL: z.string().optional().describe('Path to CLIP-L text encoder'),
+  t5xxl: z.string().optional().describe('Path to T5-XXL text encoder (FLUX.1)'),
+  llm: z.string().optional().describe('Path to LLM text encoder (FLUX.2 uses Qwen3)'),
+  vae: z.string().optional().describe('Path to VAE model'),
+  steps: z.number().optional().describe('Number of sampling steps'),
+  width: z.number().optional().describe('Default image width'),
+  height: z.number().optional().describe('Default image height'),
+  description: z.string().default(''),
+});
+
+// Schema for TTS model configuration
+export const TtsModelConfigSchema = z.object({
+  modelPath: z.string().describe('Path to TTS model'),
+  engine: z.enum(['kokoro', 'qwen3']).optional().describe('TTS engine type'),
+  voice: z.string().optional().describe('Default voice name'),
+  description: z.string().default(''),
+});
+
+export type ImageModelConfig = z.infer<typeof ImageModelConfigSchema>;
+export type TtsModelConfig = z.infer<typeof TtsModelConfigSchema>;
+
 // Schema for the entire llm.json file
 // `default` (and any key) can be either a full config object or a string pointer to another key
 export const LLMJsonConfigSchema = z.object({
   version: z.string().default('1.0'),
   models: z.record(z.string(), z.union([z.string(), ModelConfigSchema])),
   embeddings: z.record(z.string(), z.union([z.string(), EmbeddingModelConfigSchema])),
+  image: z.record(z.string(), ImageModelConfigSchema).optional(),
+  tts: z.record(z.string(), TtsModelConfigSchema).optional(),
   engineUrls: z.record(z.string(), z.string()).optional(),
 });
 
@@ -260,6 +287,8 @@ function syncToRaw(config: LLMJsonConfig): void {
   // Sync top-level fields
   rawConfig.version = config.version;
   rawConfig.engineUrls = config.engineUrls ? { ...config.engineUrls } : undefined;
+  rawConfig.image = config.image ? structuredClone(config.image) : undefined;
+  rawConfig.tts = config.tts ? structuredClone(config.tts) : undefined;
 }
 
 export async function saveLLMConfig(llmJsonPath: string, config: LLMJsonConfig): Promise<void> {
@@ -267,4 +296,22 @@ export async function saveLLMConfig(llmJsonPath: string, config: LLMJsonConfig):
   await fs.writeFile(llmJsonPath, JSON.stringify(rawConfig, null, 2));
   loadedConfig = config;
   logger.info(`[LLMConfig] Saved config with ${Object.keys(config.models).length} model(s), ${Object.keys(config.embeddings).length} embedding(s)`);
+}
+
+export function getImageConfig(name: string): ImageModelConfig | undefined {
+  return loadedConfig?.image?.[name];
+}
+
+export function getTtsConfig(name: string): TtsModelConfig | undefined {
+  return loadedConfig?.tts?.[name];
+}
+
+export function listImageConfigs(): Array<{ name: string; config: ImageModelConfig }> {
+  if (!loadedConfig?.image) return [];
+  return Object.entries(loadedConfig.image).map(([name, config]) => ({ name, config }));
+}
+
+export function listTtsConfigs(): Array<{ name: string; config: TtsModelConfig }> {
+  if (!loadedConfig?.tts) return [];
+  return Object.entries(loadedConfig.tts).map(([name, config]) => ({ name, config }));
 }

@@ -132,10 +132,15 @@ export const api = {
   browseHuggingFace(query: string, limit = 10, format = 'gguf') {
     return _fetch(`/api/local-llm/browse?q=${encodeURIComponent(query)}&limit=${limit}&format=${format}`).then(r => r.json());
   },
-  downloadLocalModel(repo: string, fileName: string, type = 'gguf') {
+  downloadLocalModel(repo: string, fileName: string, type = 'gguf', subdir?: string, targetDir?: string) {
     const params = new URLSearchParams({ repo });
-    if (type === 'mlx') params.set('type', 'mlx');
-    else params.set('fileName', fileName);
+    if (type === 'dir') {
+      params.set('type', 'dir');
+      if (subdir) params.set('subdir', subdir);
+      if (targetDir) params.set('targetDir', targetDir);
+    } else {
+      params.set('fileName', fileName);
+    }
     return new EventSource(`/api/local-llm/models/download?${params.toString()}`);
   },
   async getActiveDownloads() { return (await _fetch('/api/local-llm/models/downloads')).json(); },

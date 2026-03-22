@@ -1,21 +1,26 @@
 import { OpenAIChatModel } from './providers/openai-chat-model.ts';
 import { AnthropicChatModel } from './providers/anthropic-chat-model.ts';
 import { GeminiChatModel } from './providers/gemini-chat-model.ts';
+import { OmniChatModel } from './providers/omni-chat-model.ts';
 import { P2PChatModel } from '../p2p/p2p-chat-model.ts';
 import type { ChatModel } from '../types/llm-types.ts';
-import { getModelConfig, getLLMConfig, getLLMConfigPath, saveLLMConfig, resolveApiKey, type ModelConfig } from './llm-config.ts';
+import { getModelConfig, resolveApiKey, type ModelConfig } from './llm-config.ts';
 import { resolveAgentLLMRef, type AgentLLMRef } from './types.ts';
 import { detectProvider, type LLMProvider } from './provider-detector.ts';
-import { engineRegistry } from '../local-llm/engine-registry.ts';
 import { logger } from '../logger.ts';
 import type { P2PManager } from '../p2p/p2p-manager.ts';
 
 export class LLMFactory {
   private static instances: Map<string, ChatModel> = new Map();
   private static p2pManager: P2PManager | null = null;
+  private static modelsDir: string | null = null;
 
   static setP2PManager(manager: P2PManager): void {
     this.p2pManager = manager;
+  }
+
+  static setModelsDir(dir: string): void {
+    this.modelsDir = dir;
   }
 
   /**
@@ -42,31 +47,6 @@ export class LLMFactory {
       return cached;
     }
 
-    // Auto-start local engine if needed (skip if user provides their own baseUrl)
-    if (provider === 'local' && !config.baseUrl) {
-      const engineName = config.engine ?? 'llama-cpp';
-      const engine = engineRegistry.getEngine(engineName);
-      if (!engine) throw new Error(`Unknown local engine: ${engineName}`);
-
-      await engine.ensureRunningChat(config.model, {
-        contextSize: config.contextSize,
-        reasoningBudget: config.reasoningBudget,
-      });
-
-      // Persist auto-detected contextSize to llm.json
-      if (!config.contextSize) {
-        const detectedCtx = engine.getChatStatus().contextSize;
-        if (detectedCtx) {
-          config.contextSize = detectedCtx;
-          const fullConfig = getLLMConfig();
-          const configPath = getLLMConfigPath();
-          if (fullConfig && configPath) {
-            await saveLLMConfig(configPath, fullConfig);
-          }
-        }
-      }
-    }
-
     logger.info(`[LLMFactory] Creating LLM: ${name} (provider: ${provider}, model: ${config.model}, temp: ${temperature ?? 'default'})`);
 
     let llm: ChatModel;
@@ -83,6 +63,9 @@ export class LLMFactory {
       case 'local':
         llm = this.createOpenAI(config, temperature, 'local');
         break;
+      case 'omni':
+        llm = this.createOmni(config, temperature);
+        break;
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -93,14 +76,8 @@ export class LLMFactory {
 
   private static createOpenAI(config: ModelConfig, temperature?: number, provider: LLMProvider = 'openai'): ChatModel {
     const apiKey = resolveApiKey(provider, config.apiKey);
-    let baseURL = config.baseUrl;
-    let supportsVision = true;
-    if (provider === 'local' && !baseURL) {
-      const engineName = config.engine ?? 'llama-cpp';
-      const engine = engineRegistry.getEngine(engineName);
-      baseURL = (engine?.getChatBaseUrl() ?? 'http://127.0.0.1:9990') + '/v1';
-      supportsVision = engine?.getChatStatus().supportsVision ?? false;
-    }
+    const baseURL = config.baseUrl;
+    const supportsVision = true;
     return new OpenAIChatModel({
       modelName: config.model,
       apiKey,
@@ -134,6 +111,23 @@ export class LLMFactory {
       baseURL: config.baseUrl,
       maxTokens: config.maxTokens,
       thinkingBudget: config.thinkingBudget,
+      ...(temperature !== undefined ? { temperature } : {}),
+    });
+  }
+
+  private static createOmni(config: ModelConfig, temperature?: number): ChatModel {
+    // Resolve model path: if it's a plain filename, look in .models/
+    let modelPath = config.model;
+    if (!modelPath.includes('/') && !modelPath.includes('\\') && this.modelsDir) {
+      // Append .gguf if not present
+      if (!modelPath.endsWith('.gguf')) modelPath += '.gguf';
+      modelPath = `${this.modelsDir}/${modelPath}`;
+    }
+
+    return new OmniChatModel({
+      modelPath,
+      contextSize: config.contextSize,
+      maxTokens: config.maxTokens,
       ...(temperature !== undefined ? { temperature } : {}),
     });
   }

@@ -1,19 +1,9 @@
 {
   "version": "1.0",
   "models": {
-    "default": "llama-cpp",
-    "mlx-serve": {
-      "provider": "local",
-      "engine": "mlx-serve",
-      "model": "Qwen3.5-4B-MLX-4bit",
-      "reasoningBudget": 128,
-      "contextSize": 86016,
-      "active": false,
-      "p2p": true
-    },
-    "llama-cpp": {
-      "provider": "local",
-      "engine": "llama-cpp",
+    "default": "omni",
+    "omni": {
+      "provider": "omni",
       "model": "Qwen3.5-9B-Q4_K_M",
       "reasoningBudget": 0,
       "contextSize": 32768,
@@ -59,16 +49,10 @@
     }
   },
   "embeddings": {
-    "default": "llama-cpp",
-    "llama-cpp": {
-      "provider": "local",
-      "engine": "llama-cpp",
+    "default": "omni",
+    "omni": {
+      "provider": "omni",
       "model": "nomic-embed-text-v1.5.Q4_K_M"
-    },
-    "mlx-serve": {
-      "provider": "local",
-      "engine": "mlx-serve",
-      "model": "all-MiniLM-L6-v2-4bit"
     },
     "lmstudio": {
       "provider": "local",
@@ -91,6 +75,21 @@
       "provider": "gemini",
       "apiKey": "${GOOGLE_API_KEY}",
       "model": "gemini-embedding-001"
+    }
+  },
+  "image": {
+    "image-gen": {
+      "modelPath": ".models/flux-2-klein-4b-Q4_K_M.gguf",
+      "vae": ".models/ae.safetensors",
+      "steps": 20,
+      "description": "FLUX.2 Klein 4B — fast image generation"
+    }
+  },
+  "tts": {
+    "tts": {
+      "modelPath": ".models/qwen3-tts",
+      "engine": "qwen3",
+      "description": "Qwen3 TTS 0.6B — text-to-speech with voice cloning"
     }
   }
 }
