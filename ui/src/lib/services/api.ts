@@ -137,10 +137,10 @@ export const api = {
     if (type === 'dir') {
       params.set('type', 'dir');
       if (subdir) params.set('subdir', subdir);
-      if (targetDir) params.set('targetDir', targetDir);
     } else {
       params.set('fileName', fileName);
     }
+    if (targetDir) params.set('targetDir', targetDir);
     return new EventSource(`/api/local-llm/models/download?${params.toString()}`);
   },
   async getActiveDownloads() { return (await _fetch('/api/local-llm/models/downloads')).json(); },

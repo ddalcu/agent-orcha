@@ -33,6 +33,7 @@ function createImageTool(name: string, config: ImageModelConfig): StructuredTool
           ...(config.t5xxl ? { t5xxlPath: resolve(config.t5xxl) } : {}),
           ...(config.llm ? { llmPath: resolve(config.llm) } : {}),
           ...(config.vae ? { vaePath: resolve(config.vae) } : {}),
+          ...(config.highNoiseDiffusionModel ? { highNoiseDiffusionModelPath: resolve(config.highNoiseDiffusionModel) } : {}),
         });
 
         const buffer = await imageModel.generate(args.input, {

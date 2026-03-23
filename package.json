@@ -71,7 +71,7 @@
     "mammoth": "^1.11.0",
     "mysql2": "^3.12.0",
     "node-cron": "^4.2.1",
-    "node-omni-orcha": "file:../node-llm-cpp",
+    "node-omni-orcha": "file:/Users/david/code/node-omni-orcha",
     "nodemailer": "^8.0.1",
     "openai": "^6.22.0",
     "pdf-parse": "^1.1.4",

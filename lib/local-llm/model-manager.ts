@@ -185,8 +185,11 @@ export class ModelManager {
     repo: string,
     fileName: string,
     onProgress?: (progress: DownloadProgress) => void,
+    targetDir?: string,
   ): Promise<LocalModel> {
     const downloadKey = `${repo}/${fileName}`;
+    // Use basename for local storage when fileName contains subdirectory paths
+    const localName = path.basename(fileName);
 
     // If already downloading, don't start again
     if (this._activeDownloads.has(downloadKey)) {
@@ -195,9 +198,15 @@ export class ModelManager {
 
     await this.ensureDir();
 
+    // When targetDir is set, download into a group folder
+    const baseDir = targetDir ? path.join(this.modelsDir, targetDir) : this.modelsDir;
+    if (targetDir) {
+      await fs.mkdir(baseDir, { recursive: true });
+    }
+
     const url = `https://huggingface.co/${repo}/resolve/main/${fileName}`;
-    const tempPath = path.join(this.modelsDir, `${fileName}.downloading`);
-    const finalPath = path.join(this.modelsDir, fileName);
+    const tempPath = path.join(baseDir, `${localName}.downloading`);
+    const finalPath = path.join(baseDir, localName);
 
     // Check for a partial download to resume
     let existingBytes = 0;
@@ -208,16 +217,19 @@ export class ModelManager {
 
     const resuming = existingBytes > 0;
     if (resuming) {
-      logger.info(`[ModelManager] Resuming download of ${fileName} from ${existingBytes} bytes`);
+      logger.info(`[ModelManager] Resuming download of ${localName} from ${existingBytes} bytes`);
     } else {
       logger.info(`[ModelManager] Downloading ${url}`);
     }
 
     // Write meta early so interrupted downloads know which repo they belong to
-    await fs.writeFile(this.metaPath(fileName), JSON.stringify({ repo }, null, 2));
+    const metaFile = targetDir
+      ? path.join(baseDir, '.meta.json')
+      : this.metaPath(localName);
+    await fs.writeFile(metaFile, JSON.stringify({ repo }, null, 2));
 
-    const initialProgress: DownloadProgress = { fileName, downloadedBytes: existingBytes, totalBytes: 0, percent: 0 };
-    this._activeDownloads.set(downloadKey, { repo, fileName, progress: initialProgress });
+    const initialProgress: DownloadProgress = { fileName: localName, downloadedBytes: existingBytes, totalBytes: 0, percent: 0 };
+    this._activeDownloads.set(downloadKey, { repo, fileName: localName, progress: initialProgress });
 
     try {
       const headers: Record<string, string> = {};
@@ -231,12 +243,13 @@ export class ModelManager {
       if (response.status === 416) {
         await fs.rename(tempPath, finalPath);
         const meta = { repo, downloadedAt: new Date().toISOString() };
-        await fs.writeFile(this.metaPath(fileName), JSON.stringify(meta, null, 2));
+        await fs.writeFile(metaFile, JSON.stringify(meta, null, 2));
         const stat = await fs.stat(finalPath);
+        const resultName = targetDir ?? localName;
         return {
-          id: this.fileNameToId(fileName),
-          fileName,
-          filePath: finalPath,
+          id: this.fileNameToId(resultName),
+          fileName: resultName,
+          filePath: targetDir ? baseDir : finalPath,
           sizeBytes: stat.size,
           repo,
           downloadedAt: meta.downloadedAt,
@@ -271,7 +284,7 @@ export class ModelManager {
         transform(chunk, controller) {
           downloadedBytes += chunk.byteLength;
           const progress: DownloadProgress = {
-            fileName,
+            fileName: localName,
             downloadedBytes,
             totalBytes,
             percent: totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0,
@@ -292,13 +305,14 @@ export class ModelManager {
       await fs.rename(tempPath, finalPath);
 
       const meta = { repo, downloadedAt: new Date().toISOString() };
-      await fs.writeFile(this.metaPath(fileName), JSON.stringify(meta, null, 2));
+      await fs.writeFile(metaFile, JSON.stringify(meta, null, 2));
 
       const stat = await fs.stat(finalPath);
+      const resultName = targetDir ?? localName;
       return {
-        id: this.fileNameToId(fileName),
-        fileName,
-        filePath: finalPath,
+        id: this.fileNameToId(resultName),
+        fileName: resultName,
+        filePath: targetDir ? baseDir : finalPath,
         sizeBytes: stat.size,
         repo,
         downloadedAt: meta.downloadedAt,
