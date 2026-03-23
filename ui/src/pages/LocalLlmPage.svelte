@@ -59,24 +59,9 @@
   };
 
   const RECOMMENDED_MODELS_GGUF = [
-    // ── Chat ──
     { repo: 'unsloth/Qwen3.5-9B-GGUF', file: 'Qwen3.5-9B-Q4_K_M.gguf', label: 'Qwen3.5-9B-Q4_K_M', desc: 'Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.', size: '~5.3 GB', icon: 'fa-comments', color: 'amber', type: 'gguf', category: 'llm' },
-    // ── Embedding ──
     { repo: 'nomic-ai/nomic-embed-text-v1.5-GGUF', file: 'nomic-embed-text-v1.5.Q4_K_M.gguf', label: 'nomic-embed-text-v1.5-Q4_K_M', desc: 'Embedding model for knowledge stores. Required for local RAG pipelines.', size: '~80 MB', icon: 'fa-vector-square', color: 'blue', type: 'gguf', category: 'embed' },
-    // ── Image: FLUX.2 Klein (→ flux2-klein/) ──
-    { repo: 'unsloth/FLUX.2-klein-4B-GGUF', file: 'flux-2-klein-4b-Q4_K_M.gguf', label: 'FLUX.2 Klein 4B Q4_K_M', desc: 'Fast image generation model. Downloads into flux2-klein/ folder with its companions.', size: '~2.5 GB', icon: 'fa-image', color: 'purple', type: 'gguf', category: 'image', targetDir: 'flux2-klein' },
-    { repo: 'unsloth/Qwen3-4B-GGUF', file: 'Qwen3-4B-Q4_K_M.gguf', label: 'Qwen3 4B Q4_K_M (FLUX.2 encoder)', desc: 'LLM text encoder required by FLUX.2 Klein.', size: '~2.4 GB', icon: 'fa-font', color: 'purple', type: 'gguf', category: 'image', targetDir: 'flux2-klein' },
-    { repo: 'Comfy-Org/flux2-klein-4B', file: 'split_files/vae/flux2-vae.safetensors', label: 'FLUX.2 VAE', desc: 'Autoencoder required by FLUX.2 Klein.', size: '~321 MB', icon: 'fa-puzzle-piece', color: 'purple', type: 'gguf', category: 'image', targetDir: 'flux2-klein' },
-    // ── Video: WAN2.2 Turbo A14B (→ wan22-turbo/) ──
-    { repo: 'QuantStack/Wan2.2-T2V-A14B-GGUF', file: 'LowNoise/Wan2.2-T2V-A14B-LowNoise-Q4_K_M.gguf', label: 'WAN2.2 Turbo LowNoise Q4_K_M', desc: 'Video generation (WAN2.2 Turbo). Downloads into wan22-turbo/ folder.', size: '~9.7 GB', icon: 'fa-video', color: 'red', type: 'gguf', category: 'image', targetDir: 'wan22-turbo' },
-    { repo: 'QuantStack/Wan2.2-T2V-A14B-GGUF', file: 'HighNoise/Wan2.2-T2V-A14B-HighNoise-Q4_K_M.gguf', label: 'WAN2.2 Turbo HighNoise Q4_K_M', desc: 'High-noise companion for WAN2.2 Turbo.', size: '~9.7 GB', icon: 'fa-video', color: 'red', type: 'gguf', category: 'image', targetDir: 'wan22-turbo' },
-    { repo: 'city96/umt5-xxl-encoder-gguf', file: 'umt5-xxl-encoder-Q8_0.gguf', label: 'UMT5-XXL Q8_0 (WAN encoder)', desc: 'Text encoder required by WAN2.2 models.', size: '~5.6 GB', icon: 'fa-font', color: 'red', type: 'gguf', category: 'image', targetDir: 'wan22-turbo' },
-    { repo: 'QuantStack/Wan2.2-T2V-A14B-GGUF', file: 'VAE/Wan2.1_VAE.safetensors', label: 'WAN 2.1 VAE', desc: 'VAE required by WAN2.2 Turbo A14B.', size: '~242 MB', icon: 'fa-puzzle-piece', color: 'red', type: 'gguf', category: 'image', targetDir: 'wan22-turbo' },
-    // ── Video: WAN2.2 TI2V 5B (→ wan22-5b/) ──
-    { repo: 'QuantStack/Wan2.2-TI2V-5B-GGUF', file: 'Wan2.2-TI2V-5B-Q4_K_M.gguf', label: 'WAN2.2 TI2V 5B Q4_K_M', desc: 'Smaller video generation model. Text-to-video and image-to-video. Downloads into wan22-5b/ folder.', size: '~3.2 GB', icon: 'fa-video', color: 'orange', type: 'gguf', category: 'image', targetDir: 'wan22-5b' },
-    { repo: 'city96/umt5-xxl-encoder-gguf', file: 'umt5-xxl-encoder-Q8_0.gguf', label: 'UMT5-XXL Q8_0 (WAN encoder)', desc: 'Text encoder required by WAN2.2 models.', size: '~5.6 GB', icon: 'fa-font', color: 'orange', type: 'gguf', category: 'image', targetDir: 'wan22-5b' },
-    { repo: 'QuantStack/Wan2.2-TI2V-5B-GGUF', file: 'VAE/Wan2.2_VAE.safetensors', label: 'WAN 2.2 VAE', desc: 'VAE required by WAN2.2 TI2V 5B (different from WAN2.1 VAE).', size: '~1.3 GB', icon: 'fa-puzzle-piece', color: 'orange', type: 'gguf', category: 'image', targetDir: 'wan22-5b' },
-    // ── TTS ──
+    { repo: 'unsloth/FLUX.2-klein-4B-GGUF', file: 'flux-2-klein-4b-Q4_K_M.gguf', label: 'FLUX.2 Klein 4B Q4_K_M', desc: 'Fast image generation model (FLUX.2 Klein). Requires VAE and text encoder models (see docs).', size: '~2.5 GB', icon: 'fa-image', color: 'purple', type: 'gguf', category: 'image' },
     { repo: 'Volko76/Qwen3-TTS-12Hz-0.6B-Base-Qwen3tts.cpp_quants-GGUF', file: 'qwen3-tts', label: 'Qwen3 TTS 0.6B', desc: 'Text-to-speech with voice cloning. Upload a 5-10s audio sample to clone any voice.', size: '~2.0 GB', icon: 'fa-microphone', color: 'green', type: 'dir', category: 'tts' },
   ];
   const ENGINE_LABELS: Record<string, string> = {
@@ -384,21 +369,6 @@
     getRecommendedModels(selectedEngine || 'omni')
       .filter(r => !isModelDownloaded(models, r.repo, r.file))
   );
-
-  /** Group pending recommended models by targetDir for "Download All" buttons */
-  let recommendedGroups = $derived(() => {
-    const groups = new Map<string, typeof pendingRecommended>();
-    for (const r of pendingRecommended) {
-      if (!r.targetDir) continue;
-      const list = groups.get(r.targetDir) ?? [];
-      list.push(r);
-      groups.set(r.targetDir, list);
-    }
-    return groups;
-  });
-
-  let standaloneRecommended = $derived(pendingRecommended.filter(r => !r.targetDir));
-  let groupDownloading = $state(new Set<string>());
 
   // Cloud config
   let defaultProvider = $derived(resolveDefault('models')?.provider || resolveDefault('models')?._provider || 'local');
@@ -739,40 +709,6 @@
     };
     es.onerror = () => { cleanupDownload(downloadId); };
     startDownloadPolling();
-  }
-
-  /** Download all files in a group sequentially */
-  async function downloadGroup(group: string) {
-    if (groupDownloading.has(group)) return;
-    groupDownloading.add(group);
-    groupDownloading = new Set(groupDownloading);
-    const items = pendingRecommended.filter(r => r.targetDir === group);
-    for (const r of items) {
-      await new Promise<void>((resolve) => {
-        const downloadId = r.type === 'dir' ? `dir:${r.repo}${r.subdir ? '/' + r.subdir : ''}` : `${r.repo}/${r.file}`;
-        if (activeDownloads.has(downloadId)) { resolve(); return; }
-
-        const es = api.downloadLocalModel(r.repo, r.file, r.type, r.subdir, r.targetDir);
-        activeDownloads.set(downloadId, es);
-        activeDownloads = new Map(activeDownloads);
-        startDownloadPolling();
-
-        es.onmessage = (event: MessageEvent) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'complete' || data.type === 'error') {
-              if (data.type === 'error') console.error('Download error:', data.error);
-              cleanupDownload(downloadId);
-              loadModels();
-              resolve();
-            }
-          } catch { /* ignore parse errors */ }
-        };
-        es.onerror = () => { cleanupDownload(downloadId); resolve(); };
-      });
-    }
-    groupDownloading.delete(group);
-    groupDownloading = new Set(groupDownloading);
   }
 
   function cleanupDownload(downloadId: string) {
@@ -1879,81 +1815,31 @@
     {#if isManagedEngine && pendingRecommended.length > 0}
       <div class="mb-6">
         <h3 class="section-title mb-3">Recommended Models</h3>
-
-        <!-- Standalone models (no targetDir) -->
-        {#if standaloneRecommended.length > 0}
-          <div class="llm-rec-grid mb-4">
-            {#each standaloneRecommended as r}
-              {@const downloadId = r.type === 'dir' ? `dir:${r.repo}${r.subdir ? '/' + r.subdir : ''}` : `${r.repo}/${r.file}`}
-              {@const isDownloading = activeDownloads.has(downloadId)}
-              <div class="llm-rec-card llm-rec-card-{r.color}">
-                <div class="flex items-center gap-2 mb-2">
-                  <i class="fas {r.icon} text-{r.color} text-sm"></i>
-                  <span class="font-medium text-primary text-sm">{r.label}</span>
-                  <span class="badge badge-amber text-2xs">{r.category?.toUpperCase() || 'GGUF'}</span>
-                </div>
-                <p class="text-xs text-muted mb-3">{r.desc}</p>
-                <div class="flex items-center justify-between">
-                  <span class="text-xs text-muted">{r.size}</span>
-                  <button class="btn btn-{r.color} btn-sm" disabled={isDownloading}
-                    onclick={() => downloadModel(r.repo, r.file, r.type, r.subdir, r.type === 'dir' ? r.file : undefined)}>
-                    {#if isDownloading}
-                      <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
-                    {:else}
-                      <i class="fas fa-download mr-1"></i>Download
-                    {/if}
-                  </button>
-                </div>
+        <div class="llm-rec-grid">
+          {#each pendingRecommended as r}
+            {@const downloadId = r.type === 'dir' ? `dir:${r.repo}${r.subdir ? '/' + r.subdir : ''}` : `${r.repo}/${r.file}`}
+            {@const isDownloading = activeDownloads.has(downloadId)}
+            <div class="llm-rec-card llm-rec-card-{r.color}">
+              <div class="flex items-center gap-2 mb-2">
+                <i class="fas {r.icon} text-{r.color} text-sm"></i>
+                <span class="font-medium text-primary text-sm">{r.label}</span>
+                <span class="badge badge-amber text-2xs">{r.category?.toUpperCase() || 'GGUF'}</span>
               </div>
-            {/each}
-          </div>
-        {/if}
-
-        <!-- Grouped models (with targetDir) -->
-        {#each [...recommendedGroups().entries()] as [group, items]}
-          {@const isGroupDownloading = groupDownloading.has(group)}
-          <div class="llm-rec-group mb-4">
-            <div class="flex items-center justify-between mb-2">
-              <div class="flex items-center gap-2">
-                <i class="fas fa-folder text-{items[0].color} text-sm"></i>
-                <span class="font-medium text-primary text-sm">{group}/</span>
-                <span class="text-xs text-muted">{items.length} files</span>
+              <p class="text-xs text-muted mb-3">{r.desc}</p>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-muted">{r.size}</span>
+                <button class="btn btn-{r.color} btn-sm" disabled={isDownloading}
+                  onclick={() => downloadModel(r.repo, r.file, r.type, r.subdir, r.type === 'dir' ? r.file : undefined)}>
+                  {#if isDownloading}
+                    <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
+                  {:else}
+                    <i class="fas fa-download mr-1"></i>Download
+                  {/if}
+                </button>
               </div>
-              <button class="btn btn-{items[0].color} btn-sm" disabled={isGroupDownloading}
-                onclick={() => downloadGroup(group)}>
-                {#if isGroupDownloading}
-                  <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
-                {:else}
-                  <i class="fas fa-download mr-1"></i>Download All
-                {/if}
-              </button>
             </div>
-            <div class="llm-rec-grid">
-              {#each items as r}
-                {@const downloadId = `${r.repo}/${r.file}`}
-                {@const isDownloading = activeDownloads.has(downloadId)}
-                <div class="llm-rec-card llm-rec-card-{r.color}">
-                  <div class="flex items-center gap-2 mb-2">
-                    <i class="fas {r.icon} text-{r.color} text-sm"></i>
-                    <span class="font-medium text-primary text-sm">{r.label}</span>
-                  </div>
-                  <p class="text-xs text-muted mb-3">{r.desc}</p>
-                  <div class="flex items-center justify-between">
-                    <span class="text-xs text-muted">{r.size}</span>
-                    <button class="btn btn-{r.color} btn-sm" disabled={isDownloading || isGroupDownloading}
-                      onclick={() => downloadModel(r.repo, r.file, r.type, r.subdir, r.targetDir)}>
-                      {#if isDownloading}
-                        <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
-                      {:else}
-                        <i class="fas fa-download mr-1"></i>Download
-                      {/if}
-                    </button>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          </div>
-        {/each}
+          {/each}
+        </div>
       </div>
     {/if}
 

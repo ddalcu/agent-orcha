@@ -521,7 +521,6 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
                 reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
               }
             },
-            targetDir,
           );
 
           // Auto-download mmproj for vision models

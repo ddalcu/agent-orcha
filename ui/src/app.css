@@ -1752,19 +1752,8 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
   border-radius: var(--radius-lg);
   padding: var(--sp-4);
 }
-.llm-rec-card-amber  { border: 1px solid rgba(251, 191, 36, 0.3); }
-.llm-rec-card-blue   { border: 1px solid rgba(96, 165, 250, 0.3); }
-.llm-rec-card-purple { border: 1px solid rgba(168, 85, 247, 0.3); }
-.llm-rec-card-red    { border: 1px solid rgba(248, 113, 113, 0.3); }
-.llm-rec-card-orange { border: 1px solid rgba(251, 146, 60, 0.3); }
-.llm-rec-card-green  { border: 1px solid rgba(74, 222, 128, 0.3); }
-
-/* Recommended model group */
-.llm-rec-group {
-  background: var(--bg);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-3);
-}
+.llm-rec-card-amber { border: 1px solid rgba(251, 191, 36, 0.3); }
+.llm-rec-card-blue  { border: 1px solid rgba(96, 165, 250, 0.3); }
 
 /* Download bar */
 .llm-download-bar {

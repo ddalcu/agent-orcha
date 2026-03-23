@@ -60,7 +60,6 @@ export const ImageModelConfigSchema = z.object({
   t5xxl: z.string().optional().describe('Path to T5-XXL text encoder (FLUX.1)'),
   llm: z.string().optional().describe('Path to LLM text encoder (FLUX.2 uses Qwen3)'),
   vae: z.string().optional().describe('Path to VAE model'),
-  highNoiseDiffusionModel: z.string().optional().describe('Path to high-noise diffusion model (WAN2.2 turbo)'),
   steps: z.number().optional().describe('Number of sampling steps'),
   width: z.number().optional().describe('Default image width'),
   height: z.number().optional().describe('Default image height'),
