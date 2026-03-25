@@ -17,16 +17,29 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: linux-x64
+            omni_variant: cpu
+          - os: ubuntu-latest
+            target: linux-x64-cuda
+            omni_variant: cuda
           - os: macos-latest
             target: macos-arm64
+            omni_variant: ''
           - os: windows-latest
             target: win-x64
+            omni_variant: cpu
+          - os: windows-latest
+            target: win-x64-cuda
+            omni_variant: cuda
 
     runs-on: ${{ matrix.os }}
+
+    env:
+      OMNI_VARIANT: ${{ matrix.omni_variant }}
 
     steps:
       - uses: actions/checkout@v4

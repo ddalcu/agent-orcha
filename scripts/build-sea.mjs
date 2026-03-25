@@ -227,11 +227,17 @@ for (const addon of ['sodium-native', 'udx-native']) {
 }
 
 // node-omni-orcha native addon (local LLM/TTS/STT/Image inference)
+// OMNI_VARIANT env var controls which binary to embed: 'cuda', 'cpu', or unset (auto-detect).
 {
-  const omniCandidates = [
-    `@agent-orcha/node-omni-orcha-${platform}-${arch}-cuda`,
-    `@agent-orcha/node-omni-orcha-${platform}-${arch}`,
-  ];
+  const variant = process.env.OMNI_VARIANT?.toLowerCase();
+  const omniCandidates = variant === 'cuda'
+    ? [`@agent-orcha/node-omni-orcha-${platform}-${arch}-cuda`]
+    : variant === 'cpu'
+      ? [`@agent-orcha/node-omni-orcha-${platform}-${arch}`]
+      : [
+          `@agent-orcha/node-omni-orcha-${platform}-${arch}-cuda`,
+          `@agent-orcha/node-omni-orcha-${platform}-${arch}`,
+        ];
 
   let omniFound = false;
   for (const pkg of omniCandidates) {
