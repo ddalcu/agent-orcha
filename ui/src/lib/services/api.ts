@@ -143,6 +143,10 @@ export const api = {
     }
     return new EventSource(`/api/local-llm/models/download?${params.toString()}`);
   },
+  downloadBundle(targetDir: string, files: Array<{ repo: string; file: string; targetName?: string }>) {
+    const params = new URLSearchParams({ type: 'bundle', targetDir, files: JSON.stringify(files) });
+    return new EventSource(`/api/local-llm/models/download?${params.toString()}`);
+  },
   async getActiveDownloads() { return (await _fetch('/api/local-llm/models/downloads')).json(); },
   async getInterruptedDownloads() { return (await _fetch('/api/local-llm/models/interrupted')).json(); },
   async deleteInterruptedDownload(fileName: string) {
@@ -156,6 +160,21 @@ export const api = {
   },
   async stopLocalEmbedding(engine?: string) {
     return (await _fetch('/api/local-llm/stop-embedding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(engine ? { engine } : {}) })).json();
+  },
+  async stopLocalImage() {
+    return (await _fetch('/api/local-llm/stop-image', { method: 'POST' })).json();
+  },
+  async stopLocalTts() {
+    return (await _fetch('/api/local-llm/stop-tts', { method: 'POST' })).json();
+  },
+  async startLocalEmbedding() {
+    return (await _fetch('/api/local-llm/start-embedding', { method: 'POST' })).json();
+  },
+  async startLocalImage() {
+    return (await _fetch('/api/local-llm/start-image', { method: 'POST' })).json();
+  },
+  async startLocalTts() {
+    return (await _fetch('/api/local-llm/start-tts', { method: 'POST' })).json();
   },
   async getEngines() { return (await _fetch('/api/local-llm/engines')).json(); },
   async activateEngine(engine: string, model: string, role = 'chat') {

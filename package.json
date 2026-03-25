@@ -71,7 +71,7 @@
     "mammoth": "^1.11.0",
     "mysql2": "^3.12.0",
     "node-cron": "^4.2.1",
-    "node-omni-orcha": "file:../node-llm-cpp",
+    "@agent-orcha/node-omni-orcha": "^2026.325.1650",
     "nodemailer": "^8.0.1",
     "openai": "^6.22.0",
     "pdf-parse": "^1.1.4",
@@ -84,6 +84,14 @@
     "yaml": "^2.6.1",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.25.1"
+  },
+  "optionalDependencies": {
+    "@agent-orcha/node-omni-orcha-darwin-arm64": "^2026.325.1650",
+    "@agent-orcha/node-omni-orcha-linux-x64": "^2026.325.1650",
+    "@agent-orcha/node-omni-orcha-linux-x64-cuda": "^2026.325.1650",
+    "@agent-orcha/node-omni-orcha-linux-arm64": "^2026.325.1650",
+    "@agent-orcha/node-omni-orcha-win32-x64": "^2026.325.1650",
+    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.325.1650"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

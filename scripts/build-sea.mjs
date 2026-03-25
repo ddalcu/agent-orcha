@@ -72,6 +72,49 @@ const inlineStaticReadsPlugin = {
         resolveDir: path.resolve('.'),
       };
     });
+
+    // node-omni-orcha binding loader — replace with SEA-aware dlopen shim.
+    // The original uses createRequire(import.meta.url) which breaks in CJS SEA bundles.
+    build.onLoad({ filter: /node-omni-orcha[\\/](?:src|dist)[\\/]binding-loader\.[tj]s$/ }, async (args) => {
+      return {
+        contents: `
+          import { getNativeAddonPath, isSea } from './lib/sea/bootstrap.ts';
+          import { availableParallelism } from 'os';
+
+          // Preserve UV_THREADPOOL_SIZE side effect from original binding-loader
+          if (!process.env['UV_THREADPOOL_SIZE']) {
+            process.env['UV_THREADPOOL_SIZE'] = String(Math.max(availableParallelism(), 8));
+          }
+
+          let cachedBinding = null;
+
+          export function loadBinding() {
+            if (cachedBinding) return cachedBinding;
+
+            if (isSea()) {
+              const mod = { exports: {} };
+              process.dlopen(mod, getNativeAddonPath('omni'));
+              cachedBinding = mod.exports;
+              return cachedBinding;
+            }
+
+            // Non-SEA fallback (dev mode)
+            const { createRequire } = require('module');
+            const req = createRequire(__filename);
+            const p = process.platform, a = process.arch;
+            for (const c of [p + '-' + a + '-cuda', p + '-' + a]) {
+              try {
+                cachedBinding = req('@agent-orcha/node-omni-orcha-' + c + '/omni.node');
+                return cachedBinding;
+              } catch {}
+            }
+            throw new Error('omni.node native binding not found');
+          }
+        `,
+        loader: 'js',
+        resolveDir: path.resolve('.'),
+      };
+    });
   },
 };
 
@@ -180,6 +223,33 @@ for (const addon of ['sodium-native', 'udx-native']) {
     assets[`native/${addon}.node`] = prebuilt;
   } else {
     console.warn(`${addon} prebuilt not found: ${prebuilt} — P2P may not work in SEA binary`);
+  }
+}
+
+// node-omni-orcha native addon (local LLM/TTS/STT/Image inference)
+{
+  const omniCandidates = [
+    `@agent-orcha/node-omni-orcha-${platform}-${arch}-cuda`,
+    `@agent-orcha/node-omni-orcha-${platform}-${arch}`,
+  ];
+
+  let omniFound = false;
+  for (const pkg of omniCandidates) {
+    const nodePath = path.join('node_modules', pkg, 'omni.node');
+    if (fs.existsSync(nodePath)) {
+      assets['native/omni.node'] = nodePath;
+      console.log(`Embedding omni.node from: ${pkg}`);
+      // Also embed .metallib if present (macOS pre-compiled Metal shaders)
+      const metallibPath = path.join('node_modules', pkg, 'default.metallib');
+      if (fs.existsSync(metallibPath)) {
+        assets['native/default.metallib'] = metallibPath;
+      }
+      omniFound = true;
+      break;
+    }
+  }
+  if (!omniFound) {
+    console.warn('omni.node not found — local LLM/TTS/STT/Image will not work in SEA binary');
   }
 }
 

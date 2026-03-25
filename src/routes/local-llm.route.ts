@@ -1,12 +1,17 @@
 import * as os from 'os';
+import * as path from 'path';
 import type { FastifyPluginAsync } from 'fastify';
 import { ModelManager } from '../../lib/local-llm/index.ts';
+import { generateDirName } from '../../lib/local-llm/model-manager.ts';
+import { resolveModelFile } from '../../lib/local-llm/resolve-model-path.ts';
 import { OmniModelCache } from '../../lib/llm/providers/omni-model-cache.ts';
 import {
   getLLMConfig,
   saveLLMConfig,
   LLMFactory,
   resolveDefaultName,
+  listImageConfigs,
+  listTtsConfigs,
 } from '../../lib/llm/index.ts';
 import { detectProvider } from '../../lib/llm/provider-detector.ts';
 import { logger } from '../../lib/logger.ts';
@@ -282,14 +287,14 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         const resolvedKey = resolveDefaultName('models');
         const currentDefault = typeof config.models[resolvedKey] === 'object' ? config.models[resolvedKey] as Record<string, any> : null;
         const existingExt = typeof config.models[engine] === 'object' ? config.models[engine] as Record<string, any> : null;
+        // Preserve all existing config fields (maxTokens, temperature, contextSize, etc.)
         config.models[engine] = {
+          ...(existingExt || {}),
           provider: 'local' as const,
           engine: engine as 'ollama' | 'lmstudio',
           baseUrl,
           model,
           ...(currentDefault?.reasoningBudget != null ? { reasoningBudget: currentDefault.reasoningBudget } : {}),
-          ...(existingExt?.active != null ? { active: existingExt.active } : {}),
-          ...(existingExt?.p2p != null ? { p2p: existingExt.p2p } : {}),
         };
         config.models['default'] = engine;
       }
@@ -477,15 +482,15 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // GET /models/download?repo=...&fileName=...&type=gguf|dir&subdir=...&targetDir=...  (SSE stream)
-  fastify.get<{ Querystring: { repo: string; fileName?: string; type?: string; subdir?: string; targetDir?: string } }>(
+  // GET /models/download?repo=...&fileName=...&type=gguf|dir|bundle&subdir=...&targetDir=...&files=...  (SSE stream)
+  fastify.get<{ Querystring: { repo: string; fileName?: string; type?: string; subdir?: string; targetDir?: string; files?: string } }>(
     '/models/download',
     async (request, reply) => {
-      const { repo, fileName, type, subdir, targetDir } = request.query;
-      if (!repo) {
+      const { repo, fileName, type, subdir, targetDir, files: filesJson } = request.query;
+      if (!repo && type !== 'bundle') {
         return reply.status(400).send({ error: 'repo is required' });
       }
-      if (type !== 'dir' && !fileName) {
+      if (type !== 'dir' && type !== 'bundle' && !fileName) {
         return reply.status(400).send({ error: 'fileName is required for single-file downloads' });
       }
 
@@ -499,7 +504,24 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         let model;
 
-        if (type === 'dir') {
+        if (type === 'bundle') {
+          // Multi-repo bundle download (e.g. FLUX.2 Klein)
+          if (!targetDir || !filesJson) {
+            reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: 'targetDir and files required for bundle' })}\n\n`);
+            reply.raw.end();
+            return;
+          }
+          const bundleFiles = JSON.parse(filesJson) as Array<{ repo: string; file: string; targetName?: string }>;
+          model = await manager.downloadBundle(
+            targetDir,
+            bundleFiles,
+            (progress) => {
+              if (!clientDisconnected) {
+                reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
+              }
+            },
+          );
+        } else if (type === 'dir') {
           // Directory download (multi-file models like TTS)
           model = await manager.downloadDirectory(
             repo,
@@ -523,8 +545,9 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
             },
           );
 
-          // Auto-download mmproj for vision models
+          // Auto-download mmproj for vision models (into the same directory)
           if (!clientDisconnected && !fileName!.toLowerCase().includes('mmproj')) {
+            const modelDirName = generateDirName(fileName!);
             const mmproj = await manager.autoDownloadMmproj(
               repo,
               (progress) => {
@@ -532,6 +555,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
                   reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
                 }
               },
+              modelDirName,
             );
             if (mmproj && !clientDisconnected) {
               reply.raw.write(`data: ${JSON.stringify({ type: 'mmproj', model: mmproj })}\n\n`);
@@ -580,13 +604,14 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       const modelName = model.fileName.replace(/\.gguf$/i, '');
       const existingEntry = fullConfig?.models['omni'];
       const existingObj = (existingEntry && typeof existingEntry !== 'string') ? existingEntry : null;
+      // Preserve all existing config fields (maxTokens, temperature, thinkingBudget, etc.)
+      // and only override the fields that activation changes (provider, model, contextSize)
       const omniEntry = {
+        ...(existingObj || {}),
         provider: 'omni' as const,
         model: modelName,
         ...(currentObj?.contextSize ? { contextSize: currentObj.contextSize } : {}),
-        reasoningBudget: currentObj?.reasoningBudget ?? 0,
-        ...(existingObj?.active != null ? { active: existingObj.active } : {}),
-        ...(existingObj?.p2p != null ? { p2p: existingObj.p2p } : {}),
+        reasoningBudget: currentObj?.reasoningBudget ?? existingObj?.reasoningBudget ?? 0,
       };
 
       // Update llm.json — write to omni key and set default pointer
@@ -690,6 +715,62 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/stop-embedding', async () => {
     await OmniModelCache.unloadLlmEmbed();
     return { ok: true };
+  });
+
+  // POST /stop-image — unload omni image model
+  fastify.post('/stop-image', async () => {
+    await OmniModelCache.unloadImage();
+    return { ok: true };
+  });
+
+  // POST /stop-tts — unload omni TTS model
+  fastify.post('/stop-tts', async () => {
+    await OmniModelCache.unloadTts();
+    return { ok: true };
+  });
+
+  // POST /start-embedding — pre-load the configured omni embedding model
+  fastify.post('/start-embedding', async (_req, reply) => {
+    const config = getLLMConfig();
+    let embName = config?.embeddings?.['default'];
+    if (typeof embName === 'string') embName = config?.embeddings?.[embName];
+    const embConfig = typeof embName === 'object' ? embName : null;
+    if (!embConfig?.model) return reply.status(400).send({ error: 'No omni embedding model configured' });
+    const provider = detectProvider(embConfig as any);
+    if (provider !== 'omni') return reply.status(400).send({ error: `Embedding provider is "${provider}", not omni` });
+
+    const modelsDir = path.join(workspaceRoot, '.models');
+    const modelPath = await resolveModelFile(modelsDir, embConfig.model);
+    await OmniModelCache.getLlmEmbed(modelPath);
+    return { ok: true, status: OmniModelCache.getStatus() };
+  });
+
+  // POST /start-image — pre-load the first configured image model
+  fastify.post('/start-image', async (_req, reply) => {
+    const configs = listImageConfigs();
+    const first = configs[0];
+    if (!first) return reply.status(400).send({ error: 'No image model configured in llm.json' });
+    if (!first.config.modelPath) return reply.status(400).send({ error: 'Image config has no modelPath' });
+
+    const resolve = (p?: string) => p ? (path.isAbsolute(p) ? p : path.join(workspaceRoot, p)) : undefined;
+    const modelPath = resolve(first.config.modelPath)!;
+    await OmniModelCache.getImageModel(modelPath, {
+      ...(first.config.clipL ? { clipLPath: resolve(first.config.clipL) } : {}),
+      ...(first.config.t5xxl ? { t5xxlPath: resolve(first.config.t5xxl) } : {}),
+      ...(first.config.llm ? { llmPath: resolve(first.config.llm) } : {}),
+      ...(first.config.vae ? { vaePath: resolve(first.config.vae) } : {}),
+    });
+    return { ok: true, status: OmniModelCache.getStatus() };
+  });
+
+  // POST /start-tts — pre-load the first configured TTS model
+  fastify.post('/start-tts', async (_req, reply) => {
+    const configs = listTtsConfigs();
+    const first = configs[0];
+    if (!first) return reply.status(400).send({ error: 'No TTS model configured in llm.json' });
+    const modelPath = path.isAbsolute(first.config.modelPath) ? first.config.modelPath : path.join(workspaceRoot, first.config.modelPath);
+    await OmniModelCache.getTtsModel(modelPath);
+    return { ok: true, status: OmniModelCache.getStatus() };
   });
 
 };

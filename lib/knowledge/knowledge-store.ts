@@ -13,6 +13,7 @@ import { GeminiEmbeddingsProvider } from '../llm/providers/gemini-embeddings.ts'
 import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.ts';
 import { detectProvider } from '../llm/provider-detector.ts';
 import { OmniEmbeddingsProvider } from '../llm/providers/omni-embeddings.ts';
+import { resolveModelFile } from '../local-llm/resolve-model-path.ts';
 import { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
 import cron from 'node-cron';
 import { substituteEnvVars } from '../utils/env-substitution.ts';
@@ -238,7 +239,7 @@ export class KnowledgeStore {
 
     try {
       // 1. Create embeddings and test to get dimensions
-      const embeddings = await KnowledgeStore.createEmbeddings(config.embedding);
+      const embeddings = await KnowledgeStore.createEmbeddings(config.embedding, this.workspaceRoot);
       const testEmbedding = await embeddings.embedQuery('dimension test');
       const dimensions = testEmbedding.length;
       logger.info(`Embedding dimensions: ${dimensions}`);
@@ -569,7 +570,7 @@ export class KnowledgeStore {
 
   // --- Static Helpers (reused from old KnowledgeStoreFactory) ---
 
-  static async createEmbeddings(configName: string): Promise<Embeddings> {
+  static async createEmbeddings(configName: string, workspaceRoot?: string): Promise<Embeddings> {
     const embeddingConfig = getEmbeddingConfig(configName);
     const eosToken = embeddingConfig.eosToken;
 
@@ -580,11 +581,10 @@ export class KnowledgeStore {
 
     switch (provider) {
       case 'omni': {
-        // Resolve model path — plain name = .models/<name>.gguf
+        // Resolve model path — scan subdirectories in .models/
         let modelPath = embeddingConfig.model;
-        if (!modelPath.includes('/') && !modelPath.includes('\\')) {
-          if (!modelPath.endsWith('.gguf')) modelPath += '.gguf';
-          // Path is resolved relative to workspace by the caller context
+        if (!modelPath.includes('/') && !modelPath.includes('\\') && workspaceRoot) {
+          modelPath = await resolveModelFile(path.join(workspaceRoot, '.models'), modelPath);
         }
         baseEmbeddings = new OmniEmbeddingsProvider({ modelPath });
         break;

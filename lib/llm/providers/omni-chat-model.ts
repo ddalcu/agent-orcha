@@ -1,5 +1,5 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { LlmModel, ChatMessage, CompletionOptions, ToolDefinition } from 'node-omni-orcha';
+import type { LlmModel, ChatMessage, CompletionOptions, ToolDefinition } from '@agent-orcha/node-omni-orcha';
 import type { ChatModel, ChatModelResponse, BaseMessage, StructuredTool, ToolCall } from '../../types/llm-types.ts';
 import { OmniModelCache } from './omni-model-cache.ts';
 import { logger } from '../../logger.ts';
@@ -11,6 +11,8 @@ export interface OmniChatModelOptions {
   flashAttn?: boolean;
   temperature?: number;
   maxTokens?: number;
+  /** Control reasoning/thinking. -1 = unlimited, 0 = disabled, N>0 = token budget. */
+  thinkingBudget?: number;
 }
 
 function convertMessages(messages: BaseMessage[]): ChatMessage[] {
@@ -84,6 +86,7 @@ export class OmniChatModel implements ChatModel {
     const opts: CompletionOptions = {};
     if (this.options.temperature !== undefined) opts.temperature = this.options.temperature;
     if (this.options.maxTokens !== undefined) opts.maxTokens = this.options.maxTokens;
+    if (this.options.thinkingBudget !== undefined) opts.thinkingBudget = this.options.thinkingBudget;
     if (signal) opts.signal = signal;
     if (this.boundTools.length > 0) {
       opts.tools = convertToolDefs(this.boundTools);
@@ -117,6 +120,7 @@ export class OmniChatModel implements ChatModel {
     for await (const chunk of model.stream(converted, opts)) {
       yield {
         content: chunk.content ?? '',
+        ...(chunk.reasoning ? { reasoning: chunk.reasoning } : {}),
         ...(chunk.toolCalls?.length ? { tool_calls: convertToolCalls(chunk.toolCalls) } : {}),
         ...(chunk.usage ? {
           usage_metadata: {

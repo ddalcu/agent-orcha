@@ -400,7 +400,7 @@ describe('ModelManager', () => {
       assert.equal(result[0].downloadedBytes, 5000);
     });
 
-    it('does not report directory models as interrupted', async () => {
+    it('reports directory models with .downloading marker as interrupted', async () => {
       await createDirModel('dir-partial', {
         downloading: true,
         repo: 'user/partial',
@@ -408,7 +408,8 @@ describe('ModelManager', () => {
       });
 
       const result = await manager.getInterruptedDownloads();
-      assert.equal(result.length, 0);
+      assert.equal(result.length, 1);
+      assert.equal(result[0].fileName, 'dir-partial');
     });
 
     it('skips files that are actively being downloaded', async () => {
@@ -429,12 +430,12 @@ describe('ModelManager', () => {
       activeDownloads.clear();
     });
 
-    it('skips directory models in interrupted downloads check', async () => {
+    it('reports directory models with .downloading marker in interrupted check', async () => {
       await createDirModel('dir-active', { downloading: true });
 
-      // Directory models are not detected by getInterruptedDownloads
       const result = await manager.getInterruptedDownloads();
-      assert.equal(result.length, 0);
+      assert.equal(result.length, 1);
+      assert.equal(result[0].fileName, 'dir-active');
     });
 
     it('handles interrupted GGUF download without meta file', async () => {
@@ -500,9 +501,11 @@ describe('ModelManager', () => {
     });
 
     it('handles 416 status (range not satisfiable — file already complete)', async () => {
-      await fs.mkdir(MODELS_DIR, { recursive: true });
+      // The new downloadModel creates a subdirectory, so we pre-create the partial there
+      const subDir = path.join(MODELS_DIR, 'complete');
+      await fs.mkdir(subDir, { recursive: true });
       const content = Buffer.alloc(500);
-      await fs.writeFile(path.join(MODELS_DIR, 'complete.gguf.downloading'), content);
+      await fs.writeFile(path.join(subDir, 'complete.gguf.downloading'), content);
 
       const originalFetch = globalThis.fetch;
       globalThis.fetch = mock.fn(async () => ({
@@ -517,8 +520,8 @@ describe('ModelManager', () => {
         assert.equal(result.repo, 'user/repo');
         assert.ok(result.downloadedAt);
 
-        // Verify file was renamed from .downloading to final
-        const files = await fs.readdir(MODELS_DIR);
+        // Verify file was renamed from .downloading to final in subdirectory
+        const files = await fs.readdir(subDir);
         assert.ok(files.includes('complete.gguf'));
         assert.ok(!files.includes('complete.gguf.downloading'));
       } finally {
@@ -600,10 +603,12 @@ describe('ModelManager', () => {
         assert.equal(result.repo, 'user/repo');
         assert.ok(result.downloadedAt);
 
-        // Verify the file exists
-        const files = await fs.readdir(MODELS_DIR);
-        assert.ok(files.includes('dl-test.gguf'));
-        assert.ok(!files.includes('dl-test.gguf.downloading'));
+        // Verify the file exists in its subdirectory
+        const dirs = await fs.readdir(MODELS_DIR);
+        assert.ok(dirs.includes('dl-test'), 'subdirectory should exist');
+        const subFiles = await fs.readdir(path.join(MODELS_DIR, 'dl-test'));
+        assert.ok(subFiles.includes('dl-test.gguf'), 'gguf file should be in subdirectory');
+        assert.ok(!subFiles.includes('dl-test.gguf.downloading'));
 
         // Verify progress was reported
         assert.ok(progressUpdates.length > 0);
@@ -661,9 +666,10 @@ describe('ModelManager', () => {
     });
 
     it('resumes download with Range header when partial file exists', async () => {
-      await fs.mkdir(MODELS_DIR, { recursive: true });
-      // Create a partial download file
-      await fs.writeFile(path.join(MODELS_DIR, 'resume.gguf.downloading'), Buffer.alloc(500));
+      // downloadModel creates a subdirectory, so place partial file there
+      const subDir = path.join(MODELS_DIR, 'resume');
+      await fs.mkdir(subDir, { recursive: true });
+      await fs.writeFile(path.join(subDir, 'resume.gguf.downloading'), Buffer.alloc(500));
 
       const originalFetch = globalThis.fetch;
       let capturedHeaders: Record<string, string> = {};

@@ -1,5 +1,5 @@
-import { loadModel, createModel, detectGpu } from 'node-omni-orcha';
-import type { LlmModel, ImageModel, TtsModel, GpuInfo, LlmLoadOptions, ImageLoadOptions } from 'node-omni-orcha';
+import { loadModel, createModel, detectGpu } from '@agent-orcha/node-omni-orcha';
+import type { LlmModel, ImageModel, TtsModel, GpuInfo, LlmLoadOptions, ImageLoadOptions } from '@agent-orcha/node-omni-orcha';
 import { logger } from '../../logger.ts';
 
 export interface OmniModelStatus {
@@ -51,7 +51,7 @@ export class OmniModelCache {
       await this.llmEmbed.unload();
     }
     logger.info(`[OmniModelCache] Loading embedding LLM: ${modelPath}`);
-    this.llmEmbed = await loadModel(modelPath, { ...options, type: 'llm' }) as LlmModel;
+    this.llmEmbed = await loadModel(modelPath, { ...options, type: 'llm', embeddings: true }) as LlmModel;
     this.llmEmbedPath = modelPath;
     return this.llmEmbed;
   }
@@ -72,7 +72,7 @@ export class OmniModelCache {
     return this.imageModel;
   }
 
-  static async getTtsModel(modelPath: string, options?: { engine?: string }): Promise<TtsModel> {
+  static async getTtsModel(modelPath: string): Promise<TtsModel> {
     if (this.ttsModel && this.ttsPath === modelPath) {
       return this.ttsModel;
     }
@@ -80,9 +80,9 @@ export class OmniModelCache {
       logger.info(`[OmniModelCache] Unloading TTS model: ${this.ttsPath}`);
       await this.ttsModel.unload();
     }
-    logger.info(`[OmniModelCache] Loading TTS model: ${modelPath} (engine: ${options?.engine || 'kokoro'})`);
+    logger.info(`[OmniModelCache] Loading TTS model: ${modelPath}`);
     const model = createModel(modelPath, 'tts');
-    await model.load({ engine: (options?.engine as 'kokoro' | 'qwen3') || 'kokoro' });
+    await model.load();
     this.ttsModel = model;
     this.ttsPath = modelPath;
     return this.ttsModel;

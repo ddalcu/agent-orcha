@@ -68,8 +68,7 @@ export const ImageModelConfigSchema = z.object({
 
 // Schema for TTS model configuration
 export const TtsModelConfigSchema = z.object({
-  modelPath: z.string().describe('Path to TTS model'),
-  engine: z.enum(['kokoro', 'qwen3']).optional().describe('TTS engine type'),
+  modelPath: z.string().describe('Path to TTS model directory (Qwen3-TTS)'),
   voice: z.string().optional().describe('Default voice name'),
   description: z.string().default(''),
 });

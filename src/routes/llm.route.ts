@@ -121,7 +121,13 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       };
     }
 
-    return { version: config.version, models, embeddings };
+    return {
+      version: config.version,
+      models,
+      embeddings,
+      ...(config.image ? { image: config.image } : {}),
+      ...(config.tts ? { tts: config.tts } : {}),
+    };
   });
 
   // PUT /config/models/:name — upsert a model config entry (or set pointer for 'default')

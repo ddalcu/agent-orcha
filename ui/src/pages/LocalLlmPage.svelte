@@ -58,10 +58,19 @@
     gemini: 'GOOGLE_API_KEY',
   };
 
-  const RECOMMENDED_MODELS_GGUF = [
+  const RECOMMENDED_MODELS_GGUF: any[] = [
     { repo: 'unsloth/Qwen3.5-9B-GGUF', file: 'Qwen3.5-9B-Q4_K_M.gguf', label: 'Qwen3.5-9B-Q4_K_M', desc: 'Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.', size: '~5.3 GB', icon: 'fa-comments', color: 'amber', type: 'gguf', category: 'llm' },
     { repo: 'nomic-ai/nomic-embed-text-v1.5-GGUF', file: 'nomic-embed-text-v1.5.Q4_K_M.gguf', label: 'nomic-embed-text-v1.5-Q4_K_M', desc: 'Embedding model for knowledge stores. Required for local RAG pipelines.', size: '~80 MB', icon: 'fa-vector-square', color: 'blue', type: 'gguf', category: 'embed' },
-    { repo: 'unsloth/FLUX.2-klein-4B-GGUF', file: 'flux-2-klein-4b-Q4_K_M.gguf', label: 'FLUX.2 Klein 4B Q4_K_M', desc: 'Fast image generation model (FLUX.2 Klein). Requires VAE and text encoder models (see docs).', size: '~2.5 GB', icon: 'fa-image', color: 'purple', type: 'gguf', category: 'image' },
+    {
+      repo: 'unsloth/FLUX.2-klein-4B-GGUF', file: 'flux2-klein', label: 'FLUX.2 Klein 4B', type: 'bundle', category: 'image',
+      desc: 'Image generation model. Downloads main model, VAE, and Qwen3 text encoder.',
+      size: '~5.4 GB', icon: 'fa-image', color: 'purple',
+      bundle: [
+        { repo: 'unsloth/FLUX.2-klein-4B-GGUF', file: 'flux-2-klein-4b-Q4_K_M.gguf' },
+        { repo: 'Comfy-Org/vae-text-encorder-for-flux-klein-4b', file: 'split_files/vae/flux2-vae.safetensors', targetName: 'flux2-vae.safetensors' },
+        { repo: 'unsloth/Qwen3-4B-GGUF', file: 'Qwen3-4B-Q4_K_M.gguf' },
+      ],
+    },
     { repo: 'Volko76/Qwen3-TTS-12Hz-0.6B-Base-Qwen3tts.cpp_quants-GGUF', file: 'qwen3-tts', label: 'Qwen3 TTS 0.6B', desc: 'Text-to-speech with voice cloning. Upload a 5-10s audio sample to clone any voice.', size: '~2.0 GB', icon: 'fa-microphone', color: 'green', type: 'dir', category: 'tts' },
   ];
   const ENGINE_LABELS: Record<string, string> = {
@@ -136,8 +145,15 @@
   function isModelDownloaded(models: any[], repoId: string, fileName: string) {
     return models.some((m: any) =>
       (m.repo === repoId && m.fileName === fileName) ||
-      (m.repo === repoId && m.id === fileName) // directory-based models use subdir as id
+      (m.repo === repoId && m.id === fileName) ||
+      (m.id === fileName) // bundle/directory models: id = directory name
     );
+  }
+
+  function getRecommendedInfo(model: any): { label: string; desc: string } | null {
+    return RECOMMENDED_MODELS_GGUF.find(r =>
+      (model.repo === r.repo && (model.fileName === r.file || model.id === r.file))
+    ) as { label: string; desc: string } | null;
   }
 
   // ─── State ───
@@ -209,6 +225,11 @@
   let activatingExtEmb = $state<string | null>(null);
   // Unloading
   let unloadingModel = $state<string | null>(null);
+  let stoppingImage = $state(false);
+  let stoppingTts = $state(false);
+  let startingEmb = $state(false);
+  let startingImage = $state(false);
+  let startingTts = $state(false);
 
   // ─── Config Resolvers ───
   function resolveDefault(section: 'models' | 'embeddings'): any {
@@ -250,6 +271,28 @@
   let embRunning = $derived(omniStatus?.llmEmbed?.loaded || false);
   let activeEmbModelPath = $derived(embRunning ? omniStatus?.llmEmbed?.modelPath : null);
 
+  // Image & TTS model status from omni cache
+  let imageLoaded = $derived(omniStatus?.image?.loaded || false);
+  let imageModelPath = $derived(imageLoaded ? omniStatus?.image?.modelPath : null);
+  let imageModelName = $derived(imageModelPath ? imageModelPath.split('/').pop() : null);
+  let ttsLoaded = $derived(omniStatus?.tts?.loaded || false);
+  let ttsModelPath = $derived(ttsLoaded ? omniStatus?.tts?.modelPath : null);
+  let ttsModelName = $derived(ttsModelPath ? ttsModelPath.split('/').pop() : null);
+
+  // Configured image/TTS models from llm.json (these are "on-demand" slots)
+  let imageConfigs = $derived(Object.entries(llmConfig?.image || {}) as [string, any][]);
+  let ttsConfigs = $derived(Object.entries(llmConfig?.tts || {}) as [string, any][]);
+
+  // Configured embedding model (on-demand — loads when knowledge stores initialize)
+  let embConfigDefault = $derived.by(() => {
+    const emb = llmConfig?.embeddings;
+    if (!emb) return null;
+    let val = emb['default'];
+    if (typeof val === 'string') val = emb[val];
+    return (val && typeof val === 'object') ? val : null;
+  });
+  let embIsOmni = $derived(embConfigDefault?.provider === 'omni' || (!embConfigDefault?.provider && !embConfigDefault?.baseUrl));
+
   // Version info for managed engines
   let version = $derived(null);
   let versionLabel = $derived(
@@ -266,8 +309,13 @@
       : (BACKEND_LABELS[gpuBackend] || gpuBackend)
   );
 
-  // RAM
+  // RAM & VRAM
   let totalRam = $derived(systemRamBytes);
+  let freeRam = $state(0);
+  let usedRam = $derived(totalRam - freeRam);
+  let ramPct = $derived(totalRam > 0 ? Math.round((usedRam / totalRam) * 100) : 0);
+  let gpuVram = $derived(status?.gpu?.vramBytes || 0);
+  let isCuda = $derived(status?.gpu?.backend === 'cuda');
 
   // Chat model details for managed engine
   let activeModelName = $derived(activeModelPath ? activeModelPath.split('/').pop() : null);
@@ -407,6 +455,7 @@
     try {
       status = await api.getLocalLlmStatus();
       systemRamBytes = status.systemRamBytes || 0;
+      freeRam = status.freeRamBytes || 0;
     } catch (e) {
       console.error('Failed to load local LLM status:', e);
     }
@@ -506,9 +555,9 @@
     }
   });
 
-  // Sync managed sliders when status changes
+  // Sync managed sliders when status changes — but not during apply (would reset user's pending values)
   $effect(() => {
-    if (isManagedEngine && chatRunning) {
+    if (isManagedEngine && chatRunning && !applyingSettings) {
       ctxSliderValue = ctxSize || 8192;
       ctxSliderOrig = ctxSize || 8192;
       maxTokSliderValue = currentMaxTokensConfig;
@@ -636,32 +685,95 @@
     }
   }
 
+  async function stopImage() {
+    stoppingImage = true;
+    try {
+      await api.stopLocalImage();
+      await refresh();
+    } catch (e) {
+      console.error('Failed to stop image model:', e);
+    } finally {
+      stoppingImage = false;
+    }
+  }
+
+  async function stopTts() {
+    stoppingTts = true;
+    try {
+      await api.stopLocalTts();
+      await refresh();
+    } catch (e) {
+      console.error('Failed to stop TTS model:', e);
+    } finally {
+      stoppingTts = false;
+    }
+  }
+
+  async function startEmbedding() {
+    startingEmb = true;
+    try {
+      await api.startLocalEmbedding();
+      await refresh();
+    } catch (e) {
+      console.error('Failed to start embedding model:', e);
+    } finally {
+      startingEmb = false;
+    }
+  }
+
+  async function startImage() {
+    startingImage = true;
+    try {
+      await api.startLocalImage();
+      await refresh();
+    } catch (e) {
+      console.error('Failed to start image model:', e);
+    } finally {
+      startingImage = false;
+    }
+  }
+
+  async function startTts() {
+    startingTts = true;
+    try {
+      await api.startLocalTts();
+      await refresh();
+    } catch (e) {
+      console.error('Failed to start TTS model:', e);
+    } finally {
+      startingTts = false;
+    }
+  }
+
   async function applyModelSettings() {
-    const engineSt = status?.engines?.[selectedEngine || ''];
-    const currentCtx = engineSt?.chat?.contextSize;
-    const ctxChanged = ctxSliderValue !== currentCtx;
+    // Compare against the CONFIG values (not engine status which may lack fields)
+    const configCtx = resolveDefault('models')?.contextSize;
+    const ctxChanged = sliderCtxChanged && configCtx != null && ctxSliderValue !== configCtx;
     const newReasoningBudget = thinkingEnabled ? thinkingBudgetValue : 0;
     const existingBudget = resolveDefault('models')?.reasoningBudget || 0;
     const reasoningChanged = newReasoningBudget !== existingBudget;
     const needsRestart = ctxChanged || reasoningChanged;
 
+    // Capture the active model ID BEFORE stopping (status changes after stop)
+    const modelIdToReactivate = lastActiveModel;
+
     applyingSettings = true;
     try {
       const resolvedKey = resolveDefaultKey('models');
       const existing = resolveDefault('models') || {};
+      // Spread existing config to preserve all fields (active, p2p, engine, baseUrl, apiKey, etc.)
+      // then override only the fields the user changed
+      const { _provider, _hasEnvKey, ...cleanExisting } = existing as Record<string, unknown>;
       await api.saveLlmModel(resolvedKey!, {
-        provider: existing.provider || existing._provider || 'local',
-        model: existing.model,
+        ...cleanExisting,
+        provider: cleanExisting.provider || _provider || 'local',
         contextSize: ctxSliderValue,
         maxTokens: maxTokSliderValue,
-        ...(newReasoningBudget !== undefined ? { reasoningBudget: newReasoningBudget } : existing.reasoningBudget != null ? { reasoningBudget: existing.reasoningBudget } : {}),
-        ...(existing.temperature != null ? { temperature: existing.temperature } : {}),
+        reasoningBudget: newReasoningBudget,
       });
-      if (needsRestart) {
+      if (needsRestart && modelIdToReactivate) {
         await api.stopLocalLlm(selectedEngine || undefined);
-        const activeMP = status?.engines?.[selectedEngine || '']?.chat?.activeModel;
-        const model = models.find((m: any) => activeMP === m.filePath);
-        if (model) await api.activateLocalModel(model.id);
+        await api.activateLocalModel(modelIdToReactivate);
       }
       await loadLlmConfig();
       await refresh();
@@ -686,11 +798,13 @@
     }
   }
 
-  function downloadModel(repo: string, fileName: string, type = 'gguf', subdir?: string, targetDir?: string) {
-    const downloadId = type === 'dir' ? `dir:${repo}${subdir ? '/' + subdir : ''}` : `${repo}/${fileName}`;
+  function downloadModel(repo: string, fileName: string, type = 'gguf', subdir?: string, targetDir?: string, bundle?: any[]) {
+    const downloadId = type === 'bundle' ? `bundle:${fileName}` : type === 'dir' ? `dir:${repo}${subdir ? '/' + subdir : ''}` : `${repo}/${fileName}`;
     if (activeDownloads.has(downloadId)) return;
 
-    const es = api.downloadLocalModel(repo, fileName, type, subdir, targetDir);
+    const es = type === 'bundle' && bundle
+      ? api.downloadBundle(fileName, bundle)
+      : api.downloadLocalModel(repo, fileName, type, subdir, targetDir);
     activeDownloads.set(downloadId, es);
     activeDownloads = new Map(activeDownloads);
 
@@ -1368,29 +1482,59 @@
             </div>
           </div>
 
-          <!-- Server details -->
+          <!-- Server details + memory -->
           <div class="llm-server-details">
             <span title="Runtime"><i class="fas fa-bolt mr-1 llm-icon-dim"></i>{runtimeLabel}</span>
-            <span title="Server type"><i class="fas fa-comments mr-1 llm-icon-dim"></i>Chat Completions</span>
             {#if chatRunning}
               <span class="text-green"><i class="fas fa-microchip mr-1"></i>In-process</span>
             {:else}
               <span><i class="fas fa-link mr-1 llm-icon-dim"></i><span class="text-muted">Not running</span></span>
             {/if}
           </div>
+          {#if totalRam > 0}
+            <div class="llm-mem-section">
+              <div class="llm-mem-row">
+                <span class="llm-mem-label"><i class="fas fa-memory mr-1"></i>RAM</span>
+                <div class="llm-mem-bar-wrap">
+                  <div class="llm-mem-bar">
+                    <div class="llm-mem-fill {ramPct > 85 ? 'llm-mem-red' : ramPct > 70 ? 'llm-mem-amber' : 'llm-mem-green'}"
+                      style:width="{ramPct}%"></div>
+                  </div>
+                </div>
+                <span class="llm-mem-value {ramPct > 85 ? 'text-red' : ramPct > 70 ? 'text-amber' : 'text-muted'}">{formatBytes(usedRam)} / {formatBytes(totalRam)}</span>
+              </div>
+              {#if isCuda && gpuVram > 0}
+                <div class="llm-mem-row">
+                  <span class="llm-mem-label"><i class="fas fa-tv mr-1"></i>VRAM</span>
+                  <div class="llm-mem-bar-wrap">
+                    <div class="llm-mem-bar">
+                      <div class="llm-mem-fill llm-mem-green" style:width="0%"></div>
+                    </div>
+                  </div>
+                  <span class="llm-mem-value text-muted">{formatBytes(gpuVram)}</span>
+                </div>
+              {/if}
+            </div>
+          {/if}
 
           <!-- Chat model section -->
           <div class="llm-server-section">
-            {#if chatRunning}
+            {#if chatRunning || applyingSettings}
               <div class="llm-section-content space-y-2">
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-3">
-                    <span class="llm-pulse llm-pulse-green"></span>
-                    <span class="text-sm text-primary">Chat Model</span>
-                    <span class="badge badge-amber font-mono">{activeModelName}</span>
-                    {#if ctxSize}<span class="text-xs text-muted">{(ctxSize / 1024).toFixed(0)}K ctx</span>{/if}
+                    {#if applyingSettings && !chatRunning}
+                      <span class="llm-pulse llm-pulse-amber"></span>
+                      <span class="text-sm text-amber">Chat Model</span>
+                      <span class="badge badge-muted font-mono">Restarting...</span>
+                    {:else}
+                      <span class="llm-pulse llm-pulse-green"></span>
+                      <span class="text-sm text-primary">Chat Model</span>
+                      <span class="badge badge-amber font-mono">{activeModelName}</span>
+                      {#if ctxSize}<span class="text-xs text-muted">{(ctxSize / 1024).toFixed(0)}K ctx</span>{/if}
+                    {/if}
                   </div>
-                  <button class="btn btn-danger btn-sm" disabled={stoppingChat} onclick={stopServer}>
+                  <button class="btn btn-danger btn-sm" disabled={stoppingChat || applyingSettings} onclick={stopServer}>
                     {#if stoppingChat}
                       Stopping...
                     {:else}
@@ -1400,7 +1544,12 @@
                 </div>
 
                 <!-- Memory bar -->
-                {#if chatRunning}
+                {#if applyingSettings && !chatRunning}
+                  <div class="flex items-center gap-3 text-xs text-amber">
+                    <i class="fas fa-spinner fa-spin mr-1"></i>
+                    <span>Applying settings and restarting model...</span>
+                  </div>
+                {:else if chatRunning}
                   <div class="flex items-center gap-3"
                     title="Model loaded in-process via {runtimeLabel}">
                     <div class="flex items-center gap-3 text-xs text-muted flex-shrink-0">
@@ -1522,21 +1671,98 @@
           </div>
 
           <!-- Embedding model -->
-          {#if embRunning}
-            <div class="llm-server-section">
+          {#if embIsOmni && embConfigDefault}
+            <div class="llm-server-section {embRunning ? '' : 'llm-slot-ondemand'}">
               <div class="llm-section-content flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                  <span class="llm-pulse llm-pulse-blue"></span>
-                  <span class="text-sm text-primary">Embedding Model</span>
-                  <span class="badge badge-blue font-mono">{embModelName}</span>
-                </div>
-                <button class="btn btn-danger btn-sm" disabled={stoppingEmb} onclick={stopEmbedding}>
-                  {#if stoppingEmb}
-                    Stopping...
+                  {#if embRunning}
+                    <span class="llm-pulse llm-pulse-blue"></span>
+                    <span class="text-sm text-primary">Embedding</span>
+                    <span class="badge badge-blue font-mono">{embModelName}</span>
                   {:else}
-                    <i class="fas fa-stop mr-1"></i>Stop
+                    <i class="fas fa-vector-square text-blue text-xs"></i>
+                    <span class="text-sm text-secondary">Embedding</span>
+                    <span class="text-xs text-muted font-mono">{embConfigDefault.model}</span>
+                    <span class="llm-ondemand-badge">on demand</span>
                   {/if}
-                </button>
+                </div>
+                <div class="flex items-center gap-2">
+                  {#if embRunning}
+                    <button class="btn btn-danger btn-sm" disabled={stoppingEmb} onclick={stopEmbedding}>
+                      {#if stoppingEmb}<i class="fas fa-spinner fa-spin mr-1"></i>Stopping...{:else}<i class="fas fa-stop mr-1"></i>Stop{/if}
+                    </button>
+                  {:else}
+                    <button class="btn btn-blue btn-sm" disabled={startingEmb} onclick={startEmbedding}>
+                      {#if startingEmb}<i class="fas fa-spinner fa-spin mr-1"></i>Loading...{:else}<i class="fas fa-play mr-1"></i>Start{/if}
+                    </button>
+                  {/if}
+                </div>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Image Generation model -->
+          {#if imageConfigs.length > 0}
+            {@const imgCfg = imageConfigs[0][1]}
+            {@const imgLabel = imgCfg.description || imgCfg.modelPath?.split('/').pop() || imageConfigs[0][0]}
+            <div class="llm-server-section {imageLoaded ? '' : 'llm-slot-ondemand'}">
+              <div class="llm-section-content flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  {#if imageLoaded}
+                    <span class="llm-pulse llm-pulse-purple"></span>
+                    <span class="text-sm text-primary">Image Generation</span>
+                    <span class="badge badge-purple font-mono">{imageModelName}</span>
+                  {:else}
+                    <i class="fas fa-image text-purple text-xs"></i>
+                    <span class="text-sm text-secondary">Image Generation</span>
+                    <span class="text-xs text-muted font-mono">{imgLabel}</span>
+                    <span class="llm-ondemand-badge">on demand</span>
+                  {/if}
+                </div>
+                <div class="flex items-center gap-2">
+                  {#if imageLoaded}
+                    <button class="btn btn-danger btn-sm" disabled={stoppingImage} onclick={stopImage}>
+                      {#if stoppingImage}<i class="fas fa-spinner fa-spin mr-1"></i>Stopping...{:else}<i class="fas fa-stop mr-1"></i>Stop{/if}
+                    </button>
+                  {:else}
+                    <button class="btn btn-purple btn-sm" disabled={startingImage} onclick={startImage}>
+                      {#if startingImage}<i class="fas fa-spinner fa-spin mr-1"></i>Loading...{:else}<i class="fas fa-play mr-1"></i>Start{/if}
+                    </button>
+                  {/if}
+                </div>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Text-to-Speech model -->
+          {#if ttsConfigs.length > 0}
+            {@const ttsCfg = ttsConfigs[0][1]}
+            {@const ttsLabel = ttsCfg.description || ttsCfg.modelPath?.split('/').pop() || ttsConfigs[0][0]}
+            <div class="llm-server-section {ttsLoaded ? '' : 'llm-slot-ondemand'}">
+              <div class="llm-section-content flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  {#if ttsLoaded}
+                    <span class="llm-pulse llm-pulse-green"></span>
+                    <span class="text-sm text-primary">Text-to-Speech</span>
+                    <span class="badge badge-green font-mono">{ttsModelName}</span>
+                  {:else}
+                    <i class="fas fa-microphone text-green text-xs"></i>
+                    <span class="text-sm text-secondary">Text-to-Speech</span>
+                    <span class="text-xs text-muted font-mono">{ttsLabel}</span>
+                    <span class="llm-ondemand-badge">on demand</span>
+                  {/if}
+                </div>
+                <div class="flex items-center gap-2">
+                  {#if ttsLoaded}
+                    <button class="btn btn-danger btn-sm" disabled={stoppingTts} onclick={stopTts}>
+                      {#if stoppingTts}<i class="fas fa-spinner fa-spin mr-1"></i>Stopping...{:else}<i class="fas fa-stop mr-1"></i>Stop{/if}
+                    </button>
+                  {:else}
+                    <button class="btn btn-green btn-sm" disabled={startingTts} onclick={startTts}>
+                      {#if startingTts}<i class="fas fa-spinner fa-spin mr-1"></i>Loading...{:else}<i class="fas fa-play mr-1"></i>Start{/if}
+                    </button>
+                  {/if}
+                </div>
               </div>
             </div>
           {/if}
@@ -1704,25 +1930,34 @@
     <!-- Downloaded Models (managed engines) -->
     {#if isManagedEngine}
       <div class="mb-6">
-        <h3 class="section-title mb-3">Downloaded Models</h3>
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <h3 class="section-title">Downloaded Models</h3>
+            {#if filteredModels.length > 0}
+              <span class="text-xs text-muted">{filteredModels.length} model{filteredModels.length !== 1 ? 's' : ''}</span>
+            {/if}
+          </div>
+        </div>
         <div class="llm-model-grid">
           {#if filteredModels.length === 0}
             <div class="col-span-full text-muted text-center py-8">
               <i class="fas fa-box-open text-4xl mb-4 block text-muted"></i>
-              <p class="text-lg mb-2">No {'GGUF'} models downloaded</p>
-              <p class="text-sm">Search HuggingFace below, or download a recommended model</p>
+              <p class="text-lg mb-2">No models downloaded yet</p>
+              <p class="text-sm">Download a recommended model below to get started</p>
             </div>
           {:else}
             {#each filteredModels as model}
-              {@const gActiveChat = globalActiveModelPath()}
-              {@const gActiveEmb = globalActiveEmbPath()}
-              {@const isChat = gActiveChat && gActiveChat === model.filePath}
-              {@const isEmb = gActiveEmb && gActiveEmb === model.filePath}
+              {@const isChat = activeModelPath && model.filePath === activeModelPath}
+              {@const isEmb = activeEmbModelPath && model.filePath === activeEmbModelPath}
+              {@const isImageLoaded = imageModelPath && (model.filePath === imageModelPath || model.filePath === imageModelPath.replace(/\/[^/]+$/, ''))}
+              {@const isTtsLoaded = ttsModelPath && (model.filePath === ttsModelPath || model.filePath === ttsModelPath.replace(/\/[^/]+$/, ''))}
               {@const looksLikeEmbedding = /embed|MiniLM/i.test(model.fileName)}
               {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models\//, '')))}
               {@const looksLikeTTS = /tts|speech|qwen3.*tts|kokoro|parler/i.test(model.fileName) || /tts/i.test(model.repo || '') || Object.values(llmConfig?.tts || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models\//, '')))}
               {@const modelRole = looksLikeImage ? 'image' : looksLikeTTS ? 'tts' : looksLikeEmbedding ? 'embed' : 'llm'}
-              {@const cardCls = isChat ? 'llm-model-card active-chat' : isEmb ? 'llm-model-card active-emb' : 'llm-model-card'}
+              {@const recInfo = getRecommendedInfo(model)}
+              {@const isActive = isChat || isEmb || isImageLoaded || isTtsLoaded}
+              {@const cardCls = isChat ? 'llm-model-card active-chat' : isEmb ? 'llm-model-card active-emb' : isImageLoaded ? 'llm-model-card active-image' : isTtsLoaded ? 'llm-model-card active-tts' : 'llm-model-card'}
               {@const caps = modelRole === 'llm' ? detectCapabilitiesFromFile(model) : null}
 
               <div class={cardCls} data-model-id={model.id}>
@@ -1731,6 +1966,8 @@
                     <div class="flex items-center gap-2 mb-1">
                       {#if isChat}<i class="fas fa-circle text-amber text-2xs"></i>{/if}
                       {#if isEmb}<i class="fas fa-circle text-blue text-2xs"></i>{/if}
+                      {#if isImageLoaded}<i class="fas fa-circle text-purple text-2xs"></i>{/if}
+                      {#if isTtsLoaded}<i class="fas fa-circle text-green text-2xs"></i>{/if}
                       <span class="font-medium text-primary text-sm truncate">{model.fileName}</span>
                       {#if modelRole === 'image'}
                         <span class="badge badge-purple text-2xs">IMAGE</span>
@@ -1741,6 +1978,9 @@
                       {:else}
                         <span class="badge badge-amber text-2xs">LLM</span>
                       {/if}
+                      {#if recInfo}
+                        <span class="llm-recommended-star" title="Recommended"><i class="fas fa-star"></i></span>
+                      {/if}
                     </div>
                     {#if model.repo}<div class="text-xs text-muted truncate">{model.repo}</div>{/if}
                     {#if caps && (caps.tools || caps.vision || caps.reasoning)}
@@ -1749,6 +1989,11 @@
                         {#if caps.vision}<span class="cap-badge cap-badge-vision" title="Vision"><i class="fas fa-eye mr-1"></i>vision</span>{/if}
                         {#if caps.reasoning}<span class="cap-badge cap-badge-think" title="Reasoning"><i class="fas fa-brain mr-1"></i>think</span>{/if}
                       </div>
+                    {/if}
+                    {#if modelRole === 'image' && !isImageLoaded}
+                      <div class="text-xs text-muted mt-1"><i class="fas fa-bolt mr-1"></i>Loads when image-creator agent is invoked</div>
+                    {:else if modelRole === 'tts' && !isTtsLoaded}
+                      <div class="text-xs text-muted mt-1"><i class="fas fa-bolt mr-1"></i>Loads when voice-clone agent is invoked</div>
                     {/if}
                   </div>
                 </div>
@@ -1773,9 +2018,17 @@
                         </button>
                       {/if}
                     {:else if modelRole === 'image'}
-                      <span class="badge badge-purple"><i class="fas fa-image mr-1"></i>Image Gen</span>
+                      {#if isImageLoaded}
+                        <span class="badge badge-purple">Loaded</span>
+                      {:else}
+                        <span class="llm-ondemand-badge">on demand</span>
+                      {/if}
                     {:else if modelRole === 'tts'}
-                      <span class="badge badge-green"><i class="fas fa-microphone mr-1"></i>Voice</span>
+                      {#if isTtsLoaded}
+                        <span class="badge badge-green">Loaded</span>
+                      {:else}
+                        <span class="llm-ondemand-badge">on demand</span>
+                      {/if}
                     {:else}
                       {#if isChat}
                         <span class="badge badge-amber">Active</span>
@@ -1791,7 +2044,7 @@
                         </button>
                       {/if}
                     {/if}
-                    {#if !isChat && !isEmb}
+                    {#if !isActive}
                       <button class="text-xs text-muted transition-colors" title="Delete model"
                         onclick={() => deleteModel(model.id)}>
                         <i class="fas fa-trash-alt"></i>
@@ -1817,7 +2070,7 @@
         <h3 class="section-title mb-3">Recommended Models</h3>
         <div class="llm-rec-grid">
           {#each pendingRecommended as r}
-            {@const downloadId = r.type === 'dir' ? `dir:${r.repo}${r.subdir ? '/' + r.subdir : ''}` : `${r.repo}/${r.file}`}
+            {@const downloadId = r.type === 'bundle' ? `bundle:${r.file}` : r.type === 'dir' ? `dir:${r.repo}${r.subdir ? '/' + r.subdir : ''}` : `${r.repo}/${r.file}`}
             {@const isDownloading = activeDownloads.has(downloadId)}
             <div class="llm-rec-card llm-rec-card-{r.color}">
               <div class="flex items-center gap-2 mb-2">
@@ -1829,7 +2082,7 @@
               <div class="flex items-center justify-between">
                 <span class="text-xs text-muted">{r.size}</span>
                 <button class="btn btn-{r.color} btn-sm" disabled={isDownloading}
-                  onclick={() => downloadModel(r.repo, r.file, r.type, r.subdir, r.type === 'dir' ? r.file : undefined)}>
+                  onclick={() => downloadModel(r.repo, r.file, r.type, r.subdir, r.type === 'dir' ? r.file : undefined, r.bundle)}>
                   {#if isDownloading}
                     <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
                   {:else}

@@ -1,4 +1,4 @@
-import type { LlmModel } from 'node-omni-orcha';
+import type { LlmModel } from '@agent-orcha/node-omni-orcha';
 import type { Embeddings } from '../../types/llm-types.ts';
 import { OmniModelCache } from './omni-model-cache.ts';
 

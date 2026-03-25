@@ -14,7 +14,7 @@ import { SkillLoader, type Skill } from './skills/index.ts';
 import { ToolRegistry } from './tools/tool-registry.ts';
 import { ToolDiscovery } from './tools/tool-discovery.ts';
 import { MCPConfigSchema } from './mcp/types.ts';
-import { loadLLMConfig, getLLMConfig, listModelConfigs, getModelConfig, getEmbeddingConfig, resolveApiKey } from './llm/llm-config.ts';
+import { loadLLMConfig, getLLMConfig, getLLMConfigPath, saveLLMConfig, listModelConfigs, getModelConfig, getEmbeddingConfig, resolveApiKey } from './llm/llm-config.ts';
 import { detectProvider } from './llm/provider-detector.ts';
 import { LLMFactory } from './llm/llm-factory.ts';
 import { resolveAgentLLMRef } from './llm/types.ts';
@@ -130,6 +130,9 @@ export class Orchestrator {
     logger.info('[Orchestrator] Loading LLM config...');
     await loadLLMConfig(this.config.llmConfigPath);
 
+    // Migrate loose .gguf files into subdirectories and fix stale config paths
+    await this.migrateModelStorage();
+
     await this.checkLlmReadiness();
 
     // Set up models dir for LLMFactory to resolve model names to paths
@@ -194,6 +197,127 @@ export class Orchestrator {
       this._p2pManager = new P2PManager(this);
       await this._p2pManager.start();
       LLMFactory.setP2PManager(this._p2pManager);
+    }
+  }
+
+  /** Migrate loose .gguf files in .models/ into subdirectories and fix stale llm.json paths. */
+  private async migrateModelStorage(): Promise<void> {
+    const manager = new ModelManager(this.config.workspaceRoot);
+    const migrated = await manager.migrateLooseModels();
+
+    // Always check for broken image/tts paths in llm.json and try to fix them
+    await this.fixBrokenModelPaths(migrated);
+  }
+
+  /** Fix image/tts config paths that point to non-existent files by scanning subdirectories. */
+  private async fixBrokenModelPaths(migrated: Map<string, string>): Promise<void> {
+    const config = getLLMConfig();
+    const configPath = getLLMConfigPath();
+    if (!config || !configPath) return;
+
+    let changed = false;
+    const modelsRoot = path.join(this.config.workspaceRoot, '.models');
+    const fs = await import('fs/promises');
+
+    const fixPath = async (p: string | undefined): Promise<string | undefined> => {
+      if (!p) return p;
+
+      // Check if it was just migrated
+      const abs = path.isAbsolute(p) ? p : path.join(this.config.workspaceRoot, p);
+      if (migrated.has(abs)) {
+        const newAbs = migrated.get(abs)!;
+        changed = true;
+        return '.models/' + path.relative(modelsRoot, newAbs).replace(/\\/g, '/');
+      }
+
+      // Check .models/filename → .models/dir/filename migration pattern
+      if (p.startsWith('.models/')) {
+        const relPath = p.replace(/^\.models\//, '');
+        if (!relPath.includes('/')) {
+          const absOld = path.join(modelsRoot, relPath);
+          if (migrated.has(absOld)) {
+            const newAbs = migrated.get(absOld)!;
+            changed = true;
+            return '.models/' + path.relative(modelsRoot, newAbs).replace(/\\/g, '/');
+          }
+        }
+      }
+
+      // Check if the path actually exists — if it does, no fix needed
+      try {
+        await fs.stat(abs);
+        return p;
+      } catch { /* file doesn't exist, try to find it */ }
+
+      // Path is broken — try to find the file in subdirectories
+      const fileName = path.basename(p);
+      const ext = path.extname(fileName).toLowerCase();
+      try {
+        const dirs = await fs.readdir(modelsRoot, { withFileTypes: true });
+        for (const d of dirs) {
+          if (!d.isDirectory()) continue;
+          // Exact match first
+          const candidate = path.join(modelsRoot, d.name, fileName);
+          try {
+            await fs.stat(candidate);
+            changed = true;
+            logger.info(`[Orchestrator] Fixed broken path: ${p} → .models/${d.name}/${fileName}`);
+            return `.models/${d.name}/${fileName}`;
+          } catch { /* not here */ }
+
+          // Fuzzy match: find a file with the same extension (for VAE/safetensors renamed files)
+          if (ext === '.safetensors' || ext === '.gguf') {
+            const dirFiles = await fs.readdir(path.join(modelsRoot, d.name));
+            const match = dirFiles.find(f => f.endsWith(ext) && !f.endsWith('.meta.json'));
+            if (match && dirFiles.filter(f => f.endsWith(ext) && !f.endsWith('.meta.json')).length === 1) {
+              // Only use fuzzy match if there's exactly one file with that extension
+              changed = true;
+              logger.info(`[Orchestrator] Fixed broken path: ${p} → .models/${d.name}/${match}`);
+              return `.models/${d.name}/${match}`;
+            }
+          }
+        }
+      } catch { /* modelsRoot may not exist */ }
+
+      return p;
+    };
+
+    if (config.image) {
+      for (const [, imgCfg] of Object.entries(config.image)) {
+        imgCfg.modelPath = await fixPath(imgCfg.modelPath);
+        imgCfg.vae = await fixPath(imgCfg.vae);
+        imgCfg.clipL = await fixPath(imgCfg.clipL);
+        imgCfg.t5xxl = await fixPath(imgCfg.t5xxl);
+        imgCfg.llm = await fixPath(imgCfg.llm);
+
+        // Auto-detect missing llm encoder for FLUX.2 models
+        if (!imgCfg.llm && imgCfg.modelPath?.includes('flux')) {
+          const modelDir = path.dirname(
+            path.isAbsolute(imgCfg.modelPath) ? imgCfg.modelPath : path.join(this.config.workspaceRoot, imgCfg.modelPath),
+          );
+          try {
+            const dirFiles = await fs.readdir(modelDir);
+            const qwenFile = dirFiles.find(f => /qwen.*\.gguf$/i.test(f) && !f.toLowerCase().includes('mmproj') && !f.endsWith('.meta.json'));
+            if (qwenFile) {
+              imgCfg.llm = `.models/${path.relative(modelsRoot, path.join(modelDir, qwenFile)).replace(/\\/g, '/')}`;
+              changed = true;
+              logger.info(`[Orchestrator] Auto-detected FLUX LLM encoder: ${imgCfg.llm}`);
+            }
+          } catch { /* ok */ }
+        }
+      }
+    }
+    if (config.tts) {
+      for (const [, ttsCfg] of Object.entries(config.tts)) {
+        ttsCfg.modelPath = (await fixPath(ttsCfg.modelPath)) ?? ttsCfg.modelPath;
+      }
+    }
+
+    if (changed) {
+      await saveLLMConfig(configPath, config);
+      // Reload so the rest of startup sees the corrected paths
+      await loadLLMConfig(configPath);
+      logger.info('[Orchestrator] Updated llm.json paths (fixed broken model references)');
     }
   }
 

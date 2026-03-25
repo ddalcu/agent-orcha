@@ -79,17 +79,17 @@
   },
   "image": {
     "image-gen": {
-      "modelPath": ".models/flux-2-klein-4b-Q4_K_M.gguf",
-      "vae": ".models/ae.safetensors",
+      "modelPath": ".models/flux2-klein/flux-2-klein-4b-Q4_K_M.gguf",
+      "vae": ".models/flux2-klein/flux2-vae.safetensors",
+      "llm": ".models/flux2-klein/Qwen3-4B-Q4_K_M.gguf",
       "steps": 20,
-      "description": "FLUX.2 Klein 4B — fast image generation"
+      "description": "FLUX.2 Klein 4B"
     }
   },
   "tts": {
     "tts": {
       "modelPath": ".models/qwen3-tts",
-      "engine": "qwen3",
-      "description": "Qwen3 TTS 0.6B — text-to-speech with voice cloning"
+      "description": "Qwen3 TTS 0.6B"
     }
   }
 }

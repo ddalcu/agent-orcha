@@ -9,6 +9,7 @@ import { resolveAgentLLMRef, type AgentLLMRef } from './types.ts';
 import { detectProvider, type LLMProvider } from './provider-detector.ts';
 import { logger } from '../logger.ts';
 import type { P2PManager } from '../p2p/p2p-manager.ts';
+import { resolveModelFile } from '../local-llm/resolve-model-path.ts';
 
 export class LLMFactory {
   private static instances: Map<string, ChatModel> = new Map();
@@ -64,7 +65,7 @@ export class LLMFactory {
         llm = this.createOpenAI(config, temperature, 'local');
         break;
       case 'omni':
-        llm = this.createOmni(config, temperature);
+        llm = await this.createOmni(config, temperature);
         break;
       default:
         throw new Error(`Unsupported provider: ${provider}`);
@@ -115,19 +116,18 @@ export class LLMFactory {
     });
   }
 
-  private static createOmni(config: ModelConfig, temperature?: number): ChatModel {
-    // Resolve model path: if it's a plain filename, look in .models/
+  private static async createOmni(config: ModelConfig, temperature?: number): Promise<ChatModel> {
+    // Resolve model path: scan subdirectories in .models/
     let modelPath = config.model;
     if (!modelPath.includes('/') && !modelPath.includes('\\') && this.modelsDir) {
-      // Append .gguf if not present
-      if (!modelPath.endsWith('.gguf')) modelPath += '.gguf';
-      modelPath = `${this.modelsDir}/${modelPath}`;
+      modelPath = await resolveModelFile(this.modelsDir, modelPath);
     }
 
     return new OmniChatModel({
       modelPath,
       contextSize: config.contextSize,
       maxTokens: config.maxTokens,
+      thinkingBudget: config.thinkingBudget ?? config.reasoningBudget,
       ...(temperature !== undefined ? { temperature } : {}),
     });
   }

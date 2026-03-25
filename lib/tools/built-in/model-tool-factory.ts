@@ -74,12 +74,9 @@ function createTtsTool(name: string, config: TtsModelConfig): StructuredTool {
       const modelPath = resolve(config.modelPath);
 
       try {
-        const ttsModel = await OmniModelCache.getTtsModel(modelPath, {
-          engine: config.engine as 'kokoro' | 'qwen3',
-        });
+        const ttsModel = await OmniModelCache.getTtsModel(modelPath);
 
         const buffer = await ttsModel.speak(args.text, {
-          voice: args.voice ?? config.voice,
           ...(args.referenceAudio ? { referenceAudioPath: resolve(args.referenceAudio) } : {}),
         });
 

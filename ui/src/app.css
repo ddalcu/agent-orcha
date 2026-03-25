@@ -505,7 +505,15 @@ img { display: block; max-width: 100%; }
 .btn-green {
   background: rgba(74, 222, 128, 0.2);
   color: var(--green-400);
+  border: 1px solid rgba(74, 222, 128, 0.3);
 }
+.btn-green:hover:not(:disabled) { background: rgba(74, 222, 128, 0.3); }
+.btn-purple {
+  background: rgba(168, 85, 247, 0.2);
+  color: var(--purple-400);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+.btn-purple:hover:not(:disabled) { background: rgba(168, 85, 247, 0.3); }
 .btn-ghost {
   color: var(--text-2);
   padding: var(--sp-2);
@@ -1708,6 +1716,7 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
 }
 .llm-pulse-green::before, .llm-pulse-green::after { background: var(--green-400); }
 .llm-pulse-blue::before, .llm-pulse-blue::after { background: var(--blue-400); }
+.llm-pulse-purple::before, .llm-pulse-purple::after { background: var(--purple-400); }
 .llm-pulse-off {
   display: inline-flex;
   height: 10px;
@@ -1726,8 +1735,10 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
   transition: border-color var(--fast), background var(--fast);
 }
 .llm-model-card:hover { border-color: rgba(251, 191, 36, 0.5); }
-.llm-model-card.active-chat { border-color: var(--amber-400); background: rgba(251, 191, 36, 0.05); }
-.llm-model-card.active-emb  { border-color: var(--blue-400); background: rgba(96, 165, 250, 0.05); }
+.llm-model-card.active-chat  { border-color: var(--amber-400); background: rgba(251, 191, 36, 0.05); }
+.llm-model-card.active-emb   { border-color: var(--blue-400); background: rgba(96, 165, 250, 0.05); }
+.llm-model-card.active-image { border-color: var(--purple-400); background: rgba(168, 85, 247, 0.05); }
+.llm-model-card.active-tts   { border-color: var(--green-400); background: rgba(74, 222, 128, 0.05); }
 
 /* Model grid */
 .llm-model-grid {
@@ -1752,8 +1763,38 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
   border-radius: var(--radius-lg);
   padding: var(--sp-4);
 }
-.llm-rec-card-amber { border: 1px solid rgba(251, 191, 36, 0.3); }
-.llm-rec-card-blue  { border: 1px solid rgba(96, 165, 250, 0.3); }
+.llm-rec-card-amber  { border: 1px solid rgba(251, 191, 36, 0.3); }
+.llm-rec-card-blue   { border: 1px solid rgba(96, 165, 250, 0.3); }
+.llm-rec-card-purple { border: 1px solid rgba(168, 85, 247, 0.3); }
+.llm-rec-card-green  { border: 1px solid rgba(74, 222, 128, 0.3); }
+
+/* On-demand model slot (dashed border, muted) */
+.llm-slot-ondemand {
+  border-color: var(--border);
+  opacity: 0.75;
+}
+.llm-slot-ondemand:hover { opacity: 1; }
+
+/* "loads on invoke" / "on demand" badge */
+.llm-ondemand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.65rem;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  border: 1px dashed var(--text-3);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* Recommended star on downloaded model cards */
+.llm-recommended-star {
+  color: var(--amber-400);
+  font-size: 0.6rem;
+  flex-shrink: 0;
+}
 
 /* Download bar */
 .llm-download-bar {
@@ -1770,17 +1811,43 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
 }
 .llm-download-fill-amber { background: var(--amber-400); }
 
-/* Memory bar */
+/* Memory section */
+.llm-mem-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+.llm-mem-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.llm-mem-label {
+  font-size: 0.7rem;
+  color: var(--text-2);
+  width: 52px;
+  flex-shrink: 0;
+}
+.llm-mem-bar-wrap { flex: 1; min-width: 0; }
 .llm-mem-bar {
-  flex: 1;
+  width: 100%;
   background: var(--bg);
   border-radius: var(--radius-full);
   height: 6px;
+  overflow: hidden;
 }
 .llm-mem-fill {
   height: 100%;
   border-radius: var(--radius-full);
   transition: width var(--fast);
+}
+.llm-mem-value {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .llm-mem-green { background: var(--green); }
 .llm-mem-amber { background: var(--amber-400); }
@@ -2972,4 +3039,3 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
 
   .mobile-sidebar-toggle { display: flex; }
 }
-
