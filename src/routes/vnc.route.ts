@@ -27,7 +27,7 @@ export const vncRoutes: FastifyPluginAsync<VncRouteDeps> = async (fastify, opts)
   const sandboxContainerAvailable = async (): Promise<boolean> => {
     if (inContainer) return false;
     try {
-      const res = await fetch('http://localhost:9222/json/version');
+      const res = await fetch('http://127.0.0.1:9222/json/version');
       return res.ok;
     } catch {
       return false;
@@ -63,10 +63,10 @@ export const vncRoutes: FastifyPluginAsync<VncRouteDeps> = async (fastify, opts)
   const wss = new _WebSocketServer({ noServer: true });
 
   fastify.server.on('upgrade', (req, socket, head) => {
-    if (req.url !== '/websockify') return;
+    if (req.url !== '/websockify' && req.url !== '/vnc/websockify') return;
 
     wss.handleUpgrade(req, socket, head, (clientWs: any) => {
-      const targetWs = new _WebSocket(`ws://localhost:${WEBSOCKIFY_PORT}`, {
+      const targetWs = new _WebSocket(`ws://127.0.0.1:${WEBSOCKIFY_PORT}`, {
         protocol: clientWs.protocol,
       });
 

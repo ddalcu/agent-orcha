@@ -48,13 +48,13 @@
     "docker": "node scripts/detect-gpu.mjs --yes",
     "docker:gpu": "node scripts/detect-gpu.mjs",
     "docker:nvidia": "docker compose -f docker-compose.yaml -f docker-compose.nvidia.yaml up --build --watch",
-    "docker:amd": "docker compose -f docker-compose.yaml -f docker-compose.amd.yaml up --build --watch",
     "build:binary": "node scripts/build-sea.mjs",
     "sea": "node scripts/build-sea.mjs && ./dist/sea/agent-orcha",
     "test:e2e": "npx playwright test",
     "prepare": "node -e \"const fs=require('fs');if(fs.existsSync('scripts/install-hooks.sh')){require('child_process').execSync('bash scripts/install-hooks.sh',{stdio:'inherit'})}\""
   },
   "dependencies": {
+    "@agent-orcha/node-omni-orcha": "^2026.326.34",
     "@anthropic-ai/sdk": "^0.76.0",
     "@fastify/cors": "^10.0.1",
     "@fastify/static": "^9.0.0",
@@ -71,7 +71,6 @@
     "mammoth": "^1.11.0",
     "mysql2": "^3.12.0",
     "node-cron": "^4.2.1",
-    "@agent-orcha/node-omni-orcha": "^2026.325.1650",
     "nodemailer": "^8.0.1",
     "openai": "^6.22.0",
     "pdf-parse": "^1.1.4",
@@ -86,12 +85,12 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "optionalDependencies": {
-    "@agent-orcha/node-omni-orcha-darwin-arm64": "^2026.325.1650",
-    "@agent-orcha/node-omni-orcha-linux-x64": "^2026.325.1650",
-    "@agent-orcha/node-omni-orcha-linux-x64-cuda": "^2026.325.1650",
-    "@agent-orcha/node-omni-orcha-linux-arm64": "^2026.325.1650",
-    "@agent-orcha/node-omni-orcha-win32-x64": "^2026.325.1650",
-    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.325.1650"
+    "@agent-orcha/node-omni-orcha-darwin-arm64": "^2026.326.34",
+    "@agent-orcha/node-omni-orcha-linux-arm64": "^2026.326.34",
+    "@agent-orcha/node-omni-orcha-linux-x64": "^2026.326.34",
+    "@agent-orcha/node-omni-orcha-linux-x64-cuda": "^2026.326.34",
+    "@agent-orcha/node-omni-orcha-win32-x64": "^2026.326.34",
+    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.326.34"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

@@ -118,17 +118,26 @@ export class OmniChatModel implements ChatModel {
     const opts = this.buildOpts(options?.signal);
 
     for await (const chunk of model.stream(converted, opts)) {
-      yield {
-        content: chunk.content ?? '',
-        ...(chunk.reasoning ? { reasoning: chunk.reasoning } : {}),
-        ...(chunk.toolCalls?.length ? { tool_calls: convertToolCalls(chunk.toolCalls) } : {}),
-        ...(chunk.usage ? {
+      // node-omni-orcha emits token-by-token deltas, then a final summary
+      // chunk with the full accumulated content/reasoning plus usage stats
+      // and tool_calls. Skip the duplicated text from the final chunk but
+      // preserve tool_calls and usage metadata.
+      if (chunk.usage) {
+        yield {
+          content: '',
+          ...(chunk.toolCalls?.length ? { tool_calls: convertToolCalls(chunk.toolCalls) } : {}),
           usage_metadata: {
             input_tokens: chunk.usage.inputTokens,
             output_tokens: chunk.usage.outputTokens,
             total_tokens: chunk.usage.totalTokens,
           },
-        } : {}),
+        };
+        continue;
+      }
+      yield {
+        content: chunk.content ?? '',
+        ...(chunk.reasoning ? { reasoning: chunk.reasoning } : {}),
+        ...(chunk.toolCalls?.length ? { tool_calls: convertToolCalls(chunk.toolCalls) } : {}),
       };
     }
   }

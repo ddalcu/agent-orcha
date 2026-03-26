@@ -1,4 +1,4 @@
-FROM node:24-slim
+FROM node:25-trixie-slim
 
 WORKDIR /app
 
@@ -12,12 +12,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git zip unzip tar file htop lsof procps cron \
     # GPU (Vulkan loader for NVIDIA Container Toolkit)
     libvulkan1 \
+    # Native inference runtime (OpenMP for llama.cpp in node-omni-orcha)
+    libgomp1 \
     # Browser Sandbox
     chromium xvfb x11vnc novnc websockify fonts-liberation fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --ignore-scripts
+RUN npm install --omit=dev --ignore-scripts \
+    && PLATFORM="$(node -p "process.platform+'-'+process.arch")" \
+    && if [ ! -d "node_modules/@agent-orcha/node-omni-orcha-${PLATFORM}" ]; then \
+         npm install --no-save --ignore-scripts "@agent-orcha/node-omni-orcha-${PLATFORM}" 2>/dev/null || true; \
+       fi
 
 # Build Svelte UI → public/
 COPY ui/ ./ui/

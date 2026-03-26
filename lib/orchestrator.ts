@@ -90,6 +90,8 @@ export class Orchestrator {
   private integrationManager: IntegrationManager | null = null;
   private triggerManager: TriggerManager | null = null;
   private sandboxContainer: SandboxContainer | null = null;
+  private inContainerSandboxStatus: SandboxStatus = 'idle';
+  private inContainerSandboxError: string | null = null;
   /** @internal — accessed by p2p routes via _p2pManager */
   _p2pManager: P2PManager | null = null;
 
@@ -340,7 +342,7 @@ export class Orchestrator {
       if (provider === 'local' && !config.baseUrl) {
         const filePath = await manager.findModelFile(config.model);
         if (!filePath) issues.push(`${label}: model "${config.model}" not downloaded`);
-      } else if (provider !== 'local') {
+      } else if (provider !== 'local' && provider !== 'omni') {
         const key = resolveApiKey(provider, config.apiKey);
         if (!key) issues.push(`${label}: no API key for ${provider}`);
       }
@@ -385,6 +387,10 @@ export class Orchestrator {
         this.launchSandboxContainer().catch((err) => {
           logger.error(`[Sandbox] Failed to launch container: ${err.message}`);
         });
+      } else if (process.env['BROWSER_SANDBOX'] === 'true') {
+        this.probeCDP().catch((err) => {
+          logger.error(`[Sandbox] CDP probe failed: ${err.message}`);
+        });
       }
     } else {
       this.vmExecutor = null;
@@ -395,6 +401,29 @@ export class Orchestrator {
     if (existsSync('/.dockerenv')) return true;
     if (existsSync('/run/.containerenv')) return true;
     return process.env['BROWSER_SANDBOX'] === 'true';
+  }
+
+  private async probeCDP(): Promise<void> {
+    this.inContainerSandboxStatus = 'starting';
+    const maxWait = 60_000;
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+      try {
+        const res = await fetch('http://127.0.0.1:9222/json/version');
+        if (res.ok) {
+          this.inContainerSandboxStatus = 'running';
+          this.inContainerSandboxError = null;
+          logger.info('[Sandbox] In-container CDP ready');
+          return;
+        }
+      } catch {
+        // CDP not ready yet
+      }
+      await new Promise((r) => setTimeout(r, 1_000));
+    }
+    this.inContainerSandboxStatus = 'failed';
+    this.inContainerSandboxError = 'CDP not responding on localhost:9222';
+    logger.warn('[Sandbox] In-container CDP not responding after 60s');
   }
 
   private async launchSandboxContainer(): Promise<void> {
@@ -546,8 +575,10 @@ export class Orchestrator {
       getVmExecutor: () => this.vmExecutor,
       isEnabled: () => this.sandboxConfig?.enabled ?? false,
       getStatus: () => ({
-        status: this.sandboxContainer?.status ?? (this.sandboxConfig?.enabled ? 'idle' : 'idle'),
-        error: this.sandboxContainer?.error ?? null,
+        status: this.sandboxContainer?.status
+          ?? (process.env['BROWSER_SANDBOX'] === 'true' ? this.inContainerSandboxStatus : 'idle'),
+        error: this.sandboxContainer?.error
+          ?? (process.env['BROWSER_SANDBOX'] === 'true' ? this.inContainerSandboxError : null),
       }),
     };
   }

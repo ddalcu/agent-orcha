@@ -75,7 +75,7 @@ async function checkConfigReady(
   if (provider === 'local' && !config.baseUrl) {
     const filePath = await manager.findModelFile(config.model);
     if (!filePath) return { ready: false, reason: `Model "${config.model}" not downloaded` };
-  } else if (provider !== 'local') {
+  } else if (provider !== 'local' && provider !== 'omni') {
     const key = resolveApiKey(provider, config.apiKey);
     if (!key) return { ready: false, reason: `No API key for ${provider}` };
   }

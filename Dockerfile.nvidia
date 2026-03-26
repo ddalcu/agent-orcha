@@ -47,6 +47,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git zip unzip tar file htop lsof procps cron \
     # GPU (Vulkan runtime for AMD/Intel fallback)
     libvulkan1 \
+    # Native inference runtime (OpenMP for llama.cpp in node-omni-orcha)
+    libgomp1 \
     # Browser Sandbox
     chromium-browser xvfb x11vnc novnc websockify fonts-liberation fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
@@ -57,7 +59,11 @@ COPY --from=llama-builder /build/llama.cpp/build/bin/lib*.so* /usr/local/lib/
 RUN ldconfig && chmod +x /usr/local/bin/llama-server
 
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --ignore-scripts
+RUN npm install --omit=dev --ignore-scripts \
+    && PLATFORM="$(node -p "process.platform+'-'+process.arch")" \
+    && if [ ! -d "node_modules/@agent-orcha/node-omni-orcha-${PLATFORM}" ]; then \
+         npm install --no-save --ignore-scripts "@agent-orcha/node-omni-orcha-${PLATFORM}" 2>/dev/null || true; \
+       fi
 
 # Build Svelte UI → public/
 COPY ui/ ./ui/

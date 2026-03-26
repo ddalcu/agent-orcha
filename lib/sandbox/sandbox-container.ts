@@ -309,7 +309,7 @@ export class SandboxContainer {
     const start = Date.now();
     while (Date.now() - start < maxWait) {
       try {
-        const response = await fetch('http://localhost:9222/json/version');
+        const response = await fetch('http://127.0.0.1:9222/json/version');
         if (response.ok) return true;
       } catch {
         // Not ready yet
