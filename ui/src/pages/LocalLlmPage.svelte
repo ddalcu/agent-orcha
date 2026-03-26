@@ -314,7 +314,9 @@
   let freeRam = $state(0);
   let usedRam = $derived(totalRam - freeRam);
   let ramPct = $derived(totalRam > 0 ? Math.round((usedRam / totalRam) * 100) : 0);
-  let gpuVram = $derived(status?.gpu?.vramBytes || 0);
+  let gpuVram = $derived(status?.vram?.totalBytes || status?.gpu?.vramBytes || 0);
+  let gpuVramUsed = $derived(status?.vram?.usedBytes || 0);
+  let gpuVramPct = $derived(gpuVram > 0 && gpuVramUsed > 0 ? Math.round((gpuVramUsed / gpuVram) * 100) : 0);
   let isCuda = $derived(status?.gpu?.backend === 'cuda');
 
   // Chat model details for managed engine
@@ -1508,10 +1510,11 @@
                   <span class="llm-mem-label"><i class="fas fa-tv mr-1"></i>VRAM</span>
                   <div class="llm-mem-bar-wrap">
                     <div class="llm-mem-bar">
-                      <div class="llm-mem-fill llm-mem-green" style:width="0%"></div>
+                      <div class="llm-mem-fill {gpuVramPct > 85 ? 'llm-mem-red' : gpuVramPct > 70 ? 'llm-mem-amber' : 'llm-mem-green'}"
+                        style:width="{gpuVramPct}%"></div>
                     </div>
                   </div>
-                  <span class="llm-mem-value text-muted">{formatBytes(gpuVram)}</span>
+                  <span class="llm-mem-value {gpuVramPct > 85 ? 'text-red' : gpuVramPct > 70 ? 'text-amber' : 'text-muted'}">{gpuVramUsed > 0 ? `${formatBytes(gpuVramUsed)} / ` : ''}{formatBytes(gpuVram)}</span>
                 </div>
               {/if}
             </div>

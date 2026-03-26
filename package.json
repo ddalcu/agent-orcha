@@ -54,7 +54,7 @@
     "prepare": "node -e \"const fs=require('fs');if(fs.existsSync('scripts/install-hooks.sh')){require('child_process').execSync('bash scripts/install-hooks.sh',{stdio:'inherit'})}\""
   },
   "dependencies": {
-    "@agent-orcha/node-omni-orcha": "^2026.326.34",
+    "@agent-orcha/node-omni-orcha": "^2026.326.545",
     "@anthropic-ai/sdk": "^0.76.0",
     "@fastify/cors": "^10.0.1",
     "@fastify/static": "^9.0.0",
@@ -90,7 +90,7 @@
     "@agent-orcha/node-omni-orcha-linux-x64": "^2026.326.34",
     "@agent-orcha/node-omni-orcha-linux-x64-cuda": "^2026.326.34",
     "@agent-orcha/node-omni-orcha-win32-x64": "^2026.326.34",
-    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.326.34"
+    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.326.420"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

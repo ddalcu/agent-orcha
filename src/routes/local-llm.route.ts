@@ -14,7 +14,31 @@ import {
   listTtsConfigs,
 } from '../../lib/llm/index.ts';
 import { detectProvider } from '../../lib/llm/provider-detector.ts';
+import { execFileSync } from '../../lib/utils/child-process.ts';
 import { logger } from '../../lib/logger.ts';
+
+function queryNvidiaVram(): { totalBytes: number; usedBytes: number; freeBytes: number } | null {
+  try {
+    const output = execFileSync('nvidia-smi', [
+      '--query-gpu=memory.total,memory.used,memory.free',
+      '--format=csv,noheader,nounits',
+    ], { encoding: 'utf-8', timeout: 5_000 }).trim();
+
+    const firstGpu = output.split('\n')[0];
+    if (!firstGpu) return null;
+
+    const parts = firstGpu.split(',').map(s => parseInt(s.trim(), 10));
+    if (parts.length < 3 || parts.some(isNaN)) return null;
+
+    return {
+      totalBytes: parts[0]! * 1024 * 1024,
+      usedBytes: parts[1]! * 1024 * 1024,
+      freeBytes: parts[2]! * 1024 * 1024,
+    };
+  } catch {
+    return null;
+  }
+}
 
 const DEFAULT_ENGINE_URLS: Record<string, string> = {
   ollama: 'http://localhost:11434',
@@ -444,6 +468,8 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     const defaultProvider = (defaultModel && typeof defaultModel !== 'string') ? detectProvider(defaultModel) : null;
     const defaultEngine = (defaultModel && typeof defaultModel !== 'string') ? (defaultModel.engine || null) : null;
 
+    const vram = omniStatus.gpu.backend === 'cuda' ? queryNvidiaVram() : null;
+
     return {
       omni: omniStatus,
       available: true,
@@ -451,6 +477,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       systemRamBytes: os.totalmem(),
       freeRamBytes: os.freemem(),
       gpu: omniStatus.gpu,
+      vram,
       defaultProvider,
       defaultEngine,
       platform: process.platform,
