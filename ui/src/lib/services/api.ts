@@ -219,6 +219,10 @@ export const api = {
     });
   },
 
+  // Voices
+  async getVoices() { return (await _fetch('/api/voices')).json(); },
+  async getVoiceData(filename: string) { return (await _fetch(`/api/voices/${encodeURIComponent(filename)}`)).json(); },
+
   // Graph
   async getGraphConfig() { return (await _fetch('/api/graph/config')).json(); },
   async getGraphKnowledgeBases() { return (await _fetch('/api/graph/knowledge-bases')).json(); },

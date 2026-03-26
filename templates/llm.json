@@ -79,9 +79,9 @@
   },
   "image": {
     "image-gen": {
-      "modelPath": ".models/flux2-klein/flux-2-klein-4b-Q4_K_M.gguf",
-      "vae": ".models/flux2-klein/flux2-vae.safetensors",
-      "llm": ".models/flux2-klein/Qwen3-4B-Q4_K_M.gguf",
+      "modelPath": ".models/nomic-embed-text-v1-5-q4_k_m/nomic-embed-text-v1.5.Q4_K_M.gguf",
+      "llm": ".models/nomic-embed-text-v1-5-q4_k_m/nomic-embed-text-v1.5.Q4_K_M.gguf",
+      "vae": ".models/LFM2.5-1.2B-Instruct-8bit/model.safetensors",
       "steps": 20,
       "description": "FLUX.2 Klein 4B"
     }

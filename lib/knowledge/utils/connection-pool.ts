@@ -15,7 +15,7 @@ const poolCache = new Map<string, ConnectionPool>();
  * Get or create a connection pool for the given connection string.
  * Uses singleton pattern to prevent "too many connections" errors.
  */
-export function getPool(connectionString: string): ConnectionPool {
+export function getPool(connectionString: string, workspaceRoot?: string): ConnectionPool {
   // Check cache first
   if (poolCache.has(connectionString)) {
     logger.info(`Reusing existing connection pool`);
@@ -31,7 +31,8 @@ export function getPool(connectionString: string): ConnectionPool {
 
   if (dbType === 'sqlite') {
     const filePath = connectionString.replace(/^sqlite:\/\//, '');
-    const resolved = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+    const base = workspaceRoot || process.env.WORKSPACE || process.cwd();
+    const resolved = path.isAbsolute(filePath) ? filePath : path.resolve(base, filePath);
     logger.info(`Opening SQLite database: ${resolved}`);
     pool = new DatabaseSync(resolved);
   } else if (dbType === 'postgresql') {

@@ -1017,6 +1017,113 @@ img { display: block; max-width: 100%; }
 }
 .attach-btn:hover { color: var(--text-1); background: var(--hover); }
 
+/* Input context menu */
+.chat-input-area { position: relative; }
+.input-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+}
+.input-menu {
+  position: absolute;
+  bottom: 100%;
+  left: var(--sp-3);
+  margin-bottom: var(--sp-2);
+  z-index: 40;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--sp-1) 0;
+  min-width: 220px;
+  max-width: 280px;
+}
+.input-menu-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2h);
+  padding: var(--sp-2) var(--sp-3);
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--fast);
+}
+.input-menu-item:hover { background: var(--hover); }
+.input-menu-icon {
+  width: 16px;
+  text-align: center;
+  color: var(--text-2);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.input-menu-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.input-menu-label {
+  font-size: var(--text-sm);
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.input-menu-desc {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.3;
+}
+.input-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--sp-1) 0;
+}
+.input-menu-voices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: var(--sp-1h) var(--sp-3) var(--sp-2);
+}
+.voice-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text-2);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast), border-color var(--fast);
+}
+.voice-chip:hover:not(:disabled) {
+  color: var(--text-1);
+  background: var(--hover);
+  border-color: var(--accent-20);
+}
+.voice-chip.loading {
+  color: var(--accent);
+  border-color: var(--accent-20);
+}
+.voice-chip:disabled { opacity: 0.5; cursor: wait; }
+
+/* Loop dialog */
+.loop-dialog {
+  width: 380px;
+  max-width: 90vw;
+}
+.loop-interval-num {
+  width: 80px;
+  text-align: center;
+}
+.loop-interval-unit {
+  width: auto;
+  min-width: 110px;
+}
+.loop-prompt-textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+
 /* Response bubbles */
 .response-wrapper { /* wrapper for bubble + status/stats bars */ }
 .response-bubble-inner {

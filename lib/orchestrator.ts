@@ -163,7 +163,7 @@ export class Orchestrator {
     );
     this.toolRegistry.setModelTools(buildModelTools(listImageConfigs(), listTtsConfigs()));
     this.registerBuiltInTools();
-    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader, this.memoryManager, this.integrations);
+    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.config.workspaceRoot, this.skillLoader, this.memoryManager, this.integrations);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
 
     // Initialize ReAct workflow components

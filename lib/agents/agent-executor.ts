@@ -30,10 +30,12 @@ export class AgentExecutor {
   private skillLoader?: SkillLoader;
   private memoryManager?: MemoryManager;
   private integrations?: IntegrationAccessor;
+  private workspaceRoot: string;
 
-  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, skillLoader?: SkillLoader, memoryManager?: MemoryManager, integrations?: IntegrationAccessor) {
+  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, workspaceRoot: string, skillLoader?: SkillLoader, memoryManager?: MemoryManager, integrations?: IntegrationAccessor) {
     this.toolRegistry = toolRegistry;
     this.conversationStore = conversationStore;
+    this.workspaceRoot = workspaceRoot;
     this.skillLoader = skillLoader;
     this.memoryManager = memoryManager;
     this.integrations = integrations;
@@ -372,7 +374,7 @@ export class AgentExecutor {
       } else if (att.mediaType.startsWith('audio/')) {
         // Save audio to disk so tools (like TTS voice cloning) can reference it by path
         try {
-          const generatedDir = path.join(process.cwd(), '.generated');
+          const generatedDir = path.join(this.workspaceRoot, '.generated');
           await fs.mkdir(generatedDir, { recursive: true });
           const fileName = `ref_${Date.now()}_${att.name || 'audio.wav'}`;
           const filePath = path.join(generatedDir, fileName);

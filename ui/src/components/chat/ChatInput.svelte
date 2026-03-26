@@ -5,6 +5,7 @@
     placeholder?: string;
     onsubmit: (message: string) => void;
     onfileselect?: (files: File[]) => void;
+    onplusclick?: (event: MouseEvent) => void;
     onclick?: () => void;
   }
   let {
@@ -13,6 +14,7 @@
     placeholder = 'Ask anything',
     onsubmit,
     onfileselect,
+    onplusclick,
     onclick,
   }: Props = $props();
 
@@ -81,6 +83,13 @@
       textareaEl.style.height = 'auto';
     }
   }
+
+  export function triggerFileSelect(accept?: string) {
+    if (fileInputEl) {
+      fileInputEl.accept = accept || FILE_ACCEPT;
+      fileInputEl.click();
+    }
+  }
 </script>
 
 <div class="chat-input-wrap">
@@ -108,7 +117,7 @@
       type="button"
       class="attach-btn"
       title="Attach files"
-      onclick={() => fileInputEl?.click()}
+      onclick={(e: MouseEvent) => onplusclick ? onplusclick(e) : fileInputEl?.click()}
     >
       <i class="fas fa-plus text-sm"></i>
     </button>

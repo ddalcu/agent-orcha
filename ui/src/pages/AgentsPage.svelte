@@ -357,6 +357,20 @@
   let newSessionModalOpen = $state(false);
   let newAgentModalOpen = $state(false);
 
+  // Input context menu
+  let inputMenuOpen = $state(false);
+
+  // Prebuilt voices
+  interface VoiceEntry { filename: string; name: string; size: number }
+  let availableVoices = $state<VoiceEntry[]>([]);
+  let voiceLoading = $state<string | null>(null);
+
+  // Loop dialog
+  let loopDialogOpen = $state(false);
+  let loopDialogAmount = $state(5);
+  let loopDialogUnit = $state<'m' | 'h'>('m');
+  let loopDialogPrompt = $state('');
+
   function createSession(type: string, name: string) {
     const session = sessionStore.create({
       agentName: type === 'agent' ? name : null,
@@ -1609,6 +1623,132 @@
     }
   }
 
+  // --- Input context menu ---
+
+  const FILE_ACCEPT = "image/*,audio/*,.wav,.mp3,.ogg,.flac,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.go,.rs,.rb,.php,.sql,.sh,.log,.ini,.toml,.env";
+
+  interface InputMenuItem {
+    id: string;
+    icon: string;
+    label: string;
+    description?: string;
+    accept?: string;
+    dividerBefore?: boolean;
+  }
+
+  const inputMenuItems = $derived.by((): InputMenuItem[] => {
+    const items: InputMenuItem[] = [];
+    const tools = toolNames;
+    const hasTts = tools.some(t => t.startsWith('models:tts'));
+    const hasImageGen = tools.some(t => t.startsWith('models:image'));
+
+    if (hasTts) {
+      items.push({
+        id: 'upload-voice',
+        icon: 'fa-microphone',
+        label: 'Upload voice sample',
+        description: 'WAV file, 5\u201310s clear speech',
+        accept: 'audio/*,.wav,.mp3,.ogg,.flac',
+      });
+    }
+
+    items.push({
+      id: 'upload-image',
+      icon: 'fa-image',
+      label: 'Upload image',
+      description: hasImageGen ? 'Reference for generation' : 'Vision analysis',
+      accept: 'image/*',
+    });
+
+    items.push({
+      id: 'upload-file',
+      icon: 'fa-paperclip',
+      label: 'Upload file',
+      description: 'PDF, docs, code',
+      accept: FILE_ACCEPT,
+    });
+
+    items.push({
+      id: loopInterval ? 'stop-loop' : 'start-loop',
+      icon: 'fa-rotate',
+      label: loopInterval ? 'Stop loop' : 'Start loop',
+      description: loopInterval ? `Every ${loopLabel}` : 'Run a prompt on a timer',
+      dividerBefore: true,
+    });
+
+    return items;
+  });
+
+  function toggleInputMenu() {
+    if (!hasActiveSession) {
+      showNewSessionModal();
+      return;
+    }
+    inputMenuOpen = !inputMenuOpen;
+    if (inputMenuOpen && hasTts && availableVoices.length === 0) {
+      loadVoices();
+    }
+  }
+
+  function handleMenuSelect(id: string) {
+    inputMenuOpen = false;
+
+    if (id === 'start-loop') {
+      loopDialogOpen = true;
+      return;
+    }
+    if (id === 'stop-loop') {
+      stopLoop();
+      return;
+    }
+
+    const item = inputMenuItems.find(i => i.id === id);
+    if (item?.accept) {
+      chatInputRef?.triggerFileSelect(item.accept);
+    }
+  }
+
+  function handleStartLoopDialog() {
+    if (!loopDialogPrompt.trim() || loopDialogAmount < 1) return;
+    const ms = loopDialogUnit === 'h' ? loopDialogAmount * 3600000 : loopDialogAmount * 60000;
+    const label = `${loopDialogAmount}${loopDialogUnit}`;
+    loopDialogOpen = false;
+    startLoop(ms, loopDialogPrompt.trim(), label);
+    loopDialogPrompt = '';
+    loopDialogAmount = 5;
+    loopDialogUnit = 'm';
+  }
+
+  // --- Prebuilt voices ---
+
+  const hasTts = $derived(toolNames.some(t => t.startsWith('models:tts')));
+
+  async function loadVoices() {
+    try {
+      availableVoices = await api.getVoices();
+    } catch {
+      availableVoices = [];
+    }
+  }
+
+  async function selectVoice(voice: VoiceEntry) {
+    inputMenuOpen = false;
+    voiceLoading = voice.name;
+    try {
+      const data = await api.getVoiceData(voice.filename);
+      pendingAttachments = [...pendingAttachments, {
+        data: data.data,
+        mediaType: data.mediaType,
+        name: data.name,
+      }];
+      chatInputRef?.focus();
+    } catch (e) {
+      console.error('Failed to load voice:', e);
+    } finally {
+      voiceLoading = null;
+    }
+  }
+
   const hasArchitect = $derived(appStore.agents.some(a => a.name === 'architect'));
 
   // --- Session sidebar info ---
@@ -1874,6 +2014,46 @@
 
     <!-- Input Area -->
     <div class="chat-input-area">
+      {#if inputMenuOpen}
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div class="input-menu-backdrop" onclick={() => { inputMenuOpen = false; }}></div>
+        <div class="input-menu">
+          {#each inputMenuItems as item}
+            {#if item.dividerBefore}
+              <div class="input-menu-divider"></div>
+            {/if}
+            <button class="input-menu-item" onclick={() => handleMenuSelect(item.id)}>
+              <i class="fas {item.icon} input-menu-icon"></i>
+              <div class="input-menu-text">
+                <span class="input-menu-label">{item.label}</span>
+                {#if item.description}
+                  <span class="input-menu-desc">{item.description}</span>
+                {/if}
+              </div>
+            </button>
+            {#if item.id === 'upload-voice' && availableVoices.length > 0}
+              <div class="input-menu-voices">
+                {#each availableVoices as voice}
+                  <button
+                    class="voice-chip"
+                    class:loading={voiceLoading === voice.name}
+                    disabled={voiceLoading !== null}
+                    title={voice.filename}
+                    onclick={() => selectVoice(voice)}
+                  >
+                    {#if voiceLoading === voice.name}
+                      <i class="fas fa-spinner fa-spin text-2xs"></i>
+                    {:else}
+                      <i class="fas fa-volume-high text-2xs"></i>
+                    {/if}
+                    {voice.name}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          {/each}
+        </div>
+      {/if}
       <AttachmentPreview attachments={pendingAttachments} onremove={removeAttachment} />
       <ChatInput
         bind:this={chatInputRef}
@@ -1882,6 +2062,7 @@
         placeholder="Ask anything"
         onsubmit={handleSubmit}
         onfileselect={handleFileAttach}
+        onplusclick={toggleInputMenu}
         onclick={handleInputClick}
       />
     </div>
@@ -1983,6 +2164,55 @@
           </div>
           <i class="fas fa-chevron-right text-xs text-muted"></i>
         </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Loop Dialog -->
+{#if loopDialogOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
+  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) loopDialogOpen = false; }} role="dialog">
+    <div class="modal-content loop-dialog">
+      <div class="modal-header">
+        <h3 class="text-lg font-semibold text-primary">Start loop</h3>
+        <button class="modal-close-btn" title="Close" onclick={() => { loopDialogOpen = false; }}>
+          <i class="fas fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-4">
+        <div class="mb-3">
+          <label class="text-sm text-muted mb-1 block">Interval</label>
+          <div class="flex items-center gap-2">
+            <input
+              type="number"
+              min="1"
+              max="999"
+              bind:value={loopDialogAmount}
+              class="input loop-interval-num"
+            />
+            <select bind:value={loopDialogUnit} class="select loop-interval-unit">
+              <option value="m">minutes</option>
+              <option value="h">hours</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-4">
+          <label class="text-sm text-muted mb-1 block">Prompt</label>
+          <textarea
+            bind:value={loopDialogPrompt}
+            rows="3"
+            class="textarea loop-prompt-textarea"
+            placeholder="What should run each cycle?"
+            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleStartLoopDialog(); }}
+          ></textarea>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button class="btn btn-ghost" onclick={() => { loopDialogOpen = false; }}>Cancel</button>
+          <button class="btn btn-accent" disabled={!loopDialogPrompt.trim() || loopDialogAmount < 1} onclick={handleStartLoopDialog}>
+            <i class="fas fa-play text-xs"></i> Start
+          </button>
+        </div>
       </div>
     </div>
   </div>
