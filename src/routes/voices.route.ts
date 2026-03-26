@@ -17,11 +17,11 @@ export const voicesRoutes: FastifyPluginAsync = async (fastify) => {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       const voices = [];
       for (const entry of entries) {
-        if (!entry.isFile() || !entry.name.endsWith('.wav')) continue;
+        if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.wav')) continue;
         const stat = await fs.stat(path.join(dir, entry.name));
         voices.push({
           filename: entry.name,
-          name: entry.name.replace(/\.wav$/, ''),
+          name: entry.name.replace(/\.wav$/i, ''),
           size: stat.size,
         });
       }
@@ -30,14 +30,14 @@ export const voicesRoutes: FastifyPluginAsync = async (fastify) => {
     } catch (err: any) {
       if (err.code === 'ENOENT') return [];
       logger.error(`Failed to list voices: ${err.message}`);
-      return [];
+      return { error: err.message, voices: [] };
     }
   });
 
   /** Get voice file as base64 for attachment */
   fastify.get<{ Params: VoiceParams }>('/:filename', async (request, reply) => {
     const filename = request.params.filename;
-    if (!filename.endsWith('.wav') || filename.includes('..') || filename.includes('/')) {
+    if (!filename.endsWith('.wav') || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
       return reply.status(400).send({ error: 'Invalid filename' });
     }
 

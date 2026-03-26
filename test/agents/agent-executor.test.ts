@@ -419,7 +419,7 @@ describe('AgentExecutor invoke/stream', () => {
     };
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store, undefined, undefined, mockIntegrations);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', undefined, undefined, mockIntegrations);
     const def = minimalDefinition({
       integrations: [{ type: 'collabnook', url: 'ws://test', channel: 'test', botName: 'bot' }],
     });
@@ -694,7 +694,7 @@ describe('AgentExecutor extractStructuredOutput (via invoke)', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const def = minimalDefinition({
       output: { format: 'structured' },
     });
@@ -800,7 +800,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ input: { message: 'hi' }, sessionId: 'sess-tools' });
@@ -830,7 +830,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ message: 'hi' });
@@ -851,7 +851,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const def = minimalDefinition({
       output: {
         format: 'structured',
@@ -878,7 +878,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ message: 'empty' });
@@ -905,7 +905,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ message: 'abort' });
