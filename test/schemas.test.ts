@@ -86,13 +86,24 @@ describe('AgentMemoryConfigSchema', () => {
 });
 
 describe('AgentP2PConfigSchema', () => {
-  it('should parse p2p with leverage and share', () => {
+  it('should parse p2p with leverage boolean and share', () => {
     const result = AgentDefinitionSchema.parse({
       name: 'test', description: 'test',
       prompt: { system: 'test' },
       p2p: { leverage: true, share: false },
     });
     assert.deepEqual(result.p2p, { leverage: true, share: false });
+  });
+
+  it('should parse p2p with leverage mode string', () => {
+    for (const mode of ['local-first', 'remote-first', 'remote-only'] as const) {
+      const result = AgentDefinitionSchema.parse({
+        name: 'test', description: 'test',
+        prompt: { system: 'test' },
+        p2p: { leverage: mode, share: false },
+      });
+      assert.deepEqual(result.p2p, { leverage: mode, share: false });
+    }
   });
 
   it('should parse p2p boolean shorthand as leverage+share', () => {

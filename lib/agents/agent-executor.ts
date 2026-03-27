@@ -75,7 +75,7 @@ export class AgentExecutor {
     }
 
     const modelRef = resolveAgentModelRef(augmentedDefinition.model);
-    const leverage = resolveP2PConfig(definition.p2p).leverage;
+    const { leverage } = resolveP2PConfig(definition.p2p);
     let llm = await LLMFactory.create(
       modelRef.temperature !== undefined ? { llm: modelRef.llm, temperature: modelRef.temperature } : modelRef.llm,
       leverage,

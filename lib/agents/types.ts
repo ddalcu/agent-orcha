@@ -38,20 +38,29 @@ export const AgentPublishConfigSchema = z.union([
 
 export type AgentPublishConfig = z.infer<typeof AgentPublishConfigSchema>;
 
+export const LeverageModeSchema = z.union([
+  z.boolean(),
+  z.enum(['local-first', 'remote-first', 'remote-only']),
+]);
+
+export type LeverageMode = false | 'local-first' | 'remote-first' | 'remote-only';
+
 export const AgentP2PConfigSchema = z.union([
   z.boolean(),
   z.object({
-    leverage: z.boolean().default(false),
+    leverage: LeverageModeSchema.default(false),
     share: z.boolean().default(false),
   }),
 ]);
 
 export type AgentP2PConfig = z.infer<typeof AgentP2PConfigSchema>;
 
-export function resolveP2PConfig(config?: AgentP2PConfig): { leverage: boolean; share: boolean } {
+export function resolveP2PConfig(config?: AgentP2PConfig): { leverage: LeverageMode; share: boolean } {
   if (config === undefined || config === false) return { leverage: false, share: false };
-  if (config === true) return { leverage: true, share: true };
-  return { leverage: config.leverage, share: config.share };
+  if (config === true) return { leverage: 'local-first', share: true };
+  const lev = config.leverage;
+  const mode: LeverageMode = lev === true ? 'local-first' : lev === false ? false : lev;
+  return { leverage: mode, share: config.share };
 }
 
 export function resolvePublishConfig(
