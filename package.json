@@ -52,7 +52,7 @@
     "build:binary": "node scripts/build-sea.mjs",
     "sea": "node scripts/build-sea.mjs && ./dist/sea/agent-orcha",
     "test:e2e": "npx playwright test",
-    "prepare": "node -e \"const fs=require('fs');if(fs.existsSync('scripts/install-hooks.sh')){require('child_process').execSync('bash scripts/install-hooks.sh',{stdio:'inherit'})}\""
+    "prepare": "node -e \"const fs=require('fs'),path=require('path');const d=path.join('.git','hooks');if(!fs.existsSync('.git'))process.exit(0);fs.mkdirSync(d,{recursive:true});fs.writeFileSync(path.join(d,'pre-commit'),'#!/bin/sh\\nnode \\\"$(dirname \\\"$0\\\")/../../scripts/pre-commit.mjs\\\"\\n');try{fs.chmodSync(path.join(d,'pre-commit'),0o755)}catch{}\""
   },
   "dependencies": {
     "@agent-orcha/node-omni-orcha": "^2026.326.1716",
