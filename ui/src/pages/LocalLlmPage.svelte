@@ -59,7 +59,7 @@
   };
 
   const RECOMMENDED_MODELS_GGUF: any[] = [
-    { repo: 'unsloth/Qwen3.5-9B-GGUF', file: 'Qwen3.5-9B-Q4_K_M.gguf', label: 'Qwen3.5-9B-Q4_K_M', desc: 'Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.', size: '~5.3 GB', icon: 'fa-comments', color: 'amber', type: 'gguf', category: 'llm' },
+    { repo: 'unsloth/Qwen3.5-4B-GGUF', file: 'Qwen3.5-4B-IQ4_NL.gguf', label: 'Qwen3.5-4B-IQ4_NL', desc: 'Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.', size: '~2.5 GB', icon: 'fa-comments', color: 'amber', type: 'gguf', category: 'llm' },
     { repo: 'nomic-ai/nomic-embed-text-v1.5-GGUF', file: 'nomic-embed-text-v1.5.Q4_K_M.gguf', label: 'nomic-embed-text-v1.5-Q4_K_M', desc: 'Embedding model for knowledge stores. Required for local RAG pipelines.', size: '~80 MB', icon: 'fa-vector-square', color: 'blue', type: 'gguf', category: 'embed' },
     {
       repo: 'unsloth/FLUX.2-klein-4B-GGUF', file: 'flux2-klein', label: 'FLUX.2 Klein 4B', type: 'bundle', category: 'image',
@@ -69,6 +69,16 @@
         { repo: 'unsloth/FLUX.2-klein-4B-GGUF', file: 'flux-2-klein-4b-Q4_K_M.gguf' },
         { repo: 'Comfy-Org/vae-text-encorder-for-flux-klein-4b', file: 'split_files/vae/flux2-vae.safetensors', targetName: 'flux2-vae.safetensors' },
         { repo: 'unsloth/Qwen3-4B-GGUF', file: 'Qwen3-4B-Q4_K_M.gguf' },
+      ],
+    },
+    {
+      repo: 'QuantStack/Wan2.2-TI2V-5B-GGUF', file: 'wan22-5b', label: 'WAN 2.2 TI2V 5B', type: 'bundle', category: 'video',
+      desc: 'Video generation model. Downloads main model, VAE, and UMT5 text encoder.',
+      size: '~10 GB', icon: 'fa-video', color: 'red',
+      bundle: [
+        { repo: 'QuantStack/Wan2.2-TI2V-5B-GGUF', file: 'Wan2.2-TI2V-5B-Q4_K_M.gguf' },
+        { repo: 'QuantStack/Wan2.2-TI2V-5B-GGUF', file: 'VAE/Wan2.2_VAE.safetensors', targetName: 'Wan2.2_VAE.safetensors' },
+        { repo: 'city96/umt5-xxl-encoder-gguf', file: 'umt5-xxl-encoder-Q8_0.gguf' },
       ],
     },
     { repo: 'Volko76/Qwen3-TTS-12Hz-0.6B-Base-Qwen3tts.cpp_quants-GGUF', file: 'qwen3-tts', label: 'Qwen3 TTS 0.6B', desc: 'Text-to-speech with voice cloning. Upload a 5-10s audio sample to clone any voice.', size: '~2.0 GB', icon: 'fa-microphone', color: 'green', type: 'dir', category: 'tts' },
@@ -148,6 +158,15 @@
       (m.repo === repoId && m.id === fileName) ||
       (m.id === fileName) // bundle/directory models: id = directory name
     );
+  }
+
+  function findRecommendedForModel(modelName: string, category?: string): (typeof RECOMMENDED_MODELS_GGUF)[0] | undefined {
+    const name = modelName.replace(/\.gguf$/i, '');
+    return RECOMMENDED_MODELS_GGUF.find(r => {
+      if (category && r.category !== category) return false;
+      const rName = r.file.replace(/\.gguf$/i, '');
+      return rName.toLowerCase() === name.toLowerCase() || r.label.toLowerCase() === name.toLowerCase();
+    });
   }
 
   function getRecommendedInfo(model: any): { label: string; desc: string } | null {
@@ -293,8 +312,9 @@
   let ttsModelName = $derived(ttsModelPath ? ttsModelPath.split('/').pop() : null);
 
   // Configured image/TTS models from models.yaml (these are "on-demand" slots)
-  let imageConfigs = $derived(Object.entries(llmConfig?.image || {}) as [string, any][]);
-  let ttsConfigs = $derived(Object.entries(llmConfig?.tts || {}) as [string, any][]);
+  // Filter out 'default' pointer entries so we only have concrete config objects
+  let imageConfigs = $derived((Object.entries(llmConfig?.image || {}) as [string, any][]).filter(([k, v]) => k !== 'default' && typeof v === 'object'));
+  let ttsConfigs = $derived((Object.entries(llmConfig?.tts || {}) as [string, any][]).filter(([k, v]) => k !== 'default' && typeof v === 'object'));
 
   // Configured embedding model (on-demand — loads when knowledge stores initialize)
   let embConfigDefault = $derived.by(() => {
@@ -950,6 +970,23 @@
       console.error('Failed to toggle P2P:', e);
     } finally {
       togglingP2P = null;
+    }
+  }
+
+  let togglingSectionP2P = $state<string | null>(null);
+  async function toggleSectionP2P(section: 'image' | 'tts' | 'video', name: string) {
+    const key = `${section}:${name}`;
+    togglingSectionP2P = key;
+    try {
+      const sectionData = llmConfig?.[section];
+      const entry = sectionData?.[name];
+      const current = entry?.share === true;
+      await api.toggleSectionP2P(section, name, !current);
+      llmConfig = await api.getLlmConfig();
+    } catch (e: any) {
+      console.error(`Failed to toggle ${section} P2P:`, e);
+    } finally {
+      togglingSectionP2P = null;
     }
   }
 
@@ -1653,12 +1690,17 @@
                 </div>
               </div>
             {:else}
+              {@const defaultCfg = resolveDefault('models')}
+              {@const chatRecommended = defaultCfg?.model ? findRecommendedForModel(defaultCfg.model, 'llm') : undefined}
+              {@const chatNeedsDownload = chatRecommended && !isModelDownloaded(models, chatRecommended.repo, chatRecommended.file)}
               <div class="llm-section-content flex items-center justify-between">
                 <div class="flex items-center gap-3">
                   <span class="llm-pulse-off"></span>
                   <span class="text-sm text-secondary">Chat Model</span>
                   {#if lastActiveModelObj}
                     <span class="text-xs text-muted">{lastActiveModelObj.fileName}</span>
+                  {:else if chatNeedsDownload}
+                    <span class="text-xs text-muted">{chatRecommended.label}</span>
                   {:else}
                     <span class="text-xs text-muted">Activate a model to start</span>
                   {/if}
@@ -1673,6 +1715,16 @@
                       <i class="fas fa-play mr-1"></i>Start
                     {/if}
                   </button>
+                {:else if chatNeedsDownload}
+                  {@const isDownloading = activeDownloads.has(`${chatRecommended.repo}/${chatRecommended.file}`)}
+                  <button class="btn btn-amber btn-sm" disabled={isDownloading}
+                    onclick={() => downloadModel(chatRecommended.repo, chatRecommended.file, chatRecommended.type, undefined, undefined, undefined, chatRecommended.category)}>
+                    {#if isDownloading}
+                      <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
+                    {:else}
+                      <i class="fas fa-download mr-1"></i>Download
+                    {/if}
+                  </button>
                 {/if}
               </div>
             {/if}
@@ -1680,6 +1732,8 @@
 
           <!-- Embedding model -->
           {#if embIsOmni && embConfigDefault}
+            {@const embRecommended = findRecommendedForModel(embConfigDefault.model, 'embed')}
+            {@const embNeedsDownload = embRecommended && !isModelDownloaded(models, embRecommended.repo, embRecommended.file)}
             <div class="llm-server-section {embRunning ? '' : 'llm-slot-ondemand'}">
               <div class="llm-section-content flex items-center justify-between">
                 <div class="flex items-center gap-3">
@@ -1699,6 +1753,16 @@
                     <button class="btn btn-danger btn-sm" disabled={stoppingEmb} onclick={stopEmbedding}>
                       {#if stoppingEmb}<i class="fas fa-spinner fa-spin mr-1"></i>Stopping...{:else}<i class="fas fa-stop mr-1"></i>Stop{/if}
                     </button>
+                  {:else if embNeedsDownload}
+                    {@const isDownloading = activeDownloads.has(`${embRecommended.repo}/${embRecommended.file}`)}
+                    <button class="btn btn-blue btn-sm" disabled={isDownloading}
+                      onclick={() => downloadModel(embRecommended.repo, embRecommended.file, embRecommended.type, undefined, undefined, undefined, embRecommended.category)}>
+                      {#if isDownloading}
+                        <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
+                      {:else}
+                        <i class="fas fa-download mr-1"></i>Download
+                      {/if}
+                    </button>
                   {:else}
                     <button class="btn btn-blue btn-sm" disabled={startingEmb} onclick={startEmbedding}>
                       {#if startingEmb}<i class="fas fa-spinner fa-spin mr-1"></i>Loading...{:else}<i class="fas fa-play mr-1"></i>Start{/if}
@@ -1709,20 +1773,23 @@
             </div>
           {/if}
 
-          <!-- Image Generation model -->
+          <!-- Image / Video model -->
           {#if imageConfigs.length > 0}
             {@const imgCfg = imageConfigs[0][1]}
             {@const imgLabel = imgCfg.description || imgCfg.modelPath?.split('/').pop() || imageConfigs[0][0]}
+            {@const imgDirName = imgCfg.description || imgCfg.modelPath?.split('/').slice(-2, -1)[0] || imgCfg.modelPath?.split('/').pop() || ''}
+            {@const imgRecommended = findRecommendedForModel(imgDirName, 'image')}
+            {@const imgNeedsDownload = imgRecommended && !isModelDownloaded(models, imgRecommended.repo, imgRecommended.file)}
             <div class="llm-server-section {imageLoaded ? '' : 'llm-slot-ondemand'}">
               <div class="llm-section-content flex items-center justify-between">
                 <div class="flex items-center gap-3">
                   {#if imageLoaded}
                     <span class="llm-pulse llm-pulse-purple"></span>
-                    <span class="text-sm text-primary">Image Generation</span>
+                    <span class="text-sm text-primary">Image / Video</span>
                     <span class="badge badge-purple font-mono">{imageModelName}</span>
                   {:else}
                     <i class="fas fa-image text-purple text-xs"></i>
-                    <span class="text-sm text-secondary">Image Generation</span>
+                    <span class="text-sm text-secondary">Image / Video</span>
                     <span class="text-xs text-muted font-mono">{imgLabel}</span>
                     <span class="llm-ondemand-badge">on demand</span>
                   {/if}
@@ -1731,6 +1798,16 @@
                   {#if imageLoaded}
                     <button class="btn btn-danger btn-sm" disabled={stoppingImage} onclick={stopImage}>
                       {#if stoppingImage}<i class="fas fa-spinner fa-spin mr-1"></i>Stopping...{:else}<i class="fas fa-stop mr-1"></i>Stop{/if}
+                    </button>
+                  {:else if imgNeedsDownload}
+                    {@const isDownloading = activeDownloads.has(`bundle:${imgRecommended.file}`)}
+                    <button class="btn btn-purple btn-sm" disabled={isDownloading}
+                      onclick={() => downloadModel(imgRecommended.repo, imgRecommended.file, imgRecommended.type, undefined, undefined, imgRecommended.bundle, imgRecommended.category)}>
+                      {#if isDownloading}
+                        <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
+                      {:else}
+                        <i class="fas fa-download mr-1"></i>Download
+                      {/if}
                     </button>
                   {:else}
                     <button class="btn btn-purple btn-sm" disabled={startingImage} onclick={startImage}>
@@ -1746,6 +1823,9 @@
           {#if ttsConfigs.length > 0}
             {@const ttsCfg = ttsConfigs[0][1]}
             {@const ttsLabel = ttsCfg.description || ttsCfg.modelPath?.split('/').pop() || ttsConfigs[0][0]}
+            {@const ttsDirName = ttsCfg.modelPath?.split('/').pop() || ''}
+            {@const ttsRecommended = findRecommendedForModel(ttsDirName, 'tts')}
+            {@const ttsNeedsDownload = ttsRecommended && !isModelDownloaded(models, ttsRecommended.repo, ttsRecommended.file)}
             <div class="llm-server-section {ttsLoaded ? '' : 'llm-slot-ondemand'}">
               <div class="llm-section-content flex items-center justify-between">
                 <div class="flex items-center gap-3">
@@ -1765,6 +1845,16 @@
                     <button class="btn btn-danger btn-sm" disabled={stoppingTts} onclick={stopTts}>
                       {#if stoppingTts}<i class="fas fa-spinner fa-spin mr-1"></i>Stopping...{:else}<i class="fas fa-stop mr-1"></i>Stop{/if}
                     </button>
+                  {:else if ttsNeedsDownload}
+                    {@const isDownloading = activeDownloads.has(`dir:${ttsRecommended.repo}`)}
+                    <button class="btn btn-green btn-sm" disabled={isDownloading}
+                      onclick={() => downloadModel(ttsRecommended.repo, ttsRecommended.file, ttsRecommended.type, undefined, ttsRecommended.file, undefined, ttsRecommended.category)}>
+                      {#if isDownloading}
+                        <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
+                      {:else}
+                        <i class="fas fa-download mr-1"></i>Download
+                      {/if}
+                    </button>
                   {:else}
                     <button class="btn btn-green btn-sm" disabled={startingTts} onclick={startTts}>
                       {#if startingTts}<i class="fas fa-spinner fa-spin mr-1"></i>Loading...{:else}<i class="fas fa-play mr-1"></i>Start{/if}
@@ -1776,17 +1866,44 @@
           {/if}
 
           {#if p2pEnabled && selectedEngine}
-            {@const engEntry = llmConfig?.llm?.[selectedEngine]}
+            {@const chatEntry = llmConfig?.llm?.[selectedEngine]}
+            {@const imgEntry = imageConfigs.length > 0 ? imageConfigs[0][1] : null}
+            {@const imgName = imageConfigs.length > 0 ? imageConfigs[0][0] : ''}
+            {@const ttsEntry = ttsConfigs.length > 0 ? ttsConfigs[0][1] : null}
+            {@const ttsName = ttsConfigs.length > 0 ? ttsConfigs[0][0] : ''}
             <div class="llm-server-section">
-              <div class="llm-section-content flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <i class="fas fa-share-nodes text-xs {engEntry?.share ? 'text-accent' : 'text-muted'}"></i>
-                  <span class="text-sm {engEntry?.share ? 'text-primary' : 'text-secondary'}">P2P Sharing</span>
-                  {#if engEntry?.share}
-                    <span class="badge badge-accent text-2xs">Shared</span>
+              <div class="llm-section-content">
+                <div class="flex items-center gap-2 mb-2">
+                  <i class="fas fa-share-nodes text-xs text-accent"></i>
+                  <span class="text-sm text-primary">P2P Sharing</span>
+                </div>
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <i class="fas fa-comments text-2xs text-amber"></i>
+                      <span class="text-xs text-secondary">Chat</span>
+                    </div>
+                    <Toggle active={chatEntry?.share === true} disabled={togglingP2P === selectedEngine} onchange={() => toggleModelP2P(selectedEngine!)} />
+                  </div>
+                  {#if imgEntry}
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-2">
+                        <i class="fas fa-image text-2xs text-purple"></i>
+                        <span class="text-xs text-secondary">Image / Video</span>
+                      </div>
+                      <Toggle active={imgEntry?.share === true} disabled={togglingSectionP2P === `image:${imgName}`} onchange={() => toggleSectionP2P('image', imgName)} />
+                    </div>
+                  {/if}
+                  {#if ttsEntry}
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-2">
+                        <i class="fas fa-microphone text-2xs text-green"></i>
+                        <span class="text-xs text-secondary">Text-to-Speech</span>
+                      </div>
+                      <Toggle active={ttsEntry?.share === true} disabled={togglingSectionP2P === `tts:${ttsName}`} onchange={() => toggleSectionP2P('tts', ttsName)} />
+                    </div>
                   {/if}
                 </div>
-                <Toggle active={engEntry?.share === true} disabled={togglingP2P === selectedEngine} onchange={() => toggleModelP2P(selectedEngine!)} />
               </div>
             </div>
           {/if}

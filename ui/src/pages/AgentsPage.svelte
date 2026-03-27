@@ -967,7 +967,7 @@
       }
 
       // Intercept model tools (image, TTS, video generation)
-      if ((event.tool?.startsWith('model_') || event.tool === 'generate_video') && typeof event.output === 'string') {
+      if ((event.tool === 'generate_image' || event.tool === 'generate_tts' || event.tool === 'generate_video') && typeof event.output === 'string') {
         try {
           const parsed = JSON.parse(event.output);
           if (parsed.__modelTask) {
@@ -1680,8 +1680,8 @@
   const inputMenuItems = $derived.by((): InputMenuItem[] => {
     const items: InputMenuItem[] = [];
     const tools = toolNames;
-    const hasTts = tools.some(t => t.startsWith('models:tts'));
-    const hasImageGen = tools.some(t => t.startsWith('models:image'));
+    const hasTts = tools.some(t => t === 'builtin:generate_tts' || t.startsWith('models:tts'));
+    const hasImageGen = tools.some(t => t === 'builtin:generate_image' || t.startsWith('models:image'));
 
     if (hasTts) {
       items.push({
@@ -1872,7 +1872,7 @@
     return currentAgent.tools.map(t => typeof t === 'string' ? t : t.name);
   });
 
-  const hasTts = $derived(toolNames.some(t => t.startsWith('models:tts')));
+  const hasTts = $derived(toolNames.some(t => t === 'builtin:generate_tts' || t.startsWith('models:tts')));
   const hasVideoTool = $derived(toolNames.some(t => t.includes('generate_video')));
 
   const currentWorkflow = $derived.by(() => {

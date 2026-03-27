@@ -68,14 +68,17 @@ async function buildUserContent(text: string, attachments?: Attachment[]): Promi
 }
 
 async function checkConfigReady(
-  config: { provider?: string; baseUrl?: string; apiKey?: string; model: string },
+  config: { provider?: string; baseUrl?: string; apiKey?: string; model: string; active?: boolean },
   manager: ModelManager,
 ): Promise<{ ready: boolean; reason?: string }> {
+  if (config.active === false) {
+    return { ready: false, reason: `Model "${config.model}" is not active` };
+  }
   const provider = detectProvider(config as any);
-  if (provider === 'local' && !config.baseUrl) {
+  if (provider === 'omni' || (provider === 'local' && !config.baseUrl)) {
     const filePath = await manager.findModelFile(config.model);
     if (!filePath) return { ready: false, reason: `Model "${config.model}" not downloaded` };
-  } else if (provider !== 'local' && provider !== 'omni') {
+  } else if (provider !== 'local') {
     const key = resolveApiKey(provider, config.apiKey);
     if (!key) return { ready: false, reason: `No API key for ${provider}` };
   }
@@ -212,7 +215,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // PATCH /config/models/:name/share — toggle share flag
+  // PATCH /config/models/:name/share — toggle share flag for LLM models
   fastify.patch<{ Params: { name: string }; Body: { share: boolean } }>(
     '/config/models/:name/share',
     async (request, reply) => {
@@ -230,6 +233,36 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       await saveModelsConfig(modelsConfigPath, config);
 
       // Broadcast updated catalog so peers see the change
+      const manager = (fastify.orchestrator as any)._p2pManager;
+      manager?.broadcastCatalog();
+
+      return { ok: true };
+    },
+  );
+
+  // PATCH /config/:section/:name/share — toggle share flag for image/tts/video models
+  fastify.patch<{ Params: { section: string; name: string }; Body: { share: boolean } }>(
+    '/config/:section/:name/share',
+    async (request, reply) => {
+      const config = getModelsConfig();
+      if (!config) throw new Error('No models config loaded');
+
+      const { section, name } = request.params;
+      if (!['image', 'tts', 'video'].includes(section)) {
+        return reply.status(400).send({ error: `Invalid section "${section}". Must be image, tts, or video.` });
+      }
+
+      const sectionData = config[section as 'image' | 'tts' | 'video'];
+      if (!sectionData) return reply.status(404).send({ error: `No ${section} config found` });
+
+      const entry = sectionData[name];
+      if (!entry || typeof entry === 'string') {
+        return reply.status(404).send({ error: `${section} model "${name}" not found` });
+      }
+
+      (entry as any).share = (request.body as any).share;
+      await saveModelsConfig(modelsConfigPath, config);
+
       const manager = (fastify.orchestrator as any)._p2pManager;
       manager?.broadcastCatalog();
 

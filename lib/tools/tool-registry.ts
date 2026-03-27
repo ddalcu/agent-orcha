@@ -13,7 +13,6 @@ export class ToolRegistry {
   private builtInTools: Map<string, StructuredTool> = new Map();
   private sandboxTools: Map<string, StructuredTool>;
   private workspaceTools: Map<string, StructuredTool>;
-  private modelTools: Map<string, StructuredTool> = new Map();
 
   constructor(
     mcpClient: MCPClientManager,
@@ -106,12 +105,17 @@ export class ToolRegistry {
       }
 
       case 'models': {
-        const modelTool = this.modelTools.get(name);
-        if (!modelTool) {
-          logger.warn(`Model tool "${name}" not found (available: ${Array.from(this.modelTools.keys()).join(', ') || 'none'})`);
-          return [];
+        // Deprecated: models:image:* → builtin:generate_image, models:tts:* → builtin:generate_tts
+        logger.warn(`Deprecated tool reference "models:${name}". Use "builtin:generate_image" or "builtin:generate_tts" instead.`);
+        if (name.startsWith('image:')) {
+          const builtin = this.builtInTools.get('generate_image');
+          return builtin ? [builtin] : [];
         }
-        return [modelTool];
+        if (name.startsWith('tts:')) {
+          const builtin = this.builtInTools.get('generate_tts');
+          return builtin ? [builtin] : [];
+        }
+        return [];
       }
 
       default:
@@ -190,11 +194,4 @@ export class ToolRegistry {
     return Array.from(this.workspaceTools.values());
   }
 
-  setModelTools(tools: Map<string, StructuredTool>): void {
-    this.modelTools = tools;
-  }
-
-  getAllModelTools(): StructuredTool[] {
-    return Array.from(this.modelTools.values());
-  }
 }

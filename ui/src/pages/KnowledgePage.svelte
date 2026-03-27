@@ -182,36 +182,41 @@
     if (reindexingAll || stores.length === 0) return;
     reindexingAll = true;
 
-    // Mark all stores as indexing in the UI immediately
-    stores = stores.map(s => ({ ...s, isIndexing: true, status: 'indexing' }));
-    if (selectedStore) {
-      selectedStore = stores.find(s => s.name === selectedStore!.name) ?? selectedStore;
-    }
-
     try {
-      await Promise.all(stores.map(s => api.indexKnowledgeStore(s.name)));
-      await Promise.all(stores.map(s => new Promise<void>((resolve) => {
-        const sse = api.indexKnowledgeStoreStream(s.name);
-        const done = (status: string) => {
-          sse.close();
-          stores = stores.map(st => st.name === s.name ? { ...st, isIndexing: false, status } : st);
-          if (selectedStore?.name === s.name) {
-            selectedStore = stores.find(st => st.name === s.name) ?? selectedStore;
-          }
-          resolve();
-        };
-        sse.addEventListener('progress', ((event: MessageEvent) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.phase === 'done') done('indexed');
-            else if (data.phase === 'error') done('error');
-          } catch { /* malformed SSE */ }
-        }) as EventListener);
-        sse.addEventListener('error', (() => done('error')) as EventListener);
-        sse.onerror = () => done('error');
-      })));
-    } catch (e) {
-      console.error('Failed to re-index all stores:', e);
+      // Index stores sequentially to avoid overloading the embedding model
+      for (const s of stores) {
+        stores = stores.map(st => st.name === s.name ? { ...st, isIndexing: true, status: 'indexing' } : st);
+        if (selectedStore?.name === s.name) {
+          selectedStore = stores.find(st => st.name === s.name) ?? selectedStore;
+        }
+
+        try {
+          await api.indexKnowledgeStore(s.name);
+          await new Promise<void>((resolve) => {
+            const sse = api.indexKnowledgeStoreStream(s.name);
+            const done = (status: string) => {
+              sse.close();
+              stores = stores.map(st => st.name === s.name ? { ...st, isIndexing: false, status } : st);
+              if (selectedStore?.name === s.name) {
+                selectedStore = stores.find(st => st.name === s.name) ?? selectedStore;
+              }
+              resolve();
+            };
+            sse.addEventListener('progress', ((event: MessageEvent) => {
+              try {
+                const data = JSON.parse(event.data);
+                if (data.phase === 'done') done('indexed');
+                else if (data.phase === 'error') done('error');
+              } catch { /* malformed SSE */ }
+            }) as EventListener);
+            sse.addEventListener('error', (() => done('error')) as EventListener);
+            sse.onerror = () => done('error');
+          });
+        } catch (e) {
+          console.error(`Failed to re-index "${s.name}":`, e);
+          stores = stores.map(st => st.name === s.name ? { ...st, isIndexing: false, status: 'error' } : st);
+        }
+      }
     } finally {
       reindexingAll = false;
       await loadStores();

@@ -55,6 +55,9 @@ export const api = {
   async toggleLlmP2P(name: string, p2p: boolean) {
     return (await _fetch(`/api/llm/config/models/${encodeURIComponent(name)}/share`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ share: p2p }) })).json();
   },
+  async toggleSectionP2P(section: string, name: string, share: boolean) {
+    return (await _fetch(`/api/llm/config/${encodeURIComponent(section)}/${encodeURIComponent(name)}/share`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ share }) })).json();
+  },
   async saveLlmEmbedding(name: string, config: unknown) {
     return (await _fetch(`/api/llm/config/embeddings/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })).json();
   },

@@ -353,7 +353,7 @@ Add `"p2p": true` to a model in `llm.json`, or use the P2P share toggle on each 
   "llama-cpp": {
     "provider": "local",
     "engine": "llama-cpp",
-    "model": "Qwen3.5-9B-Q4_K_M",
+    "model": "Qwen3.5-4B-IQ4_NL",
     "p2p": true
   }
 }

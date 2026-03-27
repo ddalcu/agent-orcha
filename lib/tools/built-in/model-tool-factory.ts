@@ -98,7 +98,7 @@ function createImageTool(name: string, config: ImageModelConfig, p2pDeps?: P2PDe
       return JSON.stringify({ __modelTask: true, error: reason });
     },
     {
-      name: `model_image_${name}`,
+      name: 'generate_image',
       description: `Generate an image using ${name}. ${config.description}`.trim(),
       schema: z.object({
         input: z.string().describe('Text prompt describing the image to generate'),
@@ -174,7 +174,7 @@ function createTtsTool(name: string, config: TtsModelConfig, p2pDeps?: P2PDeps):
       return JSON.stringify({ __modelTask: true, error: reason });
     },
     {
-      name: `model_tts_${name}`,
+      name: 'generate_tts',
       description: `Generate speech using ${name}. ${config.description}`.trim(),
       schema: z.object({
         text: z.string().describe('Text to convert to speech'),
@@ -189,13 +189,13 @@ export function buildModelTools(
   imageConfigs: Array<{ name: string; config: ImageModelConfig }>,
   ttsConfigs: Array<{ name: string; config: TtsModelConfig }>,
   p2pDeps?: P2PDeps,
-): Map<string, StructuredTool> {
-  const tools = new Map<string, StructuredTool>();
-  for (const { name, config } of imageConfigs) {
-    tools.set(`image:${name}`, createImageTool(name, config, p2pDeps));
+): { image?: StructuredTool; tts?: StructuredTool } {
+  const result: { image?: StructuredTool; tts?: StructuredTool } = {};
+  if (imageConfigs.length > 0) {
+    result.image = createImageTool(imageConfigs[0]!.name, imageConfigs[0]!.config, p2pDeps);
   }
-  for (const { name, config } of ttsConfigs) {
-    tools.set(`tts:${name}`, createTtsTool(name, config, p2pDeps));
+  if (ttsConfigs.length > 0) {
+    result.tts = createTtsTool(ttsConfigs[0]!.name, ttsConfigs[0]!.config, p2pDeps);
   }
-  return tools;
+  return result;
 }

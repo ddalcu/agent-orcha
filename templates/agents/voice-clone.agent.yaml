@@ -11,7 +11,7 @@ prompt:
 
     ## What you can do
 
-    1. **Generate speech** from any text using the model_tts tool (uses a default voice)
+    1. **Generate speech** from any text using the generate_tts tool (uses a default voice)
     2. **Clone any voice** — the user provides a short audio sample and you generate speech that sounds like that person
 
     ## How voice cloning works
@@ -36,7 +36,7 @@ prompt:
 
     ## When the user asks you to speak or read aloud
 
-    1. Use the model_tts tool with the text they provide
+    1. Use the generate_tts tool with the text they provide
     2. If they've uploaded or referenced an audio sample, include the `referenceAudio` path
     3. Let them know the audio file has been generated and is ready to play
 
@@ -45,7 +45,7 @@ prompt:
     - message
 
 tools:
-  - models:tts:omni
+  - builtin:generate_tts
 
 output:
   format: text

@@ -162,7 +162,6 @@ export class Orchestrator {
       sandboxTools,
       workspaceTools,
     );
-    this.toolRegistry.setModelTools(buildModelTools(listImageConfigs(), listTtsConfigs()));
     this.registerBuiltInTools();
     this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.config.workspaceRoot, this.skillLoader, this.memoryManager, this.integrations);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
@@ -497,6 +496,15 @@ export class Orchestrator {
     this.toolRegistry.registerBuiltIn('canvas_write', createCanvasWriteTool());
     this.toolRegistry.registerBuiltIn('canvas_append', createCanvasAppendTool());
     this.registerP2PTools();
+    this.registerModelTools();
+  }
+
+  private registerModelTools(): void {
+    const { image, tts } = buildModelTools(listImageConfigs(), listTtsConfigs());
+    this.toolRegistry.unregisterBuiltIn('generate_image');
+    this.toolRegistry.unregisterBuiltIn('generate_tts');
+    if (image) this.toolRegistry.registerBuiltIn('generate_image', image);
+    if (tts) this.toolRegistry.registerBuiltIn('generate_tts', tts);
   }
 
   /** Register (or re-register) tools that depend on the P2P manager being available. */
@@ -841,7 +849,6 @@ export class Orchestrator {
         this.buildSandboxTools(),
         this.buildWorkspaceToolsMap(),
       );
-      this.toolRegistry.setModelTools(buildModelTools(listImageConfigs(), listTtsConfigs()));
       this.registerBuiltInTools();
       return 'mcp';
     }
@@ -849,7 +856,7 @@ export class Orchestrator {
     if (relativePath === 'models.yaml') {
       await loadModelsConfig(this.config.modelsConfigPath);
       LLMFactory.clearCache();
-      this.toolRegistry.setModelTools(buildModelTools(listImageConfigs(), listTtsConfigs()));
+      this.registerModelTools();
       return 'models';
     }
 
@@ -867,7 +874,6 @@ export class Orchestrator {
         sandboxTools,
         workspaceTools,
       );
-      this.toolRegistry.setModelTools(buildModelTools(listImageConfigs(), listTtsConfigs()));
       this.registerBuiltInTools();
       return 'sandbox';
     }

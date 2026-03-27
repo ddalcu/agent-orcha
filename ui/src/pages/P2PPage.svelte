@@ -113,6 +113,8 @@
   let filteredModels = $derived(sidebarFilter
     ? remoteModels.filter(l => l.name.toLowerCase().includes(sidebarFilter.toLowerCase()) || l.model.toLowerCase().includes(sidebarFilter.toLowerCase()) || l.peerName.toLowerCase().includes(sidebarFilter.toLowerCase()))
     : remoteModels);
+  let filteredChatModels = $derived(filteredModels.filter(m => !m.type || m.type === 'chat'));
+  let filteredMediaModels = $derived(filteredModels.filter(m => m.type === 'image' || m.type === 'tts'));
   let p2pConfig = $state<{ sharedAgents: any[]; sharedModels: any[] }>({ sharedAgents: [], sharedModels: [] });
   let togglingP2P = $state(false);
   let peerNameInput = $state('');
@@ -644,13 +646,13 @@
         {/if}
       </div>
 
-      <!-- Remote LLMs section -->
+      <!-- Remote Chat LLMs section -->
       <div class="p2p-section">
-        <div class="section-title">Remote LLMs ({filteredModels.length})</div>
-        {#if filteredModels.length === 0}
+        <div class="section-title">Remote LLMs ({filteredChatModels.length})</div>
+        {#if filteredChatModels.length === 0}
           <div class="text-xs text-muted p-3">{sidebarFilter ? 'No matches' : 'No shared LLMs available'}</div>
         {:else}
-          {#each filteredModels as llm}
+          {#each filteredChatModels as llm}
             <button
               class="p2p-agent-card"
               class:active={selectedModel?.name === llm.name && selectedModel?.peerId === llm.peerId}
@@ -662,16 +664,31 @@
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-2xs text-muted"><i class="fas fa-server text-2xs"></i> {llm.peerName}</span>
-                {#if llm.capabilities?.length}
-                  {#each llm.capabilities as cap}
-                    <span class="badge badge-pill {cap === 'video' ? 'badge-purple' : cap === 'image' ? 'badge-blue' : cap === 'tts' ? 'badge-green' : 'badge-gray'} text-2xs">{cap}</span>
-                  {/each}
-                {/if}
               </div>
             </button>
           {/each}
         {/if}
       </div>
+
+      <!-- Remote Image/TTS models (non-chat, leverage only) -->
+      {#if filteredMediaModels.length > 0}
+        <div class="p2p-section">
+          <div class="section-title">Remote Media Models ({filteredMediaModels.length})</div>
+          {#each filteredMediaModels as m}
+            <div class="p2p-agent-card" style="cursor: default;">
+              <div class="flex items-center gap-2">
+                <i class="fas {m.type === 'image' ? 'fa-image text-purple' : 'fa-microphone text-green'} text-xs"></i>
+                <span class="text-sm font-medium text-primary">{m.model}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-2xs text-muted"><i class="fas fa-server text-2xs"></i> {m.peerName}</span>
+                <span class="badge badge-pill {m.type === 'image' ? 'badge-purple' : 'badge-green'} text-2xs">{m.type}</span>
+                <span class="text-2xs text-muted">leverage only</span>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
     {/if}
   </div>
 
@@ -825,15 +842,18 @@
           </div>
 
           <div class="p2p-sharing-group mt-3">
-            <div class="text-xs font-medium text-muted mb-1">Shared LLMs ({p2pConfig.sharedModels.length})</div>
+            <div class="text-xs font-medium text-muted mb-1">Shared Models ({p2pConfig.sharedModels.length})</div>
             {#if p2pConfig.sharedModels.length === 0}
               <div class="text-xs text-muted p2p-hint">No models shared. Toggle sharing on a provider in the Models tab, or add <code>share: true</code> in models.yaml.</div>
             {:else}
-              {#each p2pConfig.sharedModels as llm}
+              {#each p2pConfig.sharedModels as m}
                 <div class="p2p-shared-item">
-                  <i class="fas fa-microchip text-xs text-accent"></i>
-                  <span class="text-sm text-primary">{llm.model}</span>
-                  <span class="text-2xs text-muted">({llm.name})</span>
+                  <i class="fas {m.type === 'image' ? 'fa-image text-purple' : m.type === 'tts' ? 'fa-microphone text-green' : 'fa-microchip text-accent'} text-xs"></i>
+                  <span class="text-sm text-primary">{m.model}</span>
+                  <span class="text-2xs text-muted">({m.name})</span>
+                  {#if m.type && m.type !== 'chat'}
+                    <span class="badge badge-pill {m.type === 'image' ? 'badge-purple' : 'badge-green'} text-2xs">{m.type}</span>
+                  {/if}
                 </div>
               {/each}
             {/if}

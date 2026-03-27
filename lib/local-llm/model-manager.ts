@@ -19,7 +19,7 @@ const QUANT_SUFFIXES = /[-_](bf16|f16|f32|q[0-9]+[_]?[a-z0-9]*|iq[0-9]+[_]?[a-z0
 
 /**
  * Generate a clean directory name from a GGUF file name.
- * `Qwen3.5-9B-Q4_K_M.gguf` → `qwen3-5-9b`
+ * `Qwen3.5-4B-IQ4_NL.gguf` → `qwen3-5-4b`
  * `nomic-embed-text-v1.5.Q4_K_M.gguf` → `nomic-embed`
  * `flux-2-klein-4b-Q4_K_M.gguf` → `flux-2-klein-4b`
  */
@@ -379,7 +379,14 @@ export class ModelManager {
 
   async findModelFile(modelName: string): Promise<{ filePath: string } | null> {
     const models = await this.listModels();
-    const match = models.find((m) => m.id === modelName || m.fileName === modelName);
+    const nameWithExt = modelName.endsWith('.gguf') ? modelName : `${modelName}.gguf`;
+    const match = models.find((m) =>
+      m.id === modelName ||
+      m.fileName === modelName ||
+      m.fileName === nameWithExt ||
+      m.id.toLowerCase() === modelName.toLowerCase() ||
+      m.fileName.toLowerCase() === nameWithExt.toLowerCase(),
+    );
     return match ? { filePath: match.filePath } : null;
   }
 

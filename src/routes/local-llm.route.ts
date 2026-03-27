@@ -763,11 +763,13 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
 
       const ggufFiles = files.filter(f => f.endsWith('.gguf'));
       const vaeFile = files.find(f => /vae/i.test(f) && f.endsWith('.safetensors'));
-      // Main model: the gguf that matches the directory name or flux/sd pattern, or the largest
-      const mainModel = ggufFiles.find(f => /flux|stable.?diff|sdxl/i.test(f))
+      // Main model: match known diffusion model patterns, or directory name, or first gguf
+      const mainModel = ggufFiles.find(f => /flux|stable.?diff|sdxl|wan/i.test(f))
         || ggufFiles.find(f => f.toLowerCase().includes(model.fileName.toLowerCase()))
         || ggufFiles[0];
-      const llmCompanion = ggufFiles.find(f => f !== mainModel);
+      // Detect T5/UMT5 text encoder vs LLM companion (Qwen3 for FLUX.2)
+      const t5Encoder = ggufFiles.find(f => f !== mainModel && /umt5|t5.?xxl/i.test(f));
+      const llmCompanion = ggufFiles.find(f => f !== mainModel && f !== t5Encoder);
 
       if (!mainModel) {
         return reply.status(400).send({ error: 'No .gguf model file found in directory' });
@@ -776,6 +778,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       const modelPath = path.join(modelDir, mainModel);
       try {
         await OmniModelCache.getImageModel(modelPath, {
+          ...(t5Encoder ? { t5xxlPath: path.join(modelDir, t5Encoder) } : {}),
           ...(llmCompanion ? { llmPath: path.join(modelDir, llmCompanion) } : {}),
           ...(vaeFile ? { vaePath: path.join(modelDir, vaeFile) } : {}),
         });
@@ -791,6 +794,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
           config.image = config.image || {};
           config.image['omni'] = {
             modelPath: `${relDir}/${mainModel}`,
+            ...(t5Encoder ? { t5xxl: `${relDir}/${t5Encoder}` } : {}),
             ...(llmCompanion ? { llm: `${relDir}/${llmCompanion}` } : {}),
             ...(vaeFile ? { vae: `${relDir}/${vaeFile}` } : {}),
             steps: (config.image['omni'] as any)?.steps ?? 20,

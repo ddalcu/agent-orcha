@@ -28,7 +28,7 @@ tools:                                # mcp:<server> | knowledge:<store> | funct
                                       #   vision_type, vision_scroll, vision_key, vision_drag
                                       #   (requires EXPERIMENTAL_VISION=true)
                                       # sandbox: file_read, file_write, file_edit, file_insert, file_replace_lines
-                                      # builtin: ask_user, save_memory, canvas_write, canvas_append, generate_video
+                                      # builtin: ask_user, save_memory, canvas_write, canvas_append, generate_image, generate_tts, generate_video
                                       #   generate_video: distributed video generation via P2P (requires P2P enabled)
                                       #   (conditional: integration_post, integration_context, email_send)
 skills:
@@ -239,7 +239,7 @@ llm:
   default: omni
   omni:
     provider: omni
-    model: Qwen3.5-9B-Q4_K_M
+    model: Qwen3.5-4B-IQ4_NL
     reasoningBudget: 0
     contextSize: 32768
     active: true
@@ -248,7 +248,7 @@ llm:
     provider: local
     engine: lmstudio
     baseUrl: http://localhost:1234/v1
-    model: qwen3.5-9b-mlx
+    model: qwen3.5-4b-mlx
     active: false
   openai:
     provider: openai

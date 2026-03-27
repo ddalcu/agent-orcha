@@ -514,6 +514,12 @@ img { display: block; max-width: 100%; }
   border: 1px solid rgba(168, 85, 247, 0.3);
 }
 .btn-purple:hover:not(:disabled) { background: rgba(168, 85, 247, 0.3); }
+.btn-red {
+  background: rgba(248, 113, 113, 0.2);
+  color: var(--red-400);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+.btn-red:hover:not(:disabled) { background: rgba(248, 113, 113, 0.3); }
 .btn-ghost {
   color: var(--text-2);
   padding: var(--sp-2);
@@ -1933,6 +1939,7 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
 .llm-rec-card-blue   { border: 1px solid rgba(96, 165, 250, 0.3); }
 .llm-rec-card-purple { border: 1px solid rgba(168, 85, 247, 0.3); }
 .llm-rec-card-green  { border: 1px solid rgba(74, 222, 128, 0.3); }
+.llm-rec-card-red    { border: 1px solid rgba(248, 113, 113, 0.3); }
 
 /* On-demand model slot (dashed border, muted) */
 .llm-slot-ondemand {

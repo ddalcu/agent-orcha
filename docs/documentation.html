@@ -204,7 +204,7 @@ llm:
   default: omni
   omni:
     provider: omni
-    model: Qwen3.5-9B-Q4_K_M
+    model: Qwen3.5-4B-IQ4_NL
     reasoningBudget: 0
     contextSize: 32768
     active: true
@@ -583,7 +583,7 @@ tools:                          # Tools available to agent (optional)
   - mcp:&lt;server-name&gt;           # MCP server tools
   - knowledge:&lt;store-name&gt;      # Knowledge store search
   - function:&lt;function-name&gt;    # Custom functions
-  - builtin:&lt;tool-name&gt;         # Built-in tools (ask_user, save_memory)
+  - builtin:&lt;tool-name&gt;         # Built-in tools (ask_user, save_memory, generate_image, generate_tts, generate_video)
   - sandbox:&lt;tool-name&gt;         # Sandbox tools (exec, shell, browser_*, vision_*, file_*, web_*)
   - workspace:&lt;tool-name&gt;       # Workspace tools (read, write, delete, list, list_resources, diagnostics)
 
@@ -1758,7 +1758,7 @@ p2p: true</code></pre>
             <pre><code>llm:
   omni:
     provider: omni
-    model: Qwen3.5-9B-Q4_K_M
+    model: Qwen3.5-4B-IQ4_NL
     active: true
     share: true</code></pre>
           </div>
@@ -3345,7 +3345,7 @@ publish:
   default: omni
   omni:
     provider: omni
-    model: Qwen3.5-9B-Q4_K_M
+    model: Qwen3.5-4B-IQ4_NL
     reasoningBudget: 0
     contextSize: 32768
     active: true</code></pre>

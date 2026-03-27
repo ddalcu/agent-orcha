@@ -461,7 +461,7 @@ describe('Orchestrator', () => {
 
     const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
-    (orch as any).toolRegistry = { setModelTools: () => {} };
+    (orch as any).toolRegistry = { registerBuiltIn: () => {}, unregisterBuiltIn: () => {} };
 
     const result = await orch.reloadFile('models.yaml');
     assert.equal(result, 'models');

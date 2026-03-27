@@ -381,7 +381,7 @@
         }
       }
       // Intercept model tools
-      if ((event.tool?.startsWith('model_') || event.tool === 'generate_video') && typeof event.output === 'string') {
+      if ((event.tool === 'generate_image' || event.tool === 'generate_tts' || event.tool === 'generate_video') && typeof event.output === 'string') {
         try {
           const parsed = JSON.parse(event.output);
           if (parsed.__modelTask) {
