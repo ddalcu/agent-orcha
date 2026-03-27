@@ -226,7 +226,9 @@ memory: true               # Enable persistent memory (optional)
 skills:                    # Skills to attach (optional)
   - skill-name
 publish: true              # Standalone chat at /chat/researcher (optional)
-p2p: true                  # Share on P2P network (optional)
+p2p:                       # P2P network config (optional)
+  share: true              # Share this agent to peers
+  leverage: local-first    # P2P model leverage mode (see below)
 ```
 
 ### Conversation Memory
@@ -368,6 +370,36 @@ There are three ways to use remote P2P resources:
 1. **Direct LLM chat (P2P tab)** — Select a remote peer's LLM from the P2P tab and chat with it directly. Pure LLM inference with no agent or tools involved.
 2. **Remote agent invocation (P2P tab)** — Invoke a peer's shared agent. The agent runs entirely on the host — their LLM, their tools, their knowledge stores. You receive the streamed output.
 3. **Local agent with remote LLM** — Configure your agent with `llm: "p2p"` (auto-select) or `llm: "p2p:model-name"`. The agent runs locally with your tools, react loop, memory, and knowledge stores, while only the LLM inference happens on the remote peer. Tool calling is fully supported — the remote LLM generates `tool_calls`, your local agent executes them, and results feed back over the wire.
+
+### P2P Model Leverage
+
+Control how agents use remote peer models for image, TTS, and video tasks via the `p2p.leverage` field:
+
+```yaml
+p2p:
+  leverage: local-first     # Try local, fall back to P2P peers (default)
+  leverage: remote-first    # Try P2P peers first, fall back to local
+  leverage: remote-only     # Only use P2P peers, skip local entirely
+```
+
+| Mode | Behavior |
+|------|----------|
+| `false` | P2P disabled for this agent (default) |
+| `local-first` | Use local models; fall back to P2P if local fails or is unavailable |
+| `remote-first` | Try P2P peers first for model tasks (image, TTS); fall back to local if no peers respond |
+| `remote-only` | Only use P2P peers for model tasks — skip local models entirely |
+
+The `leverage` modes apply to **model tools** (image generation, TTS, video). For explicit P2P LLM chat routing, use `model: p2p` or `model: p2p:model-name`.
+
+### Load Balancing
+
+When multiple peers share the same model, Agent Orcha automatically distributes requests across them using a **least-loaded** selection strategy:
+
+- **Client-side tracking** — Each node tracks how many in-flight requests it has sent to each peer. New requests are routed to the peer with the fewest outstanding requests.
+- **Peer-reported load** — Peers broadcast their current task load via catalog updates. When a peer starts or finishes processing a task, it broadcasts its updated load so other nodes can factor it into their selection.
+- **Tie-breaking** — When multiple peers have equal load scores, one is chosen at random to avoid clustering.
+
+This ensures requests spread evenly across peers without requiring a central coordinator.
 
 ### Rate Limiting
 

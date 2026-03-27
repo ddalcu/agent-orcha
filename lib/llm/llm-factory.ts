@@ -9,6 +9,7 @@ import { resolveAgentModelRef, type AgentModelRef } from './types.ts';
 import { detectProvider, type LLMProvider } from './provider-detector.ts';
 import { logger } from '../logger.ts';
 import type { P2PManager } from '../p2p/p2p-manager.ts';
+import type { LeverageMode } from '../agents/types.ts';
 import { resolveModelFile } from '../local-llm/resolve-model-path.ts';
 
 export class LLMFactory {
@@ -27,12 +28,41 @@ export class LLMFactory {
   /**
    * Create an LLM instance from a config name (defined in models.yaml)
    * @param ref - Config name as string, or object with name and optional temperature override
-   * @param leverage - If true, fall back to P2P network when model not found locally
+   * @param leverage - P2P leverage mode: false (disabled), 'local-first', 'remote-first', or 'remote-only'
    */
-  static async create(ref: AgentModelRef = 'default', leverage = false): Promise<ChatModel> {
+  static async create(ref: AgentModelRef = 'default', leverage: LeverageMode | boolean = false): Promise<ChatModel> {
     const resolved = resolveAgentModelRef(ref);
     const name = resolved.llm;
     const tempOverride = resolved.temperature;
+
+    // Normalize boolean to LeverageMode
+    const mode: LeverageMode = leverage === true ? 'local-first' : leverage;
+
+    // remote-first: try P2P before local
+    if (mode === 'remote-first' && this.p2pManager) {
+      const remoteModels = this.p2pManager.getRemoteModelsByName(name);
+      if (remoteModels.length > 0) {
+        const match = this.p2pManager.selectBestPeer(remoteModels);
+        logger.info(`[LLMFactory] P2P remote-first: using ${match.model} from ${match.peerName}`);
+        return new P2PChatModel(this.p2pManager, match.peerId, match.name, tempOverride);
+      }
+      logger.info(`[LLMFactory] P2P remote-first: no remote peers for "${name}", falling back to local`);
+    }
+
+    // remote-only: only use P2P, no local fallback
+    if (mode === 'remote-only') {
+      if (!this.p2pManager) {
+        throw new Error(`Model "${name}" cannot be resolved: leverage is "remote-only" but P2P is not enabled`);
+      }
+      const remoteModels = this.p2pManager.getRemoteModelsByName(name);
+      if (remoteModels.length > 0) {
+        const match = this.p2pManager.selectBestPeer(remoteModels);
+        logger.info(`[LLMFactory] P2P remote-only: using ${match.model} from ${match.peerName}`);
+        return new P2PChatModel(this.p2pManager, match.peerId, match.name, tempOverride);
+      }
+      const available = this.p2pManager.getRemoteModels().map(m => `${m.model} (${m.peerName})`).join(', ');
+      throw new Error(`Model "${name}" not found on P2P network (remote-only). Available remote: ${available || 'none'}`);
+    }
 
     // Step 1: Try exact config key match
     let config: ModelConfig | undefined;
@@ -59,20 +89,18 @@ export class LLMFactory {
       }
     }
 
-    // Step 3: P2P network (if leverage enabled)
-    if (!config && leverage && this.p2pManager) {
+    // Step 3: P2P fallback for local-first mode
+    if (!config && mode === 'local-first' && this.p2pManager) {
       const remoteModels = this.p2pManager.getRemoteModelsByName(name);
       if (remoteModels.length > 0) {
-        const match = remoteModels[0]!;
-        logger.info(`[LLMFactory] Using P2P model: ${match.model} from ${match.peerName}`);
-        const temperature = tempOverride;
-        return new P2PChatModel(this.p2pManager, match.peerId, match.name, temperature);
+        const match = this.p2pManager.selectBestPeer(remoteModels);
+        logger.info(`[LLMFactory] P2P local-first fallback: using ${match.model} from ${match.peerName}`);
+        return new P2PChatModel(this.p2pManager, match.peerId, match.name, tempOverride);
       }
     }
 
     if (!config) {
-      // Build helpful error message
-      if (leverage && this.p2pManager) {
+      if (mode && this.p2pManager) {
         const available = this.p2pManager.getRemoteModels().map(m => `${m.model} (${m.peerName})`).join(', ');
         throw new Error(`Model "${name}" not found locally or on P2P network. Available remote: ${available || 'none'}`);
       }

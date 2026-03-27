@@ -52,6 +52,7 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
         orch._p2pManager = new P2PManager(fastify.orchestrator);
         await orch._p2pManager.start();
         LLMFactory.setP2PManager(orch._p2pManager);
+        orch.agentExecutor.p2pManager = orch._p2pManager;
         fastify.orchestrator.registerP2PTools();
       }
     } else {
@@ -59,6 +60,7 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
         await orch._p2pManager.close();
         orch._p2pManager = null;
         LLMFactory.setP2PManager(null as any);
+        orch.agentExecutor.p2pManager = undefined;
         fastify.orchestrator.registerP2PTools();
       }
     }

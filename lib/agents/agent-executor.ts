@@ -13,8 +13,11 @@ import type { ConversationStore } from '../memory/conversation-store.ts';
 import type { SkillLoader } from '../skills/skill-loader.ts';
 import type { MemoryManager } from '../memory/memory-manager.ts';
 import type { IntegrationAccessor } from '../integrations/types.ts';
+import type { P2PManager } from '../p2p/p2p-manager.ts';
 import { createMemorySaveTool } from '../tools/built-in/memory-save.tool.ts';
 import { createIntegrationTools } from '../tools/built-in/integration-tools.ts';
+import { buildModelTools } from '../tools/built-in/model-tool-factory.ts';
+import { listImageConfigs, listTtsConfigs } from '../llm/llm-config.ts';
 import { StructuredOutputWrapper } from './structured-output-wrapper.ts';
 import { logLLMCallStart, logLLMCallEnd } from '../llm/llm-call-logger.ts';
 import { extractDocumentText } from '../utils/document-extract.ts';
@@ -33,6 +36,7 @@ export class AgentExecutor {
   private memoryManager?: MemoryManager;
   private integrations?: IntegrationAccessor;
   private workspaceRoot: string;
+  p2pManager?: P2PManager;
 
   constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, workspaceRoot: string, skillLoader?: SkillLoader, memoryManager?: MemoryManager, integrations?: IntegrationAccessor) {
     this.toolRegistry = toolRegistry;
@@ -75,16 +79,32 @@ export class AgentExecutor {
     }
 
     const modelRef = resolveAgentModelRef(augmentedDefinition.model);
-    const leverage = resolveP2PConfig(definition.p2p).leverage;
+    const { leverage } = resolveP2PConfig(definition.p2p);
+    // For chat LLM, only use P2P as a fallback (local-first). The remote-first/remote-only
+    // modes are for model tools (TTS, image, video). Explicit P2P chat uses model: p2p.
+    const llmLeverage = leverage === 'local-first' ? 'local-first' : false;
     let llm = await LLMFactory.create(
       modelRef.temperature !== undefined ? { llm: modelRef.llm, temperature: modelRef.temperature } : modelRef.llm,
-      leverage,
+      llmLeverage,
     );
 
     // Wrap LLM with structured output if configured
     llm = StructuredOutputWrapper.wrapLLM(llm, augmentedDefinition.output);
 
     const tools = await this.toolRegistry.resolveTools(augmentedDefinition.tools);
+
+    // Override model tools with per-agent leverage mode if remote-first or remote-only
+    if ((leverage === 'remote-first' || leverage === 'remote-only') && this.p2pManager) {
+      const agentP2PDeps = { manager: this.p2pManager, leverage };
+      const overrides = buildModelTools(listImageConfigs(), listTtsConfigs(), agentP2PDeps);
+      for (let i = 0; i < tools.length; i++) {
+        if (tools[i]!.name === 'generate_image' && overrides.image) {
+          tools[i] = overrides.image;
+        } else if (tools[i]!.name === 'generate_tts' && overrides.tts) {
+          tools[i] = overrides.tts;
+        }
+      }
+    }
 
     // Auto-inject memory tool if configured
     if (memoryConfig && this.memoryManager) {

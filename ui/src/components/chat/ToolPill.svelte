@@ -33,13 +33,15 @@
   });
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   bind:this={pillEl}
   id="tool-{runId}"
   class="tool-pill"
   class:done
   class:thinking={isThinking}
+  role="button"
+  tabindex="0"
   onclick={handlePillClick}
 >
   {#if done}

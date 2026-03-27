@@ -83,6 +83,12 @@ export function seaBootstrap(): void {
 
   console.log(`Updating Agent Orcha resources (v${version})...`);
 
+  // Clean stale public/ dir (safe to delete entirely — only static files)
+  const publicDir = path.join(ORCHA_DIR, 'public');
+  if (fs.existsSync(publicDir)) {
+    fs.rmSync(publicDir, { recursive: true });
+  }
+
   const keys: string[] = seaMod.getAssetKeys();
 
   for (const key of keys) {
@@ -91,7 +97,18 @@ export function seaBootstrap(): void {
 
     const destPath = path.join(ORCHA_DIR, key);
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    fs.writeFileSync(destPath, new Uint8Array(seaMod.getRawAsset(key)));
+    // Overwrite in place — avoids EPERM from rmSync on locked native files
+    // (e.g. omni.node or .dll loaded by another process)
+    try {
+      fs.writeFileSync(destPath, new Uint8Array(seaMod.getRawAsset(key)));
+    } catch (err: any) {
+      // On Windows, .node/.dll files may be locked by another process — skip
+      if (err.code === 'EBUSY' || err.code === 'EPERM') {
+        console.warn(`Skipped locked file: ${key}`);
+      } else {
+        throw err;
+      }
+    }
   }
 
   if (process.platform !== 'win32') {

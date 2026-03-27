@@ -9,7 +9,7 @@ export type TaskStatus =
   | 'canceled'
   | 'input-required';
 
-export type TaskKind = 'agent' | 'workflow' | 'llm';
+export type TaskKind = 'agent' | 'workflow' | 'llm' | 'image' | 'tts';
 
 export interface TaskInputRequest {
   question: string;

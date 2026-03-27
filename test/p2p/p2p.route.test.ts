@@ -192,8 +192,10 @@ describe('P2P Agent Schema', () => {
 
     assert.deepEqual(resolveP2PConfig(undefined), { leverage: false, share: false });
     assert.deepEqual(resolveP2PConfig(false), { leverage: false, share: false });
-    assert.deepEqual(resolveP2PConfig(true), { leverage: true, share: true });
-    assert.deepEqual(resolveP2PConfig({ leverage: true, share: false }), { leverage: true, share: false });
+    assert.deepEqual(resolveP2PConfig(true), { leverage: 'local-first', share: true });
+    assert.deepEqual(resolveP2PConfig({ leverage: true, share: false }), { leverage: 'local-first', share: false });
     assert.deepEqual(resolveP2PConfig({ leverage: false, share: true }), { leverage: false, share: true });
+    assert.deepEqual(resolveP2PConfig({ leverage: 'remote-first', share: false }), { leverage: 'remote-first', share: false });
+    assert.deepEqual(resolveP2PConfig({ leverage: 'remote-only', share: false }), { leverage: 'remote-only', share: false });
   });
 });

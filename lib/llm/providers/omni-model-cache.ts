@@ -37,7 +37,7 @@ export class OmniModelCache {
       await this.llmChat.unload();
     }
     logger.info(`[OmniModelCache] Loading chat LLM: ${modelPath}`);
-    this.llmChat = await loadModel(modelPath, { ...options, type: 'llm' }) as LlmModel;
+    this.llmChat = await loadModel(modelPath, { ...options, type: 'llm', contextSize: options?.contextSize || 4096 }) as LlmModel;
     this.llmChatPath = modelPath;
     return this.llmChat;
   }
@@ -51,7 +51,7 @@ export class OmniModelCache {
       await this.llmEmbed.unload();
     }
     logger.info(`[OmniModelCache] Loading embedding LLM: ${modelPath}`);
-    this.llmEmbed = await loadModel(modelPath, { ...options, type: 'llm', embeddings: true }) as LlmModel;
+    this.llmEmbed = await loadModel(modelPath, { ...options, type: 'llm', embeddings: true, contextSize: options?.contextSize || 4096 }) as LlmModel;
     this.llmEmbedPath = modelPath;
     return this.llmEmbed;
   }

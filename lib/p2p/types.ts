@@ -70,6 +70,7 @@ export interface CatalogMessage {
   peerName?: string;
   agents: P2PAgentInfo[];
   models?: P2PModelInfo[];
+  load?: number;
 }
 
 // --- Agent Invoke Messages ---
@@ -171,6 +172,7 @@ export interface PeerInfo {
   version: string;
   agents: P2PAgentInfo[];
   models: P2PModelInfo[];
+  load: number;
   connectedAt: number;
 }
 

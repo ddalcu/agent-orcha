@@ -1905,10 +1905,12 @@
         <div class="text-muted text-sm text-center py-8">No conversations yet</div>
       {:else}
         {#each sessions as s}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
             class="session-item"
             class:active={s.id === activeSessionId}
+            role="button"
+            tabindex="0"
             onclick={(e: MouseEvent) => {
               if ((e.target as HTMLElement).closest('.session-delete-btn')) return;
               switchToSession(s.id);
@@ -2104,8 +2106,8 @@
     <!-- Input Area -->
     <div class="chat-input-area">
       {#if inputMenuOpen}
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="input-menu-backdrop" onclick={() => { inputMenuOpen = false; }}></div>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="input-menu-backdrop" role="button" tabindex="-1" onclick={() => { inputMenuOpen = false; }}></div>
         <div class="input-menu">
           {#each inputMenuItems as item}
             {#if item.dividerBefore}
@@ -2160,8 +2162,8 @@
 
 <!-- New Session Modal -->
 {#if newSessionModalOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
-  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) newSessionModalOpen = false; }} role="dialog">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) newSessionModalOpen = false; }} role="dialog" tabindex="-1">
     <div class="modal-content modal-content-sm">
       <div class="modal-header">
         <h3 class="text-lg font-semibold text-primary">New conversation</h3>
@@ -2221,8 +2223,8 @@
 
 <!-- New Agent Modal -->
 {#if newAgentModalOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
-  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) newAgentModalOpen = false; }} role="dialog">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) newAgentModalOpen = false; }} role="dialog" tabindex="-1">
     <div class="modal-content modal-content-sm">
       <div class="modal-header">
         <h3 class="text-lg font-semibold text-primary">Create a new agent</h3>
@@ -2260,8 +2262,8 @@
 
 <!-- Loop Dialog -->
 {#if loopDialogOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
-  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) loopDialogOpen = false; }} role="dialog">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) loopDialogOpen = false; }} role="dialog" tabindex="-1">
     <div class="modal-content loop-dialog">
       <div class="modal-header">
         <h3 class="text-lg font-semibold text-primary">Start loop</h3>
@@ -2271,9 +2273,10 @@
       </div>
       <div class="p-4">
         <div class="mb-3">
-          <label class="text-sm text-muted mb-1 block">Interval</label>
+          <label for="loop-interval" class="text-sm text-muted mb-1 block">Interval</label>
           <div class="flex items-center gap-2">
             <input
+              id="loop-interval"
               type="number"
               min="1"
               max="999"
@@ -2287,8 +2290,9 @@
           </div>
         </div>
         <div class="mb-4">
-          <label class="text-sm text-muted mb-1 block">Prompt</label>
+          <label for="loop-prompt" class="text-sm text-muted mb-1 block">Prompt</label>
           <textarea
+            id="loop-prompt"
             bind:value={loopDialogPrompt}
             rows="3"
             class="textarea loop-prompt-textarea"
@@ -2308,8 +2312,8 @@
 {/if}
 
 {#if videoSettingsOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
-  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) videoSettingsOpen = false; }} role="dialog">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) videoSettingsOpen = false; }} role="dialog" tabindex="-1">
     <div class="modal-content video-settings-dialog">
       <div class="modal-header">
         <h3 class="text-lg font-semibold text-primary">
@@ -2330,8 +2334,9 @@
         </div>
         <div class="video-settings-grid">
           <div class="video-setting-group">
-            <label class="text-sm text-muted mb-1 block">Total Frames</label>
+            <label for="vs-frames" class="text-sm text-muted mb-1 block">Total Frames</label>
             <input
+              id="vs-frames"
               type="number"
               min="1"
               max="300"
@@ -2342,8 +2347,9 @@
           </div>
 
           <div class="video-setting-group">
-            <label class="text-sm text-muted mb-1 block">FPS</label>
+            <label for="vs-fps" class="text-sm text-muted mb-1 block">FPS</label>
             <input
+              id="vs-fps"
               type="number"
               min="1"
               max="60"
@@ -2353,8 +2359,9 @@
           </div>
 
           <div class="video-setting-group">
-            <label class="text-sm text-muted mb-1 block">Width</label>
+            <label for="vs-width" class="text-sm text-muted mb-1 block">Width</label>
             <input
+              id="vs-width"
               type="number"
               min="64"
               max="2048"
@@ -2365,8 +2372,9 @@
           </div>
 
           <div class="video-setting-group">
-            <label class="text-sm text-muted mb-1 block">Height</label>
+            <label for="vs-height" class="text-sm text-muted mb-1 block">Height</label>
             <input
+              id="vs-height"
               type="number"
               min="64"
               max="2048"
@@ -2377,8 +2385,9 @@
           </div>
 
           <div class="video-setting-group">
-            <label class="text-sm text-muted mb-1 block">CFG Scale</label>
+            <label for="vs-cfg" class="text-sm text-muted mb-1 block">CFG Scale</label>
             <input
+              id="vs-cfg"
               type="number"
               min="1"
               max="30"
@@ -2389,8 +2398,9 @@
           </div>
 
           <div class="video-setting-group">
-            <label class="text-sm text-muted mb-1 block">Steps</label>
+            <label for="vs-steps" class="text-sm text-muted mb-1 block">Steps</label>
             <input
+              id="vs-steps"
               type="number"
               min="1"
               max="100"
@@ -2400,8 +2410,9 @@
           </div>
 
           <div class="video-setting-group video-setting-full">
-            <label class="text-sm text-muted mb-1 block">Seed (optional)</label>
+            <label for="vs-seed" class="text-sm text-muted mb-1 block">Seed (optional)</label>
             <input
+              id="vs-seed"
               type="text"
               placeholder="Random"
               bind:value={videoSettings.seed}
