@@ -59,6 +59,9 @@ export class P2PManager {
   private requestTimestamps: number[] = [];
   private _rateLimit = 60; // requests per minute, 0 = unlimited
 
+  // Client-side in-flight request tracking per peer
+  private inFlightCounts = new Map<string, number>();
+
   /** Path to the JSON settings file persisted across restarts */
   private get settingsPath(): string {
     return path.join(this.orchestrator.workspaceRoot, '.p2p-settings.json');
@@ -217,6 +220,7 @@ export class P2PManager {
         version: hs.version,
         agents: hs.agents,
         models: hs.models ?? [],
+        load: 0,
         connectedAt: Date.now(),
       };
 
@@ -258,7 +262,8 @@ export class P2PManager {
         if (catalog.peerName) peer.info.peerName = catalog.peerName;
         peer.info.agents = catalog.agents;
         peer.info.models = catalog.models ?? [];
-        logger.info(`[P2P] Catalog update from "${peer.info.peerName}": ${catalog.agents.length} agent(s), ${(catalog.models ?? []).length} model(s)`);
+        peer.info.load = catalog.load ?? 0;
+        logger.info(`[P2P] Catalog update from "${peer.info.peerName}": ${catalog.agents.length} agent(s), ${(catalog.models ?? []).length} model(s), load: ${peer.info.load}`);
       }
     });
 
@@ -402,6 +407,7 @@ export class P2PManager {
     }, sessionId);
     const abortController = new AbortController();
     taskManager.registerAbort(task.id, abortController);
+    this.broadcastCatalog();
 
     try {
       const stream = this.orchestrator.streamAgent(agentName, input, sessionId, abortController.signal);
@@ -425,6 +431,7 @@ export class P2PManager {
       taskManager.reject(task.id, error);
     } finally {
       taskManager.unregisterAbort(task.id);
+      this.broadcastCatalog();
     }
   }
 
@@ -496,6 +503,7 @@ export class P2PManager {
       peerId,
       peerName: this.getPeerName(peerId),
     });
+    this.broadcastCatalog();
 
     try {
       // Use the matched config name (not the wire modelName which may be a model string)
@@ -549,6 +557,8 @@ export class P2PManager {
         protocol.send({ type: 'model_task_error', requestId, error: message });
       }
       taskManager.reject(task.id, error);
+    } finally {
+      this.broadcastCatalog();
     }
   }
 
@@ -576,6 +586,7 @@ export class P2PManager {
       peerId,
       peerName,
     });
+    this.broadcastCatalog();
 
     try {
       const { OmniModelCache } = await import('../llm/providers/omni-model-cache.ts');
@@ -619,6 +630,8 @@ export class P2PManager {
         protocol.send({ type: 'model_task_error', requestId, error: message });
       }
       taskManager.reject(task.id, error);
+    } finally {
+      this.broadcastCatalog();
     }
   }
 
@@ -645,6 +658,7 @@ export class P2PManager {
       peerId,
       peerName,
     });
+    this.broadcastCatalog();
 
     try {
       const { OmniModelCache } = await import('../llm/providers/omni-model-cache.ts');
@@ -678,7 +692,58 @@ export class P2PManager {
         protocol.send({ type: 'model_task_error', requestId, error: message });
       }
       taskManager.reject(task.id, error);
+    } finally {
+      this.broadcastCatalog();
     }
+  }
+
+  // --- In-flight tracking & peer selection ---
+
+  private incrementInFlight(peerId: string): void {
+    this.inFlightCounts.set(peerId, (this.inFlightCounts.get(peerId) ?? 0) + 1);
+  }
+
+  private decrementInFlight(peerId: string): void {
+    const count = (this.inFlightCounts.get(peerId) ?? 1) - 1;
+    if (count <= 0) {
+      this.inFlightCounts.delete(peerId);
+    } else {
+      this.inFlightCounts.set(peerId, count);
+    }
+  }
+
+  /** Get current local load: number of active incoming tasks being processed */
+  getLocalLoad(): number {
+    const taskManager = this.orchestrator.tasks.getManager();
+    const working = taskManager.listTasks({ status: 'working' });
+    return working.filter((t: { p2p?: { direction: string } }) => t.p2p?.direction === 'incoming').length;
+  }
+
+  /**
+   * Select the best peer from a list of candidates.
+   * Scores each peer by: client-side in-flight count + peer-reported load.
+   * Picks the lowest score (least busy). Ties broken randomly.
+   */
+  selectBestPeer<T extends { peerId: string }>(candidates: T[]): T {
+    if (candidates.length <= 1) return candidates[0]!;
+
+    let bestScore = Infinity;
+    let best: T[] = [];
+
+    for (const c of candidates) {
+      const inFlight = this.inFlightCounts.get(c.peerId) ?? 0;
+      const peerLoad = this.peers.get(c.peerId)?.info.load ?? 0;
+      const score = inFlight + peerLoad;
+
+      if (score < bestScore) {
+        bestScore = score;
+        best = [c];
+      } else if (score === bestScore) {
+        best.push(c);
+      }
+    }
+
+    return best[Math.floor(Math.random() * best.length)]!;
   }
 
   // --- Public API ---
@@ -853,6 +918,7 @@ export class P2PManager {
     errorPromise.catch(() => {});
 
     this.pendingRequests.set(requestId, request);
+    this.incrementInFlight(peerId);
 
     const invokeMsg: ModelTaskInvokeMessage = {
       type: 'model_task_invoke',
@@ -878,6 +944,7 @@ export class P2PManager {
       }
     } finally {
       this.pendingRequests.delete(requestId);
+      this.decrementInFlight(peerId);
     }
   }
 
@@ -924,6 +991,7 @@ export class P2PManager {
     errorPromise.catch(() => {});
 
     this.pendingRequests.set(requestId, request);
+    this.incrementInFlight(peerId);
 
     const invokeMsg: ModelTaskInvokeMessage = {
       type: 'model_task_invoke',
@@ -955,6 +1023,7 @@ export class P2PManager {
       throw new Error('No result received from remote model');
     } finally {
       this.pendingRequests.delete(requestId);
+      this.decrementInFlight(peerId);
     }
   }
 
@@ -979,7 +1048,8 @@ export class P2PManager {
   broadcastCatalog(): void {
     const agents = this.getLocalP2PAgents();
     const models = this.getLocalSharedModels();
-    const msg: CatalogMessage = { type: 'catalog', peerName: this.peerName, agents, models };
+    const load = this.getLocalLoad();
+    const msg: CatalogMessage = { type: 'catalog', peerName: this.peerName, agents, models, load };
     for (const peer of this.peers.values()) {
       peer.protocol.send(msg);
     }

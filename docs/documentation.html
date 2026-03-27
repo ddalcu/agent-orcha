@@ -1777,6 +1777,55 @@ p2p: true</code></pre>
           <li>No API keys, base URLs, or engine details are shared &mdash; only the model name, provider, and model identifier</li>
         </ul>
 
+        <h4>P2P Model Leverage</h4>
+        <p>Control how agents use remote peer models for image, TTS, and video tasks via the <code>p2p.leverage</code> field:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+          </div>
+          <div class="code-content">
+            <pre><code>p2p:
+  share: true
+  leverage: remote-first</code></pre>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Mode</th>
+              <th>Behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>false</code></td>
+              <td>P2P leverage disabled (default)</td>
+            </tr>
+            <tr>
+              <td><code>local-first</code></td>
+              <td>Use local models; fall back to P2P if local fails or is unavailable</td>
+            </tr>
+            <tr>
+              <td><code>remote-first</code></td>
+              <td>Try P2P peers first for model tasks (image, TTS); fall back to local if no peers respond</td>
+            </tr>
+            <tr>
+              <td><code>remote-only</code></td>
+              <td>Only use P2P peers for model tasks &mdash; skip local models entirely</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>The leverage modes apply to <strong>model tools</strong> (image generation, TTS, video). For explicit P2P LLM chat routing, use <code>model: p2p</code> or <code>model: p2p:model-name</code>. Boolean <code>true</code> is backward-compatible and maps to <code>local-first</code>.</p>
+
+        <h4>Load Balancing</h4>
+        <p>When multiple peers share the same model, requests are automatically distributed using a <strong>least-loaded</strong> selection strategy:</p>
+        <ul>
+          <li><strong>Client-side tracking</strong> &mdash; Each node tracks in-flight requests per peer. New requests are routed to the peer with the fewest outstanding requests from this node.</li>
+          <li><strong>Peer-reported load</strong> &mdash; Peers broadcast their current active task count via catalog updates when tasks start and complete. Other nodes factor this into peer selection.</li>
+          <li><strong>Tie-breaking</strong> &mdash; When multiple peers have equal load scores, one is chosen at random to avoid clustering.</li>
+        </ul>
+        <p>This ensures requests spread evenly across peers without requiring a central coordinator. The combined score (in-flight from caller + reported load from peer) gives accurate load distribution even when multiple callers share the same peers.</p>
+
         <h4>P2P Configuration UI</h4>
         <p>The <strong>P2P</strong> tab in Studio provides a settings panel (shown when no agent/LLM is selected) where you can:</p>
         <ul>

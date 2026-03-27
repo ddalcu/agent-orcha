@@ -55,7 +55,7 @@ async function generateImageRemotely(name: string, config: ImageModelConfig, arg
   const remotePeers = p2pDeps.manager.getRemoteModelsByName(name);
   if (remotePeers.length === 0) return null;
 
-  const peer = remotePeers[0]!;
+  const peer = p2pDeps.manager.selectBestPeer(remotePeers);
   logger.info(`[ModelToolFactory] Using remote peer "${peer.peerName}" for image model "${name}"`);
   const result = await p2pDeps.manager.invokeRemoteModelTask(
     peer.peerId, peer.name, 'image',
@@ -160,7 +160,7 @@ async function generateTtsRemotely(name: string, args: { text: string; voice?: s
   const remotePeers = p2pDeps.manager.getRemoteModelsByName(name);
   if (remotePeers.length === 0) return null;
 
-  const peer = remotePeers[0]!;
+  const peer = p2pDeps.manager.selectBestPeer(remotePeers);
   logger.info(`[ModelToolFactory] Using remote peer "${peer.peerName}" for TTS model "${name}"`);
   const result = await p2pDeps.manager.invokeRemoteModelTask(
     peer.peerId, peer.name, 'tts',

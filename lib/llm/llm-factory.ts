@@ -42,7 +42,7 @@ export class LLMFactory {
     if (mode === 'remote-first' && this.p2pManager) {
       const remoteModels = this.p2pManager.getRemoteModelsByName(name);
       if (remoteModels.length > 0) {
-        const match = remoteModels[0]!;
+        const match = this.p2pManager.selectBestPeer(remoteModels);
         logger.info(`[LLMFactory] P2P remote-first: using ${match.model} from ${match.peerName}`);
         return new P2PChatModel(this.p2pManager, match.peerId, match.name, tempOverride);
       }
@@ -56,7 +56,7 @@ export class LLMFactory {
       }
       const remoteModels = this.p2pManager.getRemoteModelsByName(name);
       if (remoteModels.length > 0) {
-        const match = remoteModels[0]!;
+        const match = this.p2pManager.selectBestPeer(remoteModels);
         logger.info(`[LLMFactory] P2P remote-only: using ${match.model} from ${match.peerName}`);
         return new P2PChatModel(this.p2pManager, match.peerId, match.name, tempOverride);
       }
@@ -93,7 +93,7 @@ export class LLMFactory {
     if (!config && mode === 'local-first' && this.p2pManager) {
       const remoteModels = this.p2pManager.getRemoteModelsByName(name);
       if (remoteModels.length > 0) {
-        const match = remoteModels[0]!;
+        const match = this.p2pManager.selectBestPeer(remoteModels);
         logger.info(`[LLMFactory] P2P local-first fallback: using ${match.model} from ${match.peerName}`);
         return new P2PChatModel(this.p2pManager, match.peerId, match.name, tempOverride);
       }
