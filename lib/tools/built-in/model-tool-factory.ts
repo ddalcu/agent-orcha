@@ -4,8 +4,14 @@ import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
 import type { StructuredTool } from '../../types/llm-types.ts';
 import type { ImageModelConfig, TtsModelConfig } from '../../llm/llm-config.ts';
+import type { P2PManager } from '../../p2p/p2p-manager.ts';
 import { OmniModelCache } from '../../llm/providers/omni-model-cache.ts';
 import { logger } from '../../logger.ts';
+
+interface P2PDeps {
+  manager: P2PManager;
+  leverage: boolean;
+}
 
 let _generatedDir = '';
 let _workspaceRoot = '';
@@ -18,47 +24,81 @@ export function setWorkspaceRoot(dir: string): void {
   _workspaceRoot = dir;
 }
 
-function createImageTool(name: string, config: ImageModelConfig): StructuredTool {
+function createImageTool(name: string, config: ImageModelConfig, p2pDeps?: P2PDeps): StructuredTool {
   return tool(
     async (args) => {
       const resolve = (p?: string) => p ? (path.isAbsolute(p) ? p : path.join(_workspaceRoot, p)) : undefined;
       const modelPath = resolve(config.modelPath);
-      if (!modelPath) {
-        return JSON.stringify({ __modelTask: true, error: 'No modelPath configured for image model' });
+
+      // Try local generation first
+      if (modelPath) {
+        try {
+          const imageModel = await OmniModelCache.getImageModel(modelPath, {
+            ...(config.clipL ? { clipLPath: resolve(config.clipL) } : {}),
+            ...(config.t5xxl ? { t5xxlPath: resolve(config.t5xxl) } : {}),
+            ...(config.llm ? { llmPath: resolve(config.llm) } : {}),
+            ...(config.vae ? { vaePath: resolve(config.vae) } : {}),
+          });
+
+          const buffer = await imageModel.generate(args.input, {
+            steps: config.steps,
+            width: config.width,
+            height: config.height,
+          });
+
+          await fs.mkdir(_generatedDir, { recursive: true });
+          const fileName = `image_${Date.now()}.png`;
+          const filePath = path.join(_generatedDir, fileName);
+          await fs.writeFile(filePath, buffer);
+
+          return JSON.stringify({
+            __modelTask: true,
+            task: 'text-to-image',
+            image: `/generated/${fileName}`,
+          });
+        } catch (localErr) {
+          logger.warn(`[ModelToolFactory] Local image generation failed, checking P2P fallback:`, localErr);
+          // Fall through to P2P fallback
+        }
       }
 
-      try {
-        const imageModel = await OmniModelCache.getImageModel(modelPath, {
-          ...(config.clipL ? { clipLPath: resolve(config.clipL) } : {}),
-          ...(config.t5xxl ? { t5xxlPath: resolve(config.t5xxl) } : {}),
-          ...(config.llm ? { llmPath: resolve(config.llm) } : {}),
-          ...(config.vae ? { vaePath: resolve(config.vae) } : {}),
-        });
+      // P2P fallback: find a remote peer sharing this model
+      if (p2pDeps?.leverage) {
+        const remotePeers = p2pDeps.manager.getRemoteModelsByName(name);
+        if (remotePeers.length > 0) {
+          const peer = remotePeers[0]!;
+          logger.info(`[ModelToolFactory] Falling back to remote peer "${peer.peerName}" for image model "${name}"`);
+          try {
+            const result = await p2pDeps.manager.invokeRemoteModelTask(
+              peer.peerId, peer.name, 'image',
+              { prompt: args.input, steps: config.steps, width: config.width, height: config.height },
+            );
 
-        const buffer = await imageModel.generate(args.input, {
-          steps: config.steps,
-          width: config.width,
-          height: config.height,
-        });
+            await fs.mkdir(_generatedDir, { recursive: true });
+            const fileName = `image_${Date.now()}.png`;
+            const filePath = path.join(_generatedDir, fileName);
+            await fs.writeFile(filePath, Buffer.from(result.data, 'base64'));
 
-        // Write PNG to .generated/
-        await fs.mkdir(_generatedDir, { recursive: true });
-        const fileName = `image_${Date.now()}.png`;
-        const filePath = path.join(_generatedDir, fileName);
-        await fs.writeFile(filePath, buffer);
-
-        return JSON.stringify({
-          __modelTask: true,
-          task: 'text-to-image',
-          image: `/generated/${fileName}`,
-        });
-      } catch (err) {
-        logger.error(`[ModelToolFactory] Image generation failed:`, err);
-        return JSON.stringify({ __modelTask: true, error: `Image generation failed: ${(err as Error).message}` });
+            return JSON.stringify({
+              __modelTask: true,
+              task: 'text-to-image',
+              image: `/generated/${fileName}`,
+              remote: peer.peerName,
+            });
+          } catch (remoteErr) {
+            logger.error(`[ModelToolFactory] Remote image generation via "${peer.peerName}" failed:`, remoteErr);
+            return JSON.stringify({ __modelTask: true, error: `Image generation failed (local and remote): ${(remoteErr as Error).message}` });
+          }
+        }
       }
+
+      const reason = modelPath
+        ? 'Local generation failed and no remote peers available'
+        : 'No modelPath configured and no remote peers available';
+      return JSON.stringify({ __modelTask: true, error: reason });
     },
     {
-      name: `model_${name}`,
+      name: `model_image_${name}`,
       description: `Generate an image using ${name}. ${config.description}`.trim(),
       schema: z.object({
         input: z.string().describe('Text prompt describing the image to generate'),
@@ -67,37 +107,74 @@ function createImageTool(name: string, config: ImageModelConfig): StructuredTool
   );
 }
 
-function createTtsTool(name: string, config: TtsModelConfig): StructuredTool {
+function createTtsTool(name: string, config: TtsModelConfig, p2pDeps?: P2PDeps): StructuredTool {
   return tool(
     async (args) => {
       const resolve = (p: string) => path.isAbsolute(p) ? p : path.join(_workspaceRoot, p);
-      const modelPath = resolve(config.modelPath);
 
-      try {
-        const ttsModel = await OmniModelCache.getTtsModel(modelPath);
+      // Try local generation first
+      if (config.modelPath) {
+        const modelPath = resolve(config.modelPath);
+        try {
+          const ttsModel = await OmniModelCache.getTtsModel(modelPath);
 
-        const buffer = await ttsModel.speak(args.text, {
-          ...(args.referenceAudio ? { referenceAudioPath: resolve(args.referenceAudio) } : {}),
-        });
+          const buffer = await ttsModel.speak(args.text, {
+            ...(args.referenceAudio ? { referenceAudioPath: resolve(args.referenceAudio) } : {}),
+          });
 
-        // Write WAV to .generated/
-        await fs.mkdir(_generatedDir, { recursive: true });
-        const fileName = `audio_${Date.now()}.wav`;
-        const filePath = path.join(_generatedDir, fileName);
-        await fs.writeFile(filePath, buffer);
+          await fs.mkdir(_generatedDir, { recursive: true });
+          const fileName = `audio_${Date.now()}.wav`;
+          const filePath = path.join(_generatedDir, fileName);
+          await fs.writeFile(filePath, buffer);
 
-        return JSON.stringify({
-          __modelTask: true,
-          task: 'text-to-speech',
-          audio: `/generated/${fileName}`,
-        });
-      } catch (err) {
-        logger.error(`[ModelToolFactory] TTS failed:`, err);
-        return JSON.stringify({ __modelTask: true, error: `TTS failed: ${(err as Error).message}` });
+          return JSON.stringify({
+            __modelTask: true,
+            task: 'text-to-speech',
+            audio: `/generated/${fileName}`,
+          });
+        } catch (localErr) {
+          logger.warn(`[ModelToolFactory] Local TTS failed, checking P2P fallback:`, localErr);
+          // Fall through to P2P fallback
+        }
       }
+
+      // P2P fallback: find a remote peer sharing this TTS model
+      if (p2pDeps?.leverage) {
+        const remotePeers = p2pDeps.manager.getRemoteModelsByName(name);
+        if (remotePeers.length > 0) {
+          const peer = remotePeers[0]!;
+          logger.info(`[ModelToolFactory] Falling back to remote peer "${peer.peerName}" for TTS model "${name}"`);
+          try {
+            const result = await p2pDeps.manager.invokeRemoteModelTask(
+              peer.peerId, peer.name, 'tts',
+              { text: args.text, voice: args.voice, referenceAudio: args.referenceAudio },
+            );
+
+            await fs.mkdir(_generatedDir, { recursive: true });
+            const fileName = `audio_${Date.now()}.wav`;
+            const filePath = path.join(_generatedDir, fileName);
+            await fs.writeFile(filePath, Buffer.from(result.data, 'base64'));
+
+            return JSON.stringify({
+              __modelTask: true,
+              task: 'text-to-speech',
+              audio: `/generated/${fileName}`,
+              remote: peer.peerName,
+            });
+          } catch (remoteErr) {
+            logger.error(`[ModelToolFactory] Remote TTS via "${peer.peerName}" failed:`, remoteErr);
+            return JSON.stringify({ __modelTask: true, error: `TTS failed (local and remote): ${(remoteErr as Error).message}` });
+          }
+        }
+      }
+
+      const reason = config.modelPath
+        ? 'Local TTS failed and no remote peers available'
+        : 'No modelPath configured and no remote peers available';
+      return JSON.stringify({ __modelTask: true, error: reason });
     },
     {
-      name: `model_${name}`,
+      name: `model_tts_${name}`,
       description: `Generate speech using ${name}. ${config.description}`.trim(),
       schema: z.object({
         text: z.string().describe('Text to convert to speech'),
@@ -111,13 +188,14 @@ function createTtsTool(name: string, config: TtsModelConfig): StructuredTool {
 export function buildModelTools(
   imageConfigs: Array<{ name: string; config: ImageModelConfig }>,
   ttsConfigs: Array<{ name: string; config: TtsModelConfig }>,
+  p2pDeps?: P2PDeps,
 ): Map<string, StructuredTool> {
   const tools = new Map<string, StructuredTool>();
   for (const { name, config } of imageConfigs) {
-    tools.set(name, createImageTool(name, config));
+    tools.set(`image:${name}`, createImageTool(name, config, p2pDeps));
   }
   for (const { name, config } of ttsConfigs) {
-    tools.set(name, createTtsTool(name, config));
+    tools.set(`tts:${name}`, createTtsTool(name, config, p2pDeps));
   }
   return tools;
 }

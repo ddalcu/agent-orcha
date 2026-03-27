@@ -5,14 +5,14 @@ import { fileURLToPath } from 'url';
 import { AgentExecutor } from '../../lib/agents/agent-executor.ts';
 import { ConversationStore } from '../../lib/memory/conversation-store.ts';
 import { MemoryManager } from '../../lib/memory/memory-manager.ts';
-import { loadLLMConfig } from '../../lib/llm/llm-config.ts';
+import { loadModelsConfig } from '../../lib/llm/llm-config.ts';
 import { LLMFactory } from '../../lib/llm/llm-factory.ts';
 import type { ChatModel, ChatModelResponse, StructuredTool } from '../../lib/types/llm-types.ts';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturePath = path.join(__dirname, '..', 'fixtures', 'llm.json');
+const fixturePath = path.join(__dirname, '..', 'fixtures', 'models.yaml');
 
 // Minimal mock tool registry
 function mockToolRegistry(tools: any[] = []) {
@@ -26,7 +26,7 @@ function minimalDefinition(overrides: Record<string, any> = {}) {
   return {
     name: 'test-agent',
     description: 'Test agent',
-    llm: 'default',
+    model: 'default',
     prompt: {
       system: 'You are a test assistant.',
       inputVariables: ['message'],
@@ -39,7 +39,7 @@ function minimalDefinition(overrides: Record<string, any> = {}) {
 
 describe('AgentExecutor', () => {
   before(async () => {
-    await loadLLMConfig(fixturePath);
+    await loadModelsConfig(fixturePath);
   });
 
   it('should construct with required deps', () => {
@@ -261,8 +261,8 @@ describe('AgentExecutor invoke/stream', () => {
   let originalCreate: typeof LLMFactory.create;
 
   before(async () => {
-    const fixturePath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'llm.json');
-    await loadLLMConfig(fixturePath);
+    const fixturePath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'models.yaml');
+    await loadModelsConfig(fixturePath);
     originalCreate = LLMFactory.create;
   });
 
@@ -659,8 +659,8 @@ describe('AgentExecutor extractStructuredOutput (via invoke)', () => {
   let originalCreate: typeof LLMFactory.create;
 
   before(async () => {
-    const fp = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'llm.json');
-    await loadLLMConfig(fp);
+    const fp = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'models.yaml');
+    await loadModelsConfig(fp);
     originalCreate = LLMFactory.create;
   });
 
@@ -762,8 +762,8 @@ describe('AgentExecutor invokeWithTools', () => {
   let originalCreate: typeof LLMFactory.create;
 
   before(async () => {
-    const fp = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'llm.json');
-    await loadLLMConfig(fp);
+    const fp = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'models.yaml');
+    await loadModelsConfig(fp);
     originalCreate = LLMFactory.create;
   });
 

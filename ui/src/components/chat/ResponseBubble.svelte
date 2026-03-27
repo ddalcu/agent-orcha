@@ -23,6 +23,7 @@
     input?: string;
     image?: string;
     audio?: string;
+    video?: string;
     error?: string;
   }
 
@@ -75,7 +76,7 @@
       {/if}
       {#if modelOutputs.length > 0}
         {#each modelOutputs as mo}
-          <ModelOutput task={mo.task} input={mo.input} image={mo.image} audio={mo.audio} error={mo.error} />
+          <ModelOutput task={mo.task} input={mo.input} image={mo.image} audio={mo.audio} video={mo.video} error={mo.error} />
         {/each}
       {/if}
       {#if children}

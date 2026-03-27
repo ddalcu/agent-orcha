@@ -50,6 +50,7 @@
     input?: string;
     image?: string;
     audio?: string;
+    video?: string;
     error?: string;
   }
 
@@ -380,7 +381,7 @@
         }
       }
       // Intercept model tools
-      if (event.tool?.startsWith('model_') && typeof event.output === 'string') {
+      if ((event.tool?.startsWith('model_') || event.tool === 'generate_video') && typeof event.output === 'string') {
         try {
           const parsed = JSON.parse(event.output);
           if (parsed.__modelTask) {
@@ -389,6 +390,7 @@
               input: parsed.input,
               image: parsed.image,
               audio: parsed.audio,
+              video: parsed.video,
               error: parsed.error,
             }];
           }

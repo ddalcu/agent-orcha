@@ -172,6 +172,15 @@
   let activeDownloadsList = $state<any[]>([]);
   let interruptedDownloads = $state<any[]>([]);
 
+  // Combine client-side EventSource keys + server-polled download keys for reliable "is downloading" checks
+  let downloadingIds = $derived.by(() => {
+    const ids = new Set<string>(activeDownloads.keys());
+    for (const d of activeDownloadsList) {
+      if (d.downloadKey) ids.add(d.downloadKey);
+    }
+    return ids;
+  });
+
   // Cloud config form state
   let cloudApiKey = $state('');
   let cloudModel = $state('');
@@ -220,6 +229,8 @@
   let activatingModelId = $state<string | null>(null);
   let activateErrors = $state<Record<string, string>>({});
   let activatingEmbId = $state<string | null>(null);
+  let activatingImageId = $state<string | null>(null);
+  let activatingTtsId = $state<string | null>(null);
   // External engine activation
   let activatingExtChat = $state<string | null>(null);
   let activatingExtEmb = $state<string | null>(null);
@@ -233,7 +244,8 @@
 
   // ─── Config Resolvers ───
   function resolveDefault(section: 'models' | 'embeddings'): any {
-    const sectionData = llmConfig?.[section];
+    const key = section === 'models' ? 'llm' : section;
+    const sectionData = llmConfig?.[key];
     if (!sectionData) return null;
     let val = sectionData['default'];
     if (typeof val === 'string') val = sectionData[val];
@@ -241,7 +253,8 @@
   }
 
   function resolveDefaultKey(section: 'models' | 'embeddings'): string | null {
-    const sectionData = llmConfig?.[section];
+    const key = section === 'models' ? 'llm' : section;
+    const sectionData = llmConfig?.[key];
     if (!sectionData) return null;
     const val = sectionData['default'];
     if (typeof val === 'string') return val;
@@ -255,7 +268,7 @@
 
   let configDefaultEngine = $derived(resolveDefault('models')?.engine || status?.defaultEngine || null);
   let selectedEngineActive = $derived.by(() => {
-    const entry = llmConfig?.models?.[selectedEngine || ''];
+    const entry = llmConfig?.llm?.[selectedEngine || ''];
     return entry?.active !== false;
   });
 
@@ -279,7 +292,7 @@
   let ttsModelPath = $derived(ttsLoaded ? omniStatus?.tts?.modelPath : null);
   let ttsModelName = $derived(ttsModelPath ? ttsModelPath.split('/').pop() : null);
 
-  // Configured image/TTS models from llm.json (these are "on-demand" slots)
+  // Configured image/TTS models from models.yaml (these are "on-demand" slots)
   let imageConfigs = $derived(Object.entries(llmConfig?.image || {}) as [string, any][]);
   let ttsConfigs = $derived(Object.entries(llmConfig?.tts || {}) as [string, any][]);
 
@@ -294,11 +307,9 @@
   let embIsOmni = $derived(embConfigDefault?.provider === 'omni' || (!embConfigDefault?.provider && !embConfigDefault?.baseUrl));
 
   // Version info for managed engines
-  let version = $derived(null);
+  let version = $derived<string | null>(null);
   let versionLabel = $derived(
-    false
-      ? (version ? `v${version}` : '')
-      : (version ? `b${version?.match?.(/^(\d+)/)?.[1] || version}` : '')
+    version ? `b${version.match(/^(\d+)/)?.[1] || version}` : ''
   );
   // GPU & runtime
   let gpuBackend = $derived(status?.gpu?.backend || 'cpu');
@@ -426,7 +437,7 @@
   async function setDefaultProvider(configName: string) {
     settingDefault = configName;
     try {
-      const entry = llmConfig?.models?.[configName];
+      const entry = llmConfig?.llm?.[configName];
       if (entry?.active === false) await api.toggleLlmActive(configName, true);
       await api.saveLlmModel('default', { _pointer: configName });
       await loadLlmConfig();
@@ -441,7 +452,7 @@
   let cloudModelEntry = $derived(() => {
     const isDefault = resolveDefault('models')?._provider === activeProvider;
     if (isDefault) return { entry: resolveDefault('models'), name: resolveDefaultKey('models') };
-    for (const [name, m] of Object.entries(llmConfig?.models || {})) {
+    for (const [name, m] of Object.entries(llmConfig?.llm || {})) {
       if (typeof m === 'string') continue;
       if ((m as any)._provider === activeProvider && name !== 'default') {
         return { entry: m, name };
@@ -661,6 +672,40 @@
     }
   }
 
+  async function activateImage(id: string) {
+    activatingImageId = id;
+    activateErrors = { ...activateErrors };
+    delete activateErrors[id];
+    try {
+      const result = await api.activateLocalImage(id);
+      if (result.error) throw new Error(result.error);
+      await loadLlmConfig();
+      await refresh();
+    } catch (e: any) {
+      console.error('Failed to activate image model:', e);
+      activateErrors = { ...activateErrors, [id]: e.message };
+    } finally {
+      activatingImageId = null;
+    }
+  }
+
+  async function activateTts(id: string) {
+    activatingTtsId = id;
+    activateErrors = { ...activateErrors };
+    delete activateErrors[id];
+    try {
+      const result = await api.activateLocalTts(id);
+      if (result.error) throw new Error(result.error);
+      await loadLlmConfig();
+      await refresh();
+    } catch (e: any) {
+      console.error('Failed to activate TTS model:', e);
+      activateErrors = { ...activateErrors, [id]: e.message };
+    } finally {
+      activatingTtsId = null;
+    }
+  }
+
   async function stopServer() {
     stoppingChat = true;
     try {
@@ -798,13 +843,13 @@
     }
   }
 
-  function downloadModel(repo: string, fileName: string, type = 'gguf', subdir?: string, targetDir?: string, bundle?: any[]) {
+  function downloadModel(repo: string, fileName: string, type = 'gguf', subdir?: string, targetDir?: string, bundle?: any[], category?: string) {
     const downloadId = type === 'bundle' ? `bundle:${fileName}` : type === 'dir' ? `dir:${repo}${subdir ? '/' + subdir : ''}` : `${repo}/${fileName}`;
     if (activeDownloads.has(downloadId)) return;
 
     const es = type === 'bundle' && bundle
-      ? api.downloadBundle(fileName, bundle)
-      : api.downloadLocalModel(repo, fileName, type, subdir, targetDir);
+      ? api.downloadBundle(fileName, bundle, category)
+      : api.downloadLocalModel(repo, fileName, type, subdir, targetDir, category);
     activeDownloads.set(downloadId, es);
     activeDownloads = new Map(activeDownloads);
 
@@ -880,7 +925,7 @@
   async function toggleModelActive(configName: string) {
     togglingActive = configName;
     try {
-      const entry = llmConfig?.models?.[configName];
+      const entry = llmConfig?.llm?.[configName];
       const currentActive = entry?.active !== false;
       await api.toggleLlmActive(configName, !currentActive);
       // Refresh config without resetting activeProvider
@@ -895,8 +940,8 @@
   async function toggleModelP2P(configName: string) {
     togglingP2P = configName;
     try {
-      const entry = llmConfig?.models?.[configName];
-      const currentP2P = entry?.p2p === true;
+      const entry = llmConfig?.llm?.[configName];
+      const currentP2P = entry?.share === true;
       await api.toggleLlmP2P(configName, !currentP2P);
       llmConfig = await api.getLlmConfig();
     } catch (e: any) {
@@ -1074,63 +1119,44 @@
     </div>
   </div>
 
-  <!-- Provider Management Strip -->
-  <div class="llm-provider-mgmt">
+  <!-- Provider Tabs -->
+  <div class="llm-provider-tabs">
     {#each engineList as eng}
-      {@const entry = llmConfig?.models?.[eng]}
+      {@const entry = llmConfig?.llm?.[eng]}
       {@const isEngActive = entry?.active !== false}
+      {@const isSelected = activeProvider === 'local' && selectedEngine === eng}
       {@const isEngDefault = (resolveDefault('models')?.engine === eng || resolveDefault('models')?.provider === eng) && !['openai', 'anthropic', 'gemini'].includes(defaultProvider)}
-      <div class="llm-provider-chip {isEngActive ? '' : 'disabled'}">
-        <span class="llm-chip-label">{ENGINE_LABELS[eng]}</span>
-        <Toggle active={isEngActive} disabled={togglingActive === eng} onchange={() => toggleModelActive(eng)} />
-        {#if isEngDefault}
-          <span class="badge badge-green text-2xs">default</span>
-        {:else}
-          <button class="llm-chip-default-btn" title="Set as default" disabled={settingDefault === eng} onclick={() => setDefaultProvider(eng)}>
-            default
-          </button>
-        {/if}
-      </div>
+      <button class="llm-provider-tab {isSelected ? 'active' : ''} {isEngActive ? '' : 'disabled'}"
+        onclick={() => { activeProvider = 'local'; selectEngine(eng); }}>
+        <i class="fas {ENGINE_ICONS[eng]} text-amber"></i>
+        <span>{ENGINE_LABELS[eng]}</span>
+        {#if isEngDefault}<span class="badge badge-green text-2xs">default</span>{/if}
+        <div class="llm-tab-toggle" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+          <Toggle active={isEngActive} disabled={togglingActive === eng} onchange={() => toggleModelActive(eng)} />
+        </div>
+      </button>
     {/each}
     {#each ['openai', 'anthropic', 'gemini'] as p}
       {@const meta = PROVIDER_META[p]}
-      {@const entry = llmConfig?.models?.[p]}
+      {@const entry = llmConfig?.llm?.[p]}
       {@const isCloudActive = entry?.active !== false}
+      {@const isSelected = activeProvider === p}
       {@const isCloudDefault = defaultProvider === p}
-      <div class="llm-provider-chip {isCloudActive ? '' : 'disabled'}">
-        <span class="llm-chip-label">{meta.label}</span>
-        <Toggle active={isCloudActive} disabled={togglingActive === p} onchange={() => toggleModelActive(p)} />
-        {#if isCloudDefault}
-          <span class="badge badge-green text-2xs">default</span>
-        {:else}
-          <button class="llm-chip-default-btn" title="Set as default" disabled={settingDefault === p} onclick={() => setDefaultProvider(p)}>
-            default
-          </button>
-        {/if}
-      </div>
-    {/each}
-  </div>
-
-  <!-- Provider Tabs -->
-  <div class="llm-provider-tabs">
-    {#each PROVIDERS as p}
-      {@const meta = PROVIDER_META[p]}
-      {@const isActive = activeProvider === p}
-      {@const isEnabled = p === 'local'
-        ? engineList.some(eng => llmConfig?.models?.[eng]?.active !== false)
-        : llmConfig?.models?.[p]?.active !== false}
-      {#if isEnabled}
-        <button class="llm-provider-tab {isActive ? 'active' : ''}" onclick={() => selectProvider(p)}>
-          <span class="text-{meta.color}">
-            {#if BRAND_SVGS[p]}
-              {@html BRAND_SVGS[p]}
-            {:else}
-              <i class="fas fa-server"></i>
-            {/if}
-          </span>
-          <span>{meta.label}</span>
-        </button>
-      {/if}
+      <button class="llm-provider-tab {isSelected ? 'active' : ''} {isCloudActive ? '' : 'disabled'}"
+        onclick={() => selectProvider(p)}>
+        <span class="text-{meta.color}">
+          {#if BRAND_SVGS[p]}
+            {@html BRAND_SVGS[p]}
+          {:else}
+            <i class="fas fa-cloud"></i>
+          {/if}
+        </span>
+        <span>{meta.label}</span>
+        {#if isCloudDefault}<span class="badge badge-green text-2xs">default</span>{/if}
+        <div class="llm-tab-toggle" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+          <Toggle active={isCloudActive} disabled={togglingActive === p} onchange={() => toggleModelActive(p)} />
+        </div>
+      </button>
     {/each}
   </div>
 
@@ -1263,11 +1289,11 @@
             {/if}
           </button>
           {#if p2pEnabled}
-            {@const pEntry = llmConfig?.models?.[provider]}
+            {@const pEntry = llmConfig?.llm?.[provider]}
             <div class="flex items-center gap-2">
-              <i class="fas fa-share-nodes text-xs {pEntry?.p2p ? 'text-accent' : 'text-muted'}"></i>
-              <span class="text-xs {pEntry?.p2p ? 'text-accent' : 'text-muted'}">P2P</span>
-              <Toggle active={pEntry?.p2p === true} disabled={togglingP2P === provider} onchange={() => toggleModelP2P(provider)} />
+              <i class="fas fa-share-nodes text-xs {pEntry?.share ? 'text-accent' : 'text-muted'}"></i>
+              <span class="text-xs {pEntry?.share ? 'text-accent' : 'text-muted'}">P2P</span>
+              <Toggle active={pEntry?.share === true} disabled={togglingP2P === provider} onchange={() => toggleModelP2P(provider)} />
             </div>
           {/if}
         </div>
@@ -1278,27 +1304,6 @@
 
   <!-- Local LLM Content -->
   {#if activeProvider === 'local'}
-    <!-- Engine Tabs -->
-    {#if engines}
-      <div class="llm-engine-tabs">
-        {#each engineList as eng}
-          {@const available = engines[eng]?.available}
-          {@const isActive = selectedEngine === eng}
-          {@const isExternal = EXTERNAL_ENGINES.includes(eng)}
-          {@const isEngEnabled = llmConfig?.models?.[eng]?.active !== false}
-          {#if isEngEnabled}
-            <button class="llm-engine-tab {isActive ? 'active' : ''}" onclick={() => selectEngine(eng)}>
-              <i class="{'fas'} {ENGINE_ICONS[eng]}"></i>
-              <span>{ENGINE_LABELS[eng]}</span>
-              {#if isExternal}
-                <span class="engine-status {available ? 'connected' : 'disconnected'}"></span>
-              {/if}
-            </button>
-          {/if}
-        {/each}
-      </div>
-    {/if}
-
     <!-- Status Bar -->
     <div class="mb-6">
       {#if isExternalEngine}
@@ -1452,17 +1457,17 @@
           {/if}
 
           {#if p2pEnabled && selectedEngine}
-            {@const engEntry = llmConfig?.models?.[selectedEngine]}
+            {@const engEntry = llmConfig?.llm?.[selectedEngine]}
             <div class="llm-server-section">
               <div class="llm-section-content flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <i class="fas fa-share-nodes text-xs {engEntry?.p2p ? 'text-accent' : 'text-muted'}"></i>
-                  <span class="text-sm {engEntry?.p2p ? 'text-primary' : 'text-secondary'}">P2P Sharing</span>
-                  {#if engEntry?.p2p}
+                  <i class="fas fa-share-nodes text-xs {engEntry?.share ? 'text-accent' : 'text-muted'}"></i>
+                  <span class="text-sm {engEntry?.share ? 'text-primary' : 'text-secondary'}">P2P Sharing</span>
+                  {#if engEntry?.share}
                     <span class="badge badge-accent text-2xs">Shared</span>
                   {/if}
                 </div>
-                <Toggle active={engEntry?.p2p === true} disabled={togglingP2P === selectedEngine} onchange={() => toggleModelP2P(selectedEngine!)} />
+                <Toggle active={engEntry?.share === true} disabled={togglingP2P === selectedEngine} onchange={() => toggleModelP2P(selectedEngine!)} />
               </div>
             </div>
           {/if}
@@ -1768,17 +1773,17 @@
           {/if}
 
           {#if p2pEnabled && selectedEngine}
-            {@const engEntry = llmConfig?.models?.[selectedEngine]}
+            {@const engEntry = llmConfig?.llm?.[selectedEngine]}
             <div class="llm-server-section">
               <div class="llm-section-content flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <i class="fas fa-share-nodes text-xs {engEntry?.p2p ? 'text-accent' : 'text-muted'}"></i>
-                  <span class="text-sm {engEntry?.p2p ? 'text-primary' : 'text-secondary'}">P2P Sharing</span>
-                  {#if engEntry?.p2p}
+                  <i class="fas fa-share-nodes text-xs {engEntry?.share ? 'text-accent' : 'text-muted'}"></i>
+                  <span class="text-sm {engEntry?.share ? 'text-primary' : 'text-secondary'}">P2P Sharing</span>
+                  {#if engEntry?.share}
                     <span class="badge badge-accent text-2xs">Shared</span>
                   {/if}
                 </div>
-                <Toggle active={engEntry?.p2p === true} disabled={togglingP2P === selectedEngine} onchange={() => toggleModelP2P(selectedEngine!)} />
+                <Toggle active={engEntry?.share === true} disabled={togglingP2P === selectedEngine} onchange={() => toggleModelP2P(selectedEngine!)} />
               </div>
             </div>
           {/if}
@@ -1954,7 +1959,7 @@
               {@const looksLikeEmbedding = /embed|MiniLM/i.test(model.fileName)}
               {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models\//, '')))}
               {@const looksLikeTTS = /tts|speech|qwen3.*tts|kokoro|parler/i.test(model.fileName) || /tts/i.test(model.repo || '') || Object.values(llmConfig?.tts || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models\//, '')))}
-              {@const modelRole = looksLikeImage ? 'image' : looksLikeTTS ? 'tts' : looksLikeEmbedding ? 'embed' : 'llm'}
+              {@const modelRole = looksLikeEmbedding ? 'embed' : looksLikeImage ? 'image' : looksLikeTTS ? 'tts' : 'llm'}
               {@const recInfo = getRecommendedInfo(model)}
               {@const isActive = isChat || isEmb || isImageLoaded || isTtsLoaded}
               {@const cardCls = isChat ? 'llm-model-card active-chat' : isEmb ? 'llm-model-card active-emb' : isImageLoaded ? 'llm-model-card active-image' : isTtsLoaded ? 'llm-model-card active-tts' : 'llm-model-card'}
@@ -1990,12 +1995,13 @@
                         {#if caps.reasoning}<span class="cap-badge cap-badge-think" title="Reasoning"><i class="fas fa-brain mr-1"></i>think</span>{/if}
                       </div>
                     {/if}
-                    {#if modelRole === 'image' && !isImageLoaded}
-                      <div class="text-xs text-muted mt-1"><i class="fas fa-bolt mr-1"></i>Loads when image-creator agent is invoked</div>
-                    {:else if modelRole === 'tts' && !isTtsLoaded}
-                      <div class="text-xs text-muted mt-1"><i class="fas fa-bolt mr-1"></i>Loads when voice-clone agent is invoked</div>
-                    {/if}
                   </div>
+                  {#if !isActive}
+                    <button class="text-xs text-muted transition-colors" title="Delete model"
+                      onclick={() => deleteModel(model.id)}>
+                      <i class="fas fa-trash-alt"></i>
+                    </button>
+                  {/if}
                 </div>
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-3 text-xs text-muted">
@@ -2013,21 +2019,37 @@
                           {#if activatingEmbId === model.id}
                             <span class="spinner-sm"></span> Loading...
                           {:else}
-                            <i class="fas fa-vector-square mr-1"></i>Embed
+                            <i class="fas fa-play mr-1"></i>Activate
                           {/if}
                         </button>
                       {/if}
                     {:else if modelRole === 'image'}
                       {#if isImageLoaded}
-                        <span class="badge badge-purple">Loaded</span>
+                        <span class="badge badge-purple">Active</span>
                       {:else}
-                        <span class="llm-ondemand-badge">on demand</span>
+                        <button class="btn btn-purple btn-sm"
+                          disabled={activatingImageId === model.id}
+                          onclick={() => activateImage(model.id)}>
+                          {#if activatingImageId === model.id}
+                            <span class="spinner-sm"></span> Loading...
+                          {:else}
+                            <i class="fas fa-play mr-1"></i>Activate
+                          {/if}
+                        </button>
                       {/if}
                     {:else if modelRole === 'tts'}
                       {#if isTtsLoaded}
-                        <span class="badge badge-green">Loaded</span>
+                        <span class="badge badge-green">Active</span>
                       {:else}
-                        <span class="llm-ondemand-badge">on demand</span>
+                        <button class="btn btn-green btn-sm"
+                          disabled={activatingTtsId === model.id}
+                          onclick={() => activateTts(model.id)}>
+                          {#if activatingTtsId === model.id}
+                            <span class="spinner-sm"></span> Loading...
+                          {:else}
+                            <i class="fas fa-play mr-1"></i>Activate
+                          {/if}
+                        </button>
                       {/if}
                     {:else}
                       {#if isChat}
@@ -2043,12 +2065,6 @@
                           {/if}
                         </button>
                       {/if}
-                    {/if}
-                    {#if !isActive}
-                      <button class="text-xs text-muted transition-colors" title="Delete model"
-                        onclick={() => deleteModel(model.id)}>
-                        <i class="fas fa-trash-alt"></i>
-                      </button>
                     {/if}
                   </div>
                 </div>
@@ -2071,7 +2087,7 @@
         <div class="llm-rec-grid">
           {#each pendingRecommended as r}
             {@const downloadId = r.type === 'bundle' ? `bundle:${r.file}` : r.type === 'dir' ? `dir:${r.repo}${r.subdir ? '/' + r.subdir : ''}` : `${r.repo}/${r.file}`}
-            {@const isDownloading = activeDownloads.has(downloadId)}
+            {@const isDownloading = downloadingIds.has(downloadId)}
             <div class="llm-rec-card llm-rec-card-{r.color}">
               <div class="flex items-center gap-2 mb-2">
                 <i class="fas {r.icon} text-{r.color} text-sm"></i>
@@ -2082,7 +2098,7 @@
               <div class="flex items-center justify-between">
                 <span class="text-xs text-muted">{r.size}</span>
                 <button class="btn btn-{r.color} btn-sm" disabled={isDownloading}
-                  onclick={() => downloadModel(r.repo, r.file, r.type, r.subdir, r.type === 'dir' ? r.file : undefined, r.bundle)}>
+                  onclick={() => downloadModel(r.repo, r.file, r.type, r.subdir, r.type === 'dir' ? r.file : undefined, r.bundle, r.category)}>
                   {#if isDownloading}
                     <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
                   {:else}
@@ -2149,7 +2165,7 @@
                       {@const tooLarge = systemRamBytes > 0 && selectedFile.sizeBytes > systemRamBytes}
                       {@const downloaded = isModelDownloaded(models, result.repoId, selectedFileName)}
                       {@const dlId = `${result.repoId}/${selectedFileName}`}
-                      {@const isDownloading = activeDownloads.has(dlId)}
+                      {@const isDownloading = downloadingIds.has(dlId)}
                       <div class="hf-result-row">
                         <div class="min-w-0 flex-shrink-0">
                           <div class="font-medium text-primary text-sm truncate" title={result.repoId}>{result.modelName}</div>

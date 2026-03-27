@@ -1,7 +1,7 @@
 name: network-security
 description: Offensive network security scanner that performs deep reconnaissance, cross-subnet discovery, vulnerability scanning, and provides remediation solutions
-llm:
-  name: default
+model:
+  llm: default
 prompt:
   system: |
     You are an offensive network security expert. Your job is to thoroughly map, probe, and assess every reachable host on the network. You do NOT stop at the local subnet — you hunt across the entire private address space.

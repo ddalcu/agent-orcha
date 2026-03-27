@@ -72,7 +72,7 @@ describe('AgentExecutor', () => {
                 system: 'You are a test agent',
                 inputVariables: ['input']
             },
-            llm: { provider: 'mock', name: 'mock' },
+            model: 'default',
             tools: []
         } as any;
 

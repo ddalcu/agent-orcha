@@ -3,14 +3,14 @@ import { strict as assert } from 'node:assert';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { LLMFactory } from '../../lib/llm/llm-factory.ts';
-import { loadLLMConfig } from '../../lib/llm/llm-config.ts';
+import { loadModelsConfig, getModelsConfig } from '../../lib/llm/llm-config.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturePath = path.join(__dirname, '..', 'fixtures', 'llm.json');
+const fixturePath = path.join(__dirname, '..', 'fixtures', 'models.yaml');
 
 describe('LLMFactory — extended coverage', () => {
   before(async () => {
-    await loadLLMConfig(fixturePath);
+    await loadModelsConfig(fixturePath);
   });
 
   afterEach(() => {
@@ -152,12 +152,11 @@ describe('LLMFactory — extended coverage', () => {
       // The easiest way is to add a fixture entry with an unsupported provider
       // or mock detectProvider. Since we can't mock easily, we'll use
       // getModelConfig + detectProvider path by adding a config at runtime.
-      const { getLLMConfig } = await import('../../lib/llm/llm-config.ts');
-      const config = getLLMConfig();
+      const config = getModelsConfig();
 
       // Temporarily add a config with an unsupported provider
-      if (config && config.models) {
-        (config.models as any)['unsupported-provider'] = {
+      if (config && config.llm) {
+        (config.llm as any)['unsupported-provider'] = {
           provider: 'unsupported-xyz',
           model: 'some-model',
         };
@@ -170,8 +169,8 @@ describe('LLMFactory — extended coverage', () => {
         );
       } finally {
         // Clean up
-        if (config && config.models) {
-          delete (config.models as any)['unsupported-provider'];
+        if (config && config.llm) {
+          delete (config.llm as any)['unsupported-provider'];
         }
       }
     });

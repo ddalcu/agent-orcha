@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { AgentDefinitionSchema, ToolReferenceSchema, OutputConfigSchema, AgentMemoryConfigSchema } from '../lib/agents/types.ts';
 import { WorkflowDefinitionSchema, WorkflowStepSchema, WorkflowConfigSchema, InputFieldSchema } from '../lib/workflows/types.ts';
 import { KnowledgeConfigSchema, SourceConfigSchema } from '../lib/knowledge/types.ts';
-import { AgentLLMRefSchema, ModelConfigSchema, LLMJsonConfigSchema } from '../lib/llm/types.ts';
+import { AgentModelRefSchema, ModelConfigSchema, ModelsConfigSchema } from '../lib/llm/types.ts';
 import { AgentSkillsConfigSchema } from '../lib/skills/types.ts';
 import { IntegrationSchema } from '../lib/integrations/types.ts';
 import { TriggerSchema } from '../lib/triggers/types.ts';
@@ -31,7 +31,7 @@ describe('AgentDefinitionSchema', () => {
       name: 'full-agent',
       description: 'Full',
       version: '2.0.0',
-      llm: { name: 'fast', temperature: 0.5 },
+      model: { name: 'fast', temperature: 0.5 },
       prompt: { system: 'Prompt', inputVariables: ['query'] },
       tools: ['function:search'],
       output: { format: 'text' },
@@ -82,6 +82,34 @@ describe('AgentMemoryConfigSchema', () => {
     const result = AgentMemoryConfigSchema.parse({ enabled: true, maxLines: 50 });
     assert.equal(result.enabled, true);
     assert.equal(result.maxLines, 50);
+  });
+});
+
+describe('AgentP2PConfigSchema', () => {
+  it('should parse p2p with leverage and share', () => {
+    const result = AgentDefinitionSchema.parse({
+      name: 'test', description: 'test',
+      prompt: { system: 'test' },
+      p2p: { leverage: true, share: false },
+    });
+    assert.deepEqual(result.p2p, { leverage: true, share: false });
+  });
+
+  it('should parse p2p boolean shorthand as leverage+share', () => {
+    const result = AgentDefinitionSchema.parse({
+      name: 'test', description: 'test',
+      prompt: { system: 'test' },
+      p2p: true,
+    });
+    assert.equal(result.p2p, true);
+  });
+
+  it('should default model to default', () => {
+    const result = AgentDefinitionSchema.parse({
+      name: 'test', description: 'test',
+      prompt: { system: 'test' },
+    });
+    assert.equal(result.model, 'default');
   });
 });
 
@@ -142,14 +170,14 @@ describe('InputFieldSchema', () => {
   });
 });
 
-describe('AgentLLMRefSchema', () => {
+describe('AgentModelRefSchema', () => {
   it('should accept string', () => {
-    assert.equal(AgentLLMRefSchema.parse('default'), 'default');
+    assert.equal(AgentModelRefSchema.parse('default'), 'default');
   });
 
-  it('should accept object with name and temperature', () => {
-    const result = AgentLLMRefSchema.parse({ name: 'fast', temperature: 0.5 });
-    assert.deepEqual(result, { name: 'fast', temperature: 0.5 });
+  it('should accept object with llm and temperature', () => {
+    const result = AgentModelRefSchema.parse({ llm: 'fast', temperature: 0.5 });
+    assert.deepEqual(result, { llm: 'fast', temperature: 0.5 });
   });
 });
 
@@ -164,14 +192,14 @@ describe('ModelConfigSchema', () => {
   });
 });
 
-describe('LLMJsonConfigSchema', () => {
+describe('ModelsConfigSchema', () => {
   it('should parse valid config', () => {
-    const result = LLMJsonConfigSchema.parse({
-      models: { default: { model: 'gpt-4o' } },
+    const result = ModelsConfigSchema.parse({
+      llm: { default: { model: 'gpt-4o' } },
       embeddings: { default: { model: 'text-embedding-3-small' } },
     });
 
-    assert.ok(result.models['default']);
+    assert.ok(result.llm['default']);
     assert.ok(result.embeddings['default']);
     assert.equal(result.version, '1.0');
   });

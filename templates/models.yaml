@@ -1,6 +1,82 @@
-models:
-  image-gen:
-    type: text-to-image
-    engine: sd-cpp
-    modelPath: .models/sd_turbo.safetensors
-    description: SD Turbo — fast image generation from text prompts
+version: "1.0"
+llm:
+  default: lmstudio
+  omni:
+    provider: omni
+    model: Qwen3.5-4B-IQ4_NL
+    maxTokens: 512
+    reasoningBudget: 128
+    contextSize: 9216
+    active: true
+    share: false
+  lmstudio:
+    provider: local
+    engine: lmstudio
+    baseUrl: http://localhost:1234/v1
+    model: qwen3.5-4b-mlx
+    maxTokens: 256
+    reasoningBudget: 128
+    active: false
+    share: true
+  ollama:
+    provider: local
+    engine: ollama
+    baseUrl: http://localhost:11434/v1
+    model: qwen3.5:latest
+    reasoningBudget: 0
+    active: false
+    share: true
+  openai:
+    provider: openai
+    apiKey: ${OPENAI_API_KEY}
+    model: gpt-4.1
+    active: false
+    share: false
+  anthropic:
+    provider: anthropic
+    apiKey: ${ANTHROPIC_API_KEY}
+    model: claude-sonnet-4-6
+    active: false
+  gemini:
+    provider: gemini
+    apiKey: ${GOOGLE_API_KEY}
+    model: gemini-3.1-pro-preview
+    active: false
+embeddings:
+  default: omni
+  omni:
+    provider: omni
+    model: nomic-embed-text-v1.5.Q4_K_M
+  lmstudio:
+    provider: local
+    engine: lmstudio
+    baseUrl: http://localhost:1234/v1
+    model: nomic-ai/text-embedding-nomic-embed-text-v1.5
+  ollama:
+    provider: local
+    engine: ollama
+    baseUrl: http://localhost:11434/v1
+    model: nomic-embed-text:v1.5
+  openai:
+    provider: openai
+    apiKey: ${OPENAI_API_KEY}
+    model: text-embedding-3-small
+  gemini:
+    provider: gemini
+    apiKey: ${GOOGLE_API_KEY}
+    model: gemini-embedding-001
+image:
+  default: omni
+  omni:
+    modelPath: .models/flux2-klein/flux-2-klein-4b-Q4_K_M.gguf
+    llm: .models/flux2-klein/Qwen3-4B-Q4_K_M.gguf
+    vae: .models/flux2-klein/flux2-vae.safetensors
+    steps: 20
+    description: flux2-klein
+    share: true
+tts:
+  default: omni
+  omni:
+    modelPath: .models/qwen3-tts
+    description: Qwen3 TTS 0.6B
+    share: true

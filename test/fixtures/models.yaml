@@ -1,0 +1,59 @@
+version: "1.0"
+
+llm:
+  default: openai
+  fast:
+    provider: openai
+    model: gpt-3.5-turbo
+    temperature: 0.1
+  gemini:
+    provider: gemini
+    apiKey: test-gemini-key-not-real
+    model: gemini-2.0-flash
+    temperature: 0.5
+  claude:
+    provider: anthropic
+    apiKey: test-anthropic-key-not-real
+    model: claude-sonnet-4-20250514
+    temperature: 0.3
+    maxTokens: 4096
+  local:
+    provider: local
+    baseUrl: http://localhost:11434/v1
+    model: llama3
+  openai-custom:
+    provider: openai
+    baseUrl: http://localhost:8080/v1
+    model: gpt-4o
+    maxTokens: 2048
+  openai:
+    provider: openai
+    model: gpt-4o-mini
+    temperature: 0.3
+  shared-model:
+    provider: openai
+    model: gpt-4o
+    temperature: 0.3
+    share: true
+
+embeddings:
+  default: openai
+  openai:
+    provider: openai
+    model: text-embedding-3-small
+
+image:
+  image-gen:
+    modelPath: /models/flux2
+    steps: 20
+    width: 1024
+    height: 1024
+    description: FLUX.2 image generation
+    share: true
+
+tts:
+  tts:
+    modelPath: /models/qwen3-tts
+    voice: default
+    description: Qwen3 TTS
+    share: true

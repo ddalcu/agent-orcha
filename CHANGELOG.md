@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
 
+## Unreleased (feature/transformers)
+
+### Fixed
+
+- **LLM Config Key Mismatch** — The Svelte UI (`LocalLlmPage`) was reading `llmConfig.models` but the API returns the LLM section under the `llm` key. All 14 references fixed to `llmConfig.llm`. This broken reference caused provider toggles (active on/off), P2P sharing toggles, context size / max tokens / thinking budget sliders, and default provider detection to silently fail.
+- **P2P Sharing Toggle** — API call used non-existent `/p2p` route; fixed to `/share`. UI read `entry.p2p` instead of `entry.share` (the actual config field). Both the API URL and 11 template references corrected.
+- **Config Resolver** — `resolveDefault('models')` and `resolveDefaultKey('models')` accessed `llmConfig['models']` (undefined). Now maps `'models'` → `'llm'` internally.
+- **Image Model Config** — `templates/models.yaml` had corrupt image config paths pointing to the nomic embedding model instead of flux2-klein files. Corrected to actual bundle file paths.
+- **Model Role Detection** — Downloaded model cards checked `looksLikeImage` before `looksLikeEmbedding`, causing embedding models to be misclassified as image. Priority order fixed: embedding → image → TTS → LLM.
+
+### Added
+
+- **Image/TTS Activate Routes** — `POST /api/local-llm/models/:id/activate-image` and `activate-tts` scan the model directory, identify main model/vae/llm companion files, load via OmniModelCache, and update `models.yaml`. Previously these model types had no per-model activation — only global start/stop.
+- **Download Auto-Config** — Download route accepts optional `category` query param. When `category=image|tts` and no existing config for that slot, `models.yaml` is auto-configured on download completion. Does not overwrite existing configs.
+- **Download State Tracking** — Added `downloadKey` field to `ActiveDownload` type. UI combines client-side EventSource keys and server-polled download keys via `$derived` Set (`downloadingIds`) for reliable "is downloading" checks across page refreshes.
+- **Agent Composer P2P Toggles** — Visual agent editor now has separate Toggle switches for P2P Share and P2P Model Fallback (leverage), replacing the single checkbox. Leverage toggle includes contextual description.
+- **Local-LLM Route Tests** — 13 new tests covering activate-image/tts routes, download auto-config slot detection, image file detection logic, and downloadKey shape.
+
+### Changed
+
+- **Downloaded Model Cards** — Removed "on demand" badges for image/TTS models. All model types now have consistent "Activate" buttons. Trash icon moved from bottom actions to top-right corner of each card.
+- **P2P Leverage Label** — Renamed from "Leverage remote models" to "P2P model fallback" in the agent composer, with description: "If a model (LLM, image, TTS) isn't available locally, search P2P peers by name."
+
+---
+
 ## Release 2026.321
 
 ### Fixed

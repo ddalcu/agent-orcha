@@ -41,7 +41,11 @@ export class P2PChatModel implements ChatModel {
     let toolCalls: ChatModelResponse['tool_calls'];
     let usage: ChatModelResponse['usage_metadata'] | undefined;
 
-    for await (const chunk of this.manager.invokeRemoteLLM(this.peerId, this.modelName, wireMessages, this.temperature, undefined, this.serializedTools)) {
+    for await (const chunk of this.manager.invokeRemoteModelStream(this.peerId, this.modelName, {
+      messages: wireMessages,
+      temperature: this.temperature,
+      tools: this.serializedTools,
+    })) {
       if (chunk.type === 'content') content += chunk.content;
       else if (chunk.type === 'thinking') reasoning += chunk.content;
       else if (chunk.type === 'tool_calls') toolCalls = (toolCalls ?? []).concat(chunk.tool_calls);
@@ -59,7 +63,11 @@ export class P2PChatModel implements ChatModel {
   async *stream(messages: BaseMessage[], options?: { signal?: AbortSignal }): AsyncIterable<ChatModelResponse> {
     const wireMessages = toWireMessages(messages);
 
-    for await (const chunk of this.manager.invokeRemoteLLM(this.peerId, this.modelName, wireMessages, this.temperature, options?.signal, this.serializedTools)) {
+    for await (const chunk of this.manager.invokeRemoteModelStream(this.peerId, this.modelName, {
+      messages: wireMessages,
+      temperature: this.temperature,
+      tools: this.serializedTools,
+    }, options?.signal)) {
       if (chunk.type === 'content') {
         yield { content: chunk.content };
       } else if (chunk.type === 'thinking') {

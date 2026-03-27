@@ -1,6 +1,7 @@
 <script lang="ts">
   import yaml from 'js-yaml';
   import { api } from '../lib/services/api.js';
+  import Toggle from '../components/Toggle.svelte';
 
   const TOOL_PREFIXES: Record<string, string> = {
     mcp: 'tool-chip-mcp',
@@ -88,7 +89,8 @@
   let pubPassword = $derived((typeof d.publish === 'object' && d.publish?.password) || '');
 
   // P2P
-  let p2pEnabled = $derived(d.p2p === true || (typeof d.p2p === 'object' && d.p2p?.enabled));
+  let p2pLeverage = $derived(d.p2p === true || (typeof d.p2p === 'object' && d.p2p?.leverage === true));
+  let p2pShare = $derived(d.p2p === true || (typeof d.p2p === 'object' && d.p2p?.share === true));
 
   // Questions
   let questions = $derived<string[]>(d.sampleQuestions || []);
@@ -411,8 +413,16 @@
   }
 
   // --- P2P handlers ---
-  function handleP2PToggle(checked: boolean) {
-    d.p2p = checked ? true : undefined;
+  function handleP2PToggle(field: 'leverage' | 'share', checked: boolean) {
+    const current = d.p2p === true ? { leverage: true, share: true }
+      : (typeof d.p2p === 'object' && d.p2p) ? { ...d.p2p }
+      : { leverage: false, share: false };
+    current[field] = checked;
+    if (!current.leverage && !current.share) {
+      d.p2p = undefined;
+    } else {
+      d.p2p = current;
+    }
     emitChange();
   }
 
@@ -781,12 +791,24 @@
         </div>
       {/if}
 
-      <h3 class="section-title mt-4">P2P</h3>
-      <label class="flex items-center gap-2 text-xs text-secondary cursor-pointer">
-        <input type="checkbox" checked={p2pEnabled}
-               onchange={(e: Event) => handleP2PToggle((e.target as HTMLInputElement).checked)} />
-        Share on P2P network
-      </label>
+      <h3 class="section-title mt-4">P2P Network</h3>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-share-nodes text-xs {p2pShare ? 'text-accent' : 'text-muted'}"></i>
+          <span class="text-xs text-secondary">Share agent to peers</span>
+        </div>
+        <Toggle active={p2pShare} onchange={(v) => handleP2PToggle('share', v)} />
+      </div>
+      <div class="flex items-center justify-between mt-2">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-rotate text-xs {p2pLeverage ? 'text-accent' : 'text-muted'}"></i>
+          <span class="text-xs text-secondary">P2P model fallback</span>
+        </div>
+        <Toggle active={p2pLeverage} onchange={(v) => handleP2PToggle('leverage', v)} />
+      </div>
+      {#if p2pLeverage}
+        <p class="text-2xs text-muted mt-1">If a model (LLM, image, TTS) isn't available locally, search P2P peers by name</p>
+      {/if}
     </div>
   </div>
 

@@ -2,7 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { api } from '../lib/services/api.js';
   import { formatElapsedTime, estimateTokens } from '../lib/utils/format.js';
-  import type { P2PStatus, P2PPeer, P2PRemoteAgent, P2PRemoteLLM, StreamEvent } from '../lib/types/index.js';
+  import type { P2PStatus, P2PPeer, P2PRemoteAgent, P2PRemoteModel, StreamEvent } from '../lib/types/index.js';
 
   import Toggle from '../components/Toggle.svelte';
   import ChatInput from '../components/chat/ChatInput.svelte';
@@ -61,14 +61,14 @@
   const chatSessions = new Map<string, ChatSession>();
   let lastSelectionKey: string | null = null;
 
-  function selectionKey(agent: P2PRemoteAgent | null, llm: P2PRemoteLLM | null): string | null {
+  function selectionKey(agent: P2PRemoteAgent | null, llm: P2PRemoteModel | null): string | null {
     if (agent) return `agent:${agent.peerId}:${agent.name}`;
     if (llm) return `llm:${llm.peerId}:${llm.name}`;
     return null;
   }
 
   function saveCurrentSession() {
-    const key = selectionKey(selectedAgent, selectedLLM);
+    const key = selectionKey(selectedAgent, selectedModel);
     if (key && bubbles.length > 0) {
       chatSessions.set(key, { bubbles: [...bubbles], sessionId });
     }
@@ -89,9 +89,9 @@
   let status = $state<P2PStatus>({ enabled: false, connected: false, peerCount: 0, peerName: '', networkKey: '', rateLimit: 0, disabledByEnv: false });
   let peers = $state<P2PPeer[]>([]);
   let remoteAgents = $state<P2PRemoteAgent[]>([]);
-  let remoteLLMs = $state<P2PRemoteLLM[]>([]);
+  let remoteModels = $state<P2PRemoteModel[]>([]);
   let selectedAgent = $state<P2PRemoteAgent | null>(null);
-  let selectedLLM = $state<P2PRemoteLLM | null>(null);
+  let selectedModel = $state<P2PRemoteModel | null>(null);
   let bubbles = $state<ChatBubble[]>([]);
   let isStreaming = $state(false);
   let currentAbortController = $state<AbortController | null>(null);
@@ -110,10 +110,10 @@
   let filteredAgents = $derived(sidebarFilter
     ? remoteAgents.filter(a => a.name.toLowerCase().includes(sidebarFilter.toLowerCase()) || a.peerName.toLowerCase().includes(sidebarFilter.toLowerCase()))
     : remoteAgents);
-  let filteredLLMs = $derived(sidebarFilter
-    ? remoteLLMs.filter(l => l.name.toLowerCase().includes(sidebarFilter.toLowerCase()) || l.model.toLowerCase().includes(sidebarFilter.toLowerCase()) || l.peerName.toLowerCase().includes(sidebarFilter.toLowerCase()))
-    : remoteLLMs);
-  let p2pConfig = $state<{ sharedAgents: any[]; sharedLLMs: any[] }>({ sharedAgents: [], sharedLLMs: [] });
+  let filteredModels = $derived(sidebarFilter
+    ? remoteModels.filter(l => l.name.toLowerCase().includes(sidebarFilter.toLowerCase()) || l.model.toLowerCase().includes(sidebarFilter.toLowerCase()) || l.peerName.toLowerCase().includes(sidebarFilter.toLowerCase()))
+    : remoteModels);
+  let p2pConfig = $state<{ sharedAgents: any[]; sharedModels: any[] }>({ sharedAgents: [], sharedModels: [] });
   let togglingP2P = $state(false);
   let peerNameInput = $state('');
   let peerNameSaving = $state(false);
@@ -147,13 +147,13 @@
             const agent = remoteAgents.find(a => a.peerId === peerId && a.name === name);
             if (agent) {
               selectedAgent = agent;
-              selectedLLM = null;
+              selectedModel = null;
               restoreSession(lastSelectionKey!);
             }
           } else if (type === 'llm') {
-            const llm = remoteLLMs.find(l => l.peerId === peerId && l.name === name);
+            const llm = remoteModels.find(l => l.peerId === peerId && l.name === name);
             if (llm) {
-              selectedLLM = llm;
+              selectedModel = llm;
               selectedAgent = null;
               restoreSession(lastSelectionKey!);
             }
@@ -162,7 +162,7 @@
         // Try immediately and also after first poll
         restore();
         const unsubTimer = setInterval(() => {
-          if (remoteAgents.length > 0 || remoteLLMs.length > 0) {
+          if (remoteAgents.length > 0 || remoteModels.length > 0) {
             restore();
             clearInterval(unsubTimer);
           }
@@ -190,7 +190,7 @@
       status = s;
       peers = p;
       remoteAgents = a;
-      remoteLLMs = l;
+      remoteModels = l;
     } catch { /* ignore */ }
   }
 
@@ -209,8 +209,8 @@
       } else {
         peers = [];
         remoteAgents = [];
-        remoteLLMs = [];
-        p2pConfig = { sharedAgents: [], sharedLLMs: [] };
+        remoteModels = [];
+        p2pConfig = { sharedAgents: [], sharedModels: [] };
       }
     } catch { /* ignore */ }
     finally { togglingP2P = false; }
@@ -265,7 +265,7 @@
 
   function selectAgent(agent: P2PRemoteAgent) {
     saveCurrentSession();
-    selectedLLM = null;
+    selectedModel = null;
     selectedAgent = agent;
     const key = selectionKey(agent, null)!;
     lastSelectionKey = key;
@@ -275,10 +275,10 @@
     }
   }
 
-  function selectLLM(llm: P2PRemoteLLM) {
+  function selectModel(llm: P2PRemoteModel) {
     saveCurrentSession();
     selectedAgent = null;
-    selectedLLM = llm;
+    selectedModel = llm;
     const key = selectionKey(null, llm)!;
     lastSelectionKey = key;
     if (!restoreSession(key)) {
@@ -291,26 +291,26 @@
     saveCurrentSession();
     currentAbortController?.abort();
     selectedAgent = null;
-    selectedLLM = null;
+    selectedModel = null;
     bubbles = [];
   }
 
   function resetChat() {
     currentAbortController?.abort();
-    const key = selectionKey(selectedAgent, selectedLLM);
+    const key = selectionKey(selectedAgent, selectedModel);
     if (key) chatSessions.delete(key);
     bubbles = [];
     if (selectedAgent) {
       sessionId = `p2p-${selectedAgent.peerId.slice(0, 8)}-${Date.now()}`;
-    } else if (selectedLLM) {
-      sessionId = `p2p-llm-${selectedLLM.peerId.slice(0, 8)}-${Date.now()}`;
+    } else if (selectedModel) {
+      sessionId = `p2p-llm-${selectedModel.peerId.slice(0, 8)}-${Date.now()}`;
     }
   }
 
   // --- Chat ---
 
   function handleSubmit(message: string) {
-    if (!message.trim() || (!selectedAgent && !selectedLLM) || isStreaming) return;
+    if (!message.trim() || (!selectedAgent && !selectedModel) || isStreaming) return;
     sendMessage(message.trim());
   }
 
@@ -320,7 +320,7 @@
   }
 
   async function sendMessage(message: string) {
-    if (!selectedAgent && !selectedLLM) return;
+    if (!selectedAgent && !selectedModel) return;
 
     const userBubble: ChatBubble = {
       type: 'user',
@@ -388,8 +388,8 @@
         );
       } else {
         response = await api.streamP2PLLM(
-          selectedLLM!.peerId,
-          selectedLLM!.name,
+          selectedModel!.peerId,
+          selectedModel!.name,
           message,
           sessionId,
           { signal: abortController.signal },
@@ -646,24 +646,27 @@
 
       <!-- Remote LLMs section -->
       <div class="p2p-section">
-        <div class="section-title">Remote LLMs ({filteredLLMs.length})</div>
-        {#if filteredLLMs.length === 0}
+        <div class="section-title">Remote LLMs ({filteredModels.length})</div>
+        {#if filteredModels.length === 0}
           <div class="text-xs text-muted p-3">{sidebarFilter ? 'No matches' : 'No shared LLMs available'}</div>
         {:else}
-          {#each filteredLLMs as llm}
+          {#each filteredModels as llm}
             <button
               class="p2p-agent-card"
-              class:active={selectedLLM?.name === llm.name && selectedLLM?.peerId === llm.peerId}
-              onclick={() => selectLLM(llm)}
+              class:active={selectedModel?.name === llm.name && selectedModel?.peerId === llm.peerId}
+              onclick={() => selectModel(llm)}
             >
               <div class="flex items-center gap-2">
                 <i class="fas fa-microchip text-xs text-accent"></i>
-                <span class="text-sm font-medium text-primary">{llm.name}</span>
+                <span class="text-sm font-medium text-primary">{llm.model}</span>
               </div>
-              <span class="text-2xs text-muted p2p-desc">{llm.model}</span>
               <div class="flex items-center gap-2">
-                <span class="badge badge-gray text-2xs">{llm.provider}</span>
                 <span class="text-2xs text-muted"><i class="fas fa-server text-2xs"></i> {llm.peerName}</span>
+                {#if llm.capabilities?.length}
+                  {#each llm.capabilities as cap}
+                    <span class="badge badge-pill {cap === 'video' ? 'badge-purple' : cap === 'image' ? 'badge-blue' : cap === 'tts' ? 'badge-green' : 'badge-gray'} text-2xs">{cap}</span>
+                  {/each}
+                {/if}
               </div>
             </button>
           {/each}
@@ -674,7 +677,7 @@
 
   <!-- Main chat area -->
   <div class="p2p-main">
-    {#if !selectedAgent && !selectedLLM}
+    {#if !selectedAgent && !selectedModel}
       <div class="p2p-config-panel">
         <!-- P2P Settings -->
         <div class="p2p-config-section">
@@ -822,16 +825,15 @@
           </div>
 
           <div class="p2p-sharing-group mt-3">
-            <div class="text-xs font-medium text-muted mb-1">Shared LLMs ({p2pConfig.sharedLLMs.length})</div>
-            {#if p2pConfig.sharedLLMs.length === 0}
-              <div class="text-xs text-muted p2p-hint">No LLMs shared. Toggle P2P on a provider in the LLM tab, or add <code>p2p: true</code> in llm.json.</div>
+            <div class="text-xs font-medium text-muted mb-1">Shared LLMs ({p2pConfig.sharedModels.length})</div>
+            {#if p2pConfig.sharedModels.length === 0}
+              <div class="text-xs text-muted p2p-hint">No models shared. Toggle sharing on a provider in the Models tab, or add <code>share: true</code> in models.yaml.</div>
             {:else}
-              {#each p2pConfig.sharedLLMs as llm}
+              {#each p2pConfig.sharedModels as llm}
                 <div class="p2p-shared-item">
                   <i class="fas fa-microchip text-xs text-accent"></i>
-                  <span class="text-sm text-primary">{llm.name}</span>
-                  <span class="badge badge-gray text-2xs">{llm.provider}</span>
-                  <span class="text-xs text-muted">{llm.model}</span>
+                  <span class="text-sm text-primary">{llm.model}</span>
+                  <span class="text-2xs text-muted">({llm.name})</span>
                 </div>
               {/each}
             {/if}
@@ -851,8 +853,8 @@
               <div class="text-xs text-muted">Add <code>p2p: true</code> to any agent YAML file, or toggle it in the IDE visual editor.</div>
             </div>
             <div class="p2p-help-item">
-              <div class="text-xs font-medium text-primary">Share an LLM</div>
-              <div class="text-xs text-muted">Click the <i class="fas fa-share-nodes"></i> icon on a provider in the LLM tab, or set <code>"p2p": true</code> in llm.json.</div>
+              <div class="text-xs font-medium text-primary">Share a Model</div>
+              <div class="text-xs text-muted">Click the <i class="fas fa-share-nodes"></i> icon on a provider in the Models tab, or set <code>share: true</code> in models.yaml.</div>
             </div>
             <div class="p2p-help-item">
               <div class="text-xs font-medium text-primary">Use Remote LLMs</div>
@@ -876,9 +878,9 @@
           {#if selectedAgent}
             <div class="text-sm font-semibold text-primary truncate">{selectedAgent.name}</div>
             <div class="text-2xs text-muted truncate">{selectedAgent.description} · <i class="fas fa-server text-2xs"></i> {selectedAgent.peerName}</div>
-          {:else if selectedLLM}
-            <div class="text-sm font-semibold text-primary truncate">{selectedLLM.name}</div>
-            <div class="text-2xs text-muted truncate">{selectedLLM.model} · <span class="badge badge-gray text-2xs">{selectedLLM.provider}</span> · <i class="fas fa-server text-2xs"></i> {selectedLLM.peerName}</div>
+          {:else if selectedModel}
+            <div class="text-sm font-semibold text-primary truncate">{selectedModel.model}</div>
+            <div class="text-2xs text-muted truncate"><i class="fas fa-server text-2xs"></i> {selectedModel.peerName}</div>
           {/if}
         </div>
         {#if bubbles.length > 0 && !isStreaming}
@@ -902,9 +904,9 @@
                   {/each}
                 </div>
               {/if}
-            {:else if selectedLLM}
+            {:else if selectedModel}
               <i class="fas fa-microchip text-2xl text-accent opacity-50"></i>
-              <div class="text-sm text-muted mt-2">Start chatting with {selectedLLM.name}</div>
+              <div class="text-sm text-muted mt-2">Start chatting with {selectedModel.name}</div>
             {/if}
           </div>
         {:else}
@@ -948,7 +950,7 @@
         <ChatInput
           bind:this={chatInputRef}
           disabled={isStreaming}
-          placeholder="Message {selectedAgent?.name ?? selectedLLM?.name ?? ''}..."
+          placeholder="Message {selectedAgent?.name ?? selectedModel?.name ?? ''}..."
           onsubmit={handleSubmit}
         />
       </div>

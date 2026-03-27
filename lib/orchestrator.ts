@@ -14,10 +14,10 @@ import { SkillLoader, type Skill } from './skills/index.ts';
 import { ToolRegistry } from './tools/tool-registry.ts';
 import { ToolDiscovery } from './tools/tool-discovery.ts';
 import { MCPConfigSchema } from './mcp/types.ts';
-import { loadLLMConfig, getLLMConfig, getLLMConfigPath, saveLLMConfig, listModelConfigs, getModelConfig, getEmbeddingConfig, resolveApiKey } from './llm/llm-config.ts';
+import { loadModelsConfig, getModelsConfig, getModelsConfigPath, saveModelsConfig, listModelConfigs, getModelConfig, getEmbeddingConfig, resolveApiKey } from './llm/llm-config.ts';
 import { detectProvider } from './llm/provider-detector.ts';
 import { LLMFactory } from './llm/llm-factory.ts';
-import { resolveAgentLLMRef } from './llm/types.ts';
+import { resolveAgentModelRef } from './llm/types.ts';
 import { ConversationStore } from './memory/conversation-store.ts';
 import { MemoryManager } from './memory/memory-manager.ts';
 import { TaskManager } from './tasks/task-manager.ts';
@@ -37,6 +37,7 @@ import { IntegrationManager } from './integrations/integration-manager.ts';
 import type { IntegrationAccessor } from './integrations/types.ts';
 import { TriggerManager } from './triggers/trigger-manager.ts';
 import { createCanvasWriteTool, createCanvasAppendTool } from './tools/built-in/canvas-write.tool.ts';
+import { createVideoGenerateTool } from './tools/built-in/video-generate.tool.ts';
 import { buildModelTools, setGeneratedDir, setWorkspaceRoot } from './tools/built-in/model-tool-factory.ts';
 import { listImageConfigs, listTtsConfigs } from './llm/llm-config.ts';
 import { OmniModelCache } from './llm/providers/omni-model-cache.ts';
@@ -63,7 +64,7 @@ export interface OrchestratorConfig {
   functionsDir?: string;
   skillsDir?: string;
   mcpConfigPath?: string;
-  llmConfigPath?: string;
+  modelsConfigPath?: string;
   sandboxConfigPath?: string;
 }
 
@@ -106,7 +107,7 @@ export class Orchestrator {
       functionsDir: config.functionsDir ?? path.join(config.workspaceRoot, 'functions'),
       skillsDir: config.skillsDir ?? path.join(config.workspaceRoot, 'skills'),
       mcpConfigPath: config.mcpConfigPath ?? path.join(config.workspaceRoot, 'mcp.json'),
-      llmConfigPath: config.llmConfigPath ?? path.join(config.workspaceRoot, 'llm.json'),
+      modelsConfigPath: config.modelsConfigPath ?? path.join(config.workspaceRoot, 'models.yaml'),
       sandboxConfigPath: config.sandboxConfigPath ?? path.join(config.workspaceRoot, 'sandbox.json'),
     };
 
@@ -128,9 +129,9 @@ export class Orchestrator {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    // Load LLM config first - required for agents and embeddings
-    logger.info('[Orchestrator] Loading LLM config...');
-    await loadLLMConfig(this.config.llmConfigPath);
+    // Load models config first - required for agents and embeddings
+    logger.info('[Orchestrator] Loading models config...');
+    await loadModelsConfig(this.config.modelsConfigPath);
 
     // Migrate loose .gguf files into subdirectories and fix stale config paths
     await this.migrateModelStorage();
@@ -199,22 +200,23 @@ export class Orchestrator {
       this._p2pManager = new P2PManager(this);
       await this._p2pManager.start();
       LLMFactory.setP2PManager(this._p2pManager);
+      this.registerP2PTools();
     }
   }
 
-  /** Migrate loose .gguf files in .models/ into subdirectories and fix stale llm.json paths. */
+  /** Migrate loose .gguf files in .models/ into subdirectories and fix stale models.yaml paths. */
   private async migrateModelStorage(): Promise<void> {
     const manager = new ModelManager(this.config.workspaceRoot);
     const migrated = await manager.migrateLooseModels();
 
-    // Always check for broken image/tts paths in llm.json and try to fix them
+    // Always check for broken image/tts paths in models.yaml and try to fix them
     await this.fixBrokenModelPaths(migrated);
   }
 
   /** Fix image/tts config paths that point to non-existent files by scanning subdirectories. */
   private async fixBrokenModelPaths(migrated: Map<string, string>): Promise<void> {
-    const config = getLLMConfig();
-    const configPath = getLLMConfigPath();
+    const config = getModelsConfig();
+    const configPath = getModelsConfigPath();
     if (!config || !configPath) return;
 
     let changed = false;
@@ -286,6 +288,7 @@ export class Orchestrator {
 
     if (config.image) {
       for (const [, imgCfg] of Object.entries(config.image)) {
+        if (typeof imgCfg === 'string') continue; // skip pointer entries like default: "omni"
         imgCfg.modelPath = await fixPath(imgCfg.modelPath);
         imgCfg.vae = await fixPath(imgCfg.vae);
         imgCfg.clipL = await fixPath(imgCfg.clipL);
@@ -311,15 +314,16 @@ export class Orchestrator {
     }
     if (config.tts) {
       for (const [, ttsCfg] of Object.entries(config.tts)) {
+        if (typeof ttsCfg === 'string') continue; // skip pointer entries
         ttsCfg.modelPath = (await fixPath(ttsCfg.modelPath)) ?? ttsCfg.modelPath;
       }
     }
 
     if (changed) {
-      await saveLLMConfig(configPath, config);
+      await saveModelsConfig(configPath, config);
       // Reload so the rest of startup sees the corrected paths
-      await loadLLMConfig(configPath);
-      logger.info('[Orchestrator] Updated llm.json paths (fixed broken model references)');
+      await loadModelsConfig(configPath);
+      logger.info('[Orchestrator] Updated models.yaml paths (fixed broken model references)');
     }
   }
 
@@ -327,9 +331,9 @@ export class Orchestrator {
     const issues: string[] = [];
     const manager = new ModelManager(this.config.workspaceRoot);
 
-    const llmConfig = getLLMConfig();
-    const hasDefaultModel = llmConfig?.models['default'] !== undefined;
-    const hasDefaultEmb = llmConfig?.embeddings['default'] !== undefined;
+    const modelsConfig = getModelsConfig();
+    const hasDefaultModel = modelsConfig?.llm['default'] !== undefined;
+    const hasDefaultEmb = modelsConfig?.embeddings['default'] !== undefined;
     const checks: [string, boolean, () => { model: string; baseUrl?: string; apiKey?: string }][] = [
       ['Chat model', hasDefaultModel, () => getModelConfig('default')],
       ['Embedding', hasDefaultEmb, () => getEmbeddingConfig('default')],
@@ -492,6 +496,19 @@ export class Orchestrator {
   private registerBuiltInTools(): void {
     this.toolRegistry.registerBuiltIn('canvas_write', createCanvasWriteTool());
     this.toolRegistry.registerBuiltIn('canvas_append', createCanvasAppendTool());
+    this.registerP2PTools();
+  }
+
+  /** Register (or re-register) tools that depend on the P2P manager being available. */
+  registerP2PTools(): void {
+    if (this._p2pManager) {
+      this.toolRegistry.registerBuiltIn('generate_video', createVideoGenerateTool({
+        p2pManager: this._p2pManager,
+        generatedDir: path.join(this.config.workspaceRoot, '.generated'),
+      }));
+    } else {
+      this.toolRegistry.unregisterBuiltIn('generate_video');
+    }
   }
 
   private buildWorkspaceToolsMap(): Map<string, StructuredTool> {
@@ -517,7 +534,7 @@ export class Orchestrator {
     // Agent diagnostics
     const agents = await Promise.all(
       this.agentLoader.list().map(async (agent) => {
-        const { name: llmName } = resolveAgentLLMRef(agent.llm);
+        const { llm: llmName } = resolveAgentModelRef(agent.model);
 
         const tools = await Promise.all(
           agent.tools.map(async (toolRef) => {
@@ -694,8 +711,8 @@ export class Orchestrator {
     return this.config.workspaceRoot;
   }
 
-  get llmConfigPath(): string {
-    return this.config.llmConfigPath;
+  get modelsConfigPath(): string {
+    return this.config.modelsConfigPath;
   }
 
   get memory(): MemoryAccessor {
@@ -768,7 +785,7 @@ export class Orchestrator {
       return 'skill';
     }
 
-    // Singleton configs (mcp.json, llm.json, sandbox.json) — deleting is unusual, no-op
+    // Singleton configs (mcp.json, models.yaml, sandbox.json) — deleting is unusual, no-op
     return 'none';
   }
 
@@ -830,15 +847,10 @@ export class Orchestrator {
     }
 
     if (relativePath === 'models.yaml') {
-      // models.yaml is no longer used — image/tts configs live in llm.json now
-      return 'models';
-    }
-
-    if (relativePath === 'llm.json') {
-      await loadLLMConfig(this.config.llmConfigPath);
+      await loadModelsConfig(this.config.modelsConfigPath);
       LLMFactory.clearCache();
       this.toolRegistry.setModelTools(buildModelTools(listImageConfigs(), listTtsConfigs()));
-      return 'llm';
+      return 'models';
     }
 
     if (relativePath === 'sandbox.json') {

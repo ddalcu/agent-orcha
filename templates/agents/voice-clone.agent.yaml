@@ -2,8 +2,8 @@ name: voice-clone
 description: Text-to-speech assistant with Qwen3 voice cloning — upload a short audio sample and it speaks in that voice
 version: "1.0.0"
 
-llm:
-  name: default
+model:
+  llm: default
 
 prompt:
   system: |
@@ -45,7 +45,7 @@ prompt:
     - message
 
 tools:
-  - models:tts
+  - models:tts:omni
 
 output:
   format: text

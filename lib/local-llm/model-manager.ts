@@ -470,7 +470,7 @@ export class ModelManager {
     await fs.writeFile(fileMetaPath, JSON.stringify({ repo }, null, 2));
 
     const initialProgress: DownloadProgress = { fileName, downloadedBytes: existingBytes, totalBytes: 0, percent: 0 };
-    this._activeDownloads.set(downloadKey, { repo, fileName, progress: initialProgress });
+    this._activeDownloads.set(downloadKey, { downloadKey, repo, fileName, progress: initialProgress });
 
     try {
       const headers: Record<string, string> = {};
@@ -591,7 +591,7 @@ export class ModelManager {
     await fs.writeFile(metaPath, JSON.stringify({ repo: repos[0], repos }, null, 2));
 
     const initialProgress: DownloadProgress = { fileName: targetDir, downloadedBytes: 0, totalBytes: 0, percent: 0 };
-    this._activeDownloads.set(downloadKey, { repo: repos[0]!, fileName: targetDir, progress: initialProgress });
+    this._activeDownloads.set(downloadKey, { downloadKey, repo: repos[0]!, fileName: targetDir, progress: initialProgress });
 
     try {
       // Get total size for progress reporting
@@ -722,7 +722,7 @@ export class ModelManager {
     await fs.writeFile(metaPath, JSON.stringify({ repo }, null, 2));
 
     const initialProgress: DownloadProgress = { fileName: dirName, downloadedBytes: 0, totalBytes: 0, percent: 0 };
-    this._activeDownloads.set(downloadKey, { repo, fileName: dirName, progress: initialProgress });
+    this._activeDownloads.set(downloadKey, { downloadKey, repo, fileName: dirName, progress: initialProgress });
 
     try {
       const apiRes = await fetch(`https://huggingface.co/api/models/${repo}?blobs=true`);

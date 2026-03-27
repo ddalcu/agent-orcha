@@ -53,7 +53,7 @@ export const api = {
     return (await _fetch(`/api/llm/config/models/${encodeURIComponent(name)}/active`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active }) })).json();
   },
   async toggleLlmP2P(name: string, p2p: boolean) {
-    return (await _fetch(`/api/llm/config/models/${encodeURIComponent(name)}/p2p`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p2p }) })).json();
+    return (await _fetch(`/api/llm/config/models/${encodeURIComponent(name)}/share`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ share: p2p }) })).json();
   },
   async saveLlmEmbedding(name: string, config: unknown) {
     return (await _fetch(`/api/llm/config/embeddings/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })).json();
@@ -132,7 +132,7 @@ export const api = {
   browseHuggingFace(query: string, limit = 10, format = 'gguf') {
     return _fetch(`/api/local-llm/browse?q=${encodeURIComponent(query)}&limit=${limit}&format=${format}`).then(r => r.json());
   },
-  downloadLocalModel(repo: string, fileName: string, type = 'gguf', subdir?: string, targetDir?: string) {
+  downloadLocalModel(repo: string, fileName: string, type = 'gguf', subdir?: string, targetDir?: string, category?: string) {
     const params = new URLSearchParams({ repo });
     if (type === 'dir') {
       params.set('type', 'dir');
@@ -141,10 +141,12 @@ export const api = {
     } else {
       params.set('fileName', fileName);
     }
+    if (category) params.set('category', category);
     return new EventSource(`/api/local-llm/models/download?${params.toString()}`);
   },
-  downloadBundle(targetDir: string, files: Array<{ repo: string; file: string; targetName?: string }>) {
+  downloadBundle(targetDir: string, files: Array<{ repo: string; file: string; targetName?: string }>, category?: string) {
     const params = new URLSearchParams({ type: 'bundle', targetDir, files: JSON.stringify(files) });
+    if (category) params.set('category', category);
     return new EventSource(`/api/local-llm/models/download?${params.toString()}`);
   },
   async getActiveDownloads() { return (await _fetch('/api/local-llm/models/downloads')).json(); },
@@ -154,6 +156,12 @@ export const api = {
   },
   async activateLocalEmbedding(id: string) {
     return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-embedding`, { method: 'POST' })).json();
+  },
+  async activateLocalImage(id: string) {
+    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-image`, { method: 'POST' })).json();
+  },
+  async activateLocalTts(id: string) {
+    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-tts`, { method: 'POST' })).json();
   },
   async stopLocalLlm(engine?: string) {
     return (await _fetch('/api/local-llm/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(engine ? { engine } : {}) })).json();

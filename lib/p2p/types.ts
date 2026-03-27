@@ -27,12 +27,15 @@ export interface P2PAgentInfo {
   sampleQuestions?: string[];
 }
 
-// --- P2P LLM Info (what peers share about their LLMs) ---
+// --- P2P Model Info (what peers share about their models) ---
 
-export interface P2PLLMInfo {
-  name: string;
-  provider: string;
-  model: string;
+export type P2PModelType = 'chat' | 'image' | 'tts';
+
+export interface P2PModelInfo {
+  name: string;           // config key on host
+  model: string;          // model string
+  type: P2PModelType;     // what kind of model
+  capabilities?: string[];
 }
 
 // --- Protocol Messages ---
@@ -44,10 +47,11 @@ export const P2PMessageTypes = [
   'stream',
   'stream_end',
   'stream_error',
-  'llm_invoke',
-  'llm_stream',
-  'llm_stream_end',
-  'llm_stream_error',
+  'model_task_invoke',
+  'model_task_result',
+  'model_task_stream',
+  'model_task_stream_end',
+  'model_task_error',
 ] as const;
 
 export type P2PMessageType = typeof P2PMessageTypes[number];
@@ -58,15 +62,17 @@ export interface HandshakeMessage {
   peerName: string;
   version: string;
   agents: P2PAgentInfo[];
-  llms?: P2PLLMInfo[];
+  models?: P2PModelInfo[];
 }
 
 export interface CatalogMessage {
   type: 'catalog';
   peerName?: string;
   agents: P2PAgentInfo[];
-  llms?: P2PLLMInfo[];
+  models?: P2PModelInfo[];
 }
+
+// --- Agent Invoke Messages ---
 
 export interface InvokeMessage {
   type: 'invoke';
@@ -93,19 +99,25 @@ export interface StreamErrorMessage {
   error: string;
 }
 
-// --- LLM P2P Messages ---
+// --- Unified Model Task Messages ---
 
-export interface LLMInvokeMessage {
-  type: 'llm_invoke';
+export interface ModelTaskInvokeMessage {
+  type: 'model_task_invoke';
   requestId: string;
+  taskType: 'chat' | 'image' | 'tts' | 'video_frame';
   modelName: string;
-  messages: P2PWireMessage[];
-  temperature?: number;
-  tools?: P2PWireTool[];
+  params: Record<string, unknown>;
 }
 
-export interface LLMStreamMessage {
-  type: 'llm_stream';
+export interface ModelTaskResultMessage {
+  type: 'model_task_result';
+  requestId: string;
+  data: string;  // base64 encoded result
+  metadata?: Record<string, unknown>;
+}
+
+export interface ModelTaskStreamMessage {
+  type: 'model_task_stream';
   requestId: string;
   chunk:
     | { type: 'content' | 'thinking'; content: string }
@@ -113,16 +125,30 @@ export interface LLMStreamMessage {
     | { type: 'tool_calls'; tool_calls: ToolCall[] };
 }
 
-export interface LLMStreamEndMessage {
-  type: 'llm_stream_end';
+export interface ModelTaskStreamEndMessage {
+  type: 'model_task_stream_end';
   requestId: string;
 }
 
-export interface LLMStreamErrorMessage {
-  type: 'llm_stream_error';
+export interface ModelTaskErrorMessage {
+  type: 'model_task_error';
   requestId: string;
   error: string;
 }
+
+// --- Video Settings (used by video tool, not a P2P message) ---
+
+export interface VideoSettings {
+  totalFrames: number;
+  width: number;
+  height: number;
+  cfgScale: number;
+  steps: number;
+  seed?: number;
+  fps: number;
+}
+
+// --- P2P Message Union ---
 
 export type P2PMessage =
   | HandshakeMessage
@@ -131,10 +157,11 @@ export type P2PMessage =
   | StreamMessage
   | StreamEndMessage
   | StreamErrorMessage
-  | LLMInvokeMessage
-  | LLMStreamMessage
-  | LLMStreamEndMessage
-  | LLMStreamErrorMessage;
+  | ModelTaskInvokeMessage
+  | ModelTaskResultMessage
+  | ModelTaskStreamMessage
+  | ModelTaskStreamEndMessage
+  | ModelTaskErrorMessage;
 
 // --- Peer tracking ---
 
@@ -143,7 +170,7 @@ export interface PeerInfo {
   peerName: string;
   version: string;
   agents: P2PAgentInfo[];
-  llms: P2PLLMInfo[];
+  models: P2PModelInfo[];
   connectedAt: number;
 }
 
@@ -154,9 +181,9 @@ export interface RemoteAgent extends P2PAgentInfo {
   peerName: string;
 }
 
-// --- Remote LLM (aggregated view for API) ---
+// --- Remote model (aggregated view for API) ---
 
-export interface RemoteLLM extends P2PLLMInfo {
+export interface RemoteModel extends P2PModelInfo {
   peerId: string;
   peerName: string;
 }

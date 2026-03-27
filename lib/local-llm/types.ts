@@ -32,6 +32,7 @@ export interface DownloadProgress {
 }
 
 export interface ActiveDownload {
+  downloadKey: string;
   repo: string;
   fileName: string;
   progress: DownloadProgress;

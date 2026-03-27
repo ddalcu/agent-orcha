@@ -160,7 +160,7 @@ function copyTemplatesFromRepo(targetDir: string): void {
     }
   }
 
-  const configFiles = ['mcp.json', 'llm.json', '.env.example'];
+  const configFiles = ['mcp.json', 'models.yaml', '.env.example'];
   for (const file of configFiles) {
     const src = path.join(templatesDir, file);
     const dest = path.join(targetDir, file);

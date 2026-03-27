@@ -2,8 +2,8 @@ name: corporate
 description: Friendly corporate assistant — answers questions about the org, people, departments
 version: "1.0.0"
 
-llm:
-  name: default
+model:
+  llm: default
 
 prompt:
   system: |

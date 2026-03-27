@@ -1,3 +1,4 @@
+import * as fs from 'node:fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import type { FastifyPluginAsync } from 'fastify';
@@ -6,8 +7,8 @@ import { generateDirName } from '../../lib/local-llm/model-manager.ts';
 import { resolveModelFile } from '../../lib/local-llm/resolve-model-path.ts';
 import { OmniModelCache } from '../../lib/llm/providers/omni-model-cache.ts';
 import {
-  getLLMConfig,
-  saveLLMConfig,
+  getModelsConfig,
+  saveModelsConfig,
   LLMFactory,
   resolveDefaultName,
   listImageConfigs,
@@ -22,7 +23,7 @@ const DEFAULT_ENGINE_URLS: Record<string, string> = {
 };
 
 function getEngineUrl(engine: string): string {
-  const config = getLLMConfig();
+  const config = getModelsConfig();
   return config?.engineUrls?.[engine] || DEFAULT_ENGINE_URLS[engine] || '';
 }
 
@@ -190,7 +191,7 @@ async function probeExternalEngine(engine: 'ollama' | 'lmstudio'): Promise<{ ava
 export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
   const workspaceRoot = fastify.orchestrator.workspaceRoot;
   const manager = new ModelManager(workspaceRoot);
-  const llmJsonPath = fastify.orchestrator.llmConfigPath;
+  const modelsConfigPath = fastify.orchestrator.modelsConfigPath;
 
   // GET /engines — probe availability of all local engines
   fastify.get('/engines', async () => {
@@ -210,7 +211,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /engines/urls — return custom engine base URLs
   fastify.get('/engines/urls', async () => {
-    const config = getLLMConfig();
+    const config = getModelsConfig();
     return {
       ollama: config?.engineUrls?.ollama || DEFAULT_ENGINE_URLS.ollama,
       lmstudio: config?.engineUrls?.lmstudio || DEFAULT_ENGINE_URLS.lmstudio,
@@ -232,9 +233,9 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       // Strip trailing slash
       const cleanUrl = url.replace(/\/+$/, '');
 
-      const config = getLLMConfig();
+      const config = getModelsConfig();
       if (!config) {
-        return reply.status(500).send({ error: 'LLM config not loaded' });
+        return reply.status(500).send({ error: 'Models config not loaded' });
       }
 
       if (!config.engineUrls) config.engineUrls = {};
@@ -246,7 +247,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         config.engineUrls[engine] = cleanUrl;
       }
 
-      await saveLLMConfig(llmJsonPath, config);
+      await saveModelsConfig(modelsConfigPath, config);
       return { ok: true };
     },
   );
@@ -265,9 +266,9 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
 
       const baseUrl = `${getEngineUrl(engine)}/v1`;
 
-      const config = getLLMConfig();
+      const config = getModelsConfig();
       if (!config) {
-        return reply.status(500).send({ error: 'LLM config not loaded' });
+        return reply.status(500).send({ error: 'Models config not loaded' });
       }
 
       if (role === 'embedding') {
@@ -284,11 +285,11 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         // Unload any omni chat model
         await OmniModelCache.unloadLlmChat();
         // Preserve reasoningBudget and active from the current entry
-        const resolvedKey = resolveDefaultName('models');
-        const currentDefault = typeof config.models[resolvedKey] === 'object' ? config.models[resolvedKey] as Record<string, any> : null;
-        const existingExt = typeof config.models[engine] === 'object' ? config.models[engine] as Record<string, any> : null;
+        const resolvedKey = resolveDefaultName('llm');
+        const currentDefault = typeof config.llm[resolvedKey] === 'object' ? config.llm[resolvedKey] as Record<string, any> : null;
+        const existingExt = typeof config.llm[engine] === 'object' ? config.llm[engine] as Record<string, any> : null;
         // Preserve all existing config fields (maxTokens, temperature, contextSize, etc.)
-        config.models[engine] = {
+        config.llm[engine] = {
           ...(existingExt || {}),
           provider: 'local' as const,
           engine: engine as 'ollama' | 'lmstudio',
@@ -296,10 +297,10 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
           model,
           ...(currentDefault?.reasoningBudget != null ? { reasoningBudget: currentDefault.reasoningBudget } : {}),
         };
-        config.models['default'] = engine;
+        config.llm['default'] = engine;
       }
 
-      await saveLLMConfig(llmJsonPath, config);
+      await saveModelsConfig(modelsConfigPath, config);
       LLMFactory.clearCache();
 
       // For LM Studio, unload running models first, then load the new one
@@ -318,7 +319,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         }
         // Load the new model
         try {
-          const modelConfig = config.models[engine];
+          const modelConfig = config.llm[engine];
           const ctxSize = (modelConfig && typeof modelConfig === 'object') ? (modelConfig as any).contextSize : undefined;
           const loadRes = await fetch(`${lmBaseUrl}/api/v1/models/load`, {
             method: 'POST',
@@ -349,21 +350,21 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ error: 'contextSize is required' });
       }
 
-      const config = getLLMConfig();
+      const config = getModelsConfig();
       if (!config) {
-        return reply.status(500).send({ error: 'LLM config not loaded' });
+        return reply.status(500).send({ error: 'Models config not loaded' });
       }
 
       // Resolve the default pointer to the actual config entry
-      const resolvedKey = resolveDefaultName('models');
-      const defaultModel = config.models[resolvedKey];
+      const resolvedKey = resolveDefaultName('llm');
+      const defaultModel = config.llm[resolvedKey];
       if (!defaultModel || typeof defaultModel === 'string') {
         return reply.status(400).send({ error: 'No default model configured' });
       }
 
-      // Save to llm.json
+      // Save to models.yaml
       defaultModel.contextSize = contextSize;
-      await saveLLMConfig(llmJsonPath, config);
+      await saveModelsConfig(modelsConfigPath, config);
       LLMFactory.clearCache();
 
       // For LM Studio, reload the model with new context_length
@@ -438,9 +439,9 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/status', async () => {
     const omniStatus = OmniModelCache.getStatus();
     const state = await manager.getState();
-    const config = getLLMConfig();
-    const resolvedKey = resolveDefaultName('models');
-    const defaultModel = config?.models[resolvedKey];
+    const config = getModelsConfig();
+    const resolvedKey = resolveDefaultName('llm');
+    const defaultModel = config?.llm[resolvedKey];
     const defaultProvider = (defaultModel && typeof defaultModel !== 'string') ? detectProvider(defaultModel) : null;
     const defaultEngine = (defaultModel && typeof defaultModel !== 'string') ? (defaultModel.engine || null) : null;
 
@@ -482,11 +483,11 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // GET /models/download?repo=...&fileName=...&type=gguf|dir|bundle&subdir=...&targetDir=...&files=...  (SSE stream)
-  fastify.get<{ Querystring: { repo: string; fileName?: string; type?: string; subdir?: string; targetDir?: string; files?: string } }>(
+  // GET /models/download?repo=...&fileName=...&type=gguf|dir|bundle&subdir=...&targetDir=...&files=...&category=...  (SSE stream)
+  fastify.get<{ Querystring: { repo: string; fileName?: string; type?: string; subdir?: string; targetDir?: string; files?: string; category?: string } }>(
     '/models/download',
     async (request, reply) => {
-      const { repo, fileName, type, subdir, targetDir, files: filesJson } = request.query;
+      const { repo, fileName, type, subdir, targetDir, files: filesJson, category } = request.query;
       if (!repo && type !== 'bundle') {
         return reply.status(400).send({ error: 'repo is required' });
       }
@@ -563,6 +564,50 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
           }
         }
 
+        // Auto-configure models.yaml for image/tts bundles after download — only if slot is empty
+        if (model && (category === 'image' || category === 'tts')) {
+          try {
+            const config = getModelsConfig();
+            if (config) {
+              const modelDir = `.models/${model.fileName}`;
+              const hasExistingImage = config.image && Object.values(config.image).some(v => typeof v === 'object' && (v as any).modelPath);
+              const hasExistingTts = config.tts && Object.values(config.tts).some(v => typeof v === 'object' && (v as any).modelPath);
+
+              if (category === 'image' && type === 'bundle' && !hasExistingImage) {
+                const bundleFiles = JSON.parse(filesJson!) as Array<{ repo: string; file: string; targetName?: string }>;
+                const mainFile = bundleFiles[0]!;
+                const vaeFile = bundleFiles.find(f => /vae/i.test(f.targetName || f.file));
+                const llmFile = bundleFiles.find(f => !(/vae/i.test(f.targetName || f.file)) && f !== mainFile);
+                const toFileName = (f: { file: string; targetName?: string }) => f.targetName || f.file.split('/').pop()!;
+                config.image = config.image || {};
+                config.image['omni'] = {
+                  modelPath: `${modelDir}/${toFileName(mainFile)}`,
+                  ...(llmFile ? { llm: `${modelDir}/${toFileName(llmFile)}` } : {}),
+                  ...(vaeFile ? { vae: `${modelDir}/${toFileName(vaeFile)}` } : {}),
+                  steps: 20,
+                  description: model.fileName,
+                  share: true,
+                };
+                config.image['default'] = 'omni';
+                await saveModelsConfig(modelsConfigPath, config);
+                LLMFactory.clearCache();
+              } else if (category === 'tts' && !hasExistingTts) {
+                config.tts = config.tts || {};
+                config.tts['omni'] = {
+                  modelPath: modelDir,
+                  description: model.fileName,
+                  share: true,
+                };
+                config.tts['default'] = 'omni';
+                await saveModelsConfig(modelsConfigPath, config);
+                LLMFactory.clearCache();
+              }
+            }
+          } catch (err: any) {
+            logger.error('[LocalLLM] Failed to auto-configure models.yaml after download:', err);
+          }
+        }
+
         if (!clientDisconnected) {
           reply.raw.write(`data: ${JSON.stringify({ type: 'complete', model })}\n\n`);
         }
@@ -587,9 +632,9 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // Read existing config for contextSize and reasoningBudget from the resolved default
-      const fullConfig = getLLMConfig();
-      const resolvedKey = resolveDefaultName('models');
-      const currentDefault = fullConfig?.models[resolvedKey];
+      const fullConfig = getModelsConfig();
+      const resolvedKey = resolveDefaultName('llm');
+      const currentDefault = fullConfig?.llm[resolvedKey];
       const currentObj = (currentDefault && typeof currentDefault !== 'string') ? currentDefault : null;
 
       try {
@@ -602,7 +647,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const modelName = model.fileName.replace(/\.gguf$/i, '');
-      const existingEntry = fullConfig?.models['omni'];
+      const existingEntry = fullConfig?.llm['omni'];
       const existingObj = (existingEntry && typeof existingEntry !== 'string') ? existingEntry : null;
       // Preserve all existing config fields (maxTokens, temperature, thinkingBudget, etc.)
       // and only override the fields that activation changes (provider, model, contextSize)
@@ -614,17 +659,17 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         reasoningBudget: currentObj?.reasoningBudget ?? existingObj?.reasoningBudget ?? 0,
       };
 
-      // Update llm.json — write to omni key and set default pointer
+      // Update models.yaml — write to omni key and set default pointer
       try {
-        const config = getLLMConfig();
+        const config = getModelsConfig();
         if (config) {
-          config.models['omni'] = omniEntry;
-          config.models['default'] = 'omni';
-          await saveLLMConfig(llmJsonPath, config);
+          config.llm['omni'] = omniEntry;
+          config.llm['default'] = 'omni';
+          await saveModelsConfig(modelsConfigPath, config);
           LLMFactory.clearCache();
         }
       } catch (err: any) {
-        logger.error('[LocalLLM] Failed to update llm.json:', err);
+        logger.error('[LocalLLM] Failed to update models.yaml:', err);
       }
 
       // Save state
@@ -650,9 +695,9 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(500).send({ error: `Failed to load: ${err.message}` });
       }
 
-      // Update llm.json — write to omni key and set default pointer
+      // Update models.yaml — write to omni key and set default pointer
       try {
-        const config = getLLMConfig();
+        const config = getModelsConfig();
         if (config) {
           const embModelName = model.fileName.replace(/\.gguf$/i, '');
           config.embeddings['omni'] = {
@@ -660,10 +705,116 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
             model: embModelName,
           };
           config.embeddings['default'] = 'omni';
-          await saveLLMConfig(llmJsonPath, config);
+          await saveModelsConfig(modelsConfigPath, config);
         }
       } catch (err: any) {
-        logger.error('[LocalLLM] Failed to update llm.json:', err);
+        logger.error('[LocalLLM] Failed to update models.yaml:', err);
+      }
+
+      return { ok: true, status: OmniModelCache.getStatus() };
+    },
+  );
+
+  // POST /models/:id/activate-image — configure + load an image model
+  fastify.post<{ Params: { id: string } }>(
+    '/models/:id/activate-image',
+    async (request, reply) => {
+      const model = await manager.getModel(request.params.id);
+      if (!model) {
+        return reply.status(404).send({ error: 'Model not found' });
+      }
+
+      // Scan the model directory to identify main model, vae, and llm companion files
+      const modelDir = model.filePath;
+      const relDir = `.models/${model.fileName}`;
+      let files: string[];
+      try {
+        files = await fs.readdir(modelDir);
+      } catch {
+        return reply.status(400).send({ error: 'Model directory not found — expected a bundle directory' });
+      }
+
+      const ggufFiles = files.filter(f => f.endsWith('.gguf'));
+      const vaeFile = files.find(f => /vae/i.test(f) && f.endsWith('.safetensors'));
+      // Main model: the gguf that matches the directory name or flux/sd pattern, or the largest
+      const mainModel = ggufFiles.find(f => /flux|stable.?diff|sdxl/i.test(f))
+        || ggufFiles.find(f => f.toLowerCase().includes(model.fileName.toLowerCase()))
+        || ggufFiles[0];
+      const llmCompanion = ggufFiles.find(f => f !== mainModel);
+
+      if (!mainModel) {
+        return reply.status(400).send({ error: 'No .gguf model file found in directory' });
+      }
+
+      const modelPath = path.join(modelDir, mainModel);
+      try {
+        await OmniModelCache.getImageModel(modelPath, {
+          ...(llmCompanion ? { llmPath: path.join(modelDir, llmCompanion) } : {}),
+          ...(vaeFile ? { vaePath: path.join(modelDir, vaeFile) } : {}),
+        });
+      } catch (err: any) {
+        logger.error('[LocalLLM] Failed to load image model:', err);
+        return reply.status(500).send({ error: `Failed to load: ${err.message}` });
+      }
+
+      // Update models.yaml
+      try {
+        const config = getModelsConfig();
+        if (config) {
+          config.image = config.image || {};
+          config.image['omni'] = {
+            modelPath: `${relDir}/${mainModel}`,
+            ...(llmCompanion ? { llm: `${relDir}/${llmCompanion}` } : {}),
+            ...(vaeFile ? { vae: `${relDir}/${vaeFile}` } : {}),
+            steps: (config.image['omni'] as any)?.steps ?? 20,
+            description: model.fileName,
+            share: true,
+          };
+          config.image['default'] = 'omni';
+          await saveModelsConfig(modelsConfigPath, config);
+          LLMFactory.clearCache();
+        }
+      } catch (err: any) {
+        logger.error('[LocalLLM] Failed to update models.yaml:', err);
+      }
+
+      return { ok: true, status: OmniModelCache.getStatus() };
+    },
+  );
+
+  // POST /models/:id/activate-tts — configure + load a TTS model
+  fastify.post<{ Params: { id: string } }>(
+    '/models/:id/activate-tts',
+    async (request, reply) => {
+      const model = await manager.getModel(request.params.id);
+      if (!model) {
+        return reply.status(404).send({ error: 'Model not found' });
+      }
+
+      const modelPath = model.filePath;
+      try {
+        await OmniModelCache.getTtsModel(modelPath);
+      } catch (err: any) {
+        logger.error('[LocalLLM] Failed to load TTS model:', err);
+        return reply.status(500).send({ error: `Failed to load: ${err.message}` });
+      }
+
+      // Update models.yaml
+      try {
+        const config = getModelsConfig();
+        if (config) {
+          config.tts = config.tts || {};
+          config.tts['omni'] = {
+            modelPath: `.models/${model.fileName}`,
+            description: model.fileName,
+            share: true,
+          };
+          config.tts['default'] = 'omni';
+          await saveModelsConfig(modelsConfigPath, config);
+          LLMFactory.clearCache();
+        }
+      } catch (err: any) {
+        logger.error('[LocalLLM] Failed to update models.yaml:', err);
       }
 
       return { ok: true, status: OmniModelCache.getStatus() };
@@ -731,7 +882,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
 
   // POST /start-embedding — pre-load the configured omni embedding model
   fastify.post('/start-embedding', async (_req, reply) => {
-    const config = getLLMConfig();
+    const config = getModelsConfig();
     let embName = config?.embeddings?.['default'];
     if (typeof embName === 'string') embName = config?.embeddings?.[embName];
     const embConfig = typeof embName === 'object' ? embName : null;
@@ -749,7 +900,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/start-image', async (_req, reply) => {
     const configs = listImageConfigs();
     const first = configs[0];
-    if (!first) return reply.status(400).send({ error: 'No image model configured in llm.json' });
+    if (!first) return reply.status(400).send({ error: 'No image model configured in models.yaml' });
     if (!first.config.modelPath) return reply.status(400).send({ error: 'Image config has no modelPath' });
 
     const resolve = (p?: string) => p ? (path.isAbsolute(p) ? p : path.join(workspaceRoot, p)) : undefined;
@@ -767,7 +918,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/start-tts', async (_req, reply) => {
     const configs = listTtsConfigs();
     const first = configs[0];
-    if (!first) return reply.status(400).send({ error: 'No TTS model configured in llm.json' });
+    if (!first) return reply.status(400).send({ error: 'No TTS model configured in models.yaml' });
     const modelPath = path.isAbsolute(first.config.modelPath) ? first.config.modelPath : path.join(workspaceRoot, first.config.modelPath);
     await OmniModelCache.getTtsModel(modelPath);
     return { ok: true, status: OmniModelCache.getStatus() };

@@ -48,7 +48,7 @@ async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> 
   }
 
   // Check for config files
-  const configFiles = ['llm.json', 'mcp.json'];
+  const configFiles = ['models.yaml', 'mcp.json'];
   const missingConfigs = [];
 
   for (const file of configFiles) {
@@ -60,9 +60,9 @@ async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> 
     }
   }
 
-  if (missingConfigs.includes('llm.json')) {
-    console.error('\nWarning: llm.json not found. LLM functionality may not work correctly.');
-    console.error('Create llm.json with your LLM configuration.\n');
+  if (missingConfigs.includes('models.yaml')) {
+    console.error('\nWarning: models.yaml not found. Model functionality may not work correctly.');
+    console.error('Create models.yaml with your model configuration.\n');
   }
 
   if (missingConfigs.includes('mcp.json')) {

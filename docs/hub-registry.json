@@ -88,6 +88,14 @@
     "tags": ["browser", "automation"]
   },
   {
+    "name": "video-creator",
+    "type": "agent",
+    "description": "Generate videos by distributing frame generation across P2P peers sharing a video/image model, then stitching frames locally.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/video-creator.agent.yaml",
+    "tags": ["video", "p2p", "generation", "distributed"]
+  },
+  {
     "name": "orcha-builder",
     "type": "skill",
     "description": "Documentation for creating and modifying ORCHA resources (agents, workflows, skills, functions, knowledge stores).",
@@ -148,7 +156,7 @@
     "type": "function",
     "description": "Basic arithmetic operations (add, subtract, multiply, divide) with input validation and division-by-zero handling.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/functions/calculator.function.js",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/functions/calculator.function.mjs",
     "tags": ["math", "utility"]
   },
   {
@@ -156,7 +164,7 @@
     "type": "function",
     "description": "Text transformations including uppercase, lowercase, title case, reverse, and alternating case formatting.",
     "author": "Agent Orcha",
-    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/functions/text-formatter.function.js",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/functions/text-formatter.function.mjs",
     "tags": ["text", "formatting"]
   },
   {

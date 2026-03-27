@@ -5,7 +5,9 @@ import { humanMessage, aiMessage, contentToText } from '../types/llm-types.ts';
 import type { ChatModel, BaseMessage, MessageContent, ContentPart } from '../types/llm-types.ts';
 import type { StructuredTool } from '../types/llm-types.ts';
 import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions, AgentMemoryConfig } from './types.ts';
+import { resolveP2PConfig } from './types.ts';
 import { LLMFactory } from '../llm/llm-factory.ts';
+import { resolveAgentModelRef } from '../llm/types.ts';
 import type { ToolRegistry } from '../tools/tool-registry.ts';
 import type { ConversationStore } from '../memory/conversation-store.ts';
 import type { SkillLoader } from '../skills/skill-loader.ts';
@@ -72,7 +74,12 @@ export class AgentExecutor {
       };
     }
 
-    let llm = await LLMFactory.create(augmentedDefinition.llm);
+    const modelRef = resolveAgentModelRef(augmentedDefinition.model);
+    const leverage = resolveP2PConfig(definition.p2p).leverage;
+    let llm = await LLMFactory.create(
+      modelRef.temperature !== undefined ? { llm: modelRef.llm, temperature: modelRef.temperature } : modelRef.llm,
+      leverage,
+    );
 
     // Wrap LLM with structured output if configured
     llm = StructuredOutputWrapper.wrapLLM(llm, augmentedDefinition.output);

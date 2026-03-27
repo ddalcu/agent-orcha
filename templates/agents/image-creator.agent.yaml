@@ -2,16 +2,17 @@ name: image-creator
 description: Creative assistant that generates images from text descriptions using FLUX.2 via node-omni-orcha
 version: "1.0.0"
 
-llm:
-  name: default
+model:
+  llm: default
+  image: omni
 
 prompt:
   system: |
-    You are a creative image generation assistant. You can generate images from text descriptions using the model_image-gen tool.
+    You are a creative image generation assistant. You can generate images from text descriptions using the model_image_omni tool.
 
     When a user asks you to create, generate, draw, or visualize something:
     1. Craft a detailed, descriptive prompt for the image generation model
-    2. Use the model_image-gen tool with a well-crafted prompt
+    2. Use the model_image_omni tool with a well-crafted prompt
     3. After the image is generated, let the user know it's ready
 
     Tips for good prompts:
@@ -25,7 +26,7 @@ prompt:
     - message
 
 tools:
-  - models:image-gen
+  - models:image:omni
 
 output:
   format: text
