@@ -1,5 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { execFile, execFileSync } from 'child_process';
+import { readdirSync } from 'fs';
+import { promisify } from 'util';
 import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';
 import type { StructuredTool } from '../../types/llm-types.ts';
@@ -8,6 +11,8 @@ import type { P2PManager } from '../../p2p/p2p-manager.ts';
 import type { LeverageMode } from '../../agents/types.ts';
 import { OmniModelCache } from '../../llm/providers/omni-model-cache.ts';
 import { logger } from '../../logger.ts';
+
+const execFileAsync = promisify(execFile);
 
 interface P2PDeps {
   manager: P2PManager;
@@ -137,6 +142,56 @@ function createImageTool(name: string, config: ImageModelConfig, p2pDeps?: P2PDe
   );
 }
 
+/** Find ffmpeg binary — check PATH first, then common install locations. */
+function findFfmpeg(): string {
+  try {
+    execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
+    return 'ffmpeg';
+  } catch {
+    if (process.platform !== 'win32') return 'ffmpeg';
+    // WinGet installs to a deeply nested path not always in PATH
+    const pkgsDir = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages');
+    try {
+      const dirs = readdirSync(pkgsDir).filter((d: string) => /ffmpeg/i.test(d));
+      for (const dir of dirs) {
+        const base = path.join(pkgsDir, dir);
+        const files = readdirSync(base, { recursive: true }) as (string | Buffer)[];
+        const match = files.find((f) => String(f).endsWith('ffmpeg.exe'));
+        if (match) {
+          const fullPath = path.join(base, String(match));
+          logger.info(`[TTS] Found ffmpeg at: ${fullPath}`);
+          return fullPath;
+        }
+      }
+    } catch (err: any) {
+      logger.warn(`[TTS] WinGet ffmpeg scan failed: ${err.message}`);
+    }
+    return 'ffmpeg';
+  }
+}
+
+let _ffmpegPath: string | null = null;
+function getFfmpeg(): string {
+  if (!_ffmpegPath) _ffmpegPath = findFfmpeg();
+  return _ffmpegPath;
+}
+
+/** Convert non-WAV audio to 24kHz mono WAV via ffmpeg. Returns the WAV path, or the original if already WAV. */
+async function ensureWav(audioPath: string): Promise<string> {
+  const ext = path.extname(audioPath).toLowerCase();
+  if (ext === '.wav') return audioPath;
+
+  logger.debug(`[TTS] Converting reference audio ${ext} → WAV using ffmpeg: ${getFfmpeg()}`);
+  const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
+  try {
+    await execFileAsync(getFfmpeg(), ['-y', '-i', audioPath, '-ar', '24000', '-ac', '1', wavPath]);
+    logger.info(`[TTS] Converted ${ext} → WAV: ${wavPath}`);
+    return wavPath;
+  } catch (err: any) {
+    throw new Error(`Failed to convert ${ext} to WAV — is ffmpeg installed? ${err.message}`);
+  }
+}
+
 async function generateTtsLocally(config: TtsModelConfig, args: { text: string; voice?: string; referenceAudio?: string }): Promise<string | null> {
   const resolve = (p: string) => path.isAbsolute(p) ? p : path.join(_workspaceRoot, p);
   if (!config.modelPath) return null;
@@ -144,8 +199,13 @@ async function generateTtsLocally(config: TtsModelConfig, args: { text: string; 
   const modelPath = resolve(config.modelPath);
   const ttsModel = await OmniModelCache.getTtsModel(modelPath);
 
+  let referenceAudioPath: string | undefined;
+  if (args.referenceAudio) {
+    referenceAudioPath = await ensureWav(resolve(args.referenceAudio));
+  }
+
   const buffer = await ttsModel.speak(args.text, {
-    ...(args.referenceAudio ? { referenceAudioPath: resolve(args.referenceAudio) } : {}),
+    ...(referenceAudioPath ? { referenceAudioPath } : {}),
   });
 
   await fs.mkdir(_generatedDir, { recursive: true });
@@ -160,11 +220,18 @@ async function generateTtsRemotely(name: string, args: { text: string; voice?: s
   const remotePeers = p2pDeps.manager.getRemoteModelsByName(name);
   if (remotePeers.length === 0) return null;
 
+  // Convert non-WAV audio locally before sending path to remote peer
+  let referenceAudio = args.referenceAudio;
+  if (referenceAudio) {
+    const resolve = (p: string) => path.isAbsolute(p) ? p : path.join(_workspaceRoot, p);
+    referenceAudio = await ensureWav(resolve(referenceAudio));
+  }
+
   const peer = p2pDeps.manager.selectBestPeer(remotePeers);
   logger.info(`[ModelToolFactory] Using remote peer "${peer.peerName}" for TTS model "${name}"`);
   const result = await p2pDeps.manager.invokeRemoteModelTask(
     peer.peerId, peer.name, 'tts',
-    { text: args.text, voice: args.voice, referenceAudio: args.referenceAudio },
+    { text: args.text, voice: args.voice, referenceAudio },
   );
 
   await fs.mkdir(_generatedDir, { recursive: true });
@@ -213,8 +280,8 @@ function createTtsTool(name: string, config: TtsModelConfig, p2pDeps?: P2PDeps):
       try {
         const result = await generateTtsLocally(config, args);
         if (result) return result;
-      } catch (localErr) {
-        logger.warn(`[ModelToolFactory] Local TTS failed, checking P2P fallback:`, localErr);
+      } catch (localErr: any) {
+        logger.warn(`[ModelToolFactory] Local TTS failed, checking P2P fallback: ${localErr?.message || localErr}`);
       }
 
       if (p2pDeps && mode) {
@@ -237,7 +304,7 @@ function createTtsTool(name: string, config: TtsModelConfig, p2pDeps?: P2PDeps):
       schema: z.object({
         text: z.string().describe('Text to convert to speech'),
         voice: z.string().optional().describe('Voice name to use'),
-        referenceAudio: z.string().optional().describe('Path to a reference audio WAV file for voice cloning (5-10 seconds, 24kHz mono recommended)'),
+        referenceAudio: z.string().optional().describe('Path to a reference audio file for voice cloning (WAV, MP3, M4A, etc. — 5-10 seconds, 24kHz mono recommended)'),
       }),
     },
   );
