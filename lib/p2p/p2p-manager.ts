@@ -456,14 +456,16 @@ export class P2PManager {
       return;
     }
 
+    const peerName = this.getPeerName(peerId);
+
     switch (taskType) {
       case 'chat':
         return this.handleChatTask(requestId, peerId, protocol, match.name, params);
       case 'image':
       case 'video_frame':
-        return this.handleImageTask(requestId, protocol, match.name, taskType, params);
+        return this.handleImageTask(requestId, peerId, peerName, protocol, match.name, taskType, params);
       case 'tts':
-        return this.handleTtsTask(requestId, protocol, match.name, params);
+        return this.handleTtsTask(requestId, peerId, peerName, protocol, match.name, params);
       default:
         protocol.send({ type: 'model_task_error', requestId, error: `Unknown task type: ${taskType}` });
     }
@@ -555,6 +557,8 @@ export class P2PManager {
    */
   private async handleImageTask(
     requestId: string,
+    peerId: string,
+    peerName: string,
     protocol: P2PProtocol,
     configName: string,
     taskType: string,
@@ -566,12 +570,20 @@ export class P2PManager {
       return;
     }
 
+    const taskManager = this.orchestrator.tasks.getManager();
+    const task = taskManager.trackP2P('image', configName, { prompt, taskType }, {
+      direction: 'incoming',
+      peerId,
+      peerName,
+    });
+
     try {
       const { OmniModelCache } = await import('../llm/providers/omni-model-cache.ts');
 
       const config = getImageConfig(configName);
       if (!config) {
         protocol.send({ type: 'model_task_error', requestId, error: `Image config "${configName}" not found` });
+        taskManager.reject(task.id, new Error(`Image config "${configName}" not found`));
         return;
       }
 
@@ -600,11 +612,13 @@ export class P2PManager {
         data: buffer.toString('base64'),
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       });
+      taskManager.resolve(task.id, { output: `p2p ${taskType} task completed` });
     } catch (error) {
       if (!protocol.isDestroyed) {
         const message = error instanceof Error ? error.message : String(error);
         protocol.send({ type: 'model_task_error', requestId, error: message });
       }
+      taskManager.reject(task.id, error);
     }
   }
 
@@ -613,6 +627,8 @@ export class P2PManager {
    */
   private async handleTtsTask(
     requestId: string,
+    peerId: string,
+    peerName: string,
     protocol: P2PProtocol,
     configName: string,
     params: Record<string, unknown>,
@@ -623,12 +639,20 @@ export class P2PManager {
       return;
     }
 
+    const taskManager = this.orchestrator.tasks.getManager();
+    const task = taskManager.trackP2P('tts', configName, { text: text.slice(0, 200) }, {
+      direction: 'incoming',
+      peerId,
+      peerName,
+    });
+
     try {
       const { OmniModelCache } = await import('../llm/providers/omni-model-cache.ts');
 
       const config = getTtsConfig(configName);
       if (!config) {
         protocol.send({ type: 'model_task_error', requestId, error: `TTS config "${configName}" not found` });
+        taskManager.reject(task.id, new Error(`TTS config "${configName}" not found`));
         return;
       }
 
@@ -647,11 +671,13 @@ export class P2PManager {
         requestId,
         data: buffer.toString('base64'),
       });
+      taskManager.resolve(task.id, { output: 'p2p tts task completed' });
     } catch (error) {
       if (!protocol.isDestroyed) {
         const message = error instanceof Error ? error.message : String(error);
         protocol.send({ type: 'model_task_error', requestId, error: message });
       }
+      taskManager.reject(task.id, error);
     }
   }
 

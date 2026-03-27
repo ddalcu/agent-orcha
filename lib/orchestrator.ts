@@ -199,7 +199,9 @@ export class Orchestrator {
       this._p2pManager = new P2PManager(this);
       await this._p2pManager.start();
       LLMFactory.setP2PManager(this._p2pManager);
+      this.agentExecutor.p2pManager = this._p2pManager;
       this.registerP2PTools();
+      this.registerModelTools();
     }
   }
 
@@ -500,7 +502,10 @@ export class Orchestrator {
   }
 
   private registerModelTools(): void {
-    const { image, tts } = buildModelTools(listImageConfigs(), listTtsConfigs());
+    const p2pDeps = this._p2pManager
+      ? { manager: this._p2pManager, leverage: 'local-first' as const }
+      : undefined;
+    const { image, tts } = buildModelTools(listImageConfigs(), listTtsConfigs(), p2pDeps);
     this.toolRegistry.unregisterBuiltIn('generate_image');
     this.toolRegistry.unregisterBuiltIn('generate_tts');
     if (image) this.toolRegistry.registerBuiltIn('generate_image', image);

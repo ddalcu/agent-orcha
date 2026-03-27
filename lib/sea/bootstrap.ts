@@ -83,6 +83,14 @@ export function seaBootstrap(): void {
 
   console.log(`Updating Agent Orcha resources (v${version})...`);
 
+  // Clean stale files from previous versions before extracting
+  for (const dir of ['public', 'native']) {
+    const dirPath = path.join(ORCHA_DIR, dir);
+    if (fs.existsSync(dirPath)) {
+      fs.rmSync(dirPath, { recursive: true });
+    }
+  }
+
   const keys: string[] = seaMod.getAssetKeys();
 
   for (const key of keys) {

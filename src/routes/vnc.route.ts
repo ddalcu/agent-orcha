@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import type { FastifyPluginAsync } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { WebSocketServer, WebSocket } from 'ws';
+import { isAuthedCookie } from '../middleware/auth.ts';
 
 const NOVNC_PATH = '/usr/share/novnc';
 const WEBSOCKIFY_PORT = 6080;
@@ -64,6 +65,12 @@ export const vncRoutes: FastifyPluginAsync<VncRouteDeps> = async (fastify, opts)
 
   fastify.server.on('upgrade', (req, socket, head) => {
     if (req.url !== '/websockify' && req.url !== '/vnc/websockify') return;
+
+    if (!isAuthedCookie(req.headers?.cookie)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
 
     wss.handleUpgrade(req, socket, head, (clientWs: any) => {
       const targetWs = new _WebSocket(`ws://127.0.0.1:${WEBSOCKIFY_PORT}`, {
