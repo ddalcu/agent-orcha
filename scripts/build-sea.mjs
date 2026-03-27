@@ -259,28 +259,31 @@ for (const addon of ['sodium-native', 'udx-native']) {
   }
 }
 
-// System tray binary (macOS + Windows only; Linux is console-only)
-if (platform === 'darwin') {
-  const trayHelperPath = path.join('scripts', 'tray-helper');
-  if (fs.existsSync(trayHelperPath)) {
-    assets['native/tray-helper'] = trayHelperPath;
-  } else {
-    console.warn('tray-helper not found — run: swiftc -O -o scripts/tray-helper scripts/tray-helper.swift');
-  }
-} else if (platform === 'win32') {
-  const trayBinName = 'tray_windows_release.exe';
-  const trayBinPath = path.join('node_modules', 'systray2', 'traybin', trayBinName);
-  if (fs.existsSync(trayBinPath)) {
-    assets[`native/${trayBinName}`] = trayBinPath;
-  } else {
-    console.warn(`systray2 binary not found: ${trayBinPath} — system tray won't work`);
+// TrayConsole binary (macOS + Windows; Linux is console-only)
+{
+  const tcBinName = platform === 'win32' ? 'trayconsole.exe' : 'trayconsole';
+  const tcPkgMap = {
+    'win32-x64': '@agent-orcha/trayconsole-win32-x64',
+    'win32-arm64': '@agent-orcha/trayconsole-win32-arm64',
+    'darwin-x64': '@agent-orcha/trayconsole-darwin-x64',
+    'darwin-arm64': '@agent-orcha/trayconsole-darwin-arm64',
+  };
+  const tcPkg = tcPkgMap[`${platform}-${arch}`];
+  if (tcPkg) {
+    const tcBinPath = path.join('node_modules', tcPkg, 'bin', tcBinName);
+    if (fs.existsSync(tcBinPath)) {
+      assets[`native/${tcBinName}`] = tcBinPath;
+      console.log(`Embedding trayconsole from: ${tcPkg}`);
+    } else {
+      console.warn(`trayconsole binary not found: ${tcBinPath} — tray/console window won't work in SEA`);
+    }
   }
 }
 
-// Tray icon
+// Tray icon (placed under native/ so seaBootstrap extracts it)
 const trayIconPath = platform === 'win32' ? 'scripts/AppIcon.ico' : 'scripts/favicon.png';
 if (fs.existsSync(trayIconPath)) {
-  assets['tray-icon'] = trayIconPath;
+  assets['native/tray-icon'] = trayIconPath;
 }
 
 console.log(`Embedding ${Object.keys(assets).length} assets`);
@@ -331,21 +334,8 @@ if (platform === 'darwin') {
     console.warn(`rcedit failed: ${e.message} — install with: npm i -D rcedit`);
   }
 
-  // Patch PE subsystem: Console (3) → GUI (2) so no console window is created on launch.
-  const buf = fs.readFileSync(outputPath);
-  const peOff = buf.readUInt32LE(0x3c);
-  if (buf.readUInt32LE(peOff) !== 0x00004550) {
-    throw new Error('Invalid PE signature in output binary');
-  }
-  const subsysOff = peOff + 0x5c;
-  const current = buf.readUInt16LE(subsysOff);
-  if (current === 3) {
-    buf.writeUInt16LE(2, subsysOff);
-    fs.writeFileSync(outputPath, buf);
-    console.log('Patched PE subsystem: Console → GUI');
-  } else {
-    console.warn(`PE subsystem is ${current}, expected 3 (Console) — skipping patch`);
-  }
+  // PE subsystem stays as Console (3). TrayConsole provides the native log
+  // window and system tray — no need to patch to GUI subsystem.
 }
 
 // --- 6. Report ---
