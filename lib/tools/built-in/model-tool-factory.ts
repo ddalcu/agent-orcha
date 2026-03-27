@@ -176,55 +176,19 @@ function getFfmpeg(): string {
   return _ffmpegPath;
 }
 
-const MAX_REFERENCE_SECONDS = 15;
-
-/** Probe audio duration in seconds via ffprobe. Returns null if probe fails. */
-async function probeDuration(audioPath: string): Promise<number | null> {
-  const ffprobe = getFfmpeg().replace(/ffmpeg(\.exe)?$/, 'ffprobe$1');
-  try {
-    const { stdout } = await execFileAsync(ffprobe, [
-      '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', audioPath,
-    ]);
-    const secs = parseFloat(stdout.trim());
-    return Number.isFinite(secs) ? secs : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Ensure reference audio is a 24kHz mono WAV ≤ MAX_REFERENCE_SECONDS.
- * Converts format and/or trims via ffmpeg only when needed.
- * Returns the original path if no processing is required.
- */
-async function ensureReferenceAudio(audioPath: string): Promise<string> {
+/** Convert non-WAV audio to 24kHz mono WAV via ffmpeg. Returns the WAV path, or the original if already WAV. */
+async function ensureWav(audioPath: string): Promise<string> {
   const ext = path.extname(audioPath).toLowerCase();
-  const isWav = ext === '.wav';
+  if (ext === '.wav') return audioPath;
 
-  // If already WAV, check if trimming is needed
-  if (isWav) {
-    const duration = await probeDuration(audioPath);
-    if (duration === null) {
-      // ffprobe unavailable — pass through as-is rather than failing
-      logger.debug(`[TTS] Could not probe WAV duration (ffprobe not available), passing through as-is`);
-      return audioPath;
-    }
-    if (duration <= MAX_REFERENCE_SECONDS) {
-      return audioPath; // already WAV and short enough
-    }
-    logger.info(`[TTS] Reference audio is ${duration.toFixed(1)}s, trimming to ${MAX_REFERENCE_SECONDS}s`);
-  }
-
-  const wavPath = isWav ? audioPath.replace(/\.wav$/i, '_trimmed.wav') : audioPath.replace(/\.[^.]+$/, '.wav');
-  const ffmpegArgs = ['-y', '-i', audioPath, '-ar', '24000', '-ac', '1', '-t', String(MAX_REFERENCE_SECONDS), wavPath];
-
-  logger.debug(`[TTS] Processing reference audio${!isWav ? ` ${ext} → WAV` : ''} using ffmpeg`);
+  logger.debug(`[TTS] Converting reference audio ${ext} → WAV using ffmpeg: ${getFfmpeg()}`);
+  const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
   try {
-    await execFileAsync(getFfmpeg(), ffmpegArgs);
-    logger.info(`[TTS] Reference audio ready: ${wavPath}`);
+    await execFileAsync(getFfmpeg(), ['-y', '-i', audioPath, '-ar', '24000', '-ac', '1', wavPath]);
+    logger.info(`[TTS] Converted ${ext} → WAV: ${wavPath}`);
     return wavPath;
   } catch (err: any) {
-    throw new Error(`Failed to process reference audio — is ffmpeg installed? ${err.message}`);
+    throw new Error(`Failed to convert ${ext} to WAV — is ffmpeg installed? ${err.message}`);
   }
 }
 
@@ -237,7 +201,7 @@ async function generateTtsLocally(config: TtsModelConfig, args: { text: string; 
 
   let referenceAudioPath: string | undefined;
   if (args.referenceAudio) {
-    referenceAudioPath = await ensureReferenceAudio(resolve(args.referenceAudio));
+    referenceAudioPath = await ensureWav(resolve(args.referenceAudio));
   }
 
   const buffer = await ttsModel.speak(args.text, {
@@ -260,7 +224,7 @@ async function generateTtsRemotely(name: string, args: { text: string; voice?: s
   let referenceAudio = args.referenceAudio;
   if (referenceAudio) {
     const resolve = (p: string) => path.isAbsolute(p) ? p : path.join(_workspaceRoot, p);
-    referenceAudio = await ensureReferenceAudio(resolve(referenceAudio));
+    referenceAudio = await ensureWav(resolve(referenceAudio));
   }
 
   const peer = p2pDeps.manager.selectBestPeer(remotePeers);
