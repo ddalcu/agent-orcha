@@ -1014,21 +1014,21 @@ export class P2PManager {
     // Image models from 'image' section
     for (const { name, config } of listImageConfigs()) {
       if (config.share) {
-        result.push({ name, model: config.modelPath ?? name, type: 'image' });
+        result.push({ name, model: config.description || config.modelPath?.split('/').pop() || name, type: 'image' });
       }
     }
 
     // Video models from 'video' section
     for (const { name, config } of listVideoConfigs()) {
       if (config.share) {
-        result.push({ name, model: config.modelPath ?? config.model ?? name, type: 'image' }); // video models generate frames (images)
+        result.push({ name, model: config.description || config.modelPath?.split('/').pop() || config.model || name, type: 'image' }); // video models generate frames (images)
       }
     }
 
     // TTS models from 'tts' section
     for (const { name, config } of listTtsConfigs()) {
       if (config.share) {
-        result.push({ name, model: config.modelPath ?? name, type: 'tts' });
+        result.push({ name, model: config.description || config.modelPath?.split('/').pop() || name, type: 'tts' });
       }
     }
 
