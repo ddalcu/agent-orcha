@@ -346,6 +346,16 @@ function createTtsTool(name: string, config: TtsModelConfig, p2pDeps?: P2PDeps):
   );
 }
 
+/** @internal Exported for testing only. */
+export const _testing = {
+  findFfmpeg,
+  getFfmpeg,
+  probeDuration,
+  ensureReferenceAudio,
+  MAX_REFERENCE_SECONDS,
+  resetFfmpegCache: () => { _ffmpegPath = null; },
+};
+
 export function buildModelTools(
   imageConfigs: Array<{ name: string; config: ImageModelConfig }>,
   ttsConfigs: Array<{ name: string; config: TtsModelConfig }>,
