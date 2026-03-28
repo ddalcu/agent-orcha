@@ -7,26 +7,62 @@ Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
 
 ## Unreleased (feature/transformers)
 
-### Fixed
-
-- **LLM Config Key Mismatch** — The Svelte UI (`LocalLlmPage`) was reading `llmConfig.models` but the API returns the LLM section under the `llm` key. All 14 references fixed to `llmConfig.llm`. This broken reference caused provider toggles (active on/off), P2P sharing toggles, context size / max tokens / thinking budget sliders, and default provider detection to silently fail.
-- **P2P Sharing Toggle** — API call used non-existent `/p2p` route; fixed to `/share`. UI read `entry.p2p` instead of `entry.share` (the actual config field). Both the API URL and 11 template references corrected.
-- **Config Resolver** — `resolveDefault('models')` and `resolveDefaultKey('models')` accessed `llmConfig['models']` (undefined). Now maps `'models'` → `'llm'` internally.
-- **Image Model Config** — `templates/models.yaml` had corrupt image config paths pointing to the nomic embedding model instead of flux2-klein files. Corrected to actual bundle file paths.
-- **Model Role Detection** — Downloaded model cards checked `looksLikeImage` before `looksLikeEmbedding`, causing embedding models to be misclassified as image. Priority order fixed: embedding → image → TTS → LLM.
-
 ### Added
 
-- **Image/TTS Activate Routes** — `POST /api/local-llm/models/:id/activate-image` and `activate-tts` scan the model directory, identify main model/vae/llm companion files, load via OmniModelCache, and update `models.yaml`. Previously these model types had no per-model activation — only global start/stop.
-- **Download Auto-Config** — Download route accepts optional `category` query param. When `category=image|tts` and no existing config for that slot, `models.yaml` is auto-configured on download completion. Does not overwrite existing configs.
-- **Download State Tracking** — Added `downloadKey` field to `ActiveDownload` type. UI combines client-side EventSource keys and server-polled download keys via `$derived` Set (`downloadingIds`) for reliable "is downloading" checks across page refreshes.
-- **Agent Composer P2P Toggles** — Visual agent editor now has separate Toggle switches for P2P Share and P2P Model Fallback (leverage), replacing the single checkbox. Leverage toggle includes contextual description.
-- **Local-LLM Route Tests** — 13 new tests covering activate-image/tts routes, download auto-config slot detection, image file detection logic, and downloadKey shape.
+- **node-omni-orcha Integration** — New `omni` provider for LLM chat, embeddings, image generation, and TTS. Models are loaded natively in-process via `@agent-orcha/node-omni-orcha` instead of shelling out to llama-server/mlx-serve binaries. Three new provider classes: `OmniChatModel`, `OmniEmbeddingsProvider`, and `OmniModelCache` (singleton cache with lazy-load-and-keep-loaded semantics for chat, embed, image, and TTS models).
+- **Unified Model Config (`models.yaml`)** — Replaced `llm.json` with a YAML config that includes `llm`, `embeddings`, `image`, `tts`, and `video` sections in a single file. New helpers: `loadModelsConfig()`, `saveModelsConfig()`, `listImageConfigs()`, `listTtsConfigs()`, `listVideoConfigs()`, `getImageConfig()`, `getTtsConfig()`.
+- **Model Tool Factory** — `lib/tools/built-in/model-tool-factory.ts` creates `generate_image` and `generate_tts` built-in tools with full P2P leverage support (local-first, remote-first, remote-only modes). Replaces the previous hardcoded tool registration in the orchestrator.
+- **Distributed Video Generation** — `generate_video` built-in tool distributes frame generation across P2P peers sharing an image/video model, then stitches frames into MP4 (or GIF fallback) using ffmpeg with minterpolate blending. Registered when P2P is enabled.
+- **P2P Load Balancing** — `selectBestPeer()` picks the least-loaded peer using combined client-side in-flight count + peer-reported load from catalog broadcasts. In-flight tracking via `incrementInFlight()`/`decrementInFlight()`. Peers broadcast `load` (active task count) in `CatalogMessage`.
+- **Unified P2P Model Protocol** — Replaced separate `llm_invoke`/`llm_stream`/`llm_stream_end`/`llm_stream_error` messages with unified `model_task_invoke`, `model_task_result`, `model_task_stream`, `model_task_stream_end`, `model_task_error` messages covering all task types (chat, image, video_frame, tts). Model sharing is now model-name-based (case-insensitive partial match) rather than provider-specific.
+- **P2P Leverage Modes** — Agent `p2p` config now supports `leverage: false | 'local-first' | 'remote-first' | 'remote-only'` and `share: boolean`, replacing the old `{ enabled: boolean }` shape. `true` maps to `local-first` for backward compatibility.
+- **Agent `model` Field** — Agents now use `model:` (string or `{ llm, image, video, tts }` per-type object) instead of the old `llm:` field. `resolveAgentModelRef()` replaces `resolveAgentLLMRef()`.
+- **Voice Selection & Cloning** — New `/api/voices` routes to list and serve `.wav` voice files. Chat input supports voice selection. Pre-recorded voice assets shipped in `templates/voices/` (10 WAV files).
+- **ModelOutput Component** — New `ui/src/components/chat/ModelOutput.svelte` renders generated images, audio players (with download), and video players (MP4/GIF) inline in chat responses.
+- **Image/TTS Activate Routes** — `POST /api/local-llm/models/:id/activate-image` and `activate-tts` scan the model directory, load via OmniModelCache, and update `models.yaml`.
+- **Download Auto-Config** — Download route accepts optional `category` query param. When `category=image|tts` and no existing config for that slot, `models.yaml` is auto-configured on download completion.
+- **Download State Tracking** — Added `downloadKey` field to `ActiveDownload` type. UI combines client-side EventSource keys and server-polled download keys via `$derived` Set for reliable cross-refresh state.
+- **Agent Composer P2P Toggles** — Separate Toggle switches for P2P Share and P2P Model Fallback (leverage), replacing the single checkbox.
+- **New Agent Templates** — `image-creator`, `video-creator`, `voice-clone`, `p2pvoice` agent templates demonstrating image generation, distributed video, TTS voice cloning, and remote-only P2P TTS.
+- **Model Bundle Downloads** — UI supports downloading multi-file model bundles (e.g., FLUX.2 Klein with GGUF + VAE + companion LLM, Qwen3-TTS directory) alongside single GGUF files. Recommended models updated to smaller Qwen3.5-4B.
+- **NVIDIA VRAM Usage** — GPU status reporting includes VRAM usage from `nvidia-smi`.
+- **Loose Model Migration** — `ModelManager.migrateLooseModels()` moves bare `.gguf` files at `.models/` root into named subdirectories with clean generated names (strips quantization suffixes).
+- **Cross-Platform Pre-Commit Hook** — New `scripts/pre-commit.mjs` (pure Node) replaces the bash pre-commit script for Windows compatibility. Checks forbidden files, secret patterns, TypeScript errors, Svelte check, and unit tests.
+- **P2P Load Balancing Tests** — `test/p2p/p2p-load-balancing.test.ts` with 500+ lines covering peer selection, in-flight tracking, and catalog load broadcasting.
+- **Local-LLM Route Tests** — 13 new tests covering activate-image/tts routes, download auto-config, image file detection, and downloadKey shape.
 
 ### Changed
 
-- **Downloaded Model Cards** — Removed "on demand" badges for image/TTS models. All model types now have consistent "Activate" buttons. Trash icon moved from bottom actions to top-right corner of each card.
-- **P2P Leverage Label** — Renamed from "Leverage remote models" to "P2P model fallback" in the agent composer, with description: "If a model (LLM, image, TTS) isn't available locally, search P2P peers by name."
+- **LLM Factory Rewrite** — `LLMFactory.create()` now supports the `omni` provider (creates `OmniChatModel`) alongside existing cloud and local providers. Embedding factory supports `omni` provider via `OmniEmbeddingsProvider`.
+- **P2P Catalog Format** — `CatalogMessage` now broadcasts `models: P2PModelInfo[]` (with `type`, `category` fields) instead of `llms: P2PLLMInfo[]`. `RemoteModel` replaces `RemoteLLM` type throughout.
+- **Orchestrator Model Registration** — `registerModelTools()` builds image/TTS tools via `ModelToolFactory`. `registerP2PTools()` adds `generate_video`. Model configs resolved from `models.yaml` sections instead of hardcoded.
+- **Models Page Overhaul** — `LocalLlmPage.svelte` extensively reworked: `omni` provider displayed as "Local", bundle download UI, model category badges (LLM/Embed/Image/TTS), activate buttons for all model types.
+- **Agents Page** — Expanded with richer agent cards and model-type indicators.
+- **P2P Page** — Updated to display model categories and leverage modes for shared models.
+- **Downloaded Model Cards** — Removed "on demand" badges. All model types have consistent "Activate" buttons. Trash icon moved to top-right corner.
+- **P2P Leverage Label** — Renamed to "P2P model fallback" with description: "If a model isn't available locally, search P2P peers by name."
+- **Sandbox Container Re-Attach** — `SandboxContainer` checks if the container already exists (stopped) and restarts it instead of erroring. New `containerExists()` and `startExistingContainer()` methods.
+- **Windows `prepare` Script** — Replaced bash `install-hooks.sh` with pure Node for cross-platform hook installation.
+- **SEA Build** — Embeds `node-omni-orcha` native addon (`omni.node` + optional `.metallib`) and `trayconsole` binary (replaces old `systray2`/Swift tray helper). `OMNI_VARIANT` env var controls CUDA vs CPU binary selection.
+- **Nvidia Dockerfile** — Updated to CUDA 13.2.0, Node.js 25.
+- **GPU Detection Script** — Removed AMD/ROCm detection and build paths. Simplified to NVIDIA or CPU-only.
+
+### Fixed
+
+- **LLM Config Key Mismatch** — Svelte UI was reading `llmConfig.models` but API returns `llm` key. All 14 references fixed. Caused provider toggles, P2P sharing, sliders, and default detection to silently fail.
+- **P2P Sharing Toggle** — API call used non-existent `/p2p` route; fixed to `/share`. UI read `entry.p2p` instead of `entry.share`.
+- **Config Resolver** — `resolveDefault('models')` accessed undefined key. Now maps `'models'` → `'llm'` internally.
+- **Image Model Config** — `templates/models.yaml` had corrupt paths pointing to embedding model instead of flux2-klein files.
+- **Model Role Detection** — Embedding models misclassified as image. Priority order fixed: embedding → image → TTS → LLM.
+- **Windows Path Matching** — Image/TTS model active status checks now handle Windows backslash paths.
+- **Embedding Config** — Fixed embedding model loading regression.
+
+### Removed
+
+- **llama-cpp / mlx-serve Engine System** — Deleted `binary-manager.ts`, `engine-interface.ts`, `engine-registry.ts`, `llama-cpp-engine.ts`, `mlx-serve-engine.ts`, `gguf-reader.ts`, `llama-server-process.ts`, `mlx-binary-manager.ts`, `mlx-server-process.ts`, and all associated tests (~5,000 lines). Local inference now goes through `node-omni-orcha` exclusively.
+- **System Tray (old)** — Deleted `lib/sea/system-tray.ts` and its tests. Replaced by the external `trayconsole` binary.
+- **`llm.json` Template** — Replaced by `templates/models.yaml`.
+- **AMD/ROCm Docker Support** — Deleted `Dockerfile.amd` and `docker-compose.amd.yaml`. AMD detection removed from `scripts/detect-gpu.mjs`.
 
 ---
 

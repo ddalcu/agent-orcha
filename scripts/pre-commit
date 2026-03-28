@@ -1,2 +1,4 @@
 #!/bin/sh
-node "$(dirname "$0")/../../scripts/pre-commit.mjs"
+# Resolve repo root via git, works regardless of symlink location or CWD
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+node "$REPO_ROOT/scripts/pre-commit.mjs"

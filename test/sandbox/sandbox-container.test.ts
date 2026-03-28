@@ -5,8 +5,8 @@ import assert from 'node:assert';
 let execFileSyncFn: (...args: any[]) => any;
 let execFileFn: (...args: any[]) => any;
 
-// Mock child_process
-mock.module('node:child_process', {
+// Mock the child-process wrapper used by sandbox-container
+mock.module('../../lib/utils/child-process.ts', {
   namedExports: {
     execFileSync: (...args: any[]) => execFileSyncFn(...args),
     execFile: (...args: any[]) => execFileFn(...args),
