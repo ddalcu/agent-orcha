@@ -10,7 +10,7 @@ Agent Orcha is a declarative multi-agent AI framework. Agents, workflows, knowle
 
 ### Key Directories
 
-- `lib/` — Core library (orchestrator, agents, workflows, knowledge, tools, LLM, MCP)
+- `lib/` — Core library (orchestrator, agents, workflows, knowledge, tools, LLM, MCP, organization)
 - `src/` — Server (Fastify routes, CLI)
 - `public/` — Web UI (Studio) — vanilla JS web components
 - `examples/` — Example YAML configs
@@ -55,6 +55,7 @@ Tools are provided to agents via prefixed references:
 - `knowledge:<store>` — Knowledge store search + graph tools
 - `function:<name>` — Custom JS functions
 - `builtin:<name>` — Built-in tools (e.g., `ask_user`, `canvas_write`, `generate_image`, `generate_tts`, `generate_video`)
+- `org:<name>` — Organization tools (tickets, agents, context)
 
 Built-in tools: `ask_user` (interrupt for user input), `save_memory` (auto-injected with memory config), `canvas_write` (write/replace content in the canvas side pane), `canvas_append` (append to existing canvas content), `generate_image` (image generation via omni/P2P), `generate_tts` (text-to-speech via omni/P2P), `generate_video` (distributed video generation via P2P — registered only when P2P is enabled). Canvas tools are registered in `Orchestrator.registerBuiltInTools()`. Model tools (`generate_image`, `generate_tts`) are registered in `Orchestrator.registerModelTools()`. Video tool is registered in `Orchestrator.registerP2PTools()`. The frontend intercepts `tool_end` events to render content. `canvas_write` supports three formats: `markdown` (rendered rich text), `html` (live iframe), `code` (syntax-highlighted with `language` param). P2P model tools use the unified `model_task_*` protocol (`model_task_invoke`, `model_task_result`, `model_task_stream`, `model_task_stream_end`, `model_task_error`) for all task types (chat, image, video_frame, tts).
 
@@ -67,6 +68,8 @@ Skills are prompt augmentation files (`skills/*/SKILL.md`) with YAML frontmatter
 ### Task Management
 
 `lib/tasks/task-manager.ts` and `task-store.ts` provide submit/track/cancel for async tasks. Exposed via `/api/tasks` routes.
+
+`lib/tasks/stream-event-buffer.ts` provides `StreamEventBuffer` — a reusable utility that accumulates per-token streaming events (`thinking`/`content`) into complete text blocks. Tool events (`tool_start`/`tool_end`) flush accumulated text and pass through immediately. Used in `heartbeat-manager.ts` (CEO heartbeats) and `agents.route.ts` (chat streaming) to reduce event counts from ~560 per-token to ~15-25 aggregated blocks. Co-locates `summarizeOutput()` for truncating large tool output and stripping base64 image data.
 
 ### Sandbox System
 
@@ -125,6 +128,36 @@ All loaders (`AgentLoader`, `WorkflowLoader`, `FunctionLoader`, `SkillLoader`, `
 - `lib/integrations/integration-manager.ts` — Lifecycle management for all connectors
 - `lib/tools/built-in/integration-tools.ts` — Auto-injected tools (`integration_post`, `integration_context`, `email_send`)
 
+### Organization System
+
+`lib/organization/` manages multi-tenant AI organizations. Each org is an isolated workspace with tickets, routines, org charts, and CEO configuration.
+
+**Key files:**
+- `lib/organization/types.ts` — Zod schemas and TypeScript types for all org entities
+- `lib/organization/org-db.ts` — SQLite schema (orgs, tickets, routines, members, CEO configs, heartbeats, runs)
+- `lib/organization/org-manager.ts` — Organization CRUD
+- `lib/organization/ticket-manager.ts` — Ticket lifecycle (create, update, state transitions, comments, activity, agent assignment)
+- `lib/organization/routine-manager.ts` — Cron-based recurring agent execution per org
+- `lib/organization/org-chart-manager.ts` — Org hierarchy (members, roles, reporting)
+- `lib/organization/heartbeat-manager.ts` — Scheduled CEO triage runs with overlap prevention
+- `lib/organization/ceo-coordinator.ts` — Orchestrates Agent CEO and Claude Code CEO strategies
+- `lib/organization/agent-ceo.ts` — CEO strategy using an ORCHA agent with org tools
+- `lib/organization/claude-code-ceo.ts` — CEO strategy using Claude CLI (stream-json format)
+- `lib/organization/ceo-run-manager.ts` — CEO run history (start/complete/fail, tokens, cost, decisions)
+- `lib/organization/dashboard-stats.ts` — Aggregated org-wide metrics for dashboards
+- `lib/organization/task-metrics-manager.ts` — Per-agent task metrics within each org
+- `src/routes/organizations.route.ts` — REST API for all org operations
+
+**Ticket states:** `backlog` → `todo` → `in_progress` → `in_review` → `blocked` → `done`
+
+**CEO strategies:**
+- `AgentCEO` — Uses an ORCHA agent defined in YAML to triage, delegate, and review
+- `ClaudeCodeCEO` — Spawns Claude CLI with `--output-format stream-json`, parses JSON-per-line events
+
+**Heartbeat flow:** Cron triggers → `HeartbeatManager` prevents overlap → `CEOCoordinator.executeHeartbeat()` → events buffered by `StreamEventBuffer` → stored in task system for Monitor visibility
+
+**Org tools:** Registered as `org:<name>` prefix. Created by `lib/tools/org/org-tools.ts`. Tools: `list_tickets`, `update_ticket`, `create_ticket`, `assign_agent`, `list_agents`, `get_org_context`.
+
 ### Trigger System
 
 `lib/triggers/trigger-manager.ts` supports cron (node-cron) and webhook triggers. Attached to agents via the `triggers:` config field.
@@ -145,9 +178,11 @@ Key schema fields: `model` (string or `{ llm, image, video, tts }` per-type obje
 
 ### Web UI (Studio)
 
-Located in `public/`. Uses vanilla JS web components (`Component` base class). No build step — served directly by Fastify static. Tabs: Agents, Knowledge, MCP, Workflows, Skills, Monitor, IDE.
+Located in `public/`. Uses vanilla JS web components (`Component` base class). No build step — served directly by Fastify static. Tabs: Agents, Knowledge, MCP, Workflows, Skills, Monitor, IDE, Organizations.
 
 **Styling:** No CSS framework (no Tailwind, Bootstrap, etc.). All styles are custom CSS in `public/styles.css` using CSS custom properties (design tokens) defined in `:root`. Before using any CSS variable or utility class, verify it exists in `styles.css` — do not assume variables like `--bg-tertiary` or classes like `bg-secondary` exist. Check the `:root` block for available tokens (e.g., `--bg`, `--surface`, `--hover`, `--border`, `--text-muted`).
+
+The Svelte UI (`ui/`) is a SvelteKit application with pages for Agents, Knowledge, MCP, Workflows, Skills, Monitor, IDE, Local LLM, P2P, and Organizations. Located in `ui/src/pages/`. Uses Svelte 5 runes syntax.
 
 ### Documentation Sync
 

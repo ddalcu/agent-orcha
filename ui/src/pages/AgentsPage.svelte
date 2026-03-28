@@ -33,6 +33,7 @@
     audio?: string;
     video?: string;
     error?: string;
+    remote?: string;
   }
 
   interface ChatBubble {
@@ -74,6 +75,7 @@
     tps: string;
     cancelled: boolean;
     visible: boolean;
+    remotePeer?: string;
   }
 
   interface WorkflowState {
@@ -710,6 +712,8 @@
 
     updateBubble(responseId, b => {
       b.showStatusBar = false;
+      // Extract remote peer name from model outputs (last successful remote generation)
+      const remotePeer = b.modelOutputs.reduce<string | undefined>((acc, m) => m.remote || acc, undefined);
       b.stats = {
         elapsed: formatElapsedTime(elapsed),
         inputTokens: `${prefix}${inputTokens} input`,
@@ -717,6 +721,7 @@
         tps: `${prefix}${tps} tok/s`,
         cancelled: wasCancelled,
         visible: true,
+        remotePeer,
       };
       b.cancelled = wasCancelled;
     });
@@ -979,6 +984,7 @@
                 audio: parsed.audio,
                 video: parsed.video,
                 error: parsed.error,
+                remote: parsed.remote,
               }];
             });
           }
@@ -2084,6 +2090,7 @@
                     tps={bubble.stats.tps}
                     cancelled={bubble.stats.cancelled}
                     visible={bubble.stats.visible}
+                    remotePeer={bubble.stats.remotePeer}
                   />
                 {/if}
               </div>

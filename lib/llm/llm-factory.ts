@@ -42,7 +42,7 @@ export class LLMFactory {
 
     // remote-first: try P2P before local
     if (mode === 'remote-first' && this.p2pManager) {
-      const remoteModels = this.p2pManager.getRemoteModelsByName(name);
+      const remoteModels = this.p2pManager.getRemoteModelsByName(name, 'chat');
       if (remoteModels.length > 0) {
         const match = this.p2pManager.selectBestPeer(remoteModels);
         logger.info(`[LLMFactory] P2P remote-first: using ${match.model} from ${match.peerName}`);
@@ -56,7 +56,7 @@ export class LLMFactory {
       if (!this.p2pManager) {
         throw new Error(`Model "${name}" cannot be resolved: leverage is "remote-only" but P2P is not enabled`);
       }
-      const remoteModels = this.p2pManager.getRemoteModelsByName(name);
+      const remoteModels = this.p2pManager.getRemoteModelsByName(name, 'chat');
       if (remoteModels.length > 0) {
         const match = this.p2pManager.selectBestPeer(remoteModels);
         logger.info(`[LLMFactory] P2P remote-only: using ${match.model} from ${match.peerName}`);
@@ -93,7 +93,7 @@ export class LLMFactory {
 
     // Step 3: P2P fallback for local-first mode
     if (!config && mode === 'local-first' && this.p2pManager) {
-      const remoteModels = this.p2pManager.getRemoteModelsByName(name);
+      const remoteModels = this.p2pManager.getRemoteModelsByName(name, 'chat');
       if (remoteModels.length > 0) {
         const match = this.p2pManager.selectBestPeer(remoteModels);
         logger.info(`[LLMFactory] P2P local-first fallback: using ${match.model} from ${match.peerName}`);

@@ -498,4 +498,94 @@ describe('P2P Load Balancing', () => {
       assert.equal(result.share, true);
     });
   });
+
+  // --- selectPeersRanked ---
+
+  describe('selectPeersRanked', () => {
+    it('returns single candidate as-is', () => {
+      const candidates = [{ peerId: 'peer-a', model: 'flux', peerName: 'A' }];
+      const result = manager.selectPeersRanked(candidates);
+      assert.equal(result.length, 1);
+      assert.equal(result[0]!.peerId, 'peer-a');
+    });
+
+    it('returns a copy, not the original array', () => {
+      const candidates = [{ peerId: 'peer-a', model: 'flux' }];
+      const result = manager.selectPeersRanked(candidates);
+      assert.notStrictEqual(result, candidates);
+    });
+
+    it('sorts by load ascending', () => {
+      injectPeer(manager, createMockPeerInfo('peer-a', 'PeerA', 5));
+      injectPeer(manager, createMockPeerInfo('peer-b', 'PeerB', 1));
+      injectPeer(manager, createMockPeerInfo('peer-c', 'PeerC', 3));
+
+      const candidates = [
+        { peerId: 'peer-a', model: 'flux' },
+        { peerId: 'peer-b', model: 'flux' },
+        { peerId: 'peer-c', model: 'flux' },
+      ];
+
+      const result = manager.selectPeersRanked(candidates);
+      assert.equal(result[0]!.peerId, 'peer-b'); // load=1
+      assert.equal(result[1]!.peerId, 'peer-c'); // load=3
+      assert.equal(result[2]!.peerId, 'peer-a'); // load=5
+    });
+
+    it('combines inFlight + peerLoad', () => {
+      injectPeer(manager, createMockPeerInfo('peer-a', 'PeerA', 2));
+      injectPeer(manager, createMockPeerInfo('peer-b', 'PeerB', 0));
+
+      const inFlight = getInFlightCounts(manager);
+      inFlight.set('peer-b', 4);
+
+      // peer-a score: 0 + 2 = 2
+      // peer-b score: 4 + 0 = 4
+      const candidates = [
+        { peerId: 'peer-a', model: 'flux' },
+        { peerId: 'peer-b', model: 'flux' },
+      ];
+
+      const result = manager.selectPeersRanked(candidates);
+      assert.equal(result[0]!.peerId, 'peer-a');
+      assert.equal(result[1]!.peerId, 'peer-b');
+    });
+
+    it('shuffles within same score tier', () => {
+      injectPeer(manager, createMockPeerInfo('peer-a', 'PeerA', 0));
+      injectPeer(manager, createMockPeerInfo('peer-b', 'PeerB', 0));
+      injectPeer(manager, createMockPeerInfo('peer-c', 'PeerC', 0));
+
+      const candidates = [
+        { peerId: 'peer-a', model: 'flux' },
+        { peerId: 'peer-b', model: 'flux' },
+        { peerId: 'peer-c', model: 'flux' },
+      ];
+
+      // Run many times — all three should appear in first position at least once
+      const firstPositionCounts = new Map<string, number>();
+      for (let i = 0; i < 300; i++) {
+        const result = manager.selectPeersRanked(candidates);
+        const first = result[0]!.peerId;
+        firstPositionCounts.set(first, (firstPositionCounts.get(first) ?? 0) + 1);
+      }
+
+      assert.ok(firstPositionCounts.get('peer-a')! > 30, `peer-a first ${firstPositionCounts.get('peer-a')} times, expected >30`);
+      assert.ok(firstPositionCounts.get('peer-b')! > 30, `peer-b first ${firstPositionCounts.get('peer-b')} times, expected >30`);
+      assert.ok(firstPositionCounts.get('peer-c')! > 30, `peer-c first ${firstPositionCounts.get('peer-c')} times, expected >30`);
+    });
+
+    it('returns all candidates (no filtering)', () => {
+      injectPeer(manager, createMockPeerInfo('peer-a', 'PeerA', 10));
+      injectPeer(manager, createMockPeerInfo('peer-b', 'PeerB', 1));
+
+      const candidates = [
+        { peerId: 'peer-a', model: 'flux' },
+        { peerId: 'peer-b', model: 'flux' },
+      ];
+
+      const result = manager.selectPeersRanked(candidates);
+      assert.equal(result.length, 2);
+    });
+  });
 });

@@ -92,6 +92,7 @@
             </li>
             <li><a href="#published-agents">Published Agents</a></li>
             <li><a href="#p2p-network">P2P Network</a></li>
+            <li><a href="#organizations">Organizations</a></li>
           </ul>
 
           <h4>Knowledge Stores</h4>
@@ -125,13 +126,14 @@
                 <li><a href="#local-llm-api">Local LLM API</a></li>
                 <li><a href="#llm-config-api">LLM Config API</a></li>
                 <li><a href="#p2p-api">P2P API</a></li>
+                <li><a href="#organizations-api">Organizations API</a></li>
               </ul>
             </li>
           </ul>
 
           <h4>Configuration</h4>
           <ul>
-            <li><a href="#engine-registry">Engine Registry</a></li>
+            <li><a href="#engine-registry">Model Providers</a></li>
             <li><a href="#env-var-substitution">Environment Variable Substitution</a></li>
             <li><a href="#thinking-reasoning">Thinking / Reasoning</a></li>
           </ul>
@@ -157,22 +159,22 @@
 
         <div class="expandable active">
           <div class="expandable-header">
-            <h3>Step 1: Initialize Your Project</h3>
+            <h3>Step 1: Create Your Project Directory</h3>
             <span class="expandable-icon">▼</span>
           </div>
           <div class="expandable-content">
             <div class="expandable-body">
-              <p>Create a new Agent Orcha project with example configurations:</p>
+              <p>Create a directory for your project. Agent Orcha auto-scaffolds example configurations on first run if no configs exist:</p>
               <div class="code-block">
                 <div class="code-header">
                   <span class="code-language">Bash</span>
                   <button class="code-copy-btn" data-copy-target="init-cmd">Copy</button>
                 </div>
                 <div class="code-content">
-                  <pre id="init-cmd"><code>docker run -v ./my-project:/data ddalcu/agent-orcha init</code></pre>
+                  <pre id="init-cmd"><code>mkdir my-project</code></pre>
                 </div>
               </div>
-              <p>This creates a project directory with:</p>
+              <p>On first start, the following will be auto-created:</p>
               <ul>
                 <li><code>agents/</code> - Example agent configurations</li>
                 <li><code>workflows/</code> - Example workflow definitions</li>
@@ -192,10 +194,10 @@
           </div>
           <div class="expandable-content">
             <div class="expandable-body">
-              <p>Edit <code>models.yaml</code> to configure your LLM providers. Agent Orcha supports OpenAI, Anthropic, Gemini, and local models.</p>
+              <p>Edit <code>models.yaml</code> to configure your LLM providers. Agent Orcha supports OpenAI, Anthropic, Gemini, and local models via the Omni provider.</p>
               <div class="code-block">
                 <div class="code-header">
-                  <span class="code-language">JSON</span>
+                  <span class="code-language">YAML</span>
                   <button class="code-copy-btn" data-copy-target="llm-config">Copy</button>
                 </div>
                 <div class="code-content">
@@ -235,13 +237,23 @@ embeddings:
   openai:
     provider: openai
     apiKey: ${OPENAI_API_KEY}
-    model: text-embedding-3-small</code></pre>
+    model: text-embedding-3-small
+image:
+  default: flux
+  flux:
+    provider: omni
+    model: FLUX.2-Klein
+tts:
+  default: qwen-tts
+  qwen-tts:
+    provider: omni
+    model: Qwen3-TTS</code></pre>
                 </div>
               </div>
               <p><strong>Key concepts:</strong></p>
               <ul>
-                <li><strong>Pointer system:</strong> Set <code>"default": "llama-cpp"</code> to point <code>default</code> at another config by name (string = pointer, object = full config)</li>
-                <li><strong>Engine field:</strong> Local models use <code>engine</code> to specify the runtime: <code>llama-cpp</code>, <code>mlx-serve</code>, <code>lmstudio</code>, or <code>ollama</code></li>
+                <li><strong>Pointer system:</strong> Set <code>default: omni</code> to point <code>default</code> at another config by name (string = pointer, object = full config)</li>
+                <li><strong>Engine field:</strong> External local models use <code>engine</code> to specify the runtime: <code>lmstudio</code> or <code>ollama</code>. Native local inference uses the <code>omni</code> provider.</li>
                 <li><strong>Environment variables:</strong> Use <code>${ENV_VAR}</code> syntax for API keys (e.g., <code>"apiKey": "${ANTHROPIC_API_KEY}"</code>)</li>
                 <li><strong>Thinking/Reasoning:</strong> Use <code>thinkingBudget</code> for Anthropic models, <code>reasoningBudget</code> for local models (set to <code>0</code> to disable)</li>
               </ul>
@@ -267,7 +279,7 @@ embeddings:
 description: My first AI agent
 version: "1.0.0"
 
-llm:
+model:
   name: default
   temperature: 0.7
 
@@ -374,7 +386,7 @@ output:
             </tr>
             <tr>
               <td><strong>Local LLM</strong></td>
-              <td>Manage local LLM engines (llama-cpp, mlx-serve). Download, load, and unload models. Monitor engine status.</td>
+              <td>Manage local LLM models via Omni (native local inference). Download, load, and unload models. Monitor engine status.</td>
             </tr>
             <tr>
               <td><strong>Skills</strong></td>
@@ -395,18 +407,8 @@ output:
         <h3 id="docker" class="mt-xl">Docker Reference</h3>
         <p>Docker is the recommended way to run Agent Orcha. The <code>ddalcu/agent-orcha</code> image includes everything you need — no Node.js installation required.</p>
 
-        <h4>Initialize a Project via Docker</h4>
-        <div class="code-block">
-          <div class="code-header">
-            <span class="code-language">Bash</span>
-            <button class="code-copy-btn" data-copy-target="docker-init">Copy</button>
-          </div>
-          <div class="code-content">
-            <pre id="docker-init"><code>docker run -v ./my-agent-orcha-project:/data ddalcu/agent-orcha init</code></pre>
-          </div>
-        </div>
-
         <h4>Start the Server via Docker</h4>
+        <p>On first run, Agent Orcha auto-scaffolds example configurations if no configs exist in the mounted volume.</p>
         <div class="code-block">
           <div class="code-header">
             <span class="code-language">Bash</span>
@@ -488,11 +490,6 @@ output:
               <td><code>false</code></td>
             </tr>
             <tr>
-              <td><code>MLX_MANUAL</code></td>
-              <td>When <code>true</code>, disables automatic mlx-serve process management (use when running mlx-serve externally)</td>
-              <td><code>false</code></td>
-            </tr>
-            <tr>
               <td><code>P2P_ENABLED</code></td>
               <td>Set to <code>false</code> to disable P2P. Enabled by default.</td>
               <td><code>true</code></td>
@@ -509,7 +506,7 @@ output:
             </tr>
             <tr>
               <td><code>P2P_SHARE_LLMS</code></td>
-              <td>When <code>true</code>, shares all active LLM models on the P2P network (overrides per-model <code>p2p</code> flag)</td>
+              <td>When <code>true</code>, shares all active LLM models on the P2P network (overrides per-model <code>share</code> flag)</td>
               <td><code>false</code></td>
             </tr>
             <tr>
@@ -534,13 +531,8 @@ output:
           </thead>
           <tbody>
             <tr>
-              <td><code>npx agent-orcha init [dir]</code></td>
-              <td>Initialize a new project with example configs</td>
-              <td><code>dir</code> - Target directory (default: current)</td>
-            </tr>
-            <tr>
-              <td><code>npx agent-orcha start</code></td>
-              <td>Start the agent orchestrator server</td>
+              <td><code>npx agent-orcha</code></td>
+              <td>Start the server (auto-scaffolds project on first run if no configs exist)</td>
               <td>Environment variables: <code>PORT</code>, <code>HOST</code>, <code>WORKSPACE</code></td>
             </tr>
             <tr>
@@ -571,9 +563,10 @@ output:
 description: string             # Human-readable description (required)
 version: string                 # Semantic version (default: "1.0.0")
 
-llm: string | object            # Reference to LLM config in models.yaml
-  # Simple: llm: default
-  # With override: llm: { name: default, temperature: 0.3 }
+model: string | object          # Reference to LLM config in models.yaml
+  # Simple: model: default
+  # With override: model: { name: default, temperature: 0.3 }
+  # Per-type: model: { llm: default, image: flux, tts: qwen-tts }
 
 prompt:                         # Prompt configuration (required)
   system: string                # System message/instructions
@@ -586,6 +579,7 @@ tools:                          # Tools available to agent (optional)
   - builtin:&lt;tool-name&gt;         # Built-in tools (ask_user, save_memory, generate_image, generate_tts, generate_video)
   - sandbox:&lt;tool-name&gt;         # Sandbox tools (exec, shell, browser_*, vision_*, file_*, web_*)
   - workspace:&lt;tool-name&gt;       # Workspace tools (read, write, delete, list, list_resources, diagnostics)
+  - org:&lt;tool-name&gt;             # Organization tools (tickets, routines, org chart)
 
 skills:                         # Skills to inject into system prompt (optional)
   - skill-name                  # Array of skill names
@@ -624,7 +618,9 @@ publish: boolean | object       # Standalone chat page (optional)
   # Simple: publish: true
   # With password: publish: { enabled: true, password: "secret" }
 
-p2p: boolean                    # Share agent on P2P network (optional)
+p2p: boolean | object            # P2P sharing and leverage (optional)
+  # Simple: p2p: true
+  # Full: p2p: { share: true, leverage: 'local-first' }
 
 maxIterations: number           # Override default 200 iteration limit (optional)
 
@@ -645,7 +641,7 @@ sampleQuestions:                # Example prompts shown in UI (optional)
 description: Researches topics using knowledge search and web fetch
 version: "1.0.0"
 
-llm:
+model:
   name: default
   temperature: 0.5
 
@@ -678,7 +674,7 @@ output:
             <pre id="structured-output"><code>name: sentiment-structured
 description: Sentiment analysis with structured output
 
-llm:
+model:
   name: default
   temperature: 0
 
@@ -1064,7 +1060,7 @@ description: PII and OWASP security filtering rules
             <pre><code># Specific skills by name
 name: corporate
 description: Friendly corporate assistant
-llm: default
+model: default
 prompt:
   system: You are a friendly corporate assistant.
   inputVariables:
@@ -1320,7 +1316,7 @@ curl -X POST http://localhost:3000/api/tasks/workflow \
           <div class="code-content">
             <pre><code>name: code-runner
 description: Agent that can execute code and search the web
-llm: default
+model: default
 
 prompt:
   system: |
@@ -1354,7 +1350,7 @@ tools:
           <div class="code-content">
             <pre><code>name: assistant
 description: Agent with persistent memory
-llm: default
+model: default
 
 prompt:
   system: |
@@ -1387,7 +1383,7 @@ memory: true        # Enable persistent memory</code></pre>
           <div class="code-content">
             <pre><code>name: daily-reporter
 description: Runs every morning at 9am
-llm: default
+model: default
 
 prompt:
   system: Generate a daily summary report.
@@ -1410,7 +1406,7 @@ triggers:
           <div class="code-content">
             <pre><code>name: webhook-handler
 description: Responds to external webhook events
-llm: default
+model: default
 
 prompt:
   system: Process the incoming webhook payload.
@@ -1495,7 +1491,7 @@ triggers:
           <div class="code-content">
             <pre><code>name: channel-bot
 description: Bot connected to a chat channel
-llm: default
+model: default
 
 prompt:
   system: |
@@ -1631,7 +1627,7 @@ integrations:
           <div class="code-content">
             <pre><code>name: support-agent
 description: Handles inbound support emails
-llm: default
+model: default
 
 prompt:
   system: |
@@ -1692,7 +1688,7 @@ integrations:
             <pre><code># Simple &mdash; publish with no password
 name: my-chatbot
 description: A helpful assistant
-llm: default
+model: default
 prompt:
   system: You are a helpful assistant.
   inputVariables:
@@ -1731,7 +1727,7 @@ publish:
         <p>P2P is enabled by default. To disable it, set <code>P2P_ENABLED=false</code> or toggle it off in the P2P tab in Studio. You can also enable/disable, change the machine name, set a private network key, and configure rate limiting from the P2P tab UI at runtime.</p>
 
         <h4>Sharing Agents</h4>
-        <p>Add <code>p2p: true</code> to any agent YAML to share it with connected peers:</p>
+        <p>Add <code>p2p: true</code> (shorthand) or <code>p2p: { share: true }</code> (full form) to any agent YAML to share it with connected peers:</p>
         <div class="code-block">
           <div class="code-header">
             <span class="code-language">YAML</span>
@@ -1739,12 +1735,13 @@ publish:
           <div class="code-content">
             <pre><code>name: my-agent
 description: A shared agent
-llm: default
+model: default
 prompt:
   system: You are helpful.
   inputVariables:
     - query
-p2p: true</code></pre>
+p2p:
+  share: true</code></pre>
           </div>
         </div>
 
@@ -1770,7 +1767,7 @@ p2p: true</code></pre>
         <ol>
           <li><strong>Direct LLM chat (P2P tab)</strong> &mdash; Select a remote peer's LLM from the P2P tab and chat with it directly. Pure LLM inference with no agent or tools involved.</li>
           <li><strong>Remote agent invocation (P2P tab)</strong> &mdash; Invoke a peer's shared agent. The agent runs entirely on the host &mdash; their LLM, their tools, their knowledge stores. You receive the streamed output.</li>
-          <li><strong>Local agent with remote LLM</strong> &mdash; Configure your agent with <code>llm: "p2p"</code> (auto-selects first available) or <code>llm: "p2p:model-name"</code>. The agent runs locally with your tools, react loop, memory, and knowledge stores, while only the LLM inference happens on the remote peer. Tool calling is fully supported &mdash; the remote LLM generates <code>tool_calls</code>, your local agent executes them, and results feed back over the wire.</li>
+          <li><strong>Local agent with remote LLM</strong> &mdash; Configure your agent with <code>model: "p2p"</code> (auto-selects first available) or <code>model: "p2p:model-name"</code>. The agent runs locally with your tools, react loop, memory, and knowledge stores, while only the LLM inference happens on the remote peer. Tool calling is fully supported &mdash; the remote LLM generates <code>tool_calls</code>, your local agent executes them, and results feed back over the wire.</li>
         </ol>
         <ul>
           <li>Conversation history for remote LLMs is managed on the caller side &mdash; the host peer is stateless</li>
@@ -1815,7 +1812,7 @@ p2p: true</code></pre>
             </tr>
           </tbody>
         </table>
-        <p>The leverage modes apply to <strong>model tools</strong> (image generation, TTS, video). For explicit P2P LLM chat routing, use <code>model: p2p</code> or <code>model: p2p:model-name</code>. Boolean <code>true</code> is backward-compatible and maps to <code>local-first</code>.</p>
+        <p>The leverage modes apply to <strong>model tools</strong> (image generation, TTS, video). For explicit P2P LLM chat routing, use <code>model: p2p</code> or <code>model: p2p:model-name</code> on the agent. Boolean <code>true</code> is backward-compatible and maps to <code>local-first</code>.</p>
 
         <h4>Load Balancing</h4>
         <p>When multiple peers share the same model, requests are automatically distributed using a <strong>least-loaded</strong> selection strategy:</p>
@@ -1873,6 +1870,22 @@ p2p: true</code></pre>
             </tr>
           </tbody>
         </table>
+
+        <!-- Organizations -->
+        <h3 id="organizations" class="mt-xl">Organizations</h3>
+        <p>The organization system enables multi-tenant management of teams, tickets, routines, and org charts. Each organization has a CEO agent that coordinates work, processes tickets, and maintains operational heartbeats.</p>
+
+        <h4>Key Concepts</h4>
+        <ul>
+          <li><strong>Tickets</strong> &mdash; Work items assigned to agents within an organization. Support priority levels, status tracking, and agent assignment.</li>
+          <li><strong>Routines</strong> &mdash; Recurring scheduled tasks for the organization, executed by the CEO agent on a cron schedule.</li>
+          <li><strong>Org Chart</strong> &mdash; Hierarchical structure defining roles, agents, and reporting lines within the organization.</li>
+          <li><strong>CEO Agent</strong> &mdash; A special coordinating agent that manages the organization, delegates tickets, runs routines, and sends heartbeats.</li>
+          <li><strong>Heartbeats</strong> &mdash; Periodic status updates from the CEO agent about organizational health and activity.</li>
+        </ul>
+
+        <h4>Organization Tools</h4>
+        <p>Organization tools are available to agents via the <code>org:&lt;tool-name&gt;</code> prefix. These tools allow agents to interact with the organization system programmatically.</p>
 
         <!-- Knowledge Stores -->
         <h2 id="knowledge-stores" class="mt-2xl">Knowledge Stores</h2>
@@ -3057,6 +3070,65 @@ Response (auth disabled):
           </tbody>
         </table>
 
+        <h3 id="organizations-api" class="mt-xl">Organizations API</h3>
+        <p>Manage multi-tenant organizations with tickets, routines, org charts, CEO agents, and heartbeats.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/organizations</code></td>
+              <td>List all organizations</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/organizations</code></td>
+              <td>Create a new organization</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/organizations/:id</code></td>
+              <td>Get organization details</td>
+            </tr>
+            <tr>
+              <td>PUT</td>
+              <td><code>/api/organizations/:id</code></td>
+              <td>Update an organization</td>
+            </tr>
+            <tr>
+              <td>DELETE</td>
+              <td><code>/api/organizations/:id</code></td>
+              <td>Delete an organization</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/organizations/:id/tickets</code></td>
+              <td>List tickets for an organization</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/organizations/:id/tickets</code></td>
+              <td>Create a ticket</td>
+            </tr>
+            <tr>
+              <td>GET</td>
+              <td><code>/api/organizations/:id/routines</code></td>
+              <td>List routines for an organization</td>
+            </tr>
+            <tr>
+              <td>POST</td>
+              <td><code>/api/organizations/:id/routines</code></td>
+              <td>Create a routine</td>
+            </tr>
+          </tbody>
+        </table>
+
         <!-- Examples -->
         <h2 id="examples" class="mt-2xl">Examples</h2>
         <p>Real-world examples to help you get started with common use cases.</p>
@@ -3074,7 +3146,7 @@ Response (auth disabled):
 description: Friendly corporate assistant — answers questions about the org, people, departments
 version: "1.0.0"
 
-llm:
+model:
   name: default
   temperature: 0.3
 
@@ -3307,7 +3379,7 @@ graph:
 description: Music store expert — explore the catalog, discover artists, and analyze customer listening patterns
 version: "1.0.0"
 
-llm:
+model:
   name: default
   temperature: 0.6
 
@@ -3349,36 +3421,41 @@ publish:
         </div>
 
         <!-- Engine Registry -->
-        <h2 id="engine-registry" class="mt-2xl">Engine Registry</h2>
-        <p>Agent Orcha uses a pluggable engine architecture for local LLM inference. Each engine manages its own process lifecycle (start, stop, health checks) and exposes an OpenAI-compatible API.</p>
+        <h2 id="engine-registry" class="mt-2xl">Model Providers</h2>
+        <p>Agent Orcha supports multiple model providers for LLM inference, image generation, TTS, and video generation.</p>
 
         <table>
           <thead>
             <tr>
-              <th>Engine</th>
+              <th>Provider</th>
               <th>Description</th>
               <th>Platforms</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td><code>llama-cpp</code></td>
-              <td>High-performance GGUF model inference via llama.cpp. Ships with the Docker image. Supports CPU and GPU acceleration.</td>
+              <td><code>omni</code></td>
+              <td>Native local inference via node-omni-orcha. Supports GGUF models for LLM, embeddings, image generation (FLUX), TTS (Qwen-TTS), and more. Ships with the Docker image.</td>
               <td>Linux, macOS, Windows</td>
             </tr>
             <tr>
-              <td><code>mlx-serve</code></td>
-              <td>Apple Silicon optimized inference via MLX framework. Best performance on M-series Macs.</td>
-              <td>macOS (Apple Silicon)</td>
+              <td><code>anthropic</code></td>
+              <td>Anthropic Claude models (claude-sonnet, claude-opus, etc.). Requires <code>apiKey</code>.</td>
+              <td>All (cloud API)</td>
             </tr>
             <tr>
-              <td><code>ollama</code></td>
-              <td>Uses an external Ollama instance. Configure <code>baseUrl</code> to point to your Ollama server.</td>
-              <td>All (external process)</td>
+              <td><code>openai</code></td>
+              <td>OpenAI models (GPT-4o, etc.). Requires <code>apiKey</code>.</td>
+              <td>All (cloud API)</td>
             </tr>
             <tr>
-              <td><code>lmstudio</code></td>
-              <td>Uses an external LM Studio instance. Configure <code>baseUrl</code> to point to your LM Studio server.</td>
+              <td><code>google</code></td>
+              <td>Google Gemini models. Requires <code>apiKey</code>.</td>
+              <td>All (cloud API)</td>
+            </tr>
+            <tr>
+              <td><code>local</code></td>
+              <td>External local inference servers. Uses <code>engine</code> field to specify the runtime: <code>lmstudio</code> or <code>ollama</code>. Configure <code>baseUrl</code> to point to the server.</td>
               <td>All (external process)</td>
             </tr>
           </tbody>
@@ -3397,10 +3474,25 @@ publish:
     model: Qwen3.5-4B-IQ4_NL
     reasoningBudget: 0
     contextSize: 32768
-    active: true</code></pre>
+    active: true
+embeddings:
+  default: omni
+  omni:
+    provider: omni
+    model: nomic-embed-text-v1.5.Q4_K_M
+image:
+  default: flux
+  flux:
+    provider: omni
+    model: FLUX.2-Klein
+tts:
+  default: qwen-tts
+  qwen-tts:
+    provider: omni
+    model: Qwen3-TTS</code></pre>
           </div>
         </div>
-        <p>The <code>engine</code> field selects the runtime for external engines (ollama, lmstudio). The <code>model</code> field specifies which model to load. The <code>active</code> flag enables/disables a provider. Engines are managed via the Local LLM tab in Studio or the <code>/api/local-llm</code> API.</p>
+        <p>The <code>models.yaml</code> file has sections for <code>llm</code>, <code>embeddings</code>, <code>image</code>, <code>tts</code>, and <code>video</code>. Each section has a <code>default</code> pointer and named configs. The <code>active</code> flag enables/disables a provider. For external local servers, the <code>engine</code> field selects the runtime (ollama, lmstudio). Models are managed via the Models tab in Studio or the <code>/api/local-llm</code> API.</p>
 
         <!-- Environment Variable Substitution -->
         <h2 id="env-var-substitution" class="mt-2xl">Environment Variable Substitution</h2>
@@ -3429,21 +3521,18 @@ publish:
         <h4>Examples</h4>
         <div class="code-block">
           <div class="code-header">
-            <span class="code-language">JSON</span>
+            <span class="code-language">YAML</span>
           </div>
           <div class="code-content">
-            <pre><code>{
-  "anthropic": {
-    "provider": "anthropic",
-    "apiKey": "${ANTHROPIC_API_KEY}",
-    "model": "claude-sonnet-4-6"
-  },
-  "openai": {
-    "provider": "openai",
-    "apiKey": "${OPENAI_API_KEY:-sk-placeholder}",
-    "model": "gpt-4o"
-  }
-}</code></pre>
+            <pre><code>llm:
+  anthropic:
+    provider: anthropic
+    apiKey: ${ANTHROPIC_API_KEY}
+    model: claude-sonnet-4-6
+  openai:
+    provider: openai
+    apiKey: ${OPENAI_API_KEY:-sk-placeholder}
+    model: gpt-4o</code></pre>
           </div>
         </div>
         <p>Environment variable substitution works in <code>models.yaml</code>, <code>mcp.json</code>, and YAML configuration files (agent, knowledge, workflow definitions).</p>
@@ -3477,23 +3566,19 @@ publish:
         <h4>Configuration</h4>
         <div class="code-block">
           <div class="code-header">
-            <span class="code-language">JSON</span>
+            <span class="code-language">YAML</span>
           </div>
           <div class="code-content">
-            <pre><code>{
-  "anthropic": {
-    "provider": "anthropic",
-    "apiKey": "${ANTHROPIC_API_KEY}",
-    "model": "claude-sonnet-4-6",
-    "thinkingBudget": 5000
-  },
-  "local-thinking": {
-    "provider": "local",
-    "engine": "llama-cpp",
-    "model": "Qwen3.5-4B-IQ4_NL",
-    "reasoningBudget": 4096
-  }
-}</code></pre>
+            <pre><code>llm:
+  anthropic:
+    provider: anthropic
+    apiKey: ${ANTHROPIC_API_KEY}
+    model: claude-sonnet-4-6
+    thinkingBudget: 5000
+  omni:
+    provider: omni
+    model: Qwen3.5-4B-IQ4_NL
+    reasoningBudget: 4096</code></pre>
           </div>
         </div>
         <p>When thinking is enabled, the model's reasoning steps are visible in the Studio UI as collapsible thinking blocks within agent responses.</p>
@@ -3501,9 +3586,22 @@ publish:
         <!-- Version History -->
         <h2 id="version-history" class="mt-2xl">Version History</h2>
 
+        <h4>2026.328</h4>
+        <ul>
+          <li>Organization system: multi-tenant orgs with tickets, routines, org charts, CEO agents, and heartbeats</li>
+          <li>Media generation tools: built-in image generation (<code>generate_image</code>), TTS/voice cloning (<code>generate_tts</code>), and distributed video generation (<code>generate_video</code>)</li>
+          <li>Unified model config: <code>models.yaml</code> with <code>llm</code>, <code>embeddings</code>, <code>image</code>, <code>tts</code>, and <code>video</code> sections</li>
+          <li>Omni provider: native local inference via node-omni-orcha replacing llama-cpp and mlx-serve engines</li>
+          <li>Agent config field renamed from <code>llm</code> to <code>model</code>, supporting per-type object: <code>model: { llm: default, image: flux, tts: qwen-tts }</code></li>
+          <li>P2P model leverage: agents can offload image/TTS/video tasks to remote peers with <code>p2p: { leverage: 'local-first' }</code></li>
+          <li>P2P load balancing across multiple peers sharing the same model</li>
+          <li>Organization tools via <code>org:&lt;name&gt;</code> tool prefix</li>
+          <li>Auto-scaffolding: <code>npx agent-orcha</code> initializes project on first run, no <code>init</code> command needed</li>
+        </ul>
+
         <h4>v0.0.8</h4>
         <ul>
-          <li>Engine Registry architecture: pluggable engine abstraction (llama-cpp, mlx-serve, ollama, lmstudio) replacing monolithic singletons</li>
+          <li>Engine Registry architecture: pluggable engine abstraction (ollama, lmstudio) replacing monolithic singletons</li>
           <li>Vision browser tools for pixel-coordinate browser control with vision LLMs</li>
           <li>Workspace tools (read, write, delete, list, list_resources, diagnostics)</li>
           <li>Agent Composer in IDE for visual agent creation</li>
@@ -3577,7 +3675,7 @@ publish:
           <h4>About</h4>
           <ul class="footer-links">
             <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
-            <li>Version 0.0.8</li>
+            <li>Version 2026.328</li>
             <li>MIT License</li>
           </ul>
         </div>

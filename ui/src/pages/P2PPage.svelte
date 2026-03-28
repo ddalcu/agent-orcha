@@ -32,6 +32,7 @@
     audio?: string;
     video?: string;
     error?: string;
+    remote?: string;
   }
 
   interface ChatBubble {
@@ -71,6 +72,7 @@
     tps: string;
     cancelled: boolean;
     visible: boolean;
+    remotePeer?: string;
   }
 
   interface ChatSession {
@@ -629,6 +631,7 @@
                 audio: parsed.audio,
                 video: parsed.video,
                 error: parsed.error,
+                remote: parsed.remote,
               }];
             });
           }
@@ -680,6 +683,7 @@
     const prefix = hasRealUsage ? '' : '~';
 
     updateBubble(responseId, b => {
+      const remotePeer = b.modelOutputs.reduce<string | undefined>((acc, m) => m.remote || acc, undefined);
       b.stats = {
         elapsed: elapsedStr,
         inputTokens: `${prefix}${inTok} input`,
@@ -687,6 +691,7 @@
         tps: `${prefix}${tps} tok/s`,
         cancelled: b.cancelled,
         visible: true,
+        remotePeer,
       };
     });
 
@@ -1243,6 +1248,7 @@
                     tps={bubble.stats.tps}
                     cancelled={bubble.stats.cancelled}
                     visible={bubble.stats.visible}
+                    remotePeer={bubble.stats.remotePeer}
                   />
                 {/if}
               </ResponseBubble>

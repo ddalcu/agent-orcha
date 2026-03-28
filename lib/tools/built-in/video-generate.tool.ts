@@ -124,7 +124,7 @@ export function createVideoGenerateTool(deps: VideoToolDeps): StructuredTool {
 
       try {
         // Find all peers sharing this model (remote + check local)
-        const remotePeers = deps.p2pManager.getRemoteModelsByName(modelRef);
+        const remotePeers = deps.p2pManager.getRemoteModelsByName(modelRef, 'image');
         const localModels = deps.p2pManager.getLocalSharedModels();
         const refLower = modelRef.toLowerCase();
         const localMatch = localModels.find(l =>

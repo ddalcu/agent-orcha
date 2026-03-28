@@ -43,6 +43,7 @@
     tps: string;
     cancelled: boolean;
     visible: boolean;
+    remotePeer?: string;
   }
 
   interface ModelOutputEntry {
@@ -52,6 +53,7 @@
     audio?: string;
     video?: string;
     error?: string;
+    remote?: string;
   }
 
   interface ChatBubble {
@@ -284,7 +286,8 @@
         const it = hasReal ? usage!.input_tokens : estimateTokens(message);
         const ot = hasReal ? usage!.output_tokens : estimateTokens(finalContent);
         const px = hasReal ? '' : '~', tps = elapsed > 0 ? (ot / (elapsed / 1000)).toFixed(1) : '0';
-        b.stats = { elapsed: formatElapsedTime(elapsed), inputTokens: `${px}${it} input`, outputTokens: `${px}${ot} output`, tps: `${px}${tps} tok/s`, cancelled: wasCancelled, visible: true };
+        const remotePeer = b.modelOutputs.reduce<string | undefined>((acc, m) => m.remote || acc, undefined);
+        b.stats = { elapsed: formatElapsedTime(elapsed), inputTokens: `${px}${it} input`, outputTokens: `${px}${ot} output`, tps: `${px}${tps} tok/s`, cancelled: wasCancelled, visible: true, remotePeer };
       }
       streamUsageData = null;
       currentAbortController = null;
@@ -392,6 +395,7 @@
               audio: parsed.audio,
               video: parsed.video,
               error: parsed.error,
+              remote: parsed.remote,
             }];
           }
         } catch (err) { console.error('[StandaloneChatPage] Failed to parse model output:', err); }
@@ -528,6 +532,7 @@
                   tps={bubble.stats.tps}
                   cancelled={bubble.stats.cancelled}
                   visible={bubble.stats.visible}
+                  remotePeer={bubble.stats.remotePeer}
                 />
               {/if}
             </div>

@@ -24,7 +24,7 @@ docker run -p 3000:3000 -v ./my-workspace:/data ddalcu/agent-orcha
 - **Declarative AI**: Define agents, workflows, and infrastructure in clear, version-controlled YAML files
 - **P2P Agent & LLM Sharing**: Share agents and LLM engines across your team or organization over an encrypted peer-to-peer network — no API keys exposed, no central server required, with per-peer rate limiting and private network keys
 - **Native Desktop Apps**: Download pre-built binaries for macOS (.app), Windows (.exe), and Linux from [GitHub Releases](https://github.com/ddalcu/agent-orcha/releases) — system tray, auto-updates, zero setup
-- **Model Agnostic**: Seamlessly swap between OpenAI, Gemini, Anthropic, or local LLMs (llama-cpp, MLX, Ollama, LM Studio) without rewriting logic
+- **Model Agnostic**: Seamlessly swap between OpenAI, Gemini, Anthropic, or local LLMs (Omni native, Ollama, LM Studio) without rewriting logic
 - **Published Agents**: Share agents via standalone chat pages at `/chat/<name>` with optional per-agent password protection
 - **Universal Tooling**: Leverage the **Model Context Protocol (MCP)** to connect agents to any external service, API, or database
 - **Knowledge Stores**: Built-in SQLite-based vector store with optional **direct mapping** for knowledge graphs — semantic search and graph analysis as a first-class citizen
@@ -56,8 +56,9 @@ Built-in web dashboard at `http://localhost:3000` with agent testing, knowledge 
 - **Skills** — Browse and inspect skills
 - **Monitor** — Real-time LLM call logs, P2P task tracking, ReAct loop metrics, and activity feed
 - **IDE** — File editor with syntax highlighting, hot-reload, and **visual agent composer** for `.agent.yaml` files
-- **Local LLM** — Download, activate, and manage local model engines (llama-cpp, MLX, Ollama, LM Studio)
+- **Local LLM** — Download, activate, and manage local models (Omni native, Ollama, LM Studio)
 - **P2P** — Browse peers, test remote agents and LLMs, configure sharing and rate limits
+- **Organizations** — Create and manage autonomous AI organizations with tickets, routines, and CEO agents
 
 ## Architecture
 
@@ -90,7 +91,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 
 ### CLI
 
-Run directly on your machine to take advantage of bare metal GPU / Apple Silicon performance for local models (llama-cpp, MLX, Ollama, LM Studio).
+Run directly on your machine to take advantage of bare metal GPU / Apple Silicon performance for local models (Omni native, Ollama, LM Studio).
 
 ```bash
 # Start the server (auto-scaffolds ~/.orcha/workspace on first run)
@@ -112,62 +113,54 @@ An empty workspace is automatically scaffolded with example agents, workflows, a
 
 ## Configuration
 
-### LLM Configuration (llm.json)
+### Model Configuration (models.yaml)
 
-All LLM and embedding configs are defined in `llm.json`. Agents and knowledge stores reference configs by name. The `default` key is a pointer to the active engine.
+All model configs live in `models.yaml` (YAML format) with sections: `llm` (chat models), `embeddings`, `image`, `tts`, `video`. Each section has named configs pointing to a provider + model combination. Agents and knowledge stores reference configs by name. The `default` key is a pointer to the active config.
 
-```json
-{
-  "version": "1.0",
-  "models": {
-    "default": "llama-cpp",
-    "llama-cpp": {
-      "provider": "local",
-      "engine": "llama-cpp",
-      "model": "Qwen3.5-4B-IQ4_NL",
-      "reasoningBudget": 0,
-      "contextSize": 32768,
-      "p2p": true
-    },
-    "ollama": {
-      "provider": "local",
-      "engine": "ollama",
-      "baseUrl": "http://localhost:11434/v1",
-      "model": "qwen3.5:latest",
-      "reasoningBudget": 0
-    },
-    "anthropic": {
-      "provider": "anthropic",
-      "apiKey": "${ANTHROPIC_API_KEY}",
-      "model": "claude-sonnet-4-6"
-    }
-  },
-  "embeddings": {
-    "default": "llama-cpp",
-    "llama-cpp": {
-      "provider": "local",
-      "engine": "llama-cpp",
-      "model": "nomic-embed-text-v1.5.Q4_K_M"
-    },
-    "openai": {
-      "provider": "openai",
-      "apiKey": "${OPENAI_API_KEY}",
-      "model": "text-embedding-3-small"
-    }
-  },
-  "engineUrls": {
-    "lmstudio": "http://192.168.2.61:1234"
-  }
-}
+```yaml
+# models.yaml
+llm:
+  default: omni
+  omni:
+    provider: omni
+    model: Qwen3.5-4B-IQ4_NL
+    contextSize: 32768
+  ollama:
+    provider: local
+    engine: ollama
+    baseUrl: http://localhost:11434/v1
+    model: qwen3.5:latest
+    reasoningBudget: 0
+  anthropic:
+    provider: anthropic
+    apiKey: ${ANTHROPIC_API_KEY}
+    model: claude-sonnet-4-6
+
+embeddings:
+  default: omni
+  omni:
+    provider: omni
+    model: nomic-embed-text-v1.5.Q4_K_M
+
+image:
+  default: flux
+  flux:
+    provider: omni
+    model: FLUX.2-Klein
+
+tts:
+  default: qwen-tts
+  qwen-tts:
+    provider: omni
+    model: Qwen3-TTS
 ```
 
-- **`default`** — Pointer string (e.g., `"llama-cpp"`) that selects the active config
-- **`engine`** — Local inference engine: `llama-cpp`, `mlx-serve`, `ollama`, `lmstudio`
-- **`provider`** — `local`, `openai`, `anthropic`, or `gemini`
-- **`contextSize`** — Context window size (local engines)
+- **`default`** — Pointer string (e.g., `"omni"`) that selects the active config
+- **`provider`** — `omni`, `openai`, `anthropic`, or `gemini`
+- **`contextSize`** — Context window size (local models)
 - **`reasoningBudget`** / **`thinkingBudget`** — Token budget for reasoning (0 to disable)
-- **`p2p`** — Share this model on the P2P network (`true`)
-- **`engineUrls`** — Base URLs for engines running on remote hosts
+- **`share`** — Share this model on the P2P network (`true`)
+- **`image`**, **`tts`**, **`video`** — Sections for image generation, text-to-speech, and video models (same structure as `llm`)
 - **`${ENV_VAR}`** — Environment variable substitution (works in all config files)
 
 ### Environment Variables
@@ -182,7 +175,6 @@ LOG_LEVEL=debug                        # Pino log level (default: info)
 EXPERIMENTAL_VISION=false              # Enable vision browser tools
 BROWSER_SANDBOX=true                   # Enable browser sandbox (Docker)
 BROWSER_VERBOSE=false                  # Show Chromium logs
-MLX_MANUAL=false                       # Skip auto MLX binary download
 P2P_ENABLED=false                      # Disable P2P swarm network (enabled by default)
 P2P_PEER_NAME=my-peer                 # Display name on the P2P network (default: hostname)
 P2P_NETWORK_KEY=agent-orcha-default   # Shared key for peer discovery (configurable in UI)
@@ -202,8 +194,8 @@ name: researcher
 description: Researches topics using web fetch and knowledge search
 version: "1.0.0"
 
-llm:
-  name: default
+model:
+  llm: default
   temperature: 0.5
 
 prompt:
@@ -348,17 +340,15 @@ p2p: true
 
 ### Sharing LLM Engines
 
-Add `"p2p": true` to a model in `llm.json`, or use the P2P share toggle on each provider in the LLM tab. Only active models with `p2p: true` are shared:
+Add `share: true` to a model in `models.yaml`, or use the P2P share toggle on each provider in the LLM tab. Only active models with `share: true` are shared:
 
-```json
-{
-  "llama-cpp": {
-    "provider": "local",
-    "engine": "llama-cpp",
-    "model": "Qwen3.5-4B-IQ4_NL",
-    "p2p": true
-  }
-}
+```yaml
+# models.yaml
+llm:
+  omni:
+    provider: omni
+    model: Qwen3.5-4B-IQ4_NL
+    share: true  # Share on P2P network
 ```
 
 No API keys or secrets are shared — only the model name and provider.
@@ -369,7 +359,7 @@ There are three ways to use remote P2P resources:
 
 1. **Direct LLM chat (P2P tab)** — Select a remote peer's LLM from the P2P tab and chat with it directly. Pure LLM inference with no agent or tools involved.
 2. **Remote agent invocation (P2P tab)** — Invoke a peer's shared agent. The agent runs entirely on the host — their LLM, their tools, their knowledge stores. You receive the streamed output.
-3. **Local agent with remote LLM** — Configure your agent with `llm: "p2p"` (auto-select) or `llm: "p2p:model-name"`. The agent runs locally with your tools, react loop, memory, and knowledge stores, while only the LLM inference happens on the remote peer. Tool calling is fully supported — the remote LLM generates `tool_calls`, your local agent executes them, and results feed back over the wire.
+3. **Local agent with remote LLM** — Configure your agent with `model: "p2p"` (auto-select) or `model: "p2p:model-name"`. The agent runs locally with your tools, react loop, memory, and knowledge stores, while only the LLM inference happens on the remote peer. Tool calling is fully supported — the remote LLM generates `tool_calls`, your local agent executes them, and results feed back over the wire.
 
 ### P2P Model Leverage
 
@@ -408,6 +398,29 @@ Incoming P2P requests are rate-limited to 60 requests/minute by default. Configu
 ### Private Networks
 
 By default all instances join the same public network. To create a private network, set `P2P_NETWORK_KEY` to a custom value (or configure in the P2P tab). The key is SHA-256 hashed before joining — only peers with the same key can discover each other.
+
+## Organizations
+
+Create autonomous AI-managed organizations. Each org is an isolated workspace with tickets, routines, an org chart, and a CEO agent that runs on scheduled heartbeats.
+
+### CEO Strategies
+
+Two strategies for autonomous management:
+
+- **Agent CEO** — Uses an ORCHA agent (defined in YAML) to triage tickets, delegate work, and review outputs
+- **Claude Code CEO** — Uses Claude directly with ORCHA API tools to manage the org autonomously
+
+### Tickets
+
+Full lifecycle: `backlog` → `todo` → `in_progress` → `in_review` → `blocked` → `done`. Tickets carry priority, labels, agent assignment, and activity history.
+
+### Routines
+
+Cron-based recurring agent execution per organization. Schedule agents to run automatically with full run history tracking.
+
+### Heartbeats
+
+Scheduled CEO triage runs. The CEO reviews the ticket board, delegates tasks to team members, and tracks progress — all on a configurable cron schedule.
 
 ## Knowledge Stores
 
@@ -532,6 +545,7 @@ Reference in agents with `mcp:fetch`.
 | `sandbox:browser_*` | CDP-based Chromium control (navigate, observe, click, type, screenshot, evaluate) |
 | `sandbox:vision_*` | Pixel-coordinate browser control for vision LLMs (navigate, click, type, scroll, key, drag, screenshot) |
 | `sandbox:file_*` | Sandboxed file tools (read, write, edit, insert, replace_lines) scoped to `/tmp` |
+| `org:<tool>` | Organization tools (list_tickets, update_ticket, assign_agent, etc.) |
 | `workspace:read/write/delete/list/list_resources/diagnostics` | Workspace file and resource access |
 
 ### Vision Browser (Experimental)
@@ -572,6 +586,7 @@ Full API documentation is available at [agentorcha.com](https://agentorcha.com).
 | Graph | `/api/graph/*` | Multi-store graph aggregation |
 | Logs | `/api/logs/*` | Real-time log streaming |
 | P2P | `/api/p2p/*` | P2P network status, settings, config, remote agents/LLMs |
+| Organizations | `/api/organizations/*` | Orgs, tickets, routines, org chart, CEO runs |
 | VNC | `/api/vnc/*` | Browser sandbox VNC status |
 
 ## Directory Structure
@@ -583,7 +598,7 @@ Full API documentation is available at [agentorcha.com](https://agentorcha.com).
 ├── knowledge/         # Knowledge store configs and data
 ├── functions/         # Custom function tools (JavaScript .mjs)
 ├── skills/            # Skill prompt files (Markdown)
-├── llm.json           # LLM and embedding configurations
+├── models.yaml        # Model and embedding configurations
 ├── mcp.json           # MCP server configuration
 └── .env               # Environment variables
 ```

@@ -356,7 +356,7 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const modelRef = model.toLowerCase();
-      const peers = manager.getRemoteModelsByName(modelRef);
+      const peers = manager.getRemoteModelsByName(modelRef, 'image');
       if (peers.length === 0) {
         return reply.status(404).send({ error: `No P2P peers found sharing model "${model}"`, availableModels: manager.getRemoteModels().map(l => l.model) });
       }

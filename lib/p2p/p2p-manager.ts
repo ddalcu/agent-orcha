@@ -8,11 +8,13 @@ import { logger } from '../logger.ts';
 import type { Orchestrator } from '../orchestrator.ts';
 import { listModelConfigs, getModelConfig, listImageConfigs, listTtsConfigs, listVideoConfigs, getImageConfig, getTtsConfig } from '../llm/llm-config.ts';
 import { LLMFactory } from '../llm/llm-factory.ts';
+import { OmniModelCache } from '../llm/providers/omni-model-cache.ts';
 import { humanMessage, aiMessage, systemMessage, toolMessage } from '../types/llm-types.ts';
 import type { MessageContent, ContentPart } from '../types/llm-types.ts';
 import { convertJsonSchemaToZod } from '../utils/json-schema-to-zod.ts';
 import type {
   P2PModelInfo,
+  P2PModelType,
   P2PWireMessage,
   P2PWireContentPart,
   P2PWireTool,
@@ -870,6 +872,28 @@ export class P2PManager {
     return best[Math.floor(Math.random() * best.length)]!;
   }
 
+  /**
+   * Return all candidates sorted by score (ascending = least busy first).
+   * Within the same score tier, order is randomized for fair distribution.
+   * Used for retry-across-peers: try the best peer first, then next-best, etc.
+   */
+  selectPeersRanked<T extends { peerId: string }>(candidates: T[]): T[] {
+    if (candidates.length <= 1) return [...candidates];
+
+    const scored = candidates.map(c => {
+      const inFlight = this.inFlightCounts.get(c.peerId) ?? 0;
+      const peerLoad = this.peers.get(c.peerId)?.info.load ?? 0;
+      return { candidate: c, score: inFlight + peerLoad };
+    });
+
+    scored.sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score;
+      return Math.random() - 0.5;
+    });
+
+    return scored.map(s => s.candidate);
+  }
+
   // --- Public API ---
 
   getStatus(): P2PStatus {
@@ -988,17 +1012,19 @@ export class P2PManager {
 
   /**
    * Find ALL remote models matching a name (case-insensitive, partial match).
+   * Optionally filter by model type to avoid cross-type matches (e.g. "omni" matching chat + image + tts).
    * Used for distributed workloads where we want to spread work across multiple peers
    * sharing the same model, regardless of what engine they run it on.
    */
-  getRemoteModelsByName(modelRef: string): RemoteModel[] {
+  getRemoteModelsByName(modelRef: string, type?: P2PModelType): RemoteModel[] {
     if (!modelRef) return [];
     const ref = modelRef.toLowerCase();
-    return this.getRemoteModels().filter(m =>
-      m.name.toLowerCase() === ref ||
-      m.model.toLowerCase() === ref ||
-      m.model.toLowerCase().includes(ref)
-    );
+    return this.getRemoteModels().filter(m => {
+      if (type && m.type !== type) return false;
+      return m.name.toLowerCase() === ref ||
+        m.model.toLowerCase() === ref ||
+        m.model.toLowerCase().includes(ref);
+    });
   }
 
   /**
@@ -1272,6 +1298,7 @@ export class P2PManager {
 
   getLocalSharedModels(): P2PModelInfo[] {
     const result: P2PModelInfo[] = [];
+    const omniStatus = OmniModelCache.getStatus();
 
     // Chat models from 'llm' section
     const blanketShare = process.env['P2P_SHARE_LLMS'] === 'true';
@@ -1281,29 +1308,42 @@ export class P2PManager {
         const config = getModelConfig(name);
         if (config.active === false) continue;
         if (config.share || blanketShare) {
-          result.push({ name, model: config.model, type: 'chat' });
+          if (config.provider === 'omni') {
+            // Omni chat models: must be loaded to be shared
+            if (!omniStatus.llmChat.loaded) continue;
+          }
+          result.push({ name, model: config.model, type: 'chat', modelId: config.model });
         }
       } catch { /* skip bad configs */ }
     }
 
-    // Image models from 'image' section
-    for (const { name, config } of listImageConfigs()) {
-      if (config.share) {
-        result.push({ name, model: config.description || config.modelPath?.split('/').pop() || name, type: 'image' });
+    // Image models from 'image' section — only advertise if loaded
+    if (omniStatus.image.loaded) {
+      for (const { name, config } of listImageConfigs()) {
+        if (config.share) {
+          const modelId = config.modelPath?.split('/').pop() || name;
+          result.push({ name, model: config.description || modelId, type: 'image', modelId });
+        }
       }
     }
 
-    // Video models from 'video' section
-    for (const { name, config } of listVideoConfigs()) {
-      if (config.share) {
-        result.push({ name, model: config.description || config.modelPath?.split('/').pop() || config.model || name, type: 'image' }); // video models generate frames (images)
+    // Video models from 'video' section — only advertise if image model is loaded (video uses image model)
+    if (omniStatus.image.loaded) {
+      for (const { name, config } of listVideoConfigs()) {
+        if (config.share) {
+          const modelId = config.modelPath?.split('/').pop() || config.model || name;
+          result.push({ name, model: config.description || modelId, type: 'image', modelId }); // video models generate frames (images)
+        }
       }
     }
 
-    // TTS models from 'tts' section
-    for (const { name, config } of listTtsConfigs()) {
-      if (config.share) {
-        result.push({ name, model: config.description || config.modelPath?.split('/').pop() || name, type: 'tts' });
+    // TTS models from 'tts' section — only advertise if loaded
+    if (omniStatus.tts.loaded) {
+      for (const { name, config } of listTtsConfigs()) {
+        if (config.share) {
+          const modelId = config.modelPath?.split('/').pop() || name;
+          result.push({ name, model: config.description || modelId, type: 'tts', modelId });
+        }
       }
     }
 

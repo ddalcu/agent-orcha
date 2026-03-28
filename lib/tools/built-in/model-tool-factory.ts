@@ -14,6 +14,35 @@ interface P2PDeps {
   leverage: LeverageMode;
 }
 
+/** Track peer+model failures to avoid retrying broken peers (works even if remote hosts run old code). */
+const FAILED_PEER_TTL = 5 * 60 * 1000; // 5 minutes
+const failedPeers = new Map<string, number>(); // key: `${peerId}:${taskType}:${modelName}` → timestamp
+
+function markPeerFailed(peerId: string, taskType: string, modelName: string): void {
+  failedPeers.set(`${peerId}:${taskType}:${modelName}`, Date.now());
+}
+
+function isPeerFailed(peerId: string, taskType: string, modelName: string): boolean {
+  const key = `${peerId}:${taskType}:${modelName}`;
+  const ts = failedPeers.get(key);
+  if (!ts) return false;
+  if (Date.now() - ts > FAILED_PEER_TTL) {
+    failedPeers.delete(key);
+    return false;
+  }
+  return true;
+}
+
+/** Deduplicate candidates by peerId (getRemoteModelsByName may return multiple model entries per peer). */
+function deduplicateByPeer<T extends { peerId: string }>(candidates: T[]): T[] {
+  const seen = new Set<string>();
+  return candidates.filter(c => {
+    if (seen.has(c.peerId)) return false;
+    seen.add(c.peerId);
+    return true;
+  });
+}
+
 let _generatedDir = '';
 let _workspaceRoot = '';
 
@@ -53,22 +82,38 @@ async function generateImageLocally(_name: string, config: ImageModelConfig, arg
 }
 
 async function generateImageRemotely(name: string, config: ImageModelConfig, args: { input: string }, p2pDeps: P2PDeps): Promise<string | null> {
-  const remotePeers = p2pDeps.manager.getRemoteModelsByName(name);
+  const remotePeers = p2pDeps.manager.getRemoteModelsByName(name, 'image');
   if (remotePeers.length === 0) return null;
 
-  const peer = p2pDeps.manager.selectBestPeer(remotePeers);
-  logger.info(`[ModelToolFactory] Using remote peer "${peer.peerName}" for image model "${name}"`);
-  const result = await p2pDeps.manager.invokeRemoteModelTask(
-    peer.peerId, peer.name, 'image',
-    { prompt: args.input, steps: config.steps, width: config.width, height: config.height },
-  );
+  const unique = deduplicateByPeer(remotePeers);
+  const eligible = unique.filter(p => !isPeerFailed(p.peerId, 'image', name));
+  if (eligible.length === 0) return null; // all peers recently failed — let caller handle fallback
 
-  await fs.mkdir(_generatedDir, { recursive: true });
-  const fileName = `image_${Date.now()}.png`;
-  const filePath = path.join(_generatedDir, fileName);
-  await fs.writeFile(filePath, Buffer.from(result.data, 'base64'));
+  const ranked = p2pDeps.manager.selectPeersRanked(eligible);
+  let lastError: Error | undefined;
 
-  return JSON.stringify({ __modelTask: true, task: 'text-to-image', image: `/generated/${fileName}`, remote: peer.peerName });
+  for (const peer of ranked) {
+    try {
+      logger.info(`[ModelToolFactory] Trying remote peer "${peer.peerName}" for image model "${name}"`);
+      const result = await p2pDeps.manager.invokeRemoteModelTask(
+        peer.peerId, peer.name, 'image',
+        { prompt: args.input, steps: config.steps, width: config.width, height: config.height },
+      );
+
+      await fs.mkdir(_generatedDir, { recursive: true });
+      const fileName = `image_${Date.now()}.png`;
+      const filePath = path.join(_generatedDir, fileName);
+      await fs.writeFile(filePath, Buffer.from(result.data, 'base64'));
+
+      return JSON.stringify({ __modelTask: true, task: 'text-to-image', image: `/generated/${fileName}`, remote: peer.peerName });
+    } catch (err) {
+      lastError = err as Error;
+      markPeerFailed(peer.peerId, 'image', name);
+      logger.warn(`[ModelToolFactory] Peer "${peer.peerName}" failed for image model "${name}":`, (err as Error).message);
+    }
+  }
+
+  throw lastError ?? new Error('All remote peers failed for image generation');
 }
 
 function createImageTool(name: string, config: ImageModelConfig, p2pDeps?: P2PDeps): StructuredTool {
@@ -158,22 +203,38 @@ async function generateTtsLocally(config: TtsModelConfig, args: { text: string; 
 }
 
 async function generateTtsRemotely(name: string, args: { text: string; voice?: string; referenceAudio?: string }, p2pDeps: P2PDeps): Promise<string | null> {
-  const remotePeers = p2pDeps.manager.getRemoteModelsByName(name);
+  const remotePeers = p2pDeps.manager.getRemoteModelsByName(name, 'tts');
   if (remotePeers.length === 0) return null;
 
-  const peer = p2pDeps.manager.selectBestPeer(remotePeers);
-  logger.info(`[ModelToolFactory] Using remote peer "${peer.peerName}" for TTS model "${name}"`);
-  const result = await p2pDeps.manager.invokeRemoteModelTask(
-    peer.peerId, peer.name, 'tts',
-    { text: args.text, voice: args.voice, referenceAudio: args.referenceAudio },
-  );
+  const unique = deduplicateByPeer(remotePeers);
+  const eligible = unique.filter(p => !isPeerFailed(p.peerId, 'tts', name));
+  if (eligible.length === 0) return null;
 
-  await fs.mkdir(_generatedDir, { recursive: true });
-  const fileName = `audio_${Date.now()}.wav`;
-  const filePath = path.join(_generatedDir, fileName);
-  await fs.writeFile(filePath, Buffer.from(result.data, 'base64'));
+  const ranked = p2pDeps.manager.selectPeersRanked(eligible);
+  let lastError: Error | undefined;
 
-  return JSON.stringify({ __modelTask: true, task: 'text-to-speech', audio: `/generated/${fileName}`, remote: peer.peerName });
+  for (const peer of ranked) {
+    try {
+      logger.info(`[ModelToolFactory] Trying remote peer "${peer.peerName}" for TTS model "${name}"`);
+      const result = await p2pDeps.manager.invokeRemoteModelTask(
+        peer.peerId, peer.name, 'tts',
+        { text: args.text, voice: args.voice, referenceAudio: args.referenceAudio },
+      );
+
+      await fs.mkdir(_generatedDir, { recursive: true });
+      const fileName = `audio_${Date.now()}.wav`;
+      const filePath = path.join(_generatedDir, fileName);
+      await fs.writeFile(filePath, Buffer.from(result.data, 'base64'));
+
+      return JSON.stringify({ __modelTask: true, task: 'text-to-speech', audio: `/generated/${fileName}`, remote: peer.peerName });
+    } catch (err) {
+      lastError = err as Error;
+      markPeerFailed(peer.peerId, 'tts', name);
+      logger.warn(`[ModelToolFactory] Peer "${peer.peerName}" failed for TTS model "${name}":`, (err as Error).message);
+    }
+  }
+
+  throw lastError ?? new Error('All remote peers failed for TTS');
 }
 
 function createTtsTool(name: string, config: TtsModelConfig, p2pDeps?: P2PDeps): StructuredTool {

@@ -37,8 +37,9 @@ export type P2PModelType = 'chat' | 'image' | 'tts';
 
 export interface P2PModelInfo {
   name: string;           // config key on host
-  model: string;          // model string
+  model: string;          // model string (display / description)
   type: P2PModelType;     // what kind of model
+  modelId?: string;       // actual model file/identifier (e.g. "flux-2-klein-4b-Q4_K_M.gguf", "qwen3.5-4b")
   capabilities?: string[];
 }
 

@@ -96,6 +96,46 @@
     "tags": ["video", "p2p", "generation", "distributed"]
   },
   {
+    "name": "org-ceo",
+    "type": "agent",
+    "description": "Autonomous CEO agent for organizations — triages tickets, delegates to team, creates agents, reviews work.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/org-ceo.agent.yaml",
+    "tags": ["organization", "ceo", "autonomous", "tickets"]
+  },
+  {
+    "name": "image-creator",
+    "type": "agent",
+    "description": "Creative assistant that generates images from text descriptions using FLUX.2 via node-omni-orcha.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/image-creator.agent.yaml",
+    "tags": ["image", "generation", "creative"]
+  },
+  {
+    "name": "voice-clone",
+    "type": "agent",
+    "description": "Text-to-speech assistant with Qwen3 voice cloning — upload a short audio sample and it speaks in that voice.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/voice-clone.agent.yaml",
+    "tags": ["tts", "voice-cloning", "audio"]
+  },
+  {
+    "name": "p2pvoice",
+    "type": "agent",
+    "description": "Text-to-speech agent that uses a remote peer's TTS model via P2P network.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/p2pvoice.agent.yaml",
+    "tags": ["tts", "p2p", "audio"]
+  },
+  {
+    "name": "simple-toolbox",
+    "type": "agent",
+    "description": "Simple agent that uses calculator and text-formatter functions — a starter template for function-based agents.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/agents/simple-toolbox.agent.yaml",
+    "tags": ["starter", "functions", "demo"]
+  },
+  {
     "name": "orcha-builder",
     "type": "skill",
     "description": "Documentation for creating and modifying ORCHA resources (agents, workflows, skills, functions, knowledge stores).",
@@ -126,6 +166,22 @@
     "author": "Agent Orcha",
     "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/web-pilot",
     "tags": ["browser", "automation"]
+  },
+  {
+    "name": "org-ceo",
+    "type": "skill",
+    "description": "CEO skill for agent-based organization leadership — ticket triage, delegation, resource creation, and work review.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/org-ceo",
+    "tags": ["organization", "ceo", "autonomous"]
+  },
+  {
+    "name": "org-ceo-cc",
+    "type": "skill",
+    "description": "CEO skill for Claude Code — manages organizations via Agent Orcha REST APIs.",
+    "author": "Agent Orcha",
+    "url": "https://github.com/ddalcu/agent-orcha/tree/main/templates/skills/org-ceo-cc",
+    "tags": ["organization", "ceo", "claude-code"]
   },
   {
     "name": "example-workflow",

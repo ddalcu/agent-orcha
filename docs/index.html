@@ -68,7 +68,7 @@
             <a href="https://www.npmjs.com/package/agent-orcha" class="btn btn-secondary btn-large" target="_blank" rel="noopener"><i class="fa-brands fa-npm"></i> View on NPM</a>
           </div>
           <div class="hero-downloads fade-in" style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            <a href="https://github.com/ddalcu/agent-orcha/releases/latest/download/agent-orcha-macos-arm64.zip" class="btn btn-secondary"><i class="fa-brands fa-apple"></i> macOS</a>
+            <a href="https://github.com/ddalcu/agent-orcha/releases/latest/download/agent-orcha-macos-arm64.dmg" class="btn btn-secondary"><i class="fa-brands fa-apple"></i> macOS</a>
             <a href="https://github.com/ddalcu/agent-orcha/releases/latest/download/agent-orcha-win-x64.zip" class="btn btn-secondary"><i class="fa-brands fa-windows"></i> Windows</a>
             <a href="https://github.com/ddalcu/agent-orcha/releases/latest/download/agent-orcha-linux-x64.tar.gz" class="btn btn-secondary"><i class="fa-brands fa-linux"></i> Linux</a>
           </div>
@@ -88,14 +88,10 @@
             <div class="terminal-content" data-tab-content="npx">
               <div class="terminal-line">
                 <span class="terminal-prompt">$</span>
-                <span class="terminal-command">npx agent-orcha init my-project && cd my-project</span>
+                <span class="terminal-command">npx agent-orcha@latest</span>
               </div>
               <div class="terminal-line">
-                <span class="terminal-prompt">$</span>
-                <span class="terminal-command">npx agent-orcha start</span>
-              </div>
-              <div class="terminal-line">
-                <span class="terminal-output">✓ Project initialized with example agents and workflows</span>
+                <span class="terminal-output">✓ Workspace scaffolded at ~/.orcha/workspace</span>
               </div>
               <div class="terminal-line">
                 <span class="terminal-output"><i class="fa-solid fa-rocket"></i> Server running on http://localhost:3000</span>
@@ -107,7 +103,7 @@
                 <span class="terminal-command">docker run -p 3000:3000 \</span>
               </div>
               <div class="terminal-line">
-                <span class="terminal-command" style="margin-left:1.5rem;">-v ./my-project:/data \</span>
+                <span class="terminal-command" style="margin-left:1.5rem;">-v ./my-workspace:/data \</span>
               </div>
               <div class="terminal-line">
                 <span class="terminal-command" style="margin-left:1.5rem;">ddalcu/agent-orcha</span>
@@ -145,13 +141,12 @@
               <pre><code># Mark an agent as shared
 name: code-reviewer
 p2p: true
-llm:
-  name: default
+model: default
 
 # Or use a remote peer's LLM
 name: my-agent
-llm: p2p          # auto-select best available
-llm: p2p:llama3   # specific remote model</code></pre>
+model: p2p          # auto-select best available
+model: p2p:llama3   # specific remote model</code></pre>
             </div>
           </div>
           <div class="code-block mt-md">
@@ -164,6 +159,45 @@ P2P_ENABLED=true npx agent-orcha start
 
 # Peers on the same network discover
 # each other automatically</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI Organizations -->
+  <section class="section">
+    <div class="container">
+      <div class="split">
+        <div class="fade-in">
+          <h2 class="mb-md">AI-Managed Organizations</h2>
+          <p class="mb-lg">Create autonomous organizations where AI CEOs manage tickets, delegate work to agent teams, and run on scheduled heartbeats. Each org is an isolated workspace with its own board, routines, and reporting hierarchy.</p>
+          <ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.75rem;">
+            <li style="color: var(--color-text-secondary);"><i class="fa-solid fa-building" style="color: var(--color-accent-cyan); width: 1.5rem;"></i> Multi-tenant organizations with tickets, routines, org charts, and dashboards</li>
+            <li style="color: var(--color-text-secondary);"><i class="fa-solid fa-robot" style="color: var(--color-accent-cyan); width: 1.5rem;"></i> Two CEO strategies — ORCHA Agent CEO or Claude Code CEO for autonomous management</li>
+            <li style="color: var(--color-text-secondary);"><i class="fa-solid fa-clock" style="color: var(--color-accent-cyan); width: 1.5rem;"></i> Scheduled heartbeats with cron — CEO triages tickets and delegates to team members automatically</li>
+            <li style="color: var(--color-text-secondary);"><i class="fa-solid fa-chart-line" style="color: var(--color-accent-cyan); width: 1.5rem;"></i> Full dashboards with CEO run history, token usage, and team performance analytics</li>
+          </ul>
+        </div>
+        <div class="fade-in">
+          <div class="code-block">
+            <div class="code-header">
+              <span class="code-language">YAML</span>
+            </div>
+            <div class="code-content">
+              <pre><code># CEO agent for your organization
+name: org-ceo
+description: Autonomous CEO agent
+model: default
+
+tools:
+  - org:list_tickets
+  - org:update_ticket
+  - org:assign_agent
+
+skills:
+  - org-ceo</code></pre>
             </div>
           </div>
         </div>
@@ -184,7 +218,7 @@ P2P_ENABLED=true npx agent-orcha start
         <div class="card fade-in">
           <div class="card-icon"><i class="fa-solid fa-rotate"></i></div>
           <h3 class="card-title">Model Agnostic</h3>
-          <p class="card-description">Seamlessly swap between OpenAI, Gemini, Anthropic, or local LLMs (llama-cpp, MLX, Ollama, LM Studio). Auto-download models and manage VRAM. Zero vendor lock-in.</p>
+          <p class="card-description">Seamlessly swap between OpenAI, Gemini, Anthropic, or local LLMs (Omni native, Ollama, LM Studio). Download and run models natively with zero setup. Zero vendor lock-in.</p>
         </div>
         <div class="card fade-in">
           <div class="card-icon"><i class="fa-solid fa-share-nodes"></i></div>
@@ -220,6 +254,16 @@ P2P_ENABLED=true npx agent-orcha start
           <div class="card-icon"><i class="fa-solid fa-heart"></i></div>
           <h3 class="card-title">Forever Open Source</h3>
           <p class="card-description">No pricing, no commercial licenses, no vendor lock-in. MIT licensed and always will be. Built by developers, for developers.</p>
+        </div>
+        <div class="card fade-in">
+          <div class="card-icon"><i class="fa-solid fa-building"></i></div>
+          <h3 class="card-title">AI Organizations</h3>
+          <p class="card-description">Create autonomous orgs with AI CEOs that manage tickets, delegate to agent teams, and report on progress. Scheduled heartbeats keep everything running.</p>
+        </div>
+        <div class="card fade-in">
+          <div class="card-icon"><i class="fa-solid fa-image"></i></div>
+          <h3 class="card-title">Image, Voice &amp; Video</h3>
+          <p class="card-description">Generate images, clone voices, and create videos using local or P2P-distributed models. Built-in tools for agents to produce rich media content.</p>
         </div>
       </div>
     </div>
@@ -354,7 +398,7 @@ output:
         </div>
         <div class="card">
           <h4 class="card-title">LLM Providers</h4>
-          <p class="card-description">OpenAI &middot; Anthropic<br>Gemini &middot; Ollama<br>llama-cpp &middot; MLX<br>LM Studio &middot; P2P</p>
+          <p class="card-description">OpenAI &middot; Anthropic<br>Gemini &middot; Ollama<br>Omni (local)<br>LM Studio &middot; P2P</p>
         </div>
         <div class="card">
           <h4 class="card-title">Integrations</h4>
@@ -379,7 +423,7 @@ output:
   "openapi": "3.0.0",
   "info": {
     "title": "Agent Orcha API",
-    "version": "2026.320",
+    "version": "2026.328",
     "description": "API for orchestrating agents, workflows, knowledge stores, functions, MCP servers, and LLMs."
   },
   "servers": [
@@ -459,7 +503,7 @@ output:
           <h4>About</h4>
           <ul class="footer-links">
             <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
-            <li>Version 2026.320</li>
+            <li>Version 2026.328</li>
             <li>MIT License</li>
           </ul>
         </div>

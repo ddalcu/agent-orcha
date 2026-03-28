@@ -1552,15 +1552,18 @@
           {#if p2pEnabled && selectedEngine}
             {@const engEntry = llmConfig?.llm?.[selectedEngine]}
             <div class="llm-server-section">
-              <div class="llm-section-content flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <i class="fas fa-share-nodes text-xs {engEntry?.share ? 'text-accent' : 'text-muted'}"></i>
-                  <span class="text-sm {engEntry?.share ? 'text-primary' : 'text-secondary'}">P2P Sharing</span>
-                  {#if engEntry?.share}
-                    <span class="badge badge-accent text-2xs">Shared</span>
-                  {/if}
+              <div class="llm-section-content">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <i class="fas fa-share-nodes text-xs {engEntry?.share ? 'text-accent' : 'text-muted'}"></i>
+                    <span class="text-sm {engEntry?.share ? 'text-primary' : 'text-secondary'}">P2P Sharing</span>
+                    {#if engEntry?.share}
+                      <span class="badge badge-accent text-2xs">Shared</span>
+                    {/if}
+                  </div>
+                  <Toggle active={engEntry?.share === true} disabled={togglingP2P === selectedEngine} onchange={() => toggleModelP2P(selectedEngine!)} />
                 </div>
-                <Toggle active={engEntry?.share === true} disabled={togglingP2P === selectedEngine} onchange={() => toggleModelP2P(selectedEngine!)} />
+                <p class="text-2xs text-muted mt-1">Models must be loaded (started) to be shared on the P2P network.</p>
               </div>
             </div>
           {/if}
@@ -1927,10 +1930,11 @@
             {@const ttsName = ttsConfigs.length > 0 ? ttsConfigs[0][0] : ''}
             <div class="llm-server-section">
               <div class="llm-section-content">
-                <div class="flex items-center gap-2 mb-2">
+                <div class="flex items-center gap-2 mb-1">
                   <i class="fas fa-share-nodes text-xs text-accent"></i>
                   <span class="text-sm text-primary">P2P Sharing</span>
                 </div>
+                <p class="text-2xs text-muted mb-2">Models must be loaded (started) to be shared on the P2P network.</p>
                 <div class="space-y-2">
                   <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
@@ -2147,7 +2151,7 @@
                       {#if isEmb}<i class="fas fa-circle text-blue text-2xs"></i>{/if}
                       {#if isImageLoaded}<i class="fas fa-circle text-purple text-2xs"></i>{/if}
                       {#if isTtsLoaded}<i class="fas fa-circle text-green text-2xs"></i>{/if}
-                      <span class="font-medium text-primary text-sm truncate">{model.fileName}</span>
+                      <span class="font-medium text-primary text-xs truncate">{model.fileName.replace(/\.gguf$/i, '')}</span>
                       {#if modelRole === 'image'}
                         <span class="badge badge-purple text-2xs">IMAGE</span>
                       {:else if modelRole === 'tts'}
@@ -2161,7 +2165,7 @@
                         <span class="llm-recommended-star" title="Recommended"><i class="fas fa-star"></i></span>
                       {/if}
                     </div>
-                    {#if model.repo}<div class="text-xs text-muted truncate">{model.repo}</div>{/if}
+                    {#if model.repo}<div class="llm-model-path text-muted truncate">{model.repo}</div>{/if}
                     {#if caps && (caps.tools || caps.vision || caps.reasoning)}
                       <div class="flex items-center gap-1 mt-1">
                         {#if caps.tools}<span class="cap-badge cap-badge-tools" title="Tool calling"><i class="fas fa-wrench mr-1"></i>tools</span>{/if}
