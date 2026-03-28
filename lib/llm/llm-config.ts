@@ -62,6 +62,7 @@ export const ImageModelConfigSchema = z.object({
   llm: z.string().optional().describe('Path to LLM text encoder (FLUX.2 uses Qwen3)'),
   vae: z.string().optional().describe('Path to VAE model'),
   steps: z.number().optional().describe('Number of sampling steps'),
+  cfgScale: z.number().optional().describe('Classifier-free guidance scale (1.0 for FLUX)'),
   width: z.number().optional().describe('Default image width'),
   height: z.number().optional().describe('Default image height'),
   description: z.string().default(''),

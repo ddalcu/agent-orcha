@@ -71,7 +71,10 @@ image:
     modelPath: .models/flux2-klein/flux-2-klein-4b-Q4_K_M.gguf
     llm: .models/flux2-klein/Qwen3-4B-Q4_K_M.gguf
     vae: .models/flux2-klein/flux2-vae.safetensors
-    steps: 20
+    steps: 5
+    cfgScale: 1.0
+    width: 512
+    height: 512
     description: flux2-klein
     share: true
 tts:

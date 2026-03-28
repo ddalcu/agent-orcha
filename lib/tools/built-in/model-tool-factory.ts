@@ -39,6 +39,7 @@ async function generateImageLocally(_name: string, config: ImageModelConfig, arg
 
   const buffer = await imageModel.generate(args.input, {
     steps: config.steps,
+    cfgScale: config.cfgScale,
     width: config.width,
     height: config.height,
   });

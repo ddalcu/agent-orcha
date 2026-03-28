@@ -6,6 +6,7 @@ import { logger } from '../logger.ts';
 export class CompanyDB {
   private db: DatabaseSync;
   private dbPath: string;
+  private closed = false;
 
   constructor(workspaceRoot: string) {
     const dataDir = path.join(workspaceRoot, '.orcha-data');
@@ -107,6 +108,8 @@ export class CompanyDB {
   }
 
   close(): void {
+    if (this.closed) return;
+    this.closed = true;
     this.db.close();
     logger.info('[CompanyDB] Database closed');
   }
