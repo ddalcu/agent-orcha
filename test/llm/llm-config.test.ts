@@ -1,6 +1,8 @@
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import {
   loadModelsConfig,
@@ -127,6 +129,50 @@ describe('isModelsConfigLoaded', () => {
   it('should return true after loading config', async () => {
     await loadModelsConfig(fixturePath);
     assert.equal(isModelsConfigLoaded(), true);
+  });
+});
+
+describe('loadModelsConfig with null apiKey (YAML null from empty env var)', () => {
+  it('should parse without error when apiKey is YAML null', async () => {
+    // YAML null occurs when an env var is set to empty string and substituted into the config
+    const yaml = `
+version: "1.0"
+llm:
+  default: local
+  local:
+    provider: local
+    model: llama3
+    apiKey: null
+embeddings:
+  default: local
+  local:
+    provider: local
+    model: nomic-embed
+    apiKey: null
+`;
+    const tmpFile = path.join(os.tmpdir(), `models-null-apikey-${Date.now()}.yaml`);
+    await fs.writeFile(tmpFile, yaml);
+    try {
+      const config = await loadModelsConfig(tmpFile);
+      const localLlm = config.llm['local'];
+      assert.ok(localLlm && typeof localLlm !== 'string');
+      // null should be coerced to undefined — not propagated as null
+      assert.equal((localLlm as any).apiKey, undefined);
+      const localEmb = config.embeddings['local'];
+      assert.ok(localEmb && typeof localEmb !== 'string');
+      assert.equal((localEmb as any).apiKey, undefined);
+    } finally {
+      await fs.unlink(tmpFile).catch(() => { /* temp file may already be removed */ });
+    }
+  });
+
+  it('resolveApiKey should handle undefined apiKey from null-coerced config', () => {
+    // When apiKey was null in YAML and got coerced to undefined, resolveApiKey must not crash
+    process.env.OPENAI_API_KEY = '';
+    const result = resolveApiKey('openai', undefined);
+    // Empty env var → falls back to the (empty) env value or undefined; either is acceptable
+    assert.ok(result === undefined || typeof result === 'string');
+    delete process.env.OPENAI_API_KEY;
   });
 });
 
