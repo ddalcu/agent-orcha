@@ -28,17 +28,21 @@ export class OmniModelCache {
   private static ttsModel: TtsModel | null = null;
   private static ttsPath: string | null = null;
 
+  private static llmChatMmproj: string | null = null;
+
   static async getLlmChat(modelPath: string, options?: LlmLoadOptions): Promise<LlmModel> {
-    if (this.llmChat && this.llmChatPath === modelPath) {
+    const requestedMmproj = options?.mmprojPath ?? null;
+    if (this.llmChat && this.llmChatPath === modelPath && this.llmChatMmproj === requestedMmproj) {
       return this.llmChat;
     }
     if (this.llmChat) {
       logger.info(`[OmniModelCache] Unloading chat LLM: ${this.llmChatPath}`);
       await this.llmChat.unload();
     }
-    logger.info(`[OmniModelCache] Loading chat LLM: ${modelPath}`);
+    logger.info(`[OmniModelCache] Loading chat LLM: ${modelPath}${requestedMmproj ? ` (mmproj: ${requestedMmproj})` : ''}`);
     this.llmChat = await loadModel(modelPath, { ...options, type: 'llm', contextSize: options?.contextSize || 4096 }) as LlmModel;
     this.llmChatPath = modelPath;
+    this.llmChatMmproj = requestedMmproj;
     return this.llmChat;
   }
 
@@ -93,6 +97,7 @@ export class OmniModelCache {
       await this.llmChat.unload();
       this.llmChat = null;
       this.llmChatPath = null;
+      this.llmChatMmproj = null;
     }
   }
 

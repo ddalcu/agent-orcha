@@ -10,7 +10,9 @@ import { detectProvider, type LLMProvider } from './provider-detector.ts';
 import { logger } from '../logger.ts';
 import type { P2PManager } from '../p2p/p2p-manager.ts';
 import type { LeverageMode } from '../agents/types.ts';
+import path from 'node:path';
 import { resolveModelFile } from '../local-llm/resolve-model-path.ts';
+import { ModelManager } from '../local-llm/model-manager.ts';
 
 export class LLMFactory {
   private static instances: Map<string, ChatModel> = new Map();
@@ -193,8 +195,22 @@ export class LLMFactory {
       modelPath = await resolveModelFile(this.modelsDir, modelPath);
     }
 
+    // Auto-detect mmproj for vision models
+    let mmprojPath: string | undefined;
+    if (this.modelsDir) {
+      const workspaceRoot = path.dirname(this.modelsDir); // modelsDir is <workspace>/.models
+      const manager = new ModelManager(workspaceRoot);
+      const modelFileName = path.basename(modelPath);
+      const found = await manager.findMmprojForModel(modelFileName);
+      if (found) {
+        mmprojPath = found;
+        logger.info(`[LLMFactory] Auto-detected mmproj for vision: ${mmprojPath}`);
+      }
+    }
+
     return new OmniChatModel({
       modelPath,
+      ...(mmprojPath ? { mmprojPath } : {}),
       contextSize: config.contextSize,
       maxTokens: config.maxTokens,
       thinkingBudget: config.thinkingBudget ?? config.reasoningBudget,

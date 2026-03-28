@@ -4,7 +4,7 @@ import { createReActAgent } from './react-loop.ts';
 import { humanMessage, aiMessage, contentToText } from '../types/llm-types.ts';
 import type { ChatModel, BaseMessage, MessageContent, ContentPart } from '../types/llm-types.ts';
 import type { StructuredTool } from '../types/llm-types.ts';
-import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions, AgentMemoryConfig, AgentCompanyContext } from './types.ts';
+import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions, AgentMemoryConfig, AgentOrgContext } from './types.ts';
 import { resolveP2PConfig } from './types.ts';
 import { LLMFactory } from '../llm/llm-factory.ts';
 import { resolveAgentModelRef } from '../llm/types.ts';
@@ -137,12 +137,12 @@ export class AgentExecutor {
     input: Record<string, unknown> | AgentInvokeOptions
   ): Promise<AgentResult> {
     const startTime = Date.now();
-    const { input: actualInput, sessionId, companyContext } = this.parseInvokeOptions(input);
+    const { input: actualInput, sessionId, orgContext } = this.parseInvokeOptions(input);
 
     // Augment system prompt with company context if provided
     let effectiveDefinition = definition;
-    if (companyContext) {
-      const contextPrompt = this.buildCompanyContextPrompt(companyContext);
+    if (orgContext) {
+      const contextPrompt = this.buildOrgContextPrompt(orgContext);
       effectiveDefinition = {
         ...definition,
         prompt: {
@@ -163,7 +163,7 @@ export class AgentExecutor {
     input: Record<string, unknown>;
     sessionId?: string;
     signal?: AbortSignal;
-    companyContext?: AgentCompanyContext;
+    orgContext?: AgentOrgContext;
   } {
     // Check if this is AgentInvokeOptions by checking for both 'input' property and if sessionId is present
     if ('input' in input && typeof input.input === 'object' && input.input !== null) {
@@ -172,19 +172,26 @@ export class AgentExecutor {
         input: options.input,
         sessionId: options.sessionId,
         signal: options.signal,
-        companyContext: options.companyContext,
+        orgContext: options.orgContext,
       };
     }
     // Otherwise treat as direct input
     return { input: input as Record<string, unknown>, sessionId: undefined };
   }
 
-  private buildCompanyContextPrompt(ctx: AgentCompanyContext): string {
-    let prompt = `<company_context>\nYou are currently working on behalf of company "${ctx.company.name}" (${ctx.company.prefix}).`;
-    if (ctx.company.description) {
-      prompt += `\n${ctx.company.description}`;
+  private buildOrgContextPrompt(ctx: AgentOrgContext): string {
+    let prompt = `<org_context>\nYou are currently working on behalf of organization "${ctx.organization.name}" (${ctx.organization.prefix}).`;
+    if (ctx.organization.description) {
+      prompt += `\n${ctx.organization.description}`;
     }
-    prompt += '\n</company_context>';
+
+    if (ctx.orgChart && ctx.orgChart.length > 0) {
+      prompt += '\n\nOrg Chart:';
+      for (const m of ctx.orgChart) {
+        prompt += `\n- ${m.agentName} (${m.role}${m.title ? `, ${m.title}` : ''})`;
+      }
+    }
+    prompt += '\n</org_context>';
 
     if (ctx.ticket) {
       prompt += `\n\n<ticket_context>\nTicket: ${ctx.ticket.identifier} — ${ctx.ticket.title}\nPriority: ${ctx.ticket.priority}`;
@@ -192,6 +199,14 @@ export class AgentExecutor {
         prompt += `\n${ctx.ticket.description}`;
       }
       prompt += '\n</ticket_context>';
+    }
+
+    if (ctx.activeTickets && ctx.activeTickets.length > 0) {
+      prompt += '\n\n<active_tickets>';
+      for (const t of ctx.activeTickets) {
+        prompt += `\n- ${t.identifier}: ${t.title} [${t.status}] ${t.priority}${t.assigneeAgent ? ` → ${t.assigneeAgent}` : ''}`;
+      }
+      prompt += '\n</active_tickets>';
     }
 
     return prompt;
@@ -462,11 +477,11 @@ export class AgentExecutor {
     tools: StructuredTool[],
     input: Record<string, unknown> | AgentInvokeOptions
   ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
-    const { input: actualInput, sessionId, signal, companyContext } = this.parseInvokeOptions(input);
+    const { input: actualInput, sessionId, signal, orgContext } = this.parseInvokeOptions(input);
 
     // Augment system prompt with company context if provided
-    if (companyContext) {
-      const contextPrompt = this.buildCompanyContextPrompt(companyContext);
+    if (orgContext) {
+      const contextPrompt = this.buildOrgContextPrompt(orgContext);
       definition = {
         ...definition,
         prompt: {

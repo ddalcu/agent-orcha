@@ -576,17 +576,28 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
           // Auto-download mmproj for vision models (into the same directory)
           if (!clientDisconnected && !fileName!.toLowerCase().includes('mmproj')) {
             const modelDirName = generateDirName(fileName!);
-            const mmproj = await manager.autoDownloadMmproj(
-              repo,
-              (progress) => {
-                if (!clientDisconnected) {
-                  reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
-                }
-              },
-              modelDirName,
-            );
-            if (mmproj && !clientDisconnected) {
-              reply.raw.write(`data: ${JSON.stringify({ type: 'mmproj', model: mmproj })}\n\n`);
+            if (!clientDisconnected) {
+              reply.raw.write(`data: ${JSON.stringify({ type: 'mmproj_start' })}\n\n`);
+            }
+            try {
+              const mmproj = await manager.autoDownloadMmproj(
+                repo,
+                (progress) => {
+                  if (!clientDisconnected) {
+                    reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
+                  }
+                },
+                modelDirName,
+              );
+              if (mmproj && !clientDisconnected) {
+                reply.raw.write(`data: ${JSON.stringify({ type: 'mmproj', model: mmproj })}\n\n`);
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              logger.warn(`[LocalLLM] mmproj auto-download failed: ${msg}`);
+              if (!clientDisconnected) {
+                reply.raw.write(`data: ${JSON.stringify({ type: 'mmproj_error', error: msg })}\n\n`);
+              }
             }
           }
         }
@@ -664,9 +675,16 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       const currentDefault = fullConfig?.llm[resolvedKey];
       const currentObj = (currentDefault && typeof currentDefault !== 'string') ? currentDefault : null;
 
+      // Auto-detect mmproj for vision models
+      const mmprojPath = await manager.findMmprojForModel(model.fileName);
+      if (mmprojPath) {
+        logger.info(`[LocalLLM] Auto-detected mmproj for activation: ${mmprojPath}`);
+      }
+
       try {
         await OmniModelCache.getLlmChat(model.filePath, {
           contextSize: currentObj?.contextSize,
+          ...(mmprojPath ? { mmprojPath } : {}),
         });
       } catch (err: any) {
         logger.error('[LocalLLM] Failed to load model:', err);
@@ -703,6 +721,51 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       await manager.saveState({ lastActiveModel: model.id });
 
       return { ok: true, status: OmniModelCache.getStatus() };
+    },
+  );
+
+  // GET /models/:id/mmproj — check if model has an mmproj companion
+  fastify.get<{ Params: { id: string } }>(
+    '/models/:id/mmproj',
+    async (request, reply) => {
+      const model = await manager.getModel(request.params.id);
+      if (!model) {
+        return reply.status(404).send({ error: 'Model not found' });
+      }
+      const mmprojPath = await manager.findMmprojForModel(model.fileName);
+      return { hasMmproj: !!mmprojPath, path: mmprojPath, repo: model.repo || null };
+    },
+  );
+
+  // POST /models/:id/download-mmproj — manually download mmproj for a vision model
+  fastify.post<{ Params: { id: string } }>(
+    '/models/:id/download-mmproj',
+    async (request, reply) => {
+      const model = await manager.getModel(request.params.id);
+      if (!model) {
+        return reply.status(404).send({ error: 'Model not found' });
+      }
+      if (!model.repo) {
+        return reply.status(400).send({ error: 'Model has no repo metadata — cannot look up mmproj' });
+      }
+
+      // Check if mmproj already exists
+      const existing = await manager.findMmprojForModel(model.fileName);
+      if (existing) {
+        return { ok: true, alreadyExists: true, path: existing };
+      }
+
+      try {
+        const dirName = generateDirName(model.fileName);
+        const mmproj = await manager.autoDownloadMmproj(model.repo, undefined, dirName);
+        if (!mmproj) {
+          return reply.status(404).send({ error: 'No mmproj file found in this model\'s HuggingFace repo' });
+        }
+        return { ok: true, model: mmproj };
+      } catch (err: any) {
+        logger.error('[LocalLLM] Manual mmproj download failed:', err);
+        return reply.status(500).send({ error: `Download failed: ${err.message}` });
+      }
     },
   );
 

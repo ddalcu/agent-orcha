@@ -3,34 +3,34 @@ import cron from 'node-cron';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type { Routine, CreateRoutineInput, UpdateRoutineInput, RoutineRun } from './types.ts';
 import { CreateRoutineSchema, UpdateRoutineSchema } from './types.ts';
-import type { CompanyManager } from './company-manager.ts';
+import type { OrgManager } from './org-manager.ts';
 import { logger } from '../logger.ts';
 
 type RunAgentFn = (
   agentName: string,
   input: Record<string, unknown>,
   sessionId?: string,
-  companyContext?: { company: { id: string; name: string; description: string; prefix: string } },
+  orgContext?: { organization: { id: string; name: string; description: string; prefix: string } },
 ) => Promise<{ taskId: string }>;
 
 export class RoutineManager {
   private db: DatabaseSync;
-  private companyManager: CompanyManager;
+  private orgManager: OrgManager;
   private cronJobs = new Map<string, cron.ScheduledTask>();
   private runAgentFn: RunAgentFn | null = null;
 
-  constructor(db: DatabaseSync, companyManager: CompanyManager) {
+  constructor(db: DatabaseSync, orgManager: OrgManager) {
     this.db = db;
-    this.companyManager = companyManager;
+    this.orgManager = orgManager;
   }
 
   setRunAgentFn(fn: RunAgentFn): void {
     this.runAgentFn = fn;
   }
 
-  list(companyId?: string): Routine[] {
-    if (companyId) {
-      return this.db.prepare('SELECT * FROM routines WHERE companyId = ? ORDER BY name').all(companyId) as Routine[];
+  list(orgId?: string): Routine[] {
+    if (orgId) {
+      return this.db.prepare('SELECT * FROM routines WHERE orgId = ? ORDER BY name').all(orgId) as Routine[];
     }
     return this.db.prepare('SELECT * FROM routines ORDER BY name').all() as Routine[];
   }
@@ -39,10 +39,10 @@ export class RoutineManager {
     return this.db.prepare('SELECT * FROM routines WHERE id = ?').get(id) as Routine | undefined;
   }
 
-  create(companyId: string, data: CreateRoutineInput): Routine {
+  create(orgId: string, data: CreateRoutineInput): Routine {
     const parsed = CreateRoutineSchema.parse(data);
-    const company = this.companyManager.get(companyId);
-    if (!company) throw new Error(`Company not found: ${companyId}`);
+    const org = this.orgManager.get(orgId);
+    if (!org) throw new Error(`Organization not found: ${orgId}`);
 
     if (!cron.validate(parsed.schedule)) {
       throw new Error(`Invalid cron expression: ${parsed.schedule}`);
@@ -53,9 +53,9 @@ export class RoutineManager {
     const agentInputJson = JSON.stringify(parsed.agentInput);
 
     this.db.prepare(`
-      INSERT INTO routines (id, companyId, name, description, schedule, timezone, agentName, agentInput, status, lastTriggeredAt, nextRunAt, createdAt, updatedAt)
+      INSERT INTO routines (id, orgId, name, description, schedule, timezone, agentName, agentInput, status, lastTriggeredAt, nextRunAt, createdAt, updatedAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', '', '', ?, ?)
-    `).run(id, companyId, parsed.name, parsed.description, parsed.schedule, parsed.timezone, parsed.agentName, agentInputJson, now, now);
+    `).run(id, orgId, parsed.name, parsed.description, parsed.schedule, parsed.timezone, parsed.agentName, agentInputJson, now, now);
 
     const routine = this.get(id)!;
     this.scheduleCronJob(routine);
@@ -93,7 +93,6 @@ export class RoutineManager {
 
     const updated = this.get(id)!;
 
-    // Reschedule if schedule or status relevant fields changed
     if (parsed.schedule || parsed.timezone) {
       this.stopCronJob(id);
       if (updated.status === 'active') {
@@ -191,13 +190,11 @@ export class RoutineManager {
     const now = new Date().toISOString();
     const runId = randomUUID();
 
-    // Create run record
     this.db.prepare(`
       INSERT INTO routine_runs (id, routineId, taskId, status, triggeredAt, completedAt, error, createdAt)
       VALUES (?, ?, '', 'triggered', ?, '', '', ?)
     `).run(runId, routine.id, now, now);
 
-    // Update routine timestamps
     this.db.prepare('UPDATE routines SET lastTriggeredAt = ?, updatedAt = ? WHERE id = ?')
       .run(now, now, routine.id);
 
@@ -206,9 +203,9 @@ export class RoutineManager {
       return this.db.prepare('SELECT * FROM routine_runs WHERE id = ?').get(runId) as RoutineRun;
     }
 
-    const company = this.companyManager.get(routine.companyId);
-    if (!company) {
-      this.updateRun(runId, 'failed', `Company not found: ${routine.companyId}`);
+    const org = this.orgManager.get(routine.orgId);
+    if (!org) {
+      this.updateRun(runId, 'failed', `Organization not found: ${routine.orgId}`);
       return this.db.prepare('SELECT * FROM routine_runs WHERE id = ?').get(runId) as RoutineRun;
     }
 
@@ -220,12 +217,12 @@ export class RoutineManager {
         agentInput = {};
       }
 
-      const companyContext = {
-        company: {
-          id: company.id,
-          name: company.name,
-          description: company.description,
-          prefix: company.issuePrefix,
+      const orgContext = {
+        organization: {
+          id: org.id,
+          name: org.name,
+          description: org.description,
+          prefix: org.issuePrefix,
         },
       };
 
@@ -233,10 +230,9 @@ export class RoutineManager {
         routine.agentName,
         agentInput,
         undefined,
-        companyContext,
+        orgContext,
       );
 
-      // Link task ID
       this.db.prepare('UPDATE routine_runs SET taskId = ? WHERE id = ?').run(result.taskId, runId);
       this.updateRun(runId, 'completed');
 

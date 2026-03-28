@@ -152,6 +152,12 @@ export const api = {
     if (category) params.set('category', category);
     return new EventSource(`/api/local-llm/models/download?${params.toString()}`);
   },
+  async checkMmproj(id: string) {
+    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/mmproj`)).json();
+  },
+  async downloadMmproj(id: string) {
+    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/download-mmproj`, { method: 'POST' })).json();
+  },
   async getActiveDownloads() { return (await _fetch('/api/local-llm/models/downloads')).json(); },
   async getInterruptedDownloads() { return (await _fetch('/api/local-llm/models/interrupted')).json(); },
   async deleteInterruptedDownload(fileName: string) {

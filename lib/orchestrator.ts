@@ -54,10 +54,16 @@ import type { KnowledgeStoreInstance, KnowledgeConfig, KnowledgeStoreMetadata, I
 import type { KnowledgeMetadataManager } from './knowledge/knowledge-store-metadata.ts';
 import type { SqliteStore } from './knowledge/sqlite-store.ts';
 import type { StructuredTool } from './types/llm-types.ts';
-import { CompanyDB } from './company/company-db.ts';
-import { CompanyManager } from './company/company-manager.ts';
-import { TicketManager } from './company/ticket-manager.ts';
-import { RoutineManager } from './company/routine-manager.ts';
+import { OrgDB } from './organization/org-db.ts';
+import { OrgManager } from './organization/org-manager.ts';
+import { TicketManager } from './organization/ticket-manager.ts';
+import { RoutineManager } from './organization/routine-manager.ts';
+import { OrgChartManager } from './organization/org-chart-manager.ts';
+import { CEOCoordinator } from './organization/ceo-coordinator.ts';
+import { CEORunManager } from './organization/ceo-run-manager.ts';
+import { TaskMetricsManager } from './organization/task-metrics-manager.ts';
+import { HeartbeatManager } from './organization/heartbeat-manager.ts';
+import { DashboardStats } from './organization/dashboard-stats.ts';
 import { logger, getRecentLogs } from './logger.ts';
 
 export interface OrchestratorConfig {
@@ -100,10 +106,16 @@ export class Orchestrator {
   /** @internal — accessed by p2p routes via _p2pManager */
   _p2pManager: P2PManager | null = null;
 
-  private companyDB: CompanyDB | null = null;
-  private _companyManager: CompanyManager | null = null;
+  private orgDB: OrgDB | null = null;
+  private _orgManager: OrgManager | null = null;
   private _ticketManager: TicketManager | null = null;
   private _routineManager: RoutineManager | null = null;
+  private _orgChartManager: OrgChartManager | null = null;
+  private _ceoCoordinator: CEOCoordinator | null = null;
+  private _ceoRunManager: CEORunManager | null = null;
+  private _taskMetricsManager: TaskMetricsManager | null = null;
+  private _heartbeatManager: HeartbeatManager | null = null;
+  private _dashboardStats: DashboardStats | null = null;
 
   private initialized = false;
 
@@ -194,17 +206,58 @@ export class Orchestrator {
 
     this.taskManager = new TaskManager(this);
 
-    // Initialize company system (SQLite-backed)
-    this.companyDB = new CompanyDB(this.config.workspaceRoot);
-    const db = this.companyDB.getDB();
-    this._companyManager = new CompanyManager(db);
-    this._ticketManager = new TicketManager(db, this._companyManager);
-    this._routineManager = new RoutineManager(db, this._companyManager);
-    this._routineManager.setRunAgentFn(async (agentName, input, sessionId, companyContext) => {
-      const task = this.taskManager.submitAgent({ agent: agentName, input, sessionId, companyContext });
+    // Initialize organization system (SQLite-backed)
+    this.orgDB = new OrgDB(this.config.workspaceRoot);
+    const db = this.orgDB.getDB();
+    this._orgManager = new OrgManager(db);
+    this._ticketManager = new TicketManager(db, this._orgManager);
+    this._routineManager = new RoutineManager(db, this._orgManager);
+    this._orgChartManager = new OrgChartManager(db, this._orgManager, (name) => this.agentLoader.get(name) !== undefined);
+    this._ceoCoordinator = new CEOCoordinator({
+      orgs: this._orgManager,
+      tickets: this._ticketManager,
+      orgChart: this._orgChartManager,
+      runAgent: async (agentName, input, sessionId, orgContext) => {
+        const result = await this.runAgent(agentName, input, sessionId, orgContext);
+        return { id: '', output: result.output };
+      },
+      submitAgent: (params) => this.taskManager.submitAgent(params),
+      listAgents: () => this.agentLoader.list().map(a => ({ name: a.name, description: a.description })),
+      workspaceRoot: this.config.workspaceRoot,
+    });
+    this._ceoRunManager = new CEORunManager(db);
+    this._taskMetricsManager = new TaskMetricsManager(db);
+    this.taskManager.setTaskMetricsManager(this._taskMetricsManager);
+    this._heartbeatManager = new HeartbeatManager({
+      db,
+      orgs: this._orgManager,
+      tickets: this._ticketManager,
+      orgChart: this._orgChartManager,
+      ceo: this._ceoCoordinator,
+      ceoRuns: this._ceoRunManager,
+      listAgents: () => this.agentLoader.list().map(a => ({ name: a.name, description: a.description })),
+      trackTask: (target, input) => this.taskManager.track('agent', target, input),
+      resolveTask: (taskId, result) => this.taskManager.resolve(taskId, result as Record<string, unknown>),
+      rejectTask: (taskId, error) => this.taskManager.reject(taskId, error),
+      addTaskEvent: (taskId, event) => this.taskManager.addEvent(taskId, event as import('./tasks/types.ts').TaskEvent),
+      workspaceRoot: this.config.workspaceRoot,
+    });
+    this._dashboardStats = new DashboardStats({
+      orgs: this._orgManager,
+      tickets: this._ticketManager,
+      orgChart: this._orgChartManager,
+      ceoRuns: this._ceoRunManager,
+      taskMetrics: this._taskMetricsManager,
+      heartbeat: this._heartbeatManager,
+      ceo: this._ceoCoordinator,
+    });
+
+    this._routineManager.setRunAgentFn(async (agentName, input, sessionId, orgContext) => {
+      const task = this.taskManager.submitAgent({ agent: agentName, input, sessionId, orgContext });
       return { taskId: task.id };
     });
     this._routineManager.startCronJobs();
+    this._heartbeatManager.startAllHeartbeats();
 
     this.initialized = true;
 
@@ -733,11 +786,17 @@ export class Orchestrator {
     };
   }
 
-  get companySystem() {
+  get orgSystem() {
     return {
-      companies: this._companyManager!,
+      orgs: this._orgManager!,
       tickets: this._ticketManager!,
       routines: this._routineManager!,
+      orgChart: this._orgChartManager!,
+      ceo: this._ceoCoordinator!,
+      ceoRuns: this._ceoRunManager!,
+      heartbeat: this._heartbeatManager!,
+      taskMetrics: this._taskMetricsManager!,
+      dashboard: this._dashboardStats!,
     };
   }
 
@@ -918,7 +977,7 @@ export class Orchestrator {
     name: string,
     input: Record<string, unknown>,
     sessionId?: string,
-    companyContext?: import('./agents/types.ts').AgentCompanyContext,
+    orgContext?: import('./agents/types.ts').AgentOrgContext,
   ): Promise<AgentResult> {
     this.ensureInitialized();
 
@@ -928,7 +987,7 @@ export class Orchestrator {
     }
 
     const instance = await this.agentExecutor.createInstance(definition);
-    return instance.invoke({ input, sessionId, companyContext });
+    return instance.invoke({ input, sessionId, orgContext });
   }
 
   async *streamAgent(
@@ -1234,8 +1293,11 @@ export class Orchestrator {
     if (this._routineManager) {
       this._routineManager.stopAll();
     }
-    if (this.companyDB) {
-      this.companyDB.close();
+    if (this._heartbeatManager) {
+      this._heartbeatManager.stopAll();
+    }
+    if (this.orgDB) {
+      this.orgDB.close();
     }
     if (this._p2pManager?.close) {
       await this._p2pManager.close();

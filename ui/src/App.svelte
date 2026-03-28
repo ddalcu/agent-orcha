@@ -11,9 +11,11 @@
   import LocalLlmPage from './pages/LocalLlmPage.svelte';
   import IdePage from './pages/IdePage.svelte';
   import P2PPage from './pages/P2PPage.svelte';
-  import CompaniesPage from './pages/CompaniesPage.svelte';
+  import OrganizationsPage from './pages/OrganizationsPage.svelte';
+  import OrgDashboardPage from './pages/OrgDashboardPage.svelte';
   import TicketsPage from './pages/TicketsPage.svelte';
   import RoutinesPage from './pages/RoutinesPage.svelte';
+  import OrgChartPage from './pages/OrgChartPage.svelte';
 
   let showLogin = $state(false);
   let showLogout = $state(false);
@@ -188,12 +190,16 @@
         <IdePage />
       {:else if appStore.activeTab === 'p2p'}
         <P2PPage />
-      {:else if appStore.activeTab === 'companies'}
-        <CompaniesPage />
+      {:else if appStore.activeTab === 'organizations'}
+        <OrganizationsPage />
+      {:else if appStore.activeTab === 'dashboard'}
+        <OrgDashboardPage />
       {:else if appStore.activeTab === 'tickets'}
         <TicketsPage />
       {:else if appStore.activeTab === 'routines'}
         <RoutinesPage />
+      {:else if appStore.activeTab === 'orgchart'}
+        <OrgChartPage />
       {/if}
     </div>
 

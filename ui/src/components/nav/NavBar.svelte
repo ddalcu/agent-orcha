@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { appStore } from '../../lib/stores/app.svelte.js';
-  import { companyStore } from '../../lib/stores/company.svelte.js';
-  import type { TabId, Company } from '../../lib/types/index.js';
+  import { onMount } from "svelte";
+  import { appStore } from "../../lib/stores/app.svelte.js";
+  import { orgStore } from "../../lib/stores/org.svelte.js";
+  import type { TabId, Organization } from "../../lib/types/index.js";
 
   interface Props {
     onselect?: () => void;
@@ -10,32 +10,32 @@
   let { onselect }: Props = $props();
 
   const coreTabs: { id: TabId; label: string; icon: string }[] = [
-    { id: 'agents', label: 'Agents', icon: 'fa-robot' },
-    { id: 'knowledge', label: 'Knowledge', icon: 'fa-brain' },
-    { id: 'graph', label: 'Graph', icon: 'fa-network-wired' },
-    { id: 'tools', label: 'Tools', icon: 'fa-wrench' },
-    { id: 'monitor', label: 'Monitor', icon: 'fa-tasks' },
-    { id: 'llm', label: 'LLM', icon: 'fa-microchip' },
-    { id: 'ide', label: 'IDE', icon: 'fa-code' },
-    { id: 'p2p', label: 'P2P', icon: 'fa-share-nodes' },
+    { id: "agents", label: "Agents", icon: "fa-robot" },
+    { id: "knowledge", label: "Knowledge", icon: "fa-brain" },
+    { id: "graph", label: "Graph", icon: "fa-network-wired" },
+    { id: "tools", label: "Tools", icon: "fa-wrench" },
+    { id: "monitor", label: "Monitor", icon: "fa-tasks" },
+    { id: "llm", label: "LLM", icon: "fa-microchip" },
+    { id: "ide", label: "IDE", icon: "fa-code" },
+    { id: "p2p", label: "P2P", icon: "fa-share-nodes" },
   ];
 
-  let expandedCompanyId = $state<string | null>(null);
+  let expandedOrgId = $state<string | null>(null);
 
   onMount(() => {
-    companyStore.loadCompanies().then(() => {
-      if (appStore.routeCompanyId) {
-        expandedCompanyId = appStore.routeCompanyId;
-        companyStore.selectCompanyById(appStore.routeCompanyId);
+    orgStore.loadOrgs().then(() => {
+      if (appStore.routeOrgId) {
+        expandedOrgId = appStore.routeOrgId;
+        orgStore.selectOrgById(appStore.routeOrgId);
       }
     });
   });
 
   $effect(() => {
-    const cid = appStore.routeCompanyId;
-    if (cid && cid !== expandedCompanyId) {
-      expandedCompanyId = cid;
-      companyStore.selectCompanyById(cid);
+    const oid = appStore.routeOrgId;
+    if (oid && oid !== expandedOrgId) {
+      expandedOrgId = oid;
+      orgStore.selectOrgById(oid);
     }
   });
 
@@ -44,36 +44,39 @@
     onselect?.();
   }
 
-  function toggleCompany(company: Company) {
-    if (expandedCompanyId === company.id) {
-      expandedCompanyId = null;
+  function toggleOrg(org: Organization) {
+    if (expandedOrgId === org.id) {
+      expandedOrgId = null;
     } else {
-      expandedCompanyId = company.id;
-      companyStore.selectCompany(company);
-      appStore.setTab('tickets', company.id);
+      expandedOrgId = org.id;
+      orgStore.selectOrg(org);
+      appStore.setTab("dashboard", org.id);
       onselect?.();
     }
   }
 
-  function goCompanyTab(tab: 'tickets' | 'routines', company: Company) {
-    companyStore.selectCompany(company);
-    appStore.setTab(tab, company.id);
+  function goOrgTab(
+    tab: "dashboard" | "tickets" | "routines" | "orgchart",
+    org: Organization,
+  ) {
+    orgStore.selectOrg(org);
+    appStore.setTab(tab, org.id);
     onselect?.();
   }
 
-  function openManageCompanies() {
-    appStore.setTab('companies');
+  function openManageOrgs() {
+    appStore.setTab("organizations");
     onselect?.();
   }
 
-  function isActiveCompanyTab(tab: string, companyId: string): boolean {
-    return appStore.activeTab === tab && appStore.routeCompanyId === companyId;
+  function isActiveOrgTab(tab: string, orgId: string): boolean {
+    return appStore.activeTab === tab && appStore.routeOrgId === orgId;
   }
 </script>
 
 <div class="flex flex-col h-full flex-1 min-h-0">
   <div class="sidebar-brand">
-    <img src="/assets/logo.png" alt="Agent Orcha" class="sidebar-logo">
+    <img src="/assets/logo.png" alt="Agent Orcha" class="sidebar-logo" />
     <span>Agent Orcha</span>
   </div>
   <nav class="flex-1 overflow-y-auto">
@@ -89,23 +92,24 @@
     {/each}
 
     <div class="co-separator"></div>
-    <div class="co-section-label">COMPANIES</div>
+    <div class="co-section-label">ORGANIZATIONS</div>
 
-    {#each companyStore.companies.filter(c => c.status === 'active') as company}
-      {@const isExpanded = expandedCompanyId === company.id}
+    {#each orgStore.organizations.filter((o) => o.status === "active") as org}
+      {@const isExpanded = expandedOrgId === org.id}
 
       <button
         class="tab-btn co-row"
         class:co-expanded={isExpanded}
-        onclick={() => toggleCompany(company)}
+        onclick={() => toggleOrg(org)}
       >
-        {#if company.brandColor}
-          <span class="co-dot" style:background={company.brandColor}></span>
+        {#if org.brandColor}
+          <span class="co-dot" style:background={org.brandColor}></span>
         {:else}
           <i class="fas fa-building tab-icon"></i>
         {/if}
-        <span>{company.name}</span>
-        <i class="fas fa-chevron-down co-chevron" class:expanded={isExpanded}></i>
+        <span>{org.name}</span>
+        <i class="fas fa-chevron-down co-chevron" class:expanded={isExpanded}
+        ></i>
       </button>
 
       {#if isExpanded}
@@ -114,24 +118,43 @@
           <div class="co-items">
             <button
               class="tab-btn co-child"
-              class:active={isActiveCompanyTab('tickets', company.id)}
-              onclick={() => goCompanyTab('tickets', company)}
+              class:active={isActiveOrgTab("dashboard", org.id)}
+              onclick={() => goOrgTab("dashboard", org)}
+            >
+              <i class="fas fa-chart-line tab-icon"></i>
+              <span>Dashboard</span>
+            </button>
+            <button
+              class="tab-btn co-child"
+              class:active={isActiveOrgTab("tickets", org.id)}
+              onclick={() => goOrgTab("tickets", org)}
             >
               <i class="fas fa-ticket tab-icon"></i>
               <span>Tickets</span>
-              {#if companyStore.tickets.length > 0}
-                <span class="co-count">{companyStore.tickets.length}</span>
+              {#if orgStore.tickets.length > 0}
+                <span class="co-count">{orgStore.tickets.length}</span>
               {/if}
             </button>
             <button
               class="tab-btn co-child"
-              class:active={isActiveCompanyTab('routines', company.id)}
-              onclick={() => goCompanyTab('routines', company)}
+              class:active={isActiveOrgTab("routines", org.id)}
+              onclick={() => goOrgTab("routines", org)}
             >
               <i class="fas fa-clock-rotate-left tab-icon"></i>
               <span>Routines</span>
-              {#if companyStore.routines.length > 0}
-                <span class="co-count">{companyStore.routines.length}</span>
+              {#if orgStore.routines.length > 0}
+                <span class="co-count">{orgStore.routines.length}</span>
+              {/if}
+            </button>
+            <button
+              class="tab-btn co-child"
+              class:active={isActiveOrgTab("orgchart", org.id)}
+              onclick={() => goOrgTab("orgchart", org)}
+            >
+              <i class="fas fa-sitemap tab-icon"></i>
+              <span>Org Chart</span>
+              {#if orgStore.members.length > 0}
+                <span class="co-count">{orgStore.members.length}</span>
               {/if}
             </button>
           </div>
@@ -139,17 +162,17 @@
       {/if}
     {/each}
 
-    {#if companyStore.companies.filter(c => c.status === 'active').length === 0}
-      <div class="co-empty">No companies yet</div>
+    {#if orgStore.organizations.filter((o) => o.status === "active").length === 0}
+      <div class="co-empty">No organizations yet</div>
     {/if}
 
     <button
       class="tab-btn co-manage"
-      class:active={appStore.activeTab === 'companies'}
-      onclick={openManageCompanies}
+      class:active={appStore.activeTab === "organizations"}
+      onclick={openManageOrgs}
     >
       <i class="fas fa-gear tab-icon"></i>
-      <span>Manage Companies</span>
+      <span>Manage</span>
     </button>
   </nav>
 </div>
@@ -170,20 +193,19 @@
     opacity: 0.7;
   }
 
-  /* ── Company row: bold when expanded, no background ── */
+  /* ── Organization row: bold when expanded, no background ── */
   .co-row.co-expanded {
     color: var(--text-1);
     font-weight: 600;
     background: transparent;
   }
 
-  /* ── Company dot (replaces icon) ── */
+  /* ── Organization dot (replaces icon) ── */
   .co-dot {
     width: 10px;
     height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
-    /* match .tab-icon width so text aligns */
     margin-left: 3px;
     margin-right: 3px;
   }
@@ -193,7 +215,9 @@
     margin-left: auto;
     font-size: 9px;
     opacity: 0.35;
-    transition: transform 0.2s ease, opacity 0.2s ease;
+    transition:
+      transform 0.2s ease,
+      opacity 0.2s ease;
   }
   .co-chevron.expanded {
     transform: rotate(180deg);

@@ -250,6 +250,9 @@
   let activatingEmbId = $state<string | null>(null);
   let activatingImageId = $state<string | null>(null);
   let activatingTtsId = $state<string | null>(null);
+  let mmprojStatus = $state('');
+  let mmprojInfo = $state<Record<string, { hasMmproj: boolean; repo: string | null; loading?: boolean }>>({});
+  let downloadingMmproj = $state<string | null>(null);
   // External engine activation
   let activatingExtChat = $state<string | null>(null);
   let activatingExtEmb = $state<string | null>(null);
@@ -497,6 +500,14 @@
   async function loadModels() {
     try {
       models = await api.getLocalLlmModels();
+      // Check mmproj status for models that look like vision LLMs
+      for (const m of models) {
+        const isVision = VISION_NAME_PATTERNS.some(p => p.test(m.fileName)) ||
+          VISION_PIPELINE_TAGS.some(t => (m as any).pipelineTag === t);
+        if (isVision && m.repo) {
+          checkMmprojForModel(m.id);
+        }
+      }
     } catch (e) {
       console.error('Failed to load local models:', e);
     }
@@ -648,6 +659,29 @@
       cloudEmbModelCustom = '';
     }
     cloudSaveStatus = '';
+  }
+
+  async function checkMmprojForModel(modelId: string) {
+    try {
+      const info = await api.checkMmproj(modelId);
+      mmprojInfo = { ...mmprojInfo, [modelId]: info };
+    } catch {
+      // Model may not support mmproj check — ignore
+    }
+  }
+
+  async function handleDownloadMmproj(modelId: string) {
+    downloadingMmproj = modelId;
+    try {
+      const result = await api.downloadMmproj(modelId);
+      if (result.ok) {
+        mmprojInfo = { ...mmprojInfo, [modelId]: { hasMmproj: true, repo: mmprojInfo[modelId]?.repo ?? null } };
+      }
+    } catch (err: any) {
+      activateErrors = { ...activateErrors, [modelId]: `mmproj: ${err.message}` };
+    } finally {
+      downloadingMmproj = null;
+    }
   }
 
   // ─── Actions ───
@@ -885,6 +919,17 @@
         if (data.type === 'error') {
           console.error('Download error:', data.error);
           cleanupDownload(downloadId);
+        }
+        if (data.type === 'mmproj_start') {
+          mmprojStatus = 'downloading';
+        }
+        if (data.type === 'mmproj') {
+          mmprojStatus = '';
+          loadModels();
+        }
+        if (data.type === 'mmproj_error') {
+          mmprojStatus = `mmproj failed: ${data.error}`;
+          setTimeout(() => { mmprojStatus = ''; }, 8000);
         }
       } catch { /* ignore parse errors */ }
     };
@@ -1150,6 +1195,15 @@
 </script>
 
 <div class="space-y-6 h-full overflow-y-auto pb-6 custom-scrollbar view-panel">
+  {#if mmprojStatus}
+    <div class="mmproj-toast">
+      {#if mmprojStatus === 'downloading'}
+        <i class="fas fa-spinner fa-spin mr-1"></i> Downloading vision projector (mmproj)...
+      {:else}
+        <i class="fas fa-exclamation-triangle mr-1"></i> {mmprojStatus}
+      {/if}
+    </div>
+  {/if}
   <!-- Header -->
   <div class="flex items-center justify-between border-b pb-4">
     <div>
@@ -2113,6 +2167,20 @@
                         {#if caps.tools}<span class="cap-badge cap-badge-tools" title="Tool calling"><i class="fas fa-wrench mr-1"></i>tools</span>{/if}
                         {#if caps.vision}<span class="cap-badge cap-badge-vision" title="Vision"><i class="fas fa-eye mr-1"></i>vision</span>{/if}
                         {#if caps.reasoning}<span class="cap-badge cap-badge-think" title="Reasoning"><i class="fas fa-brain mr-1"></i>think</span>{/if}
+                      </div>
+                    {/if}
+                    {#if caps?.vision && mmprojInfo[model.id]}
+                      <div class="flex items-center gap-1 mt-1">
+                        {#if mmprojInfo[model.id].hasMmproj}
+                          <span class="cap-badge cap-badge-vision" title="Multimodal projector loaded"><i class="fas fa-check mr-1"></i>mmproj</span>
+                        {:else if downloadingMmproj === model.id}
+                          <span class="cap-badge" title="Downloading mmproj"><span class="spinner-sm"></span> mmproj</span>
+                        {:else}
+                          <button class="cap-badge cap-badge-warn" title="Download multimodal projector for vision support"
+                            onclick={() => handleDownloadMmproj(model.id)}>
+                            <i class="fas fa-download mr-1"></i>mmproj missing
+                          </button>
+                        {/if}
                       </div>
                     {/if}
                   </div>

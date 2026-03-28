@@ -2253,6 +2253,17 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
 .cap-badge-tools  { background: rgba(74, 222, 128, 0.15); color: var(--green-400); }
 .cap-badge-vision { background: rgba(96, 165, 250, 0.15); color: var(--blue-400); }
 .cap-badge-think  { background: rgba(167, 139, 250, 0.15); color: var(--purple-400); }
+.cap-badge-warn   { background: rgba(251, 191, 36, 0.15); color: var(--amber-400); cursor: pointer; border: none; font: inherit; }
+.cap-badge-warn:hover { background: rgba(251, 191, 36, 0.25); }
+
+.mmproj-toast {
+  font-size: 0.82rem;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--amber-400);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
 
 /* HF select (inline in result rows) */
 .hf-select {

@@ -3,41 +3,41 @@ import { strict as assert } from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { CompanyDB } from '../../lib/company/company-db.ts';
-import { CompanyManager } from '../../lib/company/company-manager.ts';
-import { TicketManager } from '../../lib/company/ticket-manager.ts';
+import { OrgDB } from '../../lib/organization/org-db.ts';
+import { OrgManager } from '../../lib/organization/org-manager.ts';
+import { TicketManager } from '../../lib/organization/ticket-manager.ts';
 
 describe('TicketManager', () => {
   let tempDir: string;
-  let companyDB: CompanyDB;
-  let companyManager: CompanyManager;
+  let orgDB: OrgDB;
+  let orgManager: OrgManager;
   let ticketManager: TicketManager;
-  let companyId: string;
+  let orgId: string;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-test-'));
-    companyDB = new CompanyDB(tempDir);
-    const db = companyDB.getDB();
-    companyManager = new CompanyManager(db);
-    ticketManager = new TicketManager(db, companyManager);
+    orgDB = new OrgDB(tempDir);
+    const db = orgDB.getDB();
+    orgManager = new OrgManager(db);
+    ticketManager = new TicketManager(db, orgManager);
 
-    // Create a test company for tickets
-    const company = companyManager.create({ name: 'Test Co', issuePrefix: 'TEST' });
-    companyId = company.id;
+    // Create a test organization for tickets
+    const org = orgManager.create({ name: 'Test Co', issuePrefix: 'TEST' });
+    orgId = org.id;
   });
 
   afterEach(() => {
-    companyDB.close();
+    orgDB.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
   // ── create ──
 
   it('should create a ticket with default values', () => {
-    const ticket = ticketManager.create(companyId, { title: 'Fix login bug' });
+    const ticket = ticketManager.create(orgId, { title: 'Fix login bug' });
 
     assert.ok(ticket.id);
-    assert.equal(ticket.companyId, companyId);
+    assert.equal(ticket.orgId, orgId);
     assert.equal(ticket.title, 'Fix login bug');
     assert.equal(ticket.description, '');
     assert.equal(ticket.status, 'backlog');
@@ -50,7 +50,7 @@ describe('TicketManager', () => {
   });
 
   it('should create a ticket with all fields', () => {
-    const ticket = ticketManager.create(companyId, {
+    const ticket = ticketManager.create(orgId, {
       title: 'Deploy v2',
       description: 'Deploy the new version',
       priority: 'critical',
@@ -64,29 +64,29 @@ describe('TicketManager', () => {
   });
 
   it('should auto-increment issue numbers', () => {
-    const t1 = ticketManager.create(companyId, { title: 'First' });
-    const t2 = ticketManager.create(companyId, { title: 'Second' });
-    const t3 = ticketManager.create(companyId, { title: 'Third' });
+    const t1 = ticketManager.create(orgId, { title: 'First' });
+    const t2 = ticketManager.create(orgId, { title: 'Second' });
+    const t3 = ticketManager.create(orgId, { title: 'Third' });
 
     assert.equal(t1.identifier, 'TEST-1');
     assert.equal(t2.identifier, 'TEST-2');
     assert.equal(t3.identifier, 'TEST-3');
   });
 
-  it('should throw for non-existent company', () => {
-    assert.throws(() => ticketManager.create('fake-id', { title: 'Nope' }), /Company not found/);
+  it('should throw for non-existent organization', () => {
+    assert.throws(() => ticketManager.create('fake-id', { title: 'Nope' }), /Organization not found/);
   });
 
   it('should reject empty title', () => {
-    assert.throws(() => ticketManager.create(companyId, { title: '' }));
+    assert.throws(() => ticketManager.create(orgId, { title: '' }));
   });
 
   it('should reject invalid priority', () => {
-    assert.throws(() => ticketManager.create(companyId, { title: 'X', priority: 'ultra' as any }));
+    assert.throws(() => ticketManager.create(orgId, { title: 'X', priority: 'ultra' as any }));
   });
 
   it('should log creation activity', () => {
-    const ticket = ticketManager.create(companyId, { title: 'With activity' });
+    const ticket = ticketManager.create(orgId, { title: 'With activity' });
     const activity = ticketManager.getActivity(ticket.id);
 
     assert.equal(activity.length, 1);
@@ -98,7 +98,7 @@ describe('TicketManager', () => {
   // ── get / list ──
 
   it('should get a ticket by id', () => {
-    const created = ticketManager.create(companyId, { title: 'Lookup' });
+    const created = ticketManager.create(orgId, { title: 'Lookup' });
     const found = ticketManager.get(created.id);
 
     assert.ok(found);
@@ -106,7 +106,7 @@ describe('TicketManager', () => {
   });
 
   it('should get a ticket by identifier', () => {
-    ticketManager.create(companyId, { title: 'By ident' });
+    ticketManager.create(orgId, { title: 'By ident' });
     const found = ticketManager.getByIdentifier('TEST-1');
 
     assert.ok(found);
@@ -121,44 +121,44 @@ describe('TicketManager', () => {
     assert.equal(ticketManager.getByIdentifier('NOPE-99'), undefined);
   });
 
-  it('should list tickets for a company', () => {
-    ticketManager.create(companyId, { title: 'A' });
-    ticketManager.create(companyId, { title: 'B' });
+  it('should list tickets for an organization', () => {
+    ticketManager.create(orgId, { title: 'A' });
+    ticketManager.create(orgId, { title: 'B' });
 
-    const tickets = ticketManager.list(companyId);
+    const tickets = ticketManager.list(orgId);
     assert.equal(tickets.length, 2);
   });
 
-  it('should return empty list for company with no tickets', () => {
-    const other = companyManager.create({ name: 'Empty Co', issuePrefix: 'EMPTY' });
+  it('should return empty list for organization with no tickets', () => {
+    const other = orgManager.create({ name: 'Empty Co', issuePrefix: 'EMPTY' });
     const tickets = ticketManager.list(other.id);
     assert.equal(tickets.length, 0);
   });
 
   it('should filter tickets by status', () => {
-    const t = ticketManager.create(companyId, { title: 'A' });
+    const t = ticketManager.create(orgId, { title: 'A' });
     ticketManager.transition(t.id, 'in_progress');
-    ticketManager.create(companyId, { title: 'B' });
+    ticketManager.create(orgId, { title: 'B' });
 
-    const inProgress = ticketManager.list(companyId, { status: 'in_progress' });
+    const inProgress = ticketManager.list(orgId, { status: 'in_progress' });
     assert.equal(inProgress.length, 1);
     assert.equal(inProgress[0].title, 'A');
   });
 
   it('should filter tickets by priority', () => {
-    ticketManager.create(companyId, { title: 'Low', priority: 'low' });
-    ticketManager.create(companyId, { title: 'High', priority: 'high' });
+    ticketManager.create(orgId, { title: 'Low', priority: 'low' });
+    ticketManager.create(orgId, { title: 'High', priority: 'high' });
 
-    const high = ticketManager.list(companyId, { priority: 'high' });
+    const high = ticketManager.list(orgId, { priority: 'high' });
     assert.equal(high.length, 1);
     assert.equal(high[0].title, 'High');
   });
 
   it('should filter tickets by assigneeAgent', () => {
-    ticketManager.create(companyId, { title: 'Assigned', assigneeAgent: 'bot-1' });
-    ticketManager.create(companyId, { title: 'Unassigned' });
+    ticketManager.create(orgId, { title: 'Assigned', assigneeAgent: 'bot-1' });
+    ticketManager.create(orgId, { title: 'Unassigned' });
 
-    const assigned = ticketManager.list(companyId, { assigneeAgent: 'bot-1' });
+    const assigned = ticketManager.list(orgId, { assigneeAgent: 'bot-1' });
     assert.equal(assigned.length, 1);
     assert.equal(assigned[0].title, 'Assigned');
   });
@@ -166,28 +166,28 @@ describe('TicketManager', () => {
   // ── update ──
 
   it('should update ticket title', () => {
-    const t = ticketManager.create(companyId, { title: 'Old' });
+    const t = ticketManager.create(orgId, { title: 'Old' });
     const updated = ticketManager.update(t.id, { title: 'New' });
 
     assert.equal(updated.title, 'New');
   });
 
   it('should update ticket description', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     const updated = ticketManager.update(t.id, { description: 'detailed desc' });
 
     assert.equal(updated.description, 'detailed desc');
   });
 
   it('should update ticket priority', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     const updated = ticketManager.update(t.id, { priority: 'critical' });
 
     assert.equal(updated.priority, 'critical');
   });
 
   it('should update assignee and log activity', () => {
-    const t = ticketManager.create(companyId, { title: 'T', assigneeAgent: 'old-bot' });
+    const t = ticketManager.create(orgId, { title: 'T', assigneeAgent: 'old-bot' });
     ticketManager.update(t.id, { assigneeAgent: 'new-bot' });
 
     const activity = ticketManager.getActivity(t.id);
@@ -198,7 +198,7 @@ describe('TicketManager', () => {
   });
 
   it('should not log activity when assignee unchanged', () => {
-    const t = ticketManager.create(companyId, { title: 'T', assigneeAgent: 'same-bot' });
+    const t = ticketManager.create(orgId, { title: 'T', assigneeAgent: 'same-bot' });
     ticketManager.update(t.id, { assigneeAgent: 'same-bot' });
 
     const activity = ticketManager.getActivity(t.id);
@@ -207,7 +207,7 @@ describe('TicketManager', () => {
   });
 
   it('should return unchanged ticket when no fields provided', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     const updated = ticketManager.update(t.id, {});
 
     assert.equal(updated.title, 'T');
@@ -220,14 +220,14 @@ describe('TicketManager', () => {
   // ── transition ──
 
   it('should transition ticket status', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     const updated = ticketManager.transition(t.id, 'in_progress');
 
     assert.equal(updated.status, 'in_progress');
   });
 
   it('should set completedAt when transitioning to done', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     const done = ticketManager.transition(t.id, 'done');
 
     assert.ok(done.completedAt);
@@ -235,21 +235,21 @@ describe('TicketManager', () => {
   });
 
   it('should set completedAt when transitioning to cancelled', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     const cancelled = ticketManager.transition(t.id, 'cancelled');
 
     assert.ok(cancelled.completedAt);
   });
 
   it('should return unchanged ticket when transitioning to same status', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     const same = ticketManager.transition(t.id, 'backlog');
 
     assert.equal(same.status, 'backlog');
   });
 
   it('should log status change activity', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     ticketManager.transition(t.id, 'todo');
 
     const activity = ticketManager.getActivity(t.id);
@@ -266,7 +266,7 @@ describe('TicketManager', () => {
   // ── linkTask ──
 
   it('should link a task to a ticket', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     ticketManager.linkTask(t.id, 'task-123');
 
     const found = ticketManager.get(t.id)!;
@@ -276,7 +276,7 @@ describe('TicketManager', () => {
   // ── comments ──
 
   it('should add a comment', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     const comment = ticketManager.addComment(t.id, 'Hello!', 'user', 'Alice');
 
     assert.equal(comment.type, 'comment');
@@ -286,7 +286,7 @@ describe('TicketManager', () => {
   });
 
   it('should add a task event', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     const event = ticketManager.addTaskEvent(t.id, 'Agent started');
 
     assert.equal(event.type, 'task_event');
@@ -295,7 +295,7 @@ describe('TicketManager', () => {
   });
 
   it('should add comment with metadata', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     const comment = ticketManager.addComment(t.id, 'Result', 'agent', 'Bot', { tokens: 500 });
 
     assert.equal(JSON.parse(comment.metadata).tokens, 500);
@@ -304,7 +304,7 @@ describe('TicketManager', () => {
   // ── activity ──
 
   it('should return activity in chronological order', () => {
-    const t = ticketManager.create(companyId, { title: 'T' });
+    const t = ticketManager.create(orgId, { title: 'T' });
     ticketManager.addComment(t.id, 'First', 'user', 'A');
     ticketManager.addComment(t.id, 'Second', 'user', 'B');
 
@@ -320,20 +320,20 @@ describe('TicketManager', () => {
     assert.equal(activity.length, 0);
   });
 
-  // ── cross-company isolation ──
+  // ── cross-organization isolation ──
 
-  it('should isolate tickets between companies', () => {
-    const other = companyManager.create({ name: 'Other Co', issuePrefix: 'OTHER' });
-    ticketManager.create(companyId, { title: 'In Test Co' });
+  it('should isolate tickets between organizations', () => {
+    const other = orgManager.create({ name: 'Other Co', issuePrefix: 'OTHER' });
+    ticketManager.create(orgId, { title: 'In Test Co' });
     ticketManager.create(other.id, { title: 'In Other Co' });
 
-    assert.equal(ticketManager.list(companyId).length, 1);
+    assert.equal(ticketManager.list(orgId).length, 1);
     assert.equal(ticketManager.list(other.id).length, 1);
   });
 
-  it('should use separate issue counters per company', () => {
-    const other = companyManager.create({ name: 'Other Co', issuePrefix: 'OTHER' });
-    const t1 = ticketManager.create(companyId, { title: 'A' });
+  it('should use separate issue counters per organization', () => {
+    const other = orgManager.create({ name: 'Other Co', issuePrefix: 'OTHER' });
+    const t1 = ticketManager.create(orgId, { title: 'A' });
     const t2 = ticketManager.create(other.id, { title: 'B' });
 
     assert.equal(t1.identifier, 'TEST-1');

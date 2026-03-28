@@ -1,5 +1,6 @@
 import type { Orchestrator } from '../orchestrator.ts';
 import type { SubmitAgentParams, SubmitWorkflowParams, Task, TaskEvent, TaskKind, TaskMetrics, TaskP2PMeta, TaskStoreConfig } from './types.ts';
+import type { TaskMetricsManager } from '../organization/task-metrics-manager.ts';
 import { TaskStore } from './task-store.ts';
 import { logger } from '../logger.ts';
 
@@ -7,10 +8,15 @@ export class TaskManager {
   private store: TaskStore;
   private orchestrator: Orchestrator;
   private abortControllers = new Map<string, AbortController>();
+  private taskMetricsManager: TaskMetricsManager | null = null;
 
   constructor(orchestrator: Orchestrator, config?: TaskStoreConfig) {
     this.orchestrator = orchestrator;
     this.store = new TaskStore(config);
+  }
+
+  setTaskMetricsManager(mgr: TaskMetricsManager): void {
+    this.taskMetricsManager = mgr;
   }
 
   registerAbort(taskId: string, controller: AbortController): void {
@@ -23,11 +29,13 @@ export class TaskManager {
 
   submitAgent(params: SubmitAgentParams): Task {
     const task = this.store.create('agent', params.agent, params.input, params.sessionId);
+    const orgId = params.orgContext?.organization?.id;
 
     this.store.update(task.id, { status: 'working' });
+    this.dbCreate(task.id, 'agent', params.agent, params.input, orgId);
 
     this.orchestrator
-      .runAgent(params.agent, params.input, params.sessionId, params.companyContext)
+      .runAgent(params.agent, params.input, params.sessionId, params.orgContext)
       .then((result) => {
         const current = this.store.get(task.id);
         if (current?.status === 'canceled') return;
@@ -37,6 +45,7 @@ export class TaskManager {
           result,
           completedAt: Date.now(),
         });
+        this.dbComplete(task.id, 'completed', params.agent, 'agent', orgId, result);
         logger.debug(`[TaskManager] Agent task ${task.id} completed`);
         params.onComplete?.(result);
       })
@@ -50,6 +59,7 @@ export class TaskManager {
           error: errorMsg,
           completedAt: Date.now(),
         });
+        this.dbComplete(task.id, 'failed', params.agent, 'agent', orgId, undefined, errorMsg);
         logger.error(`[TaskManager] Agent task ${task.id} failed: ${error}`);
         params.onError?.(errorMsg);
       });
@@ -61,6 +71,7 @@ export class TaskManager {
     const task = this.store.create('workflow', params.workflow, params.input);
 
     this.store.update(task.id, { status: 'working' });
+    this.dbCreate(task.id, 'workflow', params.workflow, params.input);
 
     this.orchestrator
       .runWorkflow(params.workflow, params.input)
@@ -80,6 +91,7 @@ export class TaskManager {
               timestamp: Date.now(),
             },
           });
+          this.dbUpdateStatus(task.id, 'input-required');
           logger.debug(`[TaskManager] Workflow task ${task.id} requires input`);
           return;
         }
@@ -89,17 +101,20 @@ export class TaskManager {
           result,
           completedAt: Date.now(),
         });
+        this.dbComplete(task.id, 'completed', params.workflow, 'workflow', undefined, result);
         logger.debug(`[TaskManager] Workflow task ${task.id} completed`);
       })
       .catch((error) => {
         const current = this.store.get(task.id);
         if (current?.status === 'canceled') return;
 
+        const errorMsg = error instanceof Error ? error.message : String(error);
         this.store.update(task.id, {
           status: 'failed',
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMsg,
           completedAt: Date.now(),
         });
+        this.dbComplete(task.id, 'failed', params.workflow, 'workflow', undefined, undefined, errorMsg);
         logger.error(`[TaskManager] Workflow task ${task.id} failed: ${error}`);
       });
 
@@ -180,12 +195,14 @@ export class TaskManager {
   track(kind: TaskKind, target: string, input: Record<string, unknown>, sessionId?: string): Task {
     const task = this.store.create(kind, target, input, sessionId);
     this.store.update(task.id, { status: 'working' });
+    this.dbCreate(task.id, kind, target, input);
     return task;
   }
 
   trackP2P(kind: TaskKind, target: string, input: Record<string, unknown>, p2p: TaskP2PMeta, sessionId?: string): Task {
     const task = this.store.create(kind, target, input, sessionId);
     this.store.update(task.id, { status: 'working', p2p });
+    this.dbCreate(task.id, kind, target, input);
     return task;
   }
 
@@ -198,17 +215,20 @@ export class TaskManager {
       result,
       completedAt: Date.now(),
     });
+    this.dbComplete(taskId, 'completed', task.target, task.kind, undefined, result);
   }
 
   reject(taskId: string, error: unknown): void {
     const task = this.store.get(taskId);
     if (!task || task.status === 'canceled') return;
 
+    const errorMsg = error instanceof Error ? error.message : String(error);
     this.store.update(taskId, {
       status: 'failed',
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMsg,
       completedAt: Date.now(),
     });
+    this.dbComplete(taskId, 'failed', task.target, task.kind, undefined, undefined, errorMsg);
   }
 
   updateMetrics(id: string, metrics: TaskMetrics): void {
@@ -232,5 +252,38 @@ export class TaskManager {
 
   destroy(): void {
     this.store.destroy();
+  }
+
+  private dbCreate(taskId: string, kind: string, target: string, input: Record<string, unknown>, orgId?: string): void {
+    if (!this.taskMetricsManager) return;
+    try {
+      this.taskMetricsManager.create(taskId, kind, target, input, orgId);
+    } catch (err) {
+      logger.error(`[TaskManager] Failed to persist task creation for ${taskId}: ${err}`);
+    }
+  }
+
+  private dbComplete(taskId: string, status: string, target: string, kind: string, orgId?: string, result?: unknown, error?: string): void {
+    if (!this.taskMetricsManager) return;
+    try {
+      const finalTask = this.store.get(taskId);
+      this.taskMetricsManager.record(taskId, {
+        kind, target, status, orgId,
+        result, error,
+        metrics: finalTask?.metrics,
+        durationMs: finalTask ? (finalTask.completedAt ?? Date.now()) - finalTask.createdAt : 0,
+      });
+    } catch (err) {
+      logger.error(`[TaskManager] Failed to persist task completion for ${taskId}: ${err}`);
+    }
+  }
+
+  private dbUpdateStatus(taskId: string, status: string, error?: string): void {
+    if (!this.taskMetricsManager) return;
+    try {
+      this.taskMetricsManager.updateStatus(taskId, status, error);
+    } catch (err) {
+      logger.error(`[TaskManager] Failed to persist task status for ${taskId}: ${err}`);
+    }
   }
 }

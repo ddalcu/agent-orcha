@@ -69,7 +69,7 @@ export interface SubmitAgentParams {
   agent: string;
   input: Record<string, unknown>;
   sessionId?: string;
-  companyContext?: import('../agents/types.ts').AgentCompanyContext;
+  orgContext?: import('../agents/types.ts').AgentOrgContext;
   onComplete?: (result: AgentResult) => void;
   onError?: (error: string) => void;
 }

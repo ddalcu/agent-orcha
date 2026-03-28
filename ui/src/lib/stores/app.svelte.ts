@@ -1,20 +1,21 @@
 import type { Agent, Workflow, LLM, TabId } from '../types/index.js';
 
-const SIMPLE_TABS: TabId[] = ['agents', 'knowledge', 'graph', 'tools', 'monitor', 'llm', 'ide', 'p2p', 'companies'];
+const SIMPLE_TABS: TabId[] = ['agents', 'knowledge', 'graph', 'tools', 'monitor', 'llm', 'ide', 'p2p', 'organizations'];
 
-function parseHash(): { tab: TabId; companyId?: string; itemId?: string } {
+function parseHash(): { tab: TabId; orgId?: string; itemId?: string } {
   let raw = window.location.hash.replace('#', '');
   if (raw === 'mcp') raw = 'tools';
 
-  // Company-scoped routes:
-  //   tickets/{companyId}
-  //   tickets/{companyId}/{ticketId}
-  //   routines/{companyId}
-  //   routines/{companyId}/{routineId}
+  // Organization-scoped routes:
+  //   tickets/{orgId}
+  //   tickets/{orgId}/{ticketId}
+  //   routines/{orgId}
+  //   routines/{orgId}/{routineId}
+  //   orgchart/{orgId}
   const parts = raw.split('/');
   const base = parts[0] as TabId;
-  if ((base === 'tickets' || base === 'routines') && parts[1]) {
-    return { tab: base, companyId: parts[1], itemId: parts[2] || undefined };
+  if ((base === 'tickets' || base === 'routines' || base === 'orgchart' || base === 'dashboard') && parts[1]) {
+    return { tab: base, orgId: parts[1], itemId: parts[2] || undefined };
   }
   if (SIMPLE_TABS.includes(base)) {
     return { tab: base };
@@ -24,7 +25,7 @@ function parseHash(): { tab: TabId; companyId?: string; itemId?: string } {
 
 class AppStore {
   activeTab = $state<TabId>('agents');
-  routeCompanyId = $state<string | undefined>(undefined);
+  routeOrgId = $state<string | undefined>(undefined);
   routeItemId = $state<string | undefined>(undefined);
   agents = $state<Agent[]>([]);
   workflows = $state<Workflow[]>([]);
@@ -38,25 +39,25 @@ class AppStore {
   constructor() {
     const initial = parseHash();
     this.activeTab = initial.tab;
-    this.routeCompanyId = initial.companyId;
+    this.routeOrgId = initial.orgId;
     this.routeItemId = initial.itemId;
 
     window.addEventListener('hashchange', () => {
       const parsed = parseHash();
-      if (parsed.tab !== this.activeTab || parsed.companyId !== this.routeCompanyId || parsed.itemId !== this.routeItemId) {
+      if (parsed.tab !== this.activeTab || parsed.orgId !== this.routeOrgId || parsed.itemId !== this.routeItemId) {
         this.activeTab = parsed.tab;
-        this.routeCompanyId = parsed.companyId;
+        this.routeOrgId = parsed.orgId;
         this.routeItemId = parsed.itemId;
       }
     });
   }
 
-  setTab(tab: TabId, companyId?: string, itemId?: string) {
+  setTab(tab: TabId, orgId?: string, itemId?: string) {
     this.activeTab = tab;
-    this.routeCompanyId = companyId;
+    this.routeOrgId = orgId;
     this.routeItemId = itemId;
-    if (companyId && (tab === 'tickets' || tab === 'routines')) {
-      const hash = itemId ? `${tab}/${companyId}/${itemId}` : `${tab}/${companyId}`;
+    if (orgId && (tab === 'tickets' || tab === 'routines' || tab === 'orgchart' || tab === 'dashboard')) {
+      const hash = itemId ? `${tab}/${orgId}/${itemId}` : `${tab}/${orgId}`;
       window.location.hash = hash;
     } else {
       window.location.hash = tab;

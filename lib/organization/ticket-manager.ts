@@ -2,21 +2,21 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type { Ticket, CreateTicketInput, UpdateTicketInput, TicketActivity, TicketFilters } from './types.ts';
 import { CreateTicketSchema, UpdateTicketSchema } from './types.ts';
-import type { CompanyManager } from './company-manager.ts';
+import type { OrgManager } from './org-manager.ts';
 import { logger } from '../logger.ts';
 
 export class TicketManager {
   private db: DatabaseSync;
-  private companyManager: CompanyManager;
+  private orgManager: OrgManager;
 
-  constructor(db: DatabaseSync, companyManager: CompanyManager) {
+  constructor(db: DatabaseSync, orgManager: OrgManager) {
     this.db = db;
-    this.companyManager = companyManager;
+    this.orgManager = orgManager;
   }
 
-  list(companyId: string, filters?: TicketFilters): Ticket[] {
-    let sql = 'SELECT * FROM tickets WHERE companyId = ?';
-    const params: SQLInputValue[] = [companyId];
+  list(orgId: string, filters?: TicketFilters): Ticket[] {
+    let sql = 'SELECT * FROM tickets WHERE orgId = ?';
+    const params: SQLInputValue[] = [orgId];
 
     if (filters?.status) {
       sql += ' AND status = ?';
@@ -43,22 +43,21 @@ export class TicketManager {
     return this.db.prepare('SELECT * FROM tickets WHERE identifier = ?').get(identifier) as Ticket | undefined;
   }
 
-  create(companyId: string, data: CreateTicketInput): Ticket {
+  create(orgId: string, data: CreateTicketInput): Ticket {
     const parsed = CreateTicketSchema.parse(data);
-    const company = this.companyManager.get(companyId);
-    if (!company) throw new Error(`Company not found: ${companyId}`);
+    const org = this.orgManager.get(orgId);
+    if (!org) throw new Error(`Organization not found: ${orgId}`);
 
-    const issueNumber = this.companyManager.incrementIssueCounter(companyId);
-    const identifier = `${company.issuePrefix}-${issueNumber}`;
+    const issueNumber = this.orgManager.incrementIssueCounter(orgId);
+    const identifier = `${org.issuePrefix}-${issueNumber}`;
     const now = new Date().toISOString();
     const id = randomUUID();
 
     this.db.prepare(`
-      INSERT INTO tickets (id, companyId, title, description, status, priority, assigneeAgent, issueNumber, identifier, taskId, createdAt, updatedAt, completedAt)
+      INSERT INTO tickets (id, orgId, title, description, status, priority, assigneeAgent, issueNumber, identifier, taskId, createdAt, updatedAt, completedAt)
       VALUES (?, ?, ?, ?, 'backlog', ?, ?, ?, ?, '', ?, ?, '')
-    `).run(id, companyId, parsed.title, parsed.description, parsed.priority, parsed.assigneeAgent, issueNumber, identifier, now, now);
+    `).run(id, orgId, parsed.title, parsed.description, parsed.priority, parsed.assigneeAgent, issueNumber, identifier, now, now);
 
-    // Log creation activity
     this.addActivity(id, 'status_change', `Ticket created`, 'system', 'System', '', 'backlog');
 
     logger.info(`[TicketManager] Created ticket: ${identifier} — ${parsed.title}`);

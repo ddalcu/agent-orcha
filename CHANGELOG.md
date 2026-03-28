@@ -5,10 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
 
-## Unreleased (feature/transformers)
+## Release 2026.328
 
 ### Added
 
+- **Organization System** — Full multi-tenant organization management layer. Each organization is an isolated workspace with its own tickets, routines, org chart, and CEO configuration. Core modules: `OrgManager` (CRUD), `OrgDB` (SQLite schema for orgs, tickets, routines, members, CEO configs, heartbeats, runs), and comprehensive Zod-validated types.
+- **Ticket Workflows** — `TicketManager` handles the full ticket lifecycle: create, update, state transitions (`backlog` → `todo` → `in_progress` → `in_review` → `blocked` → `done`), comments, activity tracking, agent assignment, and task linking. Tickets carry priority, labels, and metrics.
+- **Routine Scheduling** — `RoutineManager` enables cron-based recurring agent execution per organization. Create routines with cron expressions, manage lifecycle, track individual runs with status and output.
+- **CEO Coordination** — Two CEO strategies for autonomous org management:
+  - `AgentCEO` — Uses an ORCHA agent to triage tickets, delegate to team members, and review outputs.
+  - `ClaudeCodeCEO` — Uses Claude Opus directly with an ORCHA API tool to manage the org autonomously.
+  - `CEOCoordinator` orchestrates both strategies, maintains session state, and handles concurrent operations.
+- **CEO Run Tracking** — `CEORunManager` records every CEO execution: start/complete/fail, token usage, duration, cost, decisions made, and summaries.
+- **Heartbeat Manager** — 300-line scheduled CEO check system. Runs CEO triage on a cron schedule, prevents overlapping executions, and tracks full run history with task events.
+- **Org Chart** — `OrgChartManager` manages organizational hierarchy: members with roles (`ceo`, `manager`, `member`), reporting relationships, and tree building for UI visualization.
+- **Dashboard Stats** — `DashboardStatsManager` aggregates org-wide metrics: CEO status, recent runs, token usage, ticket breakdown by status, team member list, and task performance analytics.
+- **Task Metrics** — `TaskMetricsManager` tracks per-agent task metrics within each org: invocation counts, token consumption, enabling performance dashboards.
+- **Agent Org Context** — Agents receive organization context when invoked through the org system. System prompts are augmented with `<org_context>`, `<ticket_context>`, and `<active_tickets>` XML blocks so agents understand their role and current work.
+- **P2P Token Stats & Leaderboard** — New `P2PStats` class (326 lines) tracks token usage by model and agent, persists to `.p2p-stats.json`, publishes compact stats to DHT, and builds a real-time leaderboard with online status. New `GET /api/p2p/leaderboard` endpoint. `CatalogMessage` extended with inline stats.
+- **Organization API** — `src/routes/organizations.route.ts` (523 lines): Complete REST API for organizations, tickets (with execution endpoint that builds org context and delegates to agents), routines, org chart members, comments, and activity management.
+- **Organization UI** — Five new Svelte pages:
+  - `OrganizationsPage.svelte` — List/create/edit orgs with CEO config, color branding, and issue prefix.
+  - `TicketsPage.svelte` — Full ticket board with status workflow, priority filtering, agent assignment, task execution, and comment history.
+  - `RoutinesPage.svelte` — Schedule management with cron builder, agent routing, execution history, and run status.
+  - `OrgChartPage.svelte` — Interactive tree visualization of org hierarchy with role/reporting management.
+  - `OrgDashboardPage.svelte` — Comprehensive dashboard with CEO status, runs, token metrics, ticket breakdown, and team analytics.
+- **Organization Store & API Client** — `org.svelte.ts` store manages selected org, tickets, routines, members, and dashboard state with lazy-loading. `org-api.ts` provides the full API client for all org operations.
+- **NavBar Org Sections** — Navigation reorganized with expandable organization sections showing dashboard, tickets, routines, and org chart per org. "Manage" button for creating/editing organizations.
+- **CEO Skills** — Two new skill templates: `org-ceo/SKILL.md` (agent CEO instructions) and `org-ceo-cc/SKILL.md` (Claude Code CEO instructions for managing orgs via ORCHA APIs).
 - **node-omni-orcha Integration** — New `omni` provider for LLM chat, embeddings, image generation, and TTS. Models are loaded natively in-process via `@agent-orcha/node-omni-orcha` instead of shelling out to llama-server/mlx-serve binaries. Three new provider classes: `OmniChatModel`, `OmniEmbeddingsProvider`, and `OmniModelCache` (singleton cache with lazy-load-and-keep-loaded semantics for chat, embed, image, and TTS models).
 - **Unified Model Config (`models.yaml`)** — Replaced `llm.json` with a YAML config that includes `llm`, `embeddings`, `image`, `tts`, and `video` sections in a single file. New helpers: `loadModelsConfig()`, `saveModelsConfig()`, `listImageConfigs()`, `listTtsConfigs()`, `listVideoConfigs()`, `getImageConfig()`, `getTtsConfig()`.
 - **Model Tool Factory** — `lib/tools/built-in/model-tool-factory.ts` creates `generate_image` and `generate_tts` built-in tools with full P2P leverage support (local-first, remote-first, remote-only modes). Replaces the previous hardcoded tool registration in the orchestrator.
@@ -28,17 +52,24 @@ Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
 - **NVIDIA VRAM Usage** — GPU status reporting includes VRAM usage from `nvidia-smi`.
 - **Loose Model Migration** — `ModelManager.migrateLooseModels()` moves bare `.gguf` files at `.models/` root into named subdirectories with clean generated names (strips quantization suffixes).
 - **Cross-Platform Pre-Commit Hook** — New `scripts/pre-commit.mjs` (pure Node) replaces the bash pre-commit script for Windows compatibility. Checks forbidden files, secret patterns, TypeScript errors, Svelte check, and unit tests.
+- **Ticket Manager Tests** — `test/organization/ticket-manager.test.ts` covering ticket lifecycle, state transitions, and comment management.
 - **P2P Load Balancing Tests** — `test/p2p/p2p-load-balancing.test.ts` with 500+ lines covering peer selection, in-flight tracking, and catalog load broadcasting.
 - **Local-LLM Route Tests** — 13 new tests covering activate-image/tts routes, download auto-config, image file detection, and downloadKey shape.
 
 ### Changed
 
+- **Company → Organization Rename** — The entire "company" module has been refactored to "organization" across the codebase: database, manager, types, API routes, UI pages, stores, and services. All references updated for consistent naming.
+- **Orchestrator Org Integration** — Initializes all organization system components (`OrgDB`, `OrgManager`, `TicketManager`, `RoutineManager`, `OrgChartManager`, `HeartbeatManager`, `CEOCoordinator`, `DashboardStatsManager`, `TaskMetricsManager`), exposes `orgSystem` getter, and wires org metrics into the task manager.
+- **Task Manager Org Hooks** — `TaskManager` enhanced with organization context tracking, emitting task events that feed into `TaskMetricsManager` for per-agent analytics.
+- **OmniChatModel Improvements** — Enhanced with better error handling and model loading behavior.
+- **OmniModelCache** — Improved cache eviction and concurrent load handling.
+- **LLM Factory** — Added organization-aware model resolution alongside existing `omni` provider support.
 - **LLM Factory Rewrite** — `LLMFactory.create()` now supports the `omni` provider (creates `OmniChatModel`) alongside existing cloud and local providers. Embedding factory supports `omni` provider via `OmniEmbeddingsProvider`.
-- **P2P Catalog Format** — `CatalogMessage` now broadcasts `models: P2PModelInfo[]` (with `type`, `category` fields) instead of `llms: P2PLLMInfo[]`. `RemoteModel` replaces `RemoteLLM` type throughout.
+- **P2P Catalog Format** — `CatalogMessage` now broadcasts `models: P2PModelInfo[]` (with `type`, `category` fields) instead of `llms: P2PLLMInfo[]`. `RemoteModel` replaces `RemoteLLM` type throughout. Extended with inline token stats.
 - **Orchestrator Model Registration** — `registerModelTools()` builds image/TTS tools via `ModelToolFactory`. `registerP2PTools()` adds `generate_video`. Model configs resolved from `models.yaml` sections instead of hardcoded.
 - **Models Page Overhaul** — `LocalLlmPage.svelte` extensively reworked: `omni` provider displayed as "Local", bundle download UI, model category badges (LLM/Embed/Image/TTS), activate buttons for all model types.
 - **Agents Page** — Expanded with richer agent cards and model-type indicators.
-- **P2P Page** — Updated to display model categories and leverage modes for shared models.
+- **P2P Page** — Updated to display model categories, leverage modes, and token leaderboard.
 - **Downloaded Model Cards** — Removed "on demand" badges. All model types have consistent "Activate" buttons. Trash icon moved to top-right corner.
 - **P2P Leverage Label** — Renamed to "P2P model fallback" with description: "If a model isn't available locally, search P2P peers by name."
 - **Sandbox Container Re-Attach** — `SandboxContainer` checks if the container already exists (stopped) and restarts it instead of erroring. New `containerExists()` and `startExistingContainer()` methods.
@@ -59,6 +90,10 @@ Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
 
 ### Removed
 
+- **Company Module** — Deleted `lib/company/company-db.ts`, `company-manager.ts`, and `types.ts`. Replaced by the organization system.
+- **Company UI** — Deleted `CompaniesPage.svelte`, `company-api.ts`, and `company.svelte.ts` store. Replaced by organization equivalents.
+- **Company API Route** — Deleted `src/routes/companies.route.ts`. Replaced by `organizations.route.ts`.
+- **`.env.example` Template** — Removed from `templates/`.
 - **llama-cpp / mlx-serve Engine System** — Deleted `binary-manager.ts`, `engine-interface.ts`, `engine-registry.ts`, `llama-cpp-engine.ts`, `mlx-serve-engine.ts`, `gguf-reader.ts`, `llama-server-process.ts`, `mlx-binary-manager.ts`, `mlx-server-process.ts`, and all associated tests (~5,000 lines). Local inference now goes through `node-omni-orcha` exclusively.
 - **System Tray (old)** — Deleted `lib/sea/system-tray.ts` and its tests. Replaced by the external `trayconsole` binary.
 - **`llm.json` Template** — Replaced by `templates/models.yaml`.

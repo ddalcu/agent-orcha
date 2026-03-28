@@ -115,16 +115,18 @@ export interface AgentResult {
   };
 }
 
-export interface AgentCompanyContext {
-  company: { id: string; name: string; description: string; prefix: string };
+export interface AgentOrgContext {
+  organization: { id: string; name: string; description: string; prefix: string };
   ticket?: { identifier: string; title: string; priority: string; description: string };
+  orgChart?: { agentName: string; role: string; title: string }[];
+  activeTickets?: { identifier: string; title: string; status: string; priority: string; assigneeAgent: string }[];
 }
 
 export interface AgentInvokeOptions {
   input: Record<string, unknown>;
   sessionId?: string;
   signal?: AbortSignal;
-  companyContext?: AgentCompanyContext;
+  orgContext?: AgentOrgContext;
 }
 
 export interface AgentInstance {

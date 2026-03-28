@@ -6,6 +6,8 @@ import { logger } from '../../logger.ts';
 
 export interface OmniChatModelOptions {
   modelPath: string;
+  /** Path to multimodal projector GGUF (mmproj). Required for vision models. */
+  mmprojPath?: string;
   contextSize?: number;
   gpuLayers?: number;
   flashAttn?: boolean;
@@ -15,18 +17,34 @@ export interface OmniChatModelOptions {
   thinkingBudget?: number;
 }
 
+const ROLE_MAP: Record<string, 'system' | 'user' | 'assistant' | 'tool'> = {
+  system: 'system',
+  human: 'user',
+  ai: 'assistant',
+  tool: 'tool',
+};
+
 function convertMessages(messages: BaseMessage[]): ChatMessage[] {
   return messages.map((msg) => {
-    const content = typeof msg.content === 'string'
-      ? msg.content
-      : msg.content.filter(p => p.type === 'text').map(p => (p as { type: 'text'; text: string }).text).join('\n');
-
-    const roleMap: Record<string, 'system' | 'user' | 'assistant' | 'tool'> = {
-      system: 'system',
-      human: 'user',
-      ai: 'assistant',
-      tool: 'tool',
-    };
+    // Convert content: pass through image parts as Buffers for the native binding
+    let content: ChatMessage['content'];
+    if (typeof msg.content === 'string') {
+      content = msg.content;
+    } else {
+      const hasImages = msg.content.some(p => p.type === 'image');
+      if (hasImages) {
+        // Multimodal: convert base64 image data to Buffers
+        content = msg.content.map((part) => {
+          if (part.type === 'image') {
+            return { type: 'image' as const, data: Buffer.from(part.data, 'base64') };
+          }
+          return { type: 'text' as const, text: (part as { text: string }).text };
+        });
+      } else {
+        // Text-only array: join into a single string
+        content = msg.content.filter(p => p.type === 'text').map(p => (p as { type: 'text'; text: string }).text).join('\n');
+      }
+    }
 
     // Convert tool_calls from Orcha format (args: object) to omni format (args: JSON string)
     const toolCalls = msg.tool_calls?.map(tc => ({
@@ -36,7 +54,7 @@ function convertMessages(messages: BaseMessage[]): ChatMessage[] {
     }));
 
     return {
-      role: roleMap[msg.role] ?? 'user',
+      role: ROLE_MAP[msg.role] ?? 'user',
       content,
       ...(msg.tool_call_id ? { tool_call_id: msg.tool_call_id } : {}),
       ...(msg.name ? { name: msg.name } : {}),
@@ -77,6 +95,7 @@ export class OmniChatModel implements ChatModel {
         contextSize: this.options.contextSize,
         gpuLayers: this.options.gpuLayers ?? -1,
         flashAttn: this.options.flashAttn ?? true,
+        ...(this.options.mmprojPath ? { mmprojPath: this.options.mmprojPath, imageMaxTokens: 1024 } : {}),
       });
     }
     return this.llm;

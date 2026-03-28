@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { companyStore } from '../lib/stores/company.svelte.js';
-  import { companyApi } from '../lib/services/company-api.js';
+  import { orgStore } from '../lib/stores/org.svelte.js';
+  import { orgApi } from '../lib/services/org-api.js';
   import { appStore } from '../lib/stores/app.svelte.js';
   import { api } from '../lib/services/api.js';
   import type { Ticket, TicketActivity, Agent } from '../lib/types/index.js';
@@ -35,34 +35,34 @@
   let commentText = $state('');
 
   onMount(async () => {
-    // Resolve company from route
-    if (appStore.routeCompanyId) {
-      await companyStore.selectCompanyById(appStore.routeCompanyId);
+    // Resolve organization from route
+    if (appStore.routeOrgId) {
+      await orgStore.selectOrgById(appStore.routeOrgId);
     }
-    if (companyStore.selectedCompany) {
-      await companyStore.loadTickets();
+    if (orgStore.selectedOrg) {
+      await orgStore.loadTickets();
     }
     agents = await api.getAgents();
 
     // Deep-link: open ticket detail if itemId in route
-    if (appStore.routeItemId && companyStore.selectedCompany) {
-      const ticket = companyStore.tickets.find(t => t.id === appStore.routeItemId);
+    if (appStore.routeItemId && orgStore.selectedOrg) {
+      const ticket = orgStore.tickets.find(t => t.id === appStore.routeItemId);
       if (ticket) await openDetail(ticket);
     }
   });
 
   async function applyFilters() {
-    await companyStore.loadTickets({
+    await orgStore.loadTickets({
       status: filterStatus || undefined,
       priority: filterPriority || undefined,
     });
   }
 
   async function handleCreateTicket() {
-    if (!companyStore.selectedCompany) return;
+    if (!orgStore.selectedOrg) return;
     createError = '';
     try {
-      const ticket = await companyApi.createTicket(companyStore.selectedCompany.id, {
+      const ticket = await orgApi.createTicket(orgStore.selectedOrg.id, {
         title: createTitle,
         description: createDesc,
         priority: createPriority,
@@ -72,7 +72,7 @@
       // Auto-execute if enabled and an agent is assigned
       if (createAutoExecute && createAssignee) {
         try {
-          await companyApi.executeTicket(ticket.id);
+          await orgApi.executeTicket(ticket.id);
         } catch (err) {
           // Ticket was created, just log the execution error
           console.warn('Auto-execute failed:', err);
@@ -85,19 +85,19 @@
       createPriority = 'medium';
       createAssignee = '';
       createAutoExecute = true;
-      await companyStore.loadTickets();
+      await orgStore.loadTickets();
     } catch (err) {
       createError = err instanceof Error ? err.message : String(err);
     }
   }
 
   async function openDetail(ticket: Ticket) {
-    const data = await companyApi.getTicket(ticket.id);
+    const data = await orgApi.getTicket(ticket.id);
     selectedTicket = data;
     activity = data.activity || [];
     // Push ticket ID into route
-    if (companyStore.selectedCompany) {
-      appStore.setTab('tickets', companyStore.selectedCompany.id, ticket.id);
+    if (orgStore.selectedOrg) {
+      appStore.setTab('tickets', orgStore.selectedOrg.id, ticket.id);
     }
   }
 
@@ -105,23 +105,23 @@
     selectedTicket = null;
     activity = [];
     // Pop back to ticket list route
-    if (companyStore.selectedCompany) {
-      appStore.setTab('tickets', companyStore.selectedCompany.id);
+    if (orgStore.selectedOrg) {
+      appStore.setTab('tickets', orgStore.selectedOrg.id);
     }
-    await companyStore.loadTickets();
+    await orgStore.loadTickets();
   }
 
   async function transitionStatus(id: string, status: string) {
-    await companyApi.transitionTicket(id, status);
+    await orgApi.transitionTicket(id, status);
     if (selectedTicket?.id === id) {
       await openDetail(selectedTicket);
     }
-    await companyStore.loadTickets();
+    await orgStore.loadTickets();
   }
 
   async function addComment() {
     if (!selectedTicket || !commentText.trim()) return;
-    await companyApi.addComment(selectedTicket.id, commentText.trim(), 'User');
+    await orgApi.addComment(selectedTicket.id, commentText.trim(), 'User');
     commentText = '';
     await openDetail(selectedTicket);
   }
@@ -130,12 +130,12 @@
     if (!selectedTicket || !commentText.trim()) return;
     const input = commentText.trim();
     // Post the comment first so the agent can see it in the activity
-    await companyApi.addComment(selectedTicket.id, input, 'User');
+    await orgApi.addComment(selectedTicket.id, input, 'User');
     commentText = '';
     try {
-      await companyApi.executeTicket(selectedTicket.id, undefined, input);
+      await orgApi.executeTicket(selectedTicket.id, undefined, input);
       await openDetail(selectedTicket);
-      await companyStore.loadTickets();
+      await orgStore.loadTickets();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn('Reply & Execute failed:', msg);
@@ -146,14 +146,43 @@
   async function executeTicket() {
     if (!selectedTicket) return;
     try {
-      await companyApi.executeTicket(selectedTicket.id);
+      await orgApi.executeTicket(selectedTicket.id);
       await openDetail(selectedTicket);
-      await companyStore.loadTickets();
+      await orgStore.loadTickets();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       activity = [...activity, { id: '', ticketId: '', type: 'task_event', content: `Error: ${msg}`, authorType: 'system', authorName: 'System', oldValue: '', newValue: '', metadata: '{}', createdAt: new Date().toISOString() }];
     }
   }
+
+  async function submitToCEO() {
+    if (!selectedTicket) return;
+    try {
+      await orgApi.submitToCEO(selectedTicket.id);
+      await openDetail(selectedTicket);
+      await orgStore.loadTickets();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      activity = [...activity, { id: '', ticketId: '', type: 'task_event', content: `CEO Error: ${msg}`, authorType: 'system', authorName: 'System', oldValue: '', newValue: '', metadata: '{}', createdAt: new Date().toISOString() }];
+    }
+  }
+
+  async function requestCEOReview() {
+    if (!selectedTicket) return;
+    try {
+      // Get latest agent output from activity
+      const agentComments = activity.filter(a => a.type === 'comment' && a.authorType === 'agent');
+      const lastOutput = agentComments.length > 0 ? agentComments[agentComments.length - 1].content : '';
+      await orgApi.requestCEOReview(selectedTicket.id, lastOutput);
+      await openDetail(selectedTicket);
+      await orgStore.loadTickets();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      activity = [...activity, { id: '', ticketId: '', type: 'task_event', content: `CEO Review Error: ${msg}`, authorType: 'system', authorName: 'System', oldValue: '', newValue: '', metadata: '{}', createdAt: new Date().toISOString() }];
+    }
+  }
+
+  let hasCEO = $derived(orgStore.selectedOrg?.ceoType ? true : false);
 
   function viewInMonitor(taskId: string) {
     appStore.setTab('monitor');
@@ -179,13 +208,13 @@
   }
 </script>
 
-<div class="page-container">
-  {#if !companyStore.selectedCompany}
+<div class="space-y-4 h-full overflow-y-auto pb-6 view-panel">
+  {#if !orgStore.selectedOrg}
     <div class="empty-state">
       <i class="fas fa-building empty-icon"></i>
-      <p>Select a company first to view tickets.</p>
-      <button class="btn btn-accent btn-sm" onclick={() => appStore.setTab('companies')}>
-        Go to Companies
+      <p>Select an organization first to view tickets.</p>
+      <button class="btn btn-accent btn-sm" onclick={() => appStore.setTab('organizations')}>
+        Go to Organizations
       </button>
     </div>
   {:else if selectedTicket}
@@ -222,6 +251,18 @@
         {#if selectedTicket.assigneeAgent && selectedTicket.status !== 'done' && selectedTicket.status !== 'cancelled'}
           <button class="btn btn-accent btn-sm" onclick={executeTicket}>
             <i class="fas fa-play"></i> Execute
+          </button>
+        {/if}
+
+        {#if hasCEO && selectedTicket.status !== 'done' && selectedTicket.status !== 'cancelled'}
+          <button class="btn btn-ghost btn-sm ceo-btn" onclick={submitToCEO} title="Submit to CEO for triage">
+            <i class="fas fa-crown"></i> Submit to CEO
+          </button>
+        {/if}
+
+        {#if hasCEO && (selectedTicket.status === 'in_review' || selectedTicket.status === 'done')}
+          <button class="btn btn-ghost btn-sm ceo-btn" onclick={requestCEOReview} title="Request CEO review">
+            <i class="fas fa-crown"></i> CEO Review
           </button>
         {/if}
 
@@ -313,7 +354,7 @@
     <div class="page-header">
       <h2 class="page-title">
         <i class="fas fa-ticket"></i> Tickets
-        <span class="title-company">({companyStore.selectedCompany.issuePrefix})</span>
+        <span class="title-org">({orgStore.selectedOrg.issuePrefix})</span>
       </h2>
       <button class="btn btn-accent btn-sm" onclick={() => { showCreate = true; }}>
         <i class="fas fa-plus"></i> New Ticket
@@ -335,14 +376,14 @@
       </select>
     </div>
 
-    {#if companyStore.tickets.length === 0}
+    {#if orgStore.tickets.length === 0}
       <div class="empty-state">
         <i class="fas fa-ticket empty-icon"></i>
         <p>No tickets yet.</p>
       </div>
     {:else}
       <div class="ticket-list">
-        {#each companyStore.tickets as ticket}
+        {#each orgStore.tickets as ticket}
           <button class="ticket-row" onclick={() => openDetail(ticket)}>
             <span class="ticket-id">{ticket.identifier}</span>
             <span class="ticket-title">{ticket.title}</span>
@@ -406,10 +447,9 @@
 {/if}
 
 <style>
-  .page-container { padding: 1.5rem; max-width: 900px; }
-  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; }
   .page-title { font-size: 1.2rem; font-weight: 600; color: var(--text-1); display: flex; align-items: center; gap: 0.5rem; }
-  .title-company { color: var(--text-3); font-size: 0.85rem; font-weight: 400; }
+  .title-org { color: var(--text-3); font-size: 0.85rem; font-weight: 400; }
   .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-2); }
   .empty-icon { font-size: 2.5rem; opacity: 0.3; margin-bottom: 1rem; }
 
@@ -477,4 +517,7 @@
   .form-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-2); margin-bottom: 0.5rem; cursor: pointer; }
   .form-check input[type="checkbox"] { accent-color: var(--accent); }
   .form-check input:disabled + span { opacity: 0.4; }
+
+  .ceo-btn { color: var(--accent); }
+  .ceo-btn:hover { color: var(--text-1); }
 </style>

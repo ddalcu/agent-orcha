@@ -134,9 +134,9 @@ export interface TaskMetrics {
   outputTokens?: number;
 }
 
-export type TabId = 'agents' | 'knowledge' | 'graph' | 'tools' | 'monitor' | 'llm' | 'ide' | 'p2p' | 'companies' | 'tickets' | 'routines';
+export type TabId = 'agents' | 'knowledge' | 'graph' | 'tools' | 'monitor' | 'llm' | 'ide' | 'p2p' | 'organizations' | 'tickets' | 'routines' | 'orgchart' | 'dashboard';
 
-export interface Company {
+export interface Organization {
   id: string;
   name: string;
   description: string;
@@ -144,13 +144,15 @@ export interface Company {
   issuePrefix: string;
   issueCounter: number;
   brandColor: string;
+  ceoType: string;
+  ceoConfig: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface Ticket {
   id: string;
-  companyId: string;
+  orgId: string;
   title: string;
   description: string;
   status: string;
@@ -180,7 +182,7 @@ export interface TicketActivity {
 
 export interface Routine {
   id: string;
-  companyId: string;
+  orgId: string;
   name: string;
   description: string;
   schedule: string;
@@ -204,6 +206,22 @@ export interface RoutineRun {
   completedAt: string;
   error: string;
   createdAt: string;
+}
+
+export interface OrgMember {
+  id: string;
+  orgId: string;
+  agentName: string;
+  title: string;
+  role: string;
+  reportsTo: string | null;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrgMemberNode extends OrgMember {
+  children: OrgMemberNode[];
 }
 
 export interface P2PStatus {
@@ -279,4 +297,73 @@ export interface P2PLeaderboardEntry {
   online: boolean;
   lastUpdated: number;
   isSelf: boolean;
+}
+
+export interface CEORun {
+  id: string;
+  orgId: string;
+  taskId: string;
+  type: string;
+  status: string;
+  triggerSource: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  durationMs: number;
+  summary: string;
+  decisions: string;
+  ticketsCreated: string;
+  ticketsUpdated: string;
+  sessionId: string;
+  error: string;
+  startedAt: string;
+  completedAt: string;
+  createdAt: string;
+}
+
+export interface HeartbeatConfig {
+  orgId: string;
+  enabled: number;
+  schedule: string;
+  timezone: string;
+  contextSnapshot: string;
+  updatedAt: string;
+}
+
+export interface OrgDashboard {
+  ceo: {
+    configured: boolean;
+    type: string;
+    agentName?: string;
+    status: 'idle' | 'working';
+    lastRunAt?: string;
+    lastRunSummary?: string;
+    heartbeatEnabled: boolean;
+    heartbeatSchedule?: string;
+  };
+  runs: CEORun[];
+  runStats: {
+    totalRuns: number;
+    totalCost: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    avgDurationMs: number;
+    last24hRuns: number;
+    last7dCost: number;
+  };
+  tickets: {
+    total: number;
+    byStatus: Record<string, number>;
+    recentlyUpdated: Ticket[];
+  };
+  agents: {
+    total: number;
+    members: { agentName: string; role: string; title: string }[];
+  };
+  taskStats: {
+    totalTasks: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    byAgent: { name: string; count: number; inputTokens: number; outputTokens: number }[];
+  };
 }
