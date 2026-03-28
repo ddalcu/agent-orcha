@@ -26,6 +26,8 @@ import type {
   PeerInfo,
   RemoteAgent,
   P2PStatus,
+  P2PNetworkStats,
+  P2PLeaderboardEntry,
   InvokeMessage,
   StreamMessage,
   StreamEndMessage,
@@ -33,6 +35,7 @@ import type {
   HandshakeMessage,
   CatalogMessage,
 } from './types.ts';
+import { P2PStats } from './p2p-stats.ts';
 
 const VERSION = '1.0.0';
 
@@ -62,6 +65,11 @@ export class P2PManager {
   // Client-side in-flight request tracking per peer
   private inFlightCounts = new Map<string, number>();
 
+  // Token tracking
+  private stats: P2PStats;
+  /** Peer DHT public keys — kept across disconnects for offline DHT lookups */
+  private peerPublicKeys = new Map<string, Buffer>();
+
   /** Path to the JSON settings file persisted across restarts */
   private get settingsPath(): string {
     return path.join(this.orchestrator.workspaceRoot, '.p2p-settings.json');
@@ -83,6 +91,8 @@ export class P2PManager {
     } else if (saved.rateLimit !== undefined) {
       this._rateLimit = Math.max(0, saved.rateLimit);
     }
+
+    this.stats = new P2PStats(this.orchestrator.workspaceRoot);
   }
 
   /** Check rate limit, returns true if request is allowed */
@@ -183,9 +193,17 @@ export class P2PManager {
 
     this.started = true;
     logger.info(`[P2P] Started as "${this.peerName}" (${this.peerId.slice(0, 8)}...) on network "${this.networkKey}"`);
+
+    // Start periodic DHT stats publishing
+    this.stats.startPublishTimer(async () => {
+      if (this.swarm?.dht && this.swarm.keyPair) {
+        await this.stats.publishToDHT(this.swarm.dht, this.swarm.keyPair, this.networkKey, this.peerName);
+      }
+    });
   }
 
   private onConnection(socket: any, _info: any): void {
+    const remotePublicKey: Buffer | undefined = socket.remotePublicKey;
     const protocol = new P2PProtocol(socket);
 
     // Send handshake immediately
@@ -227,6 +245,13 @@ export class P2PManager {
       this.peers.set(hs.peerId, { info: peerInfo, protocol });
       logger.info(`[P2P] Peer connected: "${hs.peerName}" (${hs.peerId.slice(0, 8)}...) with ${hs.agents.length} agent(s)`);
 
+      // Store DHT public key for stats fetching (kept across disconnects)
+      if (remotePublicKey) {
+        this.peerPublicKeys.set(hs.peerId, remotePublicKey);
+        // Background DHT stats fetch
+        this.fetchPeerStatsBackground(hs.peerId, remotePublicKey);
+      }
+
       // Set up message handlers for this peer
       this.setupPeerHandlers(hs.peerId, protocol);
     });
@@ -263,6 +288,10 @@ export class P2PManager {
         peer.info.agents = catalog.agents;
         peer.info.models = catalog.models ?? [];
         peer.info.load = catalog.load ?? 0;
+        // Update peer stats cache from inline catalog stats
+        if (catalog.stats && catalog.peerName) {
+          this.stats.updatePeerFromCatalog(peerId, catalog.peerName, catalog.stats);
+        }
         logger.info(`[P2P] Catalog update from "${peer.info.peerName}": ${catalog.agents.length} agent(s), ${(catalog.models ?? []).length} model(s), load: ${peer.info.load}`);
       }
     });
@@ -374,6 +403,78 @@ export class P2PManager {
     return this.peers.get(peerId)?.info.peerName ?? peerId.slice(0, 8);
   }
 
+  /**
+   * For P2P agent streams: if a tool_end chunk contains a model tool output
+   * (generate_image, generate_tts, generate_video), read the local file and
+   * replace the path with a base64 data URI so remote callers can render it.
+   */
+  private enrichModelToolOutput(chunk: unknown): unknown {
+    if (!chunk || typeof chunk !== 'object') return chunk;
+    const c = chunk as Record<string, unknown>;
+    if (c.type !== 'tool_end') return chunk;
+
+    const toolName = c.tool as string | undefined;
+    if (toolName !== 'generate_image' && toolName !== 'generate_tts' && toolName !== 'generate_video') return chunk;
+
+    const output = c.output;
+    if (typeof output !== 'string') return chunk;
+
+    try {
+      const parsed = JSON.parse(output);
+      if (!parsed.__modelTask) return chunk;
+
+      const generatedDir = path.join(this.orchestrator.workspaceRoot, '.generated');
+      let modified = false;
+
+      // Embed image as data URI
+      if (parsed.image && typeof parsed.image === 'string' && parsed.image.startsWith('/generated/')) {
+        const filePath = path.join(generatedDir, parsed.image.replace('/generated/', ''));
+        try {
+          const data = fs.readFileSync(filePath);
+          const ext = path.extname(filePath).slice(1) || 'png';
+          const mime = ext === 'jpg' ? 'image/jpeg' : ext === 'gif' ? 'image/gif' : `image/${ext}`;
+          parsed.image = `data:${mime};base64,${data.toString('base64')}`;
+          modified = true;
+        } catch (err: any) {
+          logger.debug(`[P2P] Could not read generated image for P2P: ${err.message}`);
+        }
+      }
+
+      // Embed audio as data URI
+      if (parsed.audio && typeof parsed.audio === 'string' && parsed.audio.startsWith('/generated/')) {
+        const filePath = path.join(generatedDir, parsed.audio.replace('/generated/', ''));
+        try {
+          const data = fs.readFileSync(filePath);
+          const ext = path.extname(filePath).slice(1) || 'wav';
+          parsed.audio = `data:audio/${ext};base64,${data.toString('base64')}`;
+          modified = true;
+        } catch (err: any) {
+          logger.debug(`[P2P] Could not read generated audio for P2P: ${err.message}`);
+        }
+      }
+
+      // Embed video as data URI
+      if (parsed.video && typeof parsed.video === 'string' && parsed.video.startsWith('/generated/')) {
+        const filePath = path.join(generatedDir, parsed.video.replace('/generated/', ''));
+        try {
+          const data = fs.readFileSync(filePath);
+          const ext = path.extname(filePath).slice(1) || 'mp4';
+          parsed.video = `data:video/${ext};base64,${data.toString('base64')}`;
+          modified = true;
+        } catch (err: any) {
+          logger.debug(`[P2P] Could not read generated video for P2P: ${err.message}`);
+        }
+      }
+
+      if (modified) {
+        return { ...c, output: JSON.stringify(parsed) };
+      }
+    } catch {
+      // Not valid JSON or unexpected format — pass through as-is
+    }
+    return chunk;
+  }
+
   private async handleInvokeRequest(
     peerId: string,
     protocol: P2PProtocol,
@@ -411,6 +512,7 @@ export class P2PManager {
 
     try {
       const stream = this.orchestrator.streamAgent(agentName, input, sessionId, abortController.signal);
+      let totalCharsServed = 0;
 
       for await (const chunk of stream) {
         if (protocol.isDestroyed) {
@@ -418,8 +520,20 @@ export class P2PManager {
           taskManager.cancelTask(task.id);
           return;
         }
-        protocol.send({ type: 'stream', requestId, chunk });
+        if (typeof chunk === 'string') totalCharsServed += chunk.length;
+        else if (chunk && typeof chunk === 'object' && 'content' in chunk) totalCharsServed += String((chunk as any).content).length;
+
+        // For model tool outputs, embed file data as base64 so remote callers can display it
+        const enriched = this.enrichModelToolOutput(chunk);
+        protocol.send({ type: 'stream', requestId, chunk: enriched });
       }
+
+      // Record served tokens (estimate from output chars — agent stream doesn't expose LLM usage)
+      this.stats.recordServed(this.networkKey, {
+        agent: agentName,
+        inputTokens: 0,
+        outputTokens: Math.ceil(totalCharsServed / 4),
+      });
 
       protocol.send({ type: 'stream_end', requestId });
       taskManager.resolve(task.id, { output: 'p2p stream completed' });
@@ -546,6 +660,12 @@ export class P2PManager {
         }
         if (chunk.usage_metadata) {
           protocol.send({ type: 'model_task_stream', requestId, chunk: { type: 'usage', ...chunk.usage_metadata } });
+          // Record served tokens
+          this.stats.recordServed(this.networkKey, {
+            model: configName,
+            inputTokens: chunk.usage_metadata.input_tokens || 0,
+            outputTokens: chunk.usage_metadata.output_tokens || 0,
+          });
         }
       }
 
@@ -1037,6 +1157,9 @@ export class P2PManager {
     if (key === this.networkKey) return;
     this.networkKey = key;
     this.saveSettings();
+    // Clear peer stats cache since we're switching networks
+    this.stats.clearPeerCache();
+    this.peerPublicKeys.clear();
     // Rejoin swarm with new topic
     if (this.started) {
       await this.close();
@@ -1049,14 +1172,66 @@ export class P2PManager {
     const agents = this.getLocalP2PAgents();
     const models = this.getLocalSharedModels();
     const load = this.getLocalLoad();
-    const msg: CatalogMessage = { type: 'catalog', peerName: this.peerName, agents, models, load };
+    const stats = this.stats.getCatalogStats(this.networkKey);
+    const msg: CatalogMessage = { type: 'catalog', peerName: this.peerName, agents, models, load, stats };
     for (const peer of this.peers.values()) {
       peer.protocol.send(msg);
     }
   }
 
+  // --- Token Stats & Leaderboard ---
+
+  /** Record tokens consumed from a remote peer (called from routes) */
+  recordConsumedTokens(opts: { model?: string; agent?: string; inputTokens: number; outputTokens: number }): void {
+    this.stats.recordConsumed(this.networkKey, opts);
+  }
+
+  /** Get own detailed stats for the current network */
+  getOwnStats(): P2PNetworkStats | null {
+    return this.stats.getStats(this.networkKey);
+  }
+
+  /** Build leaderboard for the current network, fetching peer DHT stats as needed */
+  async getLeaderboard(): Promise<P2PLeaderboardEntry[]> {
+    // Trigger DHT refresh for all known peers (respects 30s cooldown per peer)
+    if (this.swarm?.dht) {
+      const fetchPromises: Promise<void>[] = [];
+      for (const [peerId, publicKey] of this.peerPublicKeys) {
+        if (peerId === this.peerId) continue;
+        fetchPromises.push(
+          this.stats.fetchPeerStats(this.swarm.dht, publicKey, peerId).then(() => {})
+        );
+      }
+      // Wait up to 3 seconds for DHT fetches, don't block forever
+      await Promise.race([
+        Promise.allSettled(fetchPromises),
+        new Promise(resolve => setTimeout(resolve, 3_000)),
+      ]);
+    }
+
+    const connectedPeerIds = new Set(this.peers.keys());
+    return this.stats.buildLeaderboard(this.networkKey, connectedPeerIds, this.peerId, this.peerName);
+  }
+
+  /** Get this node's public key hex (for identification) */
+  getPublicKeyHex(): string {
+    return this.swarm?.keyPair?.publicKey?.toString('hex') ?? '';
+  }
+
+  private async fetchPeerStatsBackground(peerId: string, publicKey: Buffer): Promise<void> {
+    if (!this.swarm?.dht) return;
+    try {
+      await this.stats.fetchPeerStats(this.swarm.dht, publicKey, peerId);
+    } catch (err: any) {
+      logger.debug(`[P2P] Background stats fetch failed for ${peerId.slice(0, 8)}:`, err.message);
+    }
+  }
+
   async close(): Promise<void> {
     if (!this.started) return;
+
+    // Flush stats to disk and publish final DHT update
+    await this.stats.flushAndClose(this.swarm?.dht, this.swarm?.keyPair, this.networkKey, this.peerName);
 
     // Abort all pending requests
     for (const [reqId, req] of this.pendingRequests) {

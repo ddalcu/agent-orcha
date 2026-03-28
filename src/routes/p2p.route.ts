@@ -150,15 +150,23 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
 
       try {
         const stream = manager.invokeRemoteAgent(peerId, agentName, input, sid, abortController.signal);
+        let totalCharsConsumed = 0;
 
         for await (const chunk of stream) {
           if (abortController.signal.aborted) break;
 
           if (typeof chunk === 'string') {
+            totalCharsConsumed += chunk.length;
             reply.raw.write(`data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`);
           } else {
+            if (chunk && typeof chunk === 'object' && 'content' in chunk) totalCharsConsumed += String((chunk as any).content).length;
             reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
           }
+        }
+
+        // Record consumed tokens (estimate from content)
+        if (totalCharsConsumed > 0) {
+          manager.recordConsumedTokens({ agent: agentName, inputTokens: 0, outputTokens: Math.ceil(totalCharsConsumed / 4) });
         }
 
         if (!abortController.signal.aborted) {
@@ -236,6 +244,7 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       let fullContent = '';
+      let usageAccumulator: { input_tokens: number; output_tokens: number } | null = null;
 
       try {
         const stream = manager.invokeRemoteModelStream(peerId, modelName, {
@@ -251,6 +260,7 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
           } else if (chunk.type === 'thinking') {
             reply.raw.write(`data: ${JSON.stringify({ type: 'thinking', content: chunk.content })}\n\n`);
           } else if (chunk.type === 'usage') {
+            usageAccumulator = { input_tokens: chunk.input_tokens, output_tokens: chunk.output_tokens };
             reply.raw.write(`data: ${JSON.stringify({ type: 'usage', input_tokens: chunk.input_tokens, output_tokens: chunk.output_tokens, total_tokens: chunk.total_tokens })}\n\n`);
           }
         }
@@ -258,6 +268,14 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
         // Store assistant response
         if (fullContent) {
           store.addMessage(sid, { role: 'ai', content: fullContent });
+        }
+
+        // Record consumed tokens
+        if (usageAccumulator) {
+          manager.recordConsumedTokens({ model: modelName, inputTokens: usageAccumulator.input_tokens, outputTokens: usageAccumulator.output_tokens });
+        } else if (fullContent) {
+          // Estimate from content length if no usage data
+          manager.recordConsumedTokens({ model: modelName, inputTokens: 0, outputTokens: Math.ceil(fullContent.length / 4) });
         }
 
         if (!abortController.signal.aborted) {
@@ -282,6 +300,20 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
   );
+
+  // GET /api/p2p/leaderboard — token leaderboard for current network
+  fastify.get('/leaderboard', async (_req, reply) => {
+    const manager = getManager();
+    if (!manager) return reply.status(200).send([]);
+    return manager.getLeaderboard();
+  });
+
+  // GET /api/p2p/stats — own detailed stats for current network
+  fastify.get('/stats', async (_req, reply) => {
+    const manager = getManager();
+    if (!manager) return reply.status(200).send(null);
+    return manager.getOwnStats();
+  });
 
   // POST /api/p2p/video/generate — Distributed video generation via P2P
   fastify.post<{ Body: { prompt: string; model?: string; settings?: Partial<VideoSettings> } }>(

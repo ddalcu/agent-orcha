@@ -242,3 +242,41 @@ export interface P2PRemoteModel {
   peerName: string;
   capabilities?: string[];
 }
+
+export interface P2PTokenBreakdown {
+  name: string;
+  inputTokens: number;
+  outputTokens: number;
+  requestCount: number;
+}
+
+export interface P2PDirectionStats {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalRequests: number;
+  byModel: P2PTokenBreakdown[];
+  byAgent: P2PTokenBreakdown[];
+}
+
+export interface P2PNetworkStats {
+  networkKey: string;
+  served: P2PDirectionStats;
+  consumed: P2PDirectionStats;
+  lastUpdated: number;
+}
+
+export interface P2PLeaderboardEntry {
+  peerId: string;
+  peerName: string;
+  servedInputTokens: number;
+  servedOutputTokens: number;
+  servedTotalTokens: number;
+  servedRequests: number;
+  consumedInputTokens: number;
+  consumedOutputTokens: number;
+  consumedTotalTokens: number;
+  consumedRequests: number;
+  online: boolean;
+  lastUpdated: number;
+  isSelf: boolean;
+}

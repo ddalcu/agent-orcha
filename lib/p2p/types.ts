@@ -71,6 +71,8 @@ export interface CatalogMessage {
   agents: P2PAgentInfo[];
   models?: P2PModelInfo[];
   load?: number;
+  /** Inline token stats for real-time leaderboard (served/consumed input/output totals) */
+  stats?: { si: number; so: number; ci: number; co: number };
 }
 
 // --- Agent Invoke Messages ---
@@ -199,4 +201,53 @@ export interface P2PStatus {
   peerName: string;
   networkKey: string;
   rateLimit: number;
+}
+
+// --- Token Tracking ---
+
+export interface P2PTokenBreakdown {
+  name: string;          // model config key or agent name
+  inputTokens: number;
+  outputTokens: number;
+  requestCount: number;
+}
+
+export interface P2PDirectionStats {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalRequests: number;
+  byModel: P2PTokenBreakdown[];
+  byAgent: P2PTokenBreakdown[];
+}
+
+export interface P2PNetworkStats {
+  networkKey: string;
+  served: P2PDirectionStats;
+  consumed: P2PDirectionStats;
+  lastUpdated: number;
+}
+
+/** Compact DHT payload — single-char keys to stay under 1KB */
+export interface P2PDHTStats {
+  v: 1;                  // schema version
+  n: string;             // peer name
+  s: { i: number; o: number; r: number };  // served: input, output, requests
+  c: { i: number; o: number; r: number };  // consumed: input, output, requests
+  t: number;             // epoch seconds
+}
+
+export interface P2PLeaderboardEntry {
+  peerId: string;
+  peerName: string;
+  servedInputTokens: number;
+  servedOutputTokens: number;
+  servedTotalTokens: number;
+  servedRequests: number;
+  consumedInputTokens: number;
+  consumedOutputTokens: number;
+  consumedTotalTokens: number;
+  consumedRequests: number;
+  online: boolean;
+  lastUpdated: number;
+  isSelf: boolean;
 }

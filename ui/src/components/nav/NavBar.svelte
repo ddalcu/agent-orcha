@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { appStore } from '../../lib/stores/app.svelte.js';
   import { companyStore } from '../../lib/stores/company.svelte.js';
-  import type { TabId } from '../../lib/types/index.js';
+  import type { TabId, Company } from '../../lib/types/index.js';
 
   interface Props {
     onselect?: () => void;
@@ -19,38 +20,55 @@
     { id: 'p2p', label: 'P2P', icon: 'fa-share-nodes' },
   ];
 
-  const companyTabs: { id: TabId; label: string; icon: string }[] = [
-    { id: 'companies', label: 'Companies', icon: 'fa-building' },
-    { id: 'tickets', label: 'Tickets', icon: 'fa-ticket' },
-    { id: 'routines', label: 'Routines', icon: 'fa-clock-rotate-left' },
-  ];
+  let expandedCompanyId = $state<string | null>(null);
 
-  let companyExpanded = $state(
-    appStore.activeTab === 'companies' || appStore.activeTab === 'tickets' || appStore.activeTab === 'routines'
-  );
+  onMount(() => {
+    companyStore.loadCompanies().then(() => {
+      if (appStore.routeCompanyId) {
+        expandedCompanyId = appStore.routeCompanyId;
+        companyStore.selectCompanyById(appStore.routeCompanyId);
+      }
+    });
+  });
+
+  $effect(() => {
+    const cid = appStore.routeCompanyId;
+    if (cid && cid !== expandedCompanyId) {
+      expandedCompanyId = cid;
+      companyStore.selectCompanyById(cid);
+    }
+  });
 
   function selectTab(id: TabId) {
     appStore.setTab(id);
     onselect?.();
   }
 
-  function toggleCompanySection() {
-    companyExpanded = !companyExpanded;
+  function toggleCompany(company: Company) {
+    if (expandedCompanyId === company.id) {
+      expandedCompanyId = null;
+    } else {
+      expandedCompanyId = company.id;
+      companyStore.selectCompany(company);
+      appStore.setTab('tickets', company.id);
+      onselect?.();
+    }
   }
 
-  function selectCompanyTab(id: TabId) {
-    companyExpanded = true;
-    selectTab(id);
+  function goCompanyTab(tab: 'tickets' | 'routines', company: Company) {
+    companyStore.selectCompany(company);
+    appStore.setTab(tab, company.id);
+    onselect?.();
   }
 
-  const isCompanyTab = $derived(
-    appStore.activeTab === 'companies' || appStore.activeTab === 'tickets' || appStore.activeTab === 'routines'
-  );
+  function openManageCompanies() {
+    appStore.setTab('companies');
+    onselect?.();
+  }
 
-  // Auto-expand when a company tab is active
-  $effect(() => {
-    if (isCompanyTab) companyExpanded = true;
-  });
+  function isActiveCompanyTab(tab: string, companyId: string): boolean {
+    return appStore.activeTab === tab && appStore.routeCompanyId === companyId;
+  }
 </script>
 
 <div class="flex flex-col h-full flex-1 min-h-0">
@@ -70,82 +88,180 @@
       </button>
     {/each}
 
-    <div class="nav-separator"></div>
+    <div class="co-separator"></div>
+    <div class="co-section-label">COMPANIES</div>
 
-    <button
-      class="tab-btn company-header"
-      class:active={isCompanyTab}
-      onclick={toggleCompanySection}
-    >
-      <i class="fas fa-building tab-icon"></i>
-      <span>Company</span>
-      <i class="fas fa-chevron-right company-chevron" class:expanded={companyExpanded}></i>
-    </button>
+    {#each companyStore.companies.filter(c => c.status === 'active') as company}
+      {@const isExpanded = expandedCompanyId === company.id}
 
-    {#if companyExpanded}
-      {#if companyStore.selectedCompany}
-        <div class="company-badge">
-          {#if companyStore.selectedCompany.brandColor}
-            <span class="company-dot" style:background={companyStore.selectedCompany.brandColor}></span>
-          {/if}
-          <span class="company-name">{companyStore.selectedCompany.name}</span>
+      <button
+        class="tab-btn co-row"
+        class:co-expanded={isExpanded}
+        onclick={() => toggleCompany(company)}
+      >
+        {#if company.brandColor}
+          <span class="co-dot" style:background={company.brandColor}></span>
+        {:else}
+          <i class="fas fa-building tab-icon"></i>
+        {/if}
+        <span>{company.name}</span>
+        <i class="fas fa-chevron-down co-chevron" class:expanded={isExpanded}></i>
+      </button>
+
+      {#if isExpanded}
+        <div class="co-children">
+          <div class="co-rail"></div>
+          <div class="co-items">
+            <button
+              class="tab-btn co-child"
+              class:active={isActiveCompanyTab('tickets', company.id)}
+              onclick={() => goCompanyTab('tickets', company)}
+            >
+              <i class="fas fa-ticket tab-icon"></i>
+              <span>Tickets</span>
+              {#if companyStore.tickets.length > 0}
+                <span class="co-count">{companyStore.tickets.length}</span>
+              {/if}
+            </button>
+            <button
+              class="tab-btn co-child"
+              class:active={isActiveCompanyTab('routines', company.id)}
+              onclick={() => goCompanyTab('routines', company)}
+            >
+              <i class="fas fa-clock-rotate-left tab-icon"></i>
+              <span>Routines</span>
+              {#if companyStore.routines.length > 0}
+                <span class="co-count">{companyStore.routines.length}</span>
+              {/if}
+            </button>
+          </div>
         </div>
       {/if}
+    {/each}
 
-      {#each companyTabs as tab}
-        <button
-          class="tab-btn sub-tab"
-          class:active={appStore.activeTab === tab.id}
-          onclick={() => selectCompanyTab(tab.id)}
-        >
-          <i class="fas {tab.icon} tab-icon"></i>
-          <span>{tab.label}</span>
-        </button>
-      {/each}
+    {#if companyStore.companies.filter(c => c.status === 'active').length === 0}
+      <div class="co-empty">No companies yet</div>
     {/if}
+
+    <button
+      class="tab-btn co-manage"
+      class:active={appStore.activeTab === 'companies'}
+      onclick={openManageCompanies}
+    >
+      <i class="fas fa-gear tab-icon"></i>
+      <span>Manage Companies</span>
+    </button>
   </nav>
 </div>
 
 <style>
-  .nav-separator {
+  /* ── Separator & label ── */
+  .co-separator {
     height: 1px;
-    background: var(--border);
+    background: var(--border-subtle);
     margin: 8px 12px;
   }
-  .company-header {
-    position: relative;
+  .co-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--text-3);
+    padding: 4px 12px 6px;
+    opacity: 0.7;
   }
-  .company-chevron {
-    margin-left: auto;
-    font-size: 0.6rem;
-    opacity: 0.5;
-    transition: transform 0.15s ease;
+
+  /* ── Company row: bold when expanded, no background ── */
+  .co-row.co-expanded {
+    color: var(--text-1);
+    font-weight: 600;
+    background: transparent;
   }
-  .company-chevron.expanded {
-    transform: rotate(90deg);
-  }
-  .sub-tab {
-    padding-left: 2.2rem !important;
-    font-size: 0.82rem;
-  }
-  .company-badge {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 12px 2px 2.2rem;
-    font-size: 0.72rem;
-    color: var(--text-2);
-    overflow: hidden;
-  }
-  .company-dot {
-    width: 8px;
-    height: 8px;
+
+  /* ── Company dot (replaces icon) ── */
+  .co-dot {
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
+    /* match .tab-icon width so text aligns */
+    margin-left: 3px;
+    margin-right: 3px;
   }
-  .company-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+
+  /* ── Chevron ── */
+  .co-chevron {
+    margin-left: auto;
+    font-size: 9px;
+    opacity: 0.35;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .co-chevron.expanded {
+    transform: rotate(180deg);
+    opacity: 0.6;
+  }
+  .tab-btn:hover .co-chevron {
+    opacity: 0.6;
+  }
+
+  /* ── Expanded children wrapper ── */
+  .co-children {
+    display: flex;
+    padding-left: 18px;
+    margin: 0 0 2px;
+  }
+
+  /* ── Vertical connector rail ── */
+  .co-rail {
+    width: 1px;
+    background: var(--border);
+    opacity: 0.5;
+    margin: 2px 0;
+    flex-shrink: 0;
+    border-radius: 1px;
+  }
+
+  .co-items {
+    flex: 1;
+    min-width: 0;
+    padding-left: 10px;
+  }
+
+  /* ── Child tab overrides ── */
+  .co-child {
+    font-size: 12.5px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+
+  /* ── Count badge ── */
+  .co-count {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-3);
+    background: rgba(255, 255, 255, 0.06);
+    min-width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    padding: 0 5px;
+  }
+
+  /* ── Empty / Manage ── */
+  .co-empty {
+    font-size: 12px;
+    color: var(--text-3);
+    padding: 6px 12px;
+    opacity: 0.5;
+  }
+  .co-manage {
+    margin-top: 4px;
+    opacity: 0.5;
+    font-size: 12px;
+  }
+  .co-manage:hover {
+    opacity: 0.85;
   }
 </style>

@@ -70,6 +70,8 @@ export interface SubmitAgentParams {
   input: Record<string, unknown>;
   sessionId?: string;
   companyContext?: import('../agents/types.ts').AgentCompanyContext;
+  onComplete?: (result: AgentResult) => void;
+  onError?: (error: string) => void;
 }
 
 export interface SubmitWorkflowParams {

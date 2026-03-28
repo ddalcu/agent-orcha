@@ -119,7 +119,7 @@ export const companiesRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  fastify.post<{ Params: TicketIdParams; Body: { agentName?: string } }>(
+  fastify.post<{ Params: TicketIdParams; Body: { agentName?: string; input?: string } }>(
     '/tickets/:id/execute', async (request, reply) => {
       try {
         const ticket = cs().tickets.get(request.params.id);
@@ -147,16 +147,66 @@ export const companiesRoutes: FastifyPluginAsync = async (fastify) => {
           },
         };
 
-        // Submit task with company context
+        // Build full ticket context with activity history for the agent
+        const activityHistory = cs().tickets.getActivity(ticket.id);
+        const historyLines = activityHistory
+          .filter(a => a.type === 'comment')
+          .map(a => `[${a.authorType === 'agent' ? `Agent: ${a.authorName}` : a.authorName}] ${a.content}`)
+          .join('\n\n---\n\n');
+
+        let query = `${ticket.identifier}: ${ticket.title}\n\n${ticket.description}`;
+        if (historyLines) {
+          query += `\n\n--- Ticket Activity ---\n\n${historyLines}`;
+        }
+        if (request.body.input) {
+          query += `\n\n--- Latest Request ---\n\n${request.body.input}`;
+        }
+
+        const ticketId = ticket.id;
+
+        // Submit task with company context and completion callbacks
         const task = fastify.orchestrator.tasks.getManager().submitAgent({
           agent: agentName,
-          input: { query: `${ticket.identifier}: ${ticket.title}\n\n${ticket.description}` },
+          input: { query },
+          sessionId: ticket.taskId ? undefined : undefined,
           companyContext,
+          onComplete: (result) => {
+            const output = typeof result.output === 'string'
+              ? result.output
+              : JSON.stringify(result.output, null, 2);
+
+            // Extract generated file attachments from the output
+            const attachments: { url: string; type: string; name: string }[] = [];
+            const filePattern = /\/generated\/[^\s)"'\]]+/g;
+            let match: RegExpExecArray | null;
+            while ((match = filePattern.exec(output)) !== null) {
+              const url = match[0];
+              const name = url.split('/').pop() || url;
+              const ext = name.split('.').pop()?.toLowerCase() || '';
+              let type = 'file';
+              if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) type = 'image';
+              else if (['mp3', 'wav', 'ogg', 'flac', 'opus'].includes(ext)) type = 'audio';
+              else if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) type = 'video';
+              attachments.push({ url, type, name });
+            }
+
+            // Truncate very long outputs for the activity feed
+            const summary = output.length > 4000 ? output.slice(0, 4000) + '\n\n... (truncated)' : output;
+            const metadata = attachments.length > 0 ? { attachments } : undefined;
+            cs().tickets.addComment(ticketId, summary, 'agent', agentName, metadata);
+            cs().tickets.addTaskEvent(ticketId, `Agent "${agentName}" completed execution`);
+          },
+          onError: (error) => {
+            cs().tickets.addComment(ticketId, `Execution failed: ${error}`, 'agent', agentName);
+            cs().tickets.addTaskEvent(ticketId, `Agent "${agentName}" execution failed`);
+          },
         });
 
-        // Link task to ticket
+        // Link task to ticket and transition
         cs().tickets.linkTask(ticket.id, task.id);
-        cs().tickets.transition(ticket.id, 'in_progress');
+        if (ticket.status === 'backlog' || ticket.status === 'todo') {
+          cs().tickets.transition(ticket.id, 'in_progress');
+        }
         cs().tickets.addTaskEvent(ticket.id, `Agent "${agentName}" started execution (task: ${task.id})`);
 
         return reply.status(202).send({ taskId: task.id, ticket: cs().tickets.get(ticket.id) });

@@ -26,6 +26,7 @@
   let createDesc = $state('');
   let createPriority = $state('medium');
   let createAssignee = $state('');
+  let createAutoExecute = $state(true);
   let createError = $state('');
 
   // Detail view
@@ -34,10 +35,20 @@
   let commentText = $state('');
 
   onMount(async () => {
+    // Resolve company from route
+    if (appStore.routeCompanyId) {
+      await companyStore.selectCompanyById(appStore.routeCompanyId);
+    }
     if (companyStore.selectedCompany) {
       await companyStore.loadTickets();
     }
     agents = await api.getAgents();
+
+    // Deep-link: open ticket detail if itemId in route
+    if (appStore.routeItemId && companyStore.selectedCompany) {
+      const ticket = companyStore.tickets.find(t => t.id === appStore.routeItemId);
+      if (ticket) await openDetail(ticket);
+    }
   });
 
   async function applyFilters() {
@@ -51,17 +62,29 @@
     if (!companyStore.selectedCompany) return;
     createError = '';
     try {
-      await companyApi.createTicket(companyStore.selectedCompany.id, {
+      const ticket = await companyApi.createTicket(companyStore.selectedCompany.id, {
         title: createTitle,
         description: createDesc,
         priority: createPriority,
         assigneeAgent: createAssignee,
       });
+
+      // Auto-execute if enabled and an agent is assigned
+      if (createAutoExecute && createAssignee) {
+        try {
+          await companyApi.executeTicket(ticket.id);
+        } catch (err) {
+          // Ticket was created, just log the execution error
+          console.warn('Auto-execute failed:', err);
+        }
+      }
+
       showCreate = false;
       createTitle = '';
       createDesc = '';
       createPriority = 'medium';
       createAssignee = '';
+      createAutoExecute = true;
       await companyStore.loadTickets();
     } catch (err) {
       createError = err instanceof Error ? err.message : String(err);
@@ -72,11 +95,19 @@
     const data = await companyApi.getTicket(ticket.id);
     selectedTicket = data;
     activity = data.activity || [];
+    // Push ticket ID into route
+    if (companyStore.selectedCompany) {
+      appStore.setTab('tickets', companyStore.selectedCompany.id, ticket.id);
+    }
   }
 
   async function closeDetail() {
     selectedTicket = null;
     activity = [];
+    // Pop back to ticket list route
+    if (companyStore.selectedCompany) {
+      appStore.setTab('tickets', companyStore.selectedCompany.id);
+    }
     await companyStore.loadTickets();
   }
 
@@ -95,6 +126,23 @@
     await openDetail(selectedTicket);
   }
 
+  async function replyAndExecute() {
+    if (!selectedTicket || !commentText.trim()) return;
+    const input = commentText.trim();
+    // Post the comment first so the agent can see it in the activity
+    await companyApi.addComment(selectedTicket.id, input, 'User');
+    commentText = '';
+    try {
+      await companyApi.executeTicket(selectedTicket.id, undefined, input);
+      await openDetail(selectedTicket);
+      await companyStore.loadTickets();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('Reply & Execute failed:', msg);
+      await openDetail(selectedTicket);
+    }
+  }
+
   async function executeTicket() {
     if (!selectedTicket) return;
     try {
@@ -109,6 +157,15 @@
 
   function viewInMonitor(taskId: string) {
     appStore.setTab('monitor');
+  }
+
+  interface Attachment { url: string; type: string; name: string }
+
+  function getAttachments(item: TicketActivity): Attachment[] {
+    try {
+      const meta = JSON.parse(item.metadata || '{}');
+      return meta.attachments || [];
+    } catch { return []; }
   }
 
   function formatDate(iso: string): string {
@@ -202,6 +259,26 @@
                 <span class="activity-time">{formatDate(item.createdAt)}</span>
               </div>
               <div class="activity-content">{item.content}</div>
+              {#each getAttachments(item) as att}
+                <div class="activity-attachment">
+                  {#if att.type === 'image'}
+                    <a href={att.url} target="_blank" rel="noopener">
+                      <img src={att.url} alt={att.name} class="attachment-img" />
+                    </a>
+                  {:else if att.type === 'audio'}
+                    <audio controls src={att.url} class="attachment-audio">
+                      <track kind="captions" />
+                    </audio>
+                  {:else if att.type === 'video'}
+                    <!-- svelte-ignore a11y_media_has_caption -->
+                    <video controls src={att.url} class="attachment-video"></video>
+                  {:else}
+                    <a href={att.url} target="_blank" rel="noopener" class="attachment-link">
+                      <i class="fas fa-file"></i> {att.name}
+                    </a>
+                  {/if}
+                </div>
+              {/each}
             </div>
           {/each}
 
@@ -218,9 +295,16 @@
             bind:value={commentText}
             onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addComment(); } }}
           ></textarea>
-          <button class="btn btn-accent btn-sm" onclick={addComment} disabled={!commentText.trim()}>
-            <i class="fas fa-paper-plane"></i>
-          </button>
+          <div class="comment-actions">
+            <button class="btn btn-ghost btn-sm" onclick={addComment} disabled={!commentText.trim()} title="Add comment">
+              <i class="fas fa-paper-plane"></i>
+            </button>
+            {#if selectedTicket?.assigneeAgent}
+              <button class="btn btn-accent btn-sm" onclick={replyAndExecute} disabled={!commentText.trim()} title="Add comment and re-execute agent with it">
+                <i class="fas fa-play"></i> Reply & Execute
+              </button>
+            {/if}
+          </div>
         </div>
       </div>
     </div>
@@ -309,6 +393,10 @@
           </select>
         </label>
       </div>
+      <label class="form-check">
+        <input type="checkbox" bind:checked={createAutoExecute} disabled={!createAssignee} />
+        <span>Auto-execute with assigned agent</span>
+      </label>
       <div class="form-actions">
         <button class="btn btn-ghost" onclick={() => { showCreate = false; }}>Cancel</button>
         <button class="btn btn-accent" onclick={handleCreateTicket} disabled={!createTitle}>Create</button>
@@ -363,10 +451,18 @@
   .activity-author { font-weight: 600; color: var(--text-2); }
   .activity-time { margin-left: auto; }
   .activity-content { color: var(--text-1); white-space: pre-wrap; line-height: 1.4; }
+  .activity-attachment { margin-top: 0.5rem; }
+  .attachment-img { max-width: 100%; max-height: 300px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); }
+  .attachment-img:hover { border-color: var(--accent); }
+  .attachment-audio { width: 100%; max-width: 400px; height: 36px; }
+  .attachment-video { max-width: 100%; max-height: 300px; border-radius: 6px; border: 1px solid var(--border); }
+  .attachment-link { color: var(--accent); font-size: 0.82rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+  .attachment-link:hover { text-decoration: underline; }
   .activity-empty { color: var(--text-3); font-size: 0.82rem; padding: 0.5rem 0; }
 
   .comment-box { display: flex; gap: 0.5rem; align-items: flex-end; }
   .comment-box textarea { flex: 1; }
+  .comment-actions { display: flex; flex-direction: column; gap: 0.25rem; }
 
   /* Modal */
   .modal-overlay { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; z-index: 100; }
@@ -378,4 +474,7 @@
   .form-label.half { flex: 1; }
   .form-error { background: rgba(217,83,79,0.15); color: var(--red); padding: 0.5rem; border-radius: 6px; font-size: 0.82rem; margin-bottom: 0.75rem; }
   .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+  .form-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-2); margin-bottom: 0.5rem; cursor: pointer; }
+  .form-check input[type="checkbox"] { accent-color: var(--accent); }
+  .form-check input:disabled + span { opacity: 0.4; }
 </style>

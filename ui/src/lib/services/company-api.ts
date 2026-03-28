@@ -47,8 +47,8 @@ export const companyApi = {
   async addComment(ticketId: string, content: string, authorName?: string) {
     return (await _fetch(`/api/companies/tickets/${ticketId}/comments`, { method: 'POST', ...json({ content, authorName }) })).json();
   },
-  async executeTicket(ticketId: string, agentName?: string) {
-    return (await _fetch(`/api/companies/tickets/${ticketId}/execute`, { method: 'POST', ...json({ agentName }) })).json();
+  async executeTicket(ticketId: string, agentName?: string, input?: string) {
+    return (await _fetch(`/api/companies/tickets/${ticketId}/execute`, { method: 'POST', ...json({ agentName, input }) })).json();
   },
 
   // Routines

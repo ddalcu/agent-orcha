@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import { api } from '../lib/services/api.js';
-  import { formatElapsedTime, estimateTokens } from '../lib/utils/format.js';
-  import type { P2PStatus, P2PPeer, P2PRemoteAgent, P2PRemoteModel, StreamEvent } from '../lib/types/index.js';
+  import { formatElapsedTime, estimateTokens, formatTokenCount } from '../lib/utils/format.js';
+  import type { P2PStatus, P2PPeer, P2PRemoteAgent, P2PRemoteModel, P2PLeaderboardEntry, P2PNetworkStats, StreamEvent } from '../lib/types/index.js';
 
   import Toggle from '../components/Toggle.svelte';
   import ChatInput from '../components/chat/ChatInput.svelte';
@@ -11,8 +11,18 @@
   import ResponseBubble from '../components/chat/ResponseBubble.svelte';
   import StreamStatusBar from '../components/chat/StreamStatusBar.svelte';
   import StreamStatsBar from '../components/chat/StreamStatsBar.svelte';
+  import ModelOutput from '../components/chat/ModelOutput.svelte';
 
   // --- Types ---
+
+  interface ModelOutputEntry {
+    task: string;
+    input?: string;
+    image?: string;
+    audio?: string;
+    video?: string;
+    error?: string;
+  }
 
   interface ChatBubble {
     type: 'user' | 'response';
@@ -20,6 +30,7 @@
     content: string;
     tools: ToolEntry[];
     thinkingSections: ThinkingEntry[];
+    modelOutputs: ModelOutputEntry[];
     isLoading: boolean;
     error: string;
     stats: StatsData | null;
@@ -128,6 +139,15 @@
   let rateLimitSaving = $state(false);
   let rateLimitSaved = $state(false);
 
+  // --- Tabs & Leaderboard ---
+  type P2PTab = 'settings' | 'leaderboard';
+  let activeMainTab = $state<P2PTab>('settings');
+  let leaderboard = $state<P2PLeaderboardEntry[]>([]);
+  let ownStats = $state<P2PNetworkStats | null>(null);
+  let leaderboardLoading = $state(false);
+  let showOwnDetails = $state(false);
+  let leaderboardPollTimer: ReturnType<typeof setInterval> | null = null;
+
   onMount(async () => {
     await loadStatus();
     peerNameInput = status.peerName;
@@ -177,6 +197,7 @@
   onDestroy(() => {
     saveCurrentSession();
     if (pollTimer) clearInterval(pollTimer);
+    if (leaderboardPollTimer) clearInterval(leaderboardPollTimer);
     if (streamTimerInterval) clearInterval(streamTimerInterval);
     currentAbortController?.abort();
   });
@@ -265,6 +286,34 @@
     }
   }
 
+  async function loadLeaderboard() {
+    leaderboardLoading = true;
+    try {
+      const [lb, stats] = await Promise.all([
+        api.getP2PLeaderboard(),
+        api.getP2PStats(),
+      ]);
+      leaderboard = lb ?? [];
+      ownStats = stats;
+    } catch {
+      // Leaderboard may not be available if P2P is off
+    } finally {
+      leaderboardLoading = false;
+    }
+  }
+
+  $effect(() => {
+    if (activeMainTab === 'leaderboard' && status.enabled && !selectedAgent && !selectedModel) {
+      loadLeaderboard();
+      leaderboardPollTimer = setInterval(loadLeaderboard, 10_000);
+      return () => {
+        if (leaderboardPollTimer) { clearInterval(leaderboardPollTimer); leaderboardPollTimer = null; }
+      };
+    } else {
+      if (leaderboardPollTimer) { clearInterval(leaderboardPollTimer); leaderboardPollTimer = null; }
+    }
+  });
+
   function selectAgent(agent: P2PRemoteAgent) {
     saveCurrentSession();
     selectedModel = null;
@@ -330,6 +379,7 @@
       content: message,
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: false,
       error: '',
       stats: null,
@@ -346,6 +396,7 @@
       content: '',
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: true,
       error: '',
       stats: null,
@@ -497,10 +548,31 @@
     }
 
     if (event.type === 'tool_end') {
+      const toolOutput = typeof event.output === 'string' ? event.output : JSON.stringify(event.output ?? '');
+
+      // Intercept model tools (image, TTS, video generation) — parse and display media
+      if ((event.tool === 'generate_image' || event.tool === 'generate_tts' || event.tool === 'generate_video') && typeof event.output === 'string') {
+        try {
+          const parsed = JSON.parse(event.output);
+          if (parsed.__modelTask) {
+            updateBubble(responseId, b => {
+              b.modelOutputs = [...b.modelOutputs, {
+                task: parsed.task,
+                input: parsed.input,
+                image: parsed.image,
+                audio: parsed.audio,
+                video: parsed.video,
+                error: parsed.error,
+              }];
+            });
+          }
+        } catch (err) { console.error('[P2PPage] Failed to parse model output:', err); }
+      }
+
       updateBubble(responseId, b => {
         const tool = b.tools.find(t => t.runId === event.runId);
         if (tool) {
-          tool.output = typeof event.output === 'string' ? event.output : JSON.stringify(event.output ?? '');
+          tool.output = toolOutput;
           tool.done = true;
         }
         b.statusText = 'Streaming...';
@@ -695,6 +767,17 @@
   <!-- Main chat area -->
   <div class="p2p-main">
     {#if !selectedAgent && !selectedModel}
+      <!-- Tab bar -->
+      <div class="p2p-tab-bar">
+        <button class="p2p-tab" class:active={activeMainTab === 'settings'} onclick={() => { activeMainTab = 'settings'; }}>
+          <i class="fas fa-gear"></i> Settings
+        </button>
+        <button class="p2p-tab" class:active={activeMainTab === 'leaderboard'} onclick={() => { activeMainTab = 'leaderboard'; }}>
+          <i class="fas fa-trophy"></i> Leaderboard
+        </button>
+      </div>
+
+      {#if activeMainTab === 'settings'}
       <div class="p2p-config-panel">
         <!-- P2P Settings -->
         <div class="p2p-config-section">
@@ -888,6 +971,142 @@
         </div>
         {/if}
       </div>
+      {:else if activeMainTab === 'leaderboard'}
+      <div class="p2p-config-panel">
+        {#if !status.enabled}
+          <div class="p2p-config-section">
+            <div class="text-sm text-muted">Enable P2P to see the leaderboard.</div>
+          </div>
+        {:else}
+          <!-- Network label -->
+          <div class="p2p-leaderboard-header">
+            <div class="flex items-center gap-2">
+              <i class="fas fa-trophy text-accent"></i>
+              <span class="text-sm font-semibold text-primary">Network: "{status.networkKey}"</span>
+            </div>
+            <button class="btn btn-sm btn-ghost text-muted" disabled={leaderboardLoading} onclick={loadLeaderboard} title="Refresh">
+              <i class="fas fa-sync-alt" class:fa-spin={leaderboardLoading}></i>
+            </button>
+          </div>
+
+          <!-- Leaderboard table -->
+          <div class="p2p-config-section p2p-leaderboard-section">
+            {#if leaderboard.length === 0}
+              <div class="text-sm text-muted p-3">
+                {leaderboardLoading ? 'Loading...' : 'No token data yet. Share agents or models and serve requests to populate the leaderboard.'}
+              </div>
+            {:else}
+              <div class="p2p-lb-table">
+                <div class="p2p-lb-row p2p-lb-header">
+                  <span class="p2p-lb-rank">#</span>
+                  <span class="p2p-lb-name">Peer</span>
+                  <span class="p2p-lb-tokens">Served</span>
+                  <span class="p2p-lb-tokens">Consumed</span>
+                  <span class="p2p-lb-status-col">Status</span>
+                </div>
+                {#each leaderboard as entry, i}
+                  <div class="p2p-lb-row" class:p2p-lb-self={entry.isSelf}>
+                    <span class="p2p-lb-rank">
+                      {#if i === 0}
+                        <i class="fas fa-crown text-amber"></i>
+                      {:else}
+                        {i + 1}
+                      {/if}
+                    </span>
+                    <span class="p2p-lb-name">
+                      <span class="text-sm font-medium text-primary">{entry.peerName}</span>
+                      {#if entry.isSelf}<span class="badge badge-pill badge-accent text-2xs">you</span>{/if}
+                    </span>
+                    <span class="p2p-lb-tokens">
+                      <span class="text-sm font-medium text-primary">{formatTokenCount(entry.servedTotalTokens)}</span>
+                      <span class="text-2xs text-muted">{entry.servedRequests} req</span>
+                    </span>
+                    <span class="p2p-lb-tokens">
+                      <span class="text-sm font-medium text-primary">{formatTokenCount(entry.consumedTotalTokens)}</span>
+                      <span class="text-2xs text-muted">{entry.consumedRequests} req</span>
+                    </span>
+                    <span class="p2p-lb-status-col">
+                      <span class="status-dot" class:status-dot-active={entry.online} class:status-dot-error={!entry.online}></span>
+                      <span class="text-2xs text-muted">{entry.online ? 'Online' : 'Offline'}</span>
+                    </span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <!-- Own detailed stats -->
+          <div class="p2p-config-section">
+            <button class="p2p-details-toggle" onclick={() => { showOwnDetails = !showOwnDetails; }}>
+              <i class="fas {showOwnDetails ? 'fa-chevron-down' : 'fa-chevron-right'} text-2xs text-muted"></i>
+              <span class="text-sm font-semibold text-primary">Your Detailed Stats</span>
+            </button>
+
+            {#if showOwnDetails && ownStats}
+              <div class="p2p-stats-details">
+                <!-- Served breakdown -->
+                <div class="p2p-stats-group">
+                  <div class="text-xs font-medium text-accent mb-1">
+                    <i class="fas fa-arrow-up"></i> Served — {formatTokenCount(ownStats.served.totalInputTokens + ownStats.served.totalOutputTokens)} tokens ({ownStats.served.totalRequests} requests)
+                  </div>
+                  {#if ownStats.served.byModel.length > 0}
+                    <div class="text-2xs text-muted mb-1 mt-2">By Model</div>
+                    {#each ownStats.served.byModel as m}
+                      <div class="p2p-stats-row">
+                        <span class="text-xs text-primary">{m.name}</span>
+                        <span class="text-xs text-muted">{formatTokenCount(m.inputTokens + m.outputTokens)} tokens · {m.requestCount} req</span>
+                      </div>
+                    {/each}
+                  {/if}
+                  {#if ownStats.served.byAgent.length > 0}
+                    <div class="text-2xs text-muted mb-1 mt-2">By Agent</div>
+                    {#each ownStats.served.byAgent as a}
+                      <div class="p2p-stats-row">
+                        <span class="text-xs text-primary">{a.name}</span>
+                        <span class="text-xs text-muted">{formatTokenCount(a.inputTokens + a.outputTokens)} tokens · {a.requestCount} req</span>
+                      </div>
+                    {/each}
+                  {/if}
+                  {#if ownStats.served.byModel.length === 0 && ownStats.served.byAgent.length === 0}
+                    <div class="text-xs text-muted p2p-hint">No served data yet</div>
+                  {/if}
+                </div>
+
+                <!-- Consumed breakdown -->
+                <div class="p2p-stats-group">
+                  <div class="text-xs font-medium text-accent mb-1">
+                    <i class="fas fa-arrow-down"></i> Consumed — {formatTokenCount(ownStats.consumed.totalInputTokens + ownStats.consumed.totalOutputTokens)} tokens ({ownStats.consumed.totalRequests} requests)
+                  </div>
+                  {#if ownStats.consumed.byModel.length > 0}
+                    <div class="text-2xs text-muted mb-1 mt-2">By Model</div>
+                    {#each ownStats.consumed.byModel as m}
+                      <div class="p2p-stats-row">
+                        <span class="text-xs text-primary">{m.name}</span>
+                        <span class="text-xs text-muted">{formatTokenCount(m.inputTokens + m.outputTokens)} tokens · {m.requestCount} req</span>
+                      </div>
+                    {/each}
+                  {/if}
+                  {#if ownStats.consumed.byAgent.length > 0}
+                    <div class="text-2xs text-muted mb-1 mt-2">By Agent</div>
+                    {#each ownStats.consumed.byAgent as a}
+                      <div class="p2p-stats-row">
+                        <span class="text-xs text-primary">{a.name}</span>
+                        <span class="text-xs text-muted">{formatTokenCount(a.inputTokens + a.outputTokens)} tokens · {a.requestCount} req</span>
+                      </div>
+                    {/each}
+                  {/if}
+                  {#if ownStats.consumed.byModel.length === 0 && ownStats.consumed.byAgent.length === 0}
+                    <div class="text-xs text-muted p2p-hint">No consumed data yet</div>
+                  {/if}
+                </div>
+              </div>
+            {:else if showOwnDetails && !ownStats}
+              <div class="text-xs text-muted p-3">No stats yet. Start sharing and serving requests.</div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+      {/if}
     {:else}
       <!-- Chat header -->
       <div class="p2p-chat-header">
@@ -939,6 +1158,7 @@
                 content={bubble.content}
                 tools={bubble.tools}
                 thinkingSections={bubble.thinkingSections}
+                modelOutputs={bubble.modelOutputs}
                 isLoading={bubble.isLoading}
                 error={bubble.error}
               >
@@ -1249,9 +1469,172 @@
     border-color: var(--accent);
   }
 
+  /* --- Tab bar --- */
+
+  .p2p-tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+
+  .p2p-tab {
+    flex: 1;
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--text-xs);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-3);
+    transition: color var(--fast), background var(--fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-1h);
+  }
+
+  .p2p-tab.active {
+    color: var(--text-1);
+    background: var(--surface);
+    border-bottom: 2px solid var(--accent);
+  }
+
+  .p2p-tab:not(.active):hover {
+    color: var(--text-2);
+    background: var(--hover);
+  }
+
+  /* --- Leaderboard --- */
+
+  .p2p-leaderboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--sp-1);
+  }
+
+  .p2p-leaderboard-section {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .p2p-lb-table {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .p2p-lb-row {
+    display: grid;
+    grid-template-columns: 40px 1fr 100px 100px 80px;
+    align-items: center;
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--border-subtle);
+    gap: var(--sp-2);
+  }
+
+  .p2p-lb-row:last-child {
+    border-bottom: none;
+  }
+
+  .p2p-lb-header {
+    background: var(--bg);
+    font-size: var(--text-2xs);
+    color: var(--text-3);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .p2p-lb-self {
+    background: var(--accent-dim);
+  }
+
+  .p2p-lb-rank {
+    text-align: center;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  .p2p-lb-name {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1h);
+    min-width: 0;
+  }
+
+  .p2p-lb-name .text-sm {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .p2p-lb-tokens {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+  }
+
+  .p2p-lb-status-col {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+  }
+
+  /* --- Details toggle --- */
+
+  .p2p-details-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--sp-1) 0;
+    width: 100%;
+    text-align: left;
+  }
+
+  .p2p-details-toggle:hover {
+    opacity: 0.8;
+  }
+
+  .p2p-stats-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border-subtle);
+    margin-top: var(--sp-2);
+  }
+
+  .p2p-stats-group {
+    padding: var(--sp-2);
+    border-radius: var(--radius);
+    background: var(--bg);
+  }
+
+  .p2p-stats-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--sp-1) var(--sp-2);
+    border-radius: var(--radius-sm);
+  }
+
+  .p2p-stats-row:hover {
+    background: var(--hover);
+  }
+
   @media (max-width: 768px) {
     .p2p-sidebar {
       display: none;
+    }
+
+    .p2p-lb-row {
+      grid-template-columns: 30px 1fr 80px 80px 60px;
+      padding: var(--sp-1h) var(--sp-2);
     }
   }
 </style>

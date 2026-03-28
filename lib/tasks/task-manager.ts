@@ -38,17 +38,20 @@ export class TaskManager {
           completedAt: Date.now(),
         });
         logger.debug(`[TaskManager] Agent task ${task.id} completed`);
+        params.onComplete?.(result);
       })
       .catch((error) => {
         const current = this.store.get(task.id);
         if (current?.status === 'canceled') return;
 
+        const errorMsg = error instanceof Error ? error.message : String(error);
         this.store.update(task.id, {
           status: 'failed',
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMsg,
           completedAt: Date.now(),
         });
         logger.error(`[TaskManager] Agent task ${task.id} failed: ${error}`);
+        params.onError?.(errorMsg);
       });
 
     return task;

@@ -1,7 +1,5 @@
-import type { Company, Ticket, Routine, RoutineRun } from '../types/index.js';
+import type { Company, Ticket, Routine } from '../types/index.js';
 import { companyApi } from '../services/company-api.js';
-
-const STORAGE_KEY = 'orcha-selected-company';
 
 class CompanyStore {
   companies = $state<Company[]>([]);
@@ -9,30 +7,32 @@ class CompanyStore {
   tickets = $state<Ticket[]>([]);
   routines = $state<Routine[]>([]);
   loading = $state(false);
-
-  constructor() {
-    // Restore selected company from localStorage on load
-    const savedId = localStorage.getItem(STORAGE_KEY);
-    if (savedId) {
-      this.loadCompanies().then(() => {
-        const found = this.companies.find(c => c.id === savedId);
-        if (found) this.selectedCompany = found;
-      });
-    }
-  }
+  initialized = false;
 
   async loadCompanies(): Promise<void> {
     this.companies = await companyApi.listCompanies();
+    this.initialized = true;
+  }
+
+  async ensureLoaded(): Promise<void> {
+    if (!this.initialized) await this.loadCompanies();
+  }
+
+  async selectCompanyById(id: string): Promise<void> {
+    await this.ensureLoaded();
+    const found = this.companies.find(c => c.id === id);
+    if (found && found.id !== this.selectedCompany?.id) {
+      this.selectedCompany = found;
+      await Promise.all([this.loadTickets(), this.loadRoutines()]);
+    }
   }
 
   selectCompany(company: Company | null): void {
     this.selectedCompany = company;
     if (company) {
-      localStorage.setItem(STORAGE_KEY, company.id);
       this.loadTickets();
       this.loadRoutines();
     } else {
-      localStorage.removeItem(STORAGE_KEY);
       this.tickets = [];
       this.routines = [];
     }

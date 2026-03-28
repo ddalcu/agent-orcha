@@ -82,7 +82,7 @@
 
   function selectAndGo(company: Company) {
     companyStore.selectCompany(company);
-    appStore.setTab('tickets');
+    appStore.setTab('tickets', company.id);
   }
 </script>
 
@@ -133,15 +133,7 @@
               <i class="fas fa-arrow-right"></i> Open
             </button>
             <button class="btn btn-ghost btn-xs" onclick={() => openEdit(company)} title="Edit">
-              <i class="fas fa-pen"></i>
-            </button>
-            {#if company.status === 'active'}
-              <button class="btn btn-ghost btn-xs" onclick={() => handleArchive(company)} title="Archive">
-                <i class="fas fa-archive"></i>
-              </button>
-            {/if}
-            <button class="btn btn-ghost btn-xs text-red" onclick={() => { confirmDelete = company; }} title="Delete">
-              <i class="fas fa-trash"></i>
+              <i class="fas fa-pen"></i> Edit
             </button>
           </div>
         </div>
@@ -184,6 +176,19 @@
           <span class="color-value">{formColor}</span>
         </div>
       </label>
+
+      {#if editingCompany}
+        <div class="form-danger-zone">
+          {#if editingCompany.status === 'active'}
+            <button class="btn btn-ghost btn-sm text-muted" onclick={() => { handleArchive(editingCompany!); showForm = false; }}>
+              <i class="fas fa-archive"></i> Archive Company
+            </button>
+          {/if}
+          <button class="btn btn-ghost btn-sm text-red" onclick={() => { confirmDelete = editingCompany; showForm = false; }}>
+            <i class="fas fa-trash"></i> Delete Company
+          </button>
+        </div>
+      {/if}
 
       <div class="form-actions">
         <button class="btn btn-ghost" onclick={() => { showForm = false; }}>Cancel</button>
@@ -393,6 +398,14 @@
     color: var(--text-3);
     font-family: monospace;
   }
+  .form-danger-zone {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+  .text-muted { color: var(--text-3); }
   .text-red { color: var(--red); }
   .btn-danger {
     background: var(--red);

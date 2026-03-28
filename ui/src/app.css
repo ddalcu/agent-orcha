@@ -2282,16 +2282,17 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
 .llm-provider-tabs {
   display: flex;
   gap: var(--sp-2);
-  flex-wrap: wrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.llm-provider-tabs::-webkit-scrollbar { display: none; }
 .llm-provider-tab {
-  flex: 1 1 0;
-  min-width: 100px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface);
@@ -2301,6 +2302,7 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
   transition: all 0.15s;
   cursor: pointer;
   position: relative;
+  white-space: nowrap;
 }
 .llm-provider-tab:hover { border-color: var(--text-3); color: var(--text-1); }
 .llm-provider-tab.active {
@@ -2314,10 +2316,7 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
 .llm-tab-toggle {
   display: flex;
   align-items: center;
-  margin-left: auto;
-}
-@media (max-width: 640px) {
-  .llm-provider-tab { flex: 0 0 calc(50% - var(--sp-1)); }
+  margin-left: var(--sp-1);
 }
 
 /* ─── Cloud Provider Config ─── */

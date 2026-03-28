@@ -217,6 +217,8 @@ export const api = {
   async getP2PPeers() { return (await _fetch('/api/p2p/peers')).json(); },
   async getP2PAgents() { return (await _fetch('/api/p2p/agents')).json(); },
   async getP2PLLMs() { return (await _fetch('/api/p2p/llms')).json(); },
+  async getP2PLeaderboard() { return (await _fetch('/api/p2p/leaderboard')).json(); },
+  async getP2PStats() { return (await _fetch('/api/p2p/stats')).json(); },
   async streamP2PAgent(peerId: string, agentName: string, input: unknown, sessionId: string, opts: { signal?: AbortSignal } = {}) {
     return _fetch(`/api/p2p/agents/${encodeURIComponent(peerId)}/${encodeURIComponent(agentName)}/stream`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

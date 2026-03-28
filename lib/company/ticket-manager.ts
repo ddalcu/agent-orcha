@@ -123,8 +123,8 @@ export class TicketManager {
       .run(taskId, new Date().toISOString(), id);
   }
 
-  addComment(ticketId: string, content: string, authorType: string, authorName: string): TicketActivity {
-    return this.addActivity(ticketId, 'comment', content, authorType, authorName);
+  addComment(ticketId: string, content: string, authorType: string, authorName: string, metadata?: Record<string, unknown>): TicketActivity {
+    return this.addActivity(ticketId, 'comment', content, authorType, authorName, '', '', metadata);
   }
 
   addTaskEvent(ticketId: string, eventDescription: string, metadata?: Record<string, unknown>): TicketActivity {

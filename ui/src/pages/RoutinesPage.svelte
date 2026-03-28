@@ -24,10 +24,19 @@
   let runs = $state<RoutineRun[]>([]);
 
   onMount(async () => {
+    if (appStore.routeCompanyId) {
+      await companyStore.selectCompanyById(appStore.routeCompanyId);
+    }
     if (companyStore.selectedCompany) {
       await companyStore.loadRoutines();
     }
     agents = await api.getAgents();
+
+    // Deep-link: open routine detail if itemId in route
+    if (appStore.routeItemId && companyStore.selectedCompany) {
+      const routine = companyStore.routines.find(r => r.id === appStore.routeItemId);
+      if (routine) await openDetail(routine);
+    }
   });
 
   function openCreate() {
@@ -120,11 +129,17 @@
     const data = await companyApi.getRoutine(routine.id);
     selectedRoutine = data;
     runs = data.runs || [];
+    if (companyStore.selectedCompany) {
+      appStore.setTab('routines', companyStore.selectedCompany.id, routine.id);
+    }
   }
 
   function closeDetail() {
     selectedRoutine = null;
     runs = [];
+    if (companyStore.selectedCompany) {
+      appStore.setTab('routines', companyStore.selectedCompany.id);
+    }
   }
 
   function formatDate(iso: string): string {
