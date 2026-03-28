@@ -4,7 +4,7 @@ import { createReActAgent } from './react-loop.ts';
 import { humanMessage, aiMessage, contentToText } from '../types/llm-types.ts';
 import type { ChatModel, BaseMessage, MessageContent, ContentPart } from '../types/llm-types.ts';
 import type { StructuredTool } from '../types/llm-types.ts';
-import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions, AgentMemoryConfig } from './types.ts';
+import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions, AgentMemoryConfig, AgentCompanyContext } from './types.ts';
 import { resolveP2PConfig } from './types.ts';
 import { LLMFactory } from '../llm/llm-factory.ts';
 import { resolveAgentModelRef } from '../llm/types.ts';
@@ -137,19 +137,33 @@ export class AgentExecutor {
     input: Record<string, unknown> | AgentInvokeOptions
   ): Promise<AgentResult> {
     const startTime = Date.now();
-    const { input: actualInput, sessionId } = this.parseInvokeOptions(input);
+    const { input: actualInput, sessionId, companyContext } = this.parseInvokeOptions(input);
 
-    if (tools.length > 0) {
-      return this.invokeWithTools(definition, llm, tools, actualInput, startTime, sessionId);
+    // Augment system prompt with company context if provided
+    let effectiveDefinition = definition;
+    if (companyContext) {
+      const contextPrompt = this.buildCompanyContextPrompt(companyContext);
+      effectiveDefinition = {
+        ...definition,
+        prompt: {
+          ...definition.prompt,
+          system: `${definition.prompt.system}\n\n${contextPrompt}`,
+        },
+      };
     }
 
-    return this.invokeWithoutTools(definition, llm, actualInput, startTime, sessionId);
+    if (tools.length > 0) {
+      return this.invokeWithTools(effectiveDefinition, llm, tools, actualInput, startTime, sessionId);
+    }
+
+    return this.invokeWithoutTools(effectiveDefinition, llm, actualInput, startTime, sessionId);
   }
 
   private parseInvokeOptions(input: Record<string, unknown> | AgentInvokeOptions): {
     input: Record<string, unknown>;
     sessionId?: string;
     signal?: AbortSignal;
+    companyContext?: AgentCompanyContext;
   } {
     // Check if this is AgentInvokeOptions by checking for both 'input' property and if sessionId is present
     if ('input' in input && typeof input.input === 'object' && input.input !== null) {
@@ -158,10 +172,29 @@ export class AgentExecutor {
         input: options.input,
         sessionId: options.sessionId,
         signal: options.signal,
+        companyContext: options.companyContext,
       };
     }
     // Otherwise treat as direct input
     return { input: input as Record<string, unknown>, sessionId: undefined };
+  }
+
+  private buildCompanyContextPrompt(ctx: AgentCompanyContext): string {
+    let prompt = `<company_context>\nYou are currently working on behalf of company "${ctx.company.name}" (${ctx.company.prefix}).`;
+    if (ctx.company.description) {
+      prompt += `\n${ctx.company.description}`;
+    }
+    prompt += '\n</company_context>';
+
+    if (ctx.ticket) {
+      prompt += `\n\n<ticket_context>\nTicket: ${ctx.ticket.identifier} — ${ctx.ticket.title}\nPriority: ${ctx.ticket.priority}`;
+      if (ctx.ticket.description) {
+        prompt += `\n${ctx.ticket.description}`;
+      }
+      prompt += '\n</ticket_context>';
+    }
+
+    return prompt;
   }
 
   private async invokeWithTools(
@@ -429,7 +462,19 @@ export class AgentExecutor {
     tools: StructuredTool[],
     input: Record<string, unknown> | AgentInvokeOptions
   ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
-    const { input: actualInput, sessionId, signal } = this.parseInvokeOptions(input);
+    const { input: actualInput, sessionId, signal, companyContext } = this.parseInvokeOptions(input);
+
+    // Augment system prompt with company context if provided
+    if (companyContext) {
+      const contextPrompt = this.buildCompanyContextPrompt(companyContext);
+      definition = {
+        ...definition,
+        prompt: {
+          ...definition.prompt,
+          system: `${definition.prompt.system}\n\n${contextPrompt}`,
+        },
+      };
+    }
 
     if (tools.length > 0) {
       const agent = createReActAgent({

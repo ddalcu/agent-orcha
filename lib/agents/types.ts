@@ -115,10 +115,16 @@ export interface AgentResult {
   };
 }
 
+export interface AgentCompanyContext {
+  company: { id: string; name: string; description: string; prefix: string };
+  ticket?: { identifier: string; title: string; priority: string; description: string };
+}
+
 export interface AgentInvokeOptions {
   input: Record<string, unknown>;
   sessionId?: string;
   signal?: AbortSignal;
+  companyContext?: AgentCompanyContext;
 }
 
 export interface AgentInstance {

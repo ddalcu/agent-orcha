@@ -27,7 +27,7 @@ export class TaskManager {
     this.store.update(task.id, { status: 'working' });
 
     this.orchestrator
-      .runAgent(params.agent, params.input, params.sessionId)
+      .runAgent(params.agent, params.input, params.sessionId, params.companyContext)
       .then((result) => {
         const current = this.store.get(task.id);
         if (current?.status === 'canceled') return;

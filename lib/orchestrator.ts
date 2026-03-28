@@ -54,6 +54,10 @@ import type { KnowledgeStoreInstance, KnowledgeConfig, KnowledgeStoreMetadata, I
 import type { KnowledgeMetadataManager } from './knowledge/knowledge-store-metadata.ts';
 import type { SqliteStore } from './knowledge/sqlite-store.ts';
 import type { StructuredTool } from './types/llm-types.ts';
+import { CompanyDB } from './company/company-db.ts';
+import { CompanyManager } from './company/company-manager.ts';
+import { TicketManager } from './company/ticket-manager.ts';
+import { RoutineManager } from './company/routine-manager.ts';
 import { logger, getRecentLogs } from './logger.ts';
 
 export interface OrchestratorConfig {
@@ -95,6 +99,11 @@ export class Orchestrator {
   private inContainerSandboxError: string | null = null;
   /** @internal — accessed by p2p routes via _p2pManager */
   _p2pManager: P2PManager | null = null;
+
+  private companyDB: CompanyDB | null = null;
+  private _companyManager: CompanyManager | null = null;
+  private _ticketManager: TicketManager | null = null;
+  private _routineManager: RoutineManager | null = null;
 
   private initialized = false;
 
@@ -184,6 +193,18 @@ export class Orchestrator {
     logger.info('[Orchestrator] Knowledge configs loaded (stores will initialize on demand)');
 
     this.taskManager = new TaskManager(this);
+
+    // Initialize company system (SQLite-backed)
+    this.companyDB = new CompanyDB(this.config.workspaceRoot);
+    const db = this.companyDB.getDB();
+    this._companyManager = new CompanyManager(db);
+    this._ticketManager = new TicketManager(db, this._companyManager);
+    this._routineManager = new RoutineManager(db, this._companyManager);
+    this._routineManager.setRunAgentFn(async (agentName, input, sessionId, companyContext) => {
+      const task = this.taskManager.submitAgent({ agent: agentName, input, sessionId, companyContext });
+      return { taskId: task.id };
+    });
+    this._routineManager.startCronJobs();
 
     this.initialized = true;
 
@@ -713,6 +734,14 @@ export class Orchestrator {
     };
   }
 
+  get companySystem() {
+    return {
+      companies: this._companyManager!,
+      tickets: this._ticketManager!,
+      routines: this._routineManager!,
+    };
+  }
+
   get triggers(): TriggerAccessor {
     return {
       getManager: () => this.triggerManager,
@@ -889,7 +918,8 @@ export class Orchestrator {
   async runAgent(
     name: string,
     input: Record<string, unknown>,
-    sessionId?: string
+    sessionId?: string,
+    companyContext?: import('./agents/types.ts').AgentCompanyContext,
   ): Promise<AgentResult> {
     this.ensureInitialized();
 
@@ -899,7 +929,7 @@ export class Orchestrator {
     }
 
     const instance = await this.agentExecutor.createInstance(definition);
-    return instance.invoke({ input, sessionId });
+    return instance.invoke({ input, sessionId, companyContext });
   }
 
   async *streamAgent(
@@ -1202,6 +1232,12 @@ export class Orchestrator {
   }
 
   async close(): Promise<void> {
+    if (this._routineManager) {
+      this._routineManager.stopAll();
+    }
+    if (this.companyDB) {
+      this.companyDB.close();
+    }
     if (this._p2pManager?.close) {
       await this._p2pManager.close();
     }

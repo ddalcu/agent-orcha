@@ -24,6 +24,7 @@ import { logsRoutes } from './routes/logs.route.ts';
 import { publishRoutes } from './routes/publish.route.ts';
 import { toolsRoutes } from './routes/tools.route.ts';
 import { p2pRoutes } from './routes/p2p.route.ts';
+import { companiesRoutes } from './routes/companies.route.ts';
 import { voicesRoutes } from './routes/voices.route.ts';
 import { getPinoConfig } from '../lib/logger.ts';
 import { authPlugin } from './middleware/auth.ts';
@@ -107,6 +108,7 @@ export async function createServer(orchestrator: Orchestrator): Promise<FastifyI
   await fastify.register(publishRoutes, { prefix: '/api/publish' });
   await fastify.register(toolsRoutes, { prefix: '/api/tools' });
   await fastify.register(p2pRoutes, { prefix: '/api/p2p' });
+  await fastify.register(companiesRoutes, { prefix: '/api/companies' });
   await fastify.register(voicesRoutes, { prefix: '/api/voices' });
   await fastify.register(chatRoutes);
   await fastify.register(vncRoutes);

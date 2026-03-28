@@ -11,6 +11,9 @@
   import LocalLlmPage from './pages/LocalLlmPage.svelte';
   import IdePage from './pages/IdePage.svelte';
   import P2PPage from './pages/P2PPage.svelte';
+  import CompaniesPage from './pages/CompaniesPage.svelte';
+  import TicketsPage from './pages/TicketsPage.svelte';
+  import RoutinesPage from './pages/RoutinesPage.svelte';
 
   let showLogin = $state(false);
   let showLogout = $state(false);
@@ -186,6 +189,12 @@
         <IdePage />
       {:else if appStore.activeTab === 'p2p'}
         <P2PPage />
+      {:else if appStore.activeTab === 'companies'}
+        <CompaniesPage />
+      {:else if appStore.activeTab === 'tickets'}
+        <TicketsPage />
+      {:else if appStore.activeTab === 'routines'}
+        <RoutinesPage />
       {/if}
     </div>
 

@@ -134,7 +134,77 @@ export interface TaskMetrics {
   outputTokens?: number;
 }
 
-export type TabId = 'agents' | 'knowledge' | 'graph' | 'tools' | 'monitor' | 'llm' | 'ide' | 'p2p';
+export type TabId = 'agents' | 'knowledge' | 'graph' | 'tools' | 'monitor' | 'llm' | 'ide' | 'p2p' | 'companies' | 'tickets' | 'routines';
+
+export interface Company {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  issuePrefix: string;
+  issueCounter: number;
+  brandColor: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Ticket {
+  id: string;
+  companyId: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  assigneeAgent: string;
+  issueNumber: number;
+  identifier: string;
+  taskId: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string;
+  activity?: TicketActivity[];
+}
+
+export interface TicketActivity {
+  id: string;
+  ticketId: string;
+  type: string;
+  content: string;
+  authorType: string;
+  authorName: string;
+  oldValue: string;
+  newValue: string;
+  metadata: string;
+  createdAt: string;
+}
+
+export interface Routine {
+  id: string;
+  companyId: string;
+  name: string;
+  description: string;
+  schedule: string;
+  timezone: string;
+  agentName: string;
+  agentInput: string;
+  status: string;
+  lastTriggeredAt: string;
+  nextRunAt: string;
+  createdAt: string;
+  updatedAt: string;
+  runs?: RoutineRun[];
+}
+
+export interface RoutineRun {
+  id: string;
+  routineId: string;
+  taskId: string;
+  status: string;
+  triggeredAt: string;
+  completedAt: string;
+  error: string;
+  createdAt: string;
+}
 
 export interface P2PStatus {
   enabled: boolean;
