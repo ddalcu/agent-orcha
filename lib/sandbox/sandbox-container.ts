@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from '../utils/child-process.ts';
 import { logger } from '../logger.ts';
 import type { SandboxStatus } from './types.ts';
 

@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile } from '../utils/child-process.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { tool } from '../types/tool-factory.ts';

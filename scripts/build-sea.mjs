@@ -334,8 +334,20 @@ if (platform === 'darwin') {
     console.warn(`rcedit failed: ${e.message} — install with: npm i -D rcedit`);
   }
 
-  // PE subsystem stays as Console (3). TrayConsole provides the native log
-  // window and system tray — no need to patch to GUI subsystem.
+  // Patch PE subsystem from Console (3) to GUI (2) so Windows doesn't
+  // allocate a native console window on double-click. TrayConsole provides
+  // the log window and system tray instead.
+  const exeBuf = fs.readFileSync(outputPath);
+  const peOffset = exeBuf.readUInt32LE(0x3c);
+  const subsystemOffset = peOffset + 4 + 20 + 68; // PE sig + COFF header + OptionalHeader.Subsystem
+  const currentSubsystem = exeBuf.readUInt16LE(subsystemOffset);
+  if (currentSubsystem === 3) {
+    exeBuf.writeUInt16LE(2, subsystemOffset);
+    fs.writeFileSync(outputPath, exeBuf);
+    console.log('Patched PE subsystem: Console → GUI');
+  } else {
+    console.warn(`Unexpected PE subsystem value: ${currentSubsystem} — skipping patch`);
+  }
 }
 
 // --- 6. Report ---

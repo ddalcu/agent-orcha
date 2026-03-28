@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { execFile } from 'child_process';
+import { execFile } from '../../utils/child-process.ts';
 import { promisify } from 'util';
 import { tool } from '../../types/tool-factory.ts';
 import { z } from 'zod';

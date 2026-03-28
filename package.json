@@ -55,7 +55,7 @@
     "prepare": "node -e \"const fs=require('fs'),path=require('path');const d=path.join('.git','hooks');if(!fs.existsSync('.git'))process.exit(0);fs.mkdirSync(d,{recursive:true});fs.writeFileSync(path.join(d,'pre-commit'),'#!/bin/sh\\nnode \\\"$(dirname \\\"$0\\\")/../../scripts/pre-commit.mjs\\\"\\n');try{fs.chmodSync(path.join(d,'pre-commit'),0o755)}catch{}\""
   },
   "dependencies": {
-    "@agent-orcha/node-omni-orcha": "^2026.327.1615",
+    "@agent-orcha/node-omni-orcha": "^2026.328.26",
     "@agent-orcha/trayconsolejs": "^0.1.1",
     "@anthropic-ai/sdk": "^0.76.0",
     "@fastify/cors": "^10.0.1",
@@ -86,12 +86,12 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "optionalDependencies": {
-    "@agent-orcha/node-omni-orcha-darwin-arm64": "^2026.326.1716",
-    "@agent-orcha/node-omni-orcha-linux-arm64": "^2026.326.1716",
-    "@agent-orcha/node-omni-orcha-linux-x64": "^2026.326.1716",
-    "@agent-orcha/node-omni-orcha-linux-x64-cuda": "^2026.326.1716",
-    "@agent-orcha/node-omni-orcha-win32-x64": "^2026.326.1716",
-    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.326.1716"
+    "@agent-orcha/node-omni-orcha-darwin-arm64": "^2026.328.26",
+    "@agent-orcha/node-omni-orcha-linux-arm64": "^2026.328.26",
+    "@agent-orcha/node-omni-orcha-linux-x64": "^2026.328.26",
+    "@agent-orcha/node-omni-orcha-linux-x64-cuda": "^2026.328.26",
+    "@agent-orcha/node-omni-orcha-win32-x64": "^2026.328.26",
+    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.328.26"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
