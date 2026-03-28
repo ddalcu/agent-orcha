@@ -18,9 +18,16 @@ interface LLMStreamParams {
   modelName: string;
 }
 
+interface Attachment {
+  data: string;
+  mediaType: string;
+  name?: string;
+}
+
 interface LLMStreamBody {
   message: string;
   sessionId?: string;
+  attachments?: Attachment[];
 }
 
 export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
@@ -209,7 +216,7 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const { peerId, modelName } = request.params;
-      const { message, sessionId } = request.body;
+      const { message, sessionId, attachments } = request.body;
       const sid = sessionId || `p2p-llm-${peerId}-${Date.now()}`;
 
       const taskManager = fastify.orchestrator.tasks.getManager();
@@ -229,6 +236,25 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
         role: m.role === 'human' ? 'user' : m.role === 'ai' ? 'assistant' : m.role,
         content: typeof m.content === 'string' ? m.content : '',
       }));
+
+      // Attach images to the last user message (the one we just added)
+      if (attachments?.length) {
+        const last = wireMessages[wireMessages.length - 1];
+        if (last && last.role === 'user') {
+          const parts: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mediaType: string }> = [];
+          if (last.content) parts.push({ type: 'text', text: last.content as string });
+          for (const att of attachments) {
+            if (att.mediaType.startsWith('image/')) {
+              parts.push({ type: 'image', data: att.data, mediaType: att.mediaType });
+            } else {
+              // Non-image files: include as labeled text
+              const label = att.name ? `[File: ${att.name}]` : '[Attached file]';
+              parts.push({ type: 'text', text: `${label}\n(base64 data omitted — non-image attachment)` });
+            }
+          }
+          last.content = parts as any;
+        }
+      }
 
       const abortController = new AbortController();
       taskManager.registerAbort(task.id, abortController);

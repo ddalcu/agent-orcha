@@ -140,19 +140,18 @@
     <NavBar onselect={() => toggleSidebar(true)} />
     <div class="sidebar-footer">
       <div id="header-actions" class="flex items-center gap-2">
-        {#if sandboxStatus !== 'no-docker'}
-          <button
-            class="btn-ghost sandbox-btn"
-            class:sandbox-starting={sandboxStatus === 'idle' || sandboxStatus === 'detecting' || sandboxStatus === 'pulling' || sandboxStatus === 'starting'}
-            class:sandbox-running={sandboxStatus === 'running'}
-            class:sandbox-failed={sandboxStatus === 'failed'}
-            title={sandboxStatus === 'running' ? 'View Browser Desktop' : sandboxStatus === 'failed' ? `Sandbox failed: ${sandboxError || 'unknown error'}` : `Sandbox: ${sandboxStatus}...`}
-            onclick={openVnc}
-            disabled={sandboxStatus !== 'running'}
-          >
-            <i class="fas fa-desktop"></i>
-          </button>
-        {/if}
+        <button
+          class="btn-ghost sandbox-btn"
+          class:sandbox-starting={sandboxStatus === 'idle' || sandboxStatus === 'detecting' || sandboxStatus === 'pulling' || sandboxStatus === 'starting'}
+          class:sandbox-running={sandboxStatus === 'running'}
+          class:sandbox-off={sandboxStatus === 'no-docker'}
+          class:sandbox-failed={sandboxStatus === 'failed'}
+          title={sandboxStatus === 'running' ? 'View Browser Desktop' : sandboxStatus === 'no-docker' ? 'Sandbox unavailable — Docker not running' : sandboxStatus === 'failed' ? `Sandbox failed: ${sandboxError || 'unknown error'}` : `Sandbox: ${sandboxStatus}...`}
+          onclick={openVnc}
+          disabled={sandboxStatus !== 'running'}
+        >
+          <i class="fas fa-desktop"></i>
+        </button>
         {#if showLogout}
           <button class="btn-ghost" title="Logout" onclick={handleLogout}>
             <i class="fas fa-right-from-bracket"></i>
@@ -260,6 +259,10 @@
   }
   .sandbox-btn.sandbox-running {
     color: var(--green, #22c55e);
+  }
+  .sandbox-btn.sandbox-off {
+    color: var(--red, #ef4444);
+    opacity: 0.5;
   }
   .sandbox-btn.sandbox-failed {
     color: var(--red, #ef4444);

@@ -472,13 +472,12 @@ export class Orchestrator {
       logger.warn('║    sandbox:web_search, sandbox:file_*                          ║');
       logger.warn('╚════════════════════════════════════════════════════════════════╝');
       logger.warn('');
+      this.sandboxContainer = container;
       return;
     }
 
-    const started = await container.start();
-    if (started) {
-      this.sandboxContainer = container;
-    }
+    await container.start();
+    this.sandboxContainer = container;
   }
 
   private buildSandboxTools(): Map<string, StructuredTool> {

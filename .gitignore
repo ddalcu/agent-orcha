@@ -30,6 +30,8 @@ agent-orcha-*.tgz
 test-results
 public
 .DS_Store
+templates/.orcha-data/
+templates/.p2p-stats.json
 
 # iOS - generated/unnecessary
 ios/AgentOrcha.xcodeproj

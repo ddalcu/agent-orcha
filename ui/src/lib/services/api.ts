@@ -225,10 +225,10 @@ export const api = {
       body: JSON.stringify({ input, sessionId }), signal: opts.signal,
     });
   },
-  async streamP2PLLM(peerId: string, modelName: string, message: string, sessionId: string, opts: { signal?: AbortSignal } = {}) {
+  async streamP2PLLM(peerId: string, modelName: string, message: string, sessionId: string, attachments?: unknown[] | null, opts: { signal?: AbortSignal } = {}) {
     return _fetch(`/api/p2p/llms/${encodeURIComponent(peerId)}/${encodeURIComponent(modelName)}/stream`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, sessionId }), signal: opts.signal,
+      body: JSON.stringify({ message, sessionId, ...(attachments?.length ? { attachments } : {}) }), signal: opts.signal,
     });
   },
 

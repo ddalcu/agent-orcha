@@ -9,10 +9,12 @@ import type { Orchestrator } from '../orchestrator.ts';
 import { listModelConfigs, getModelConfig, listImageConfigs, listTtsConfigs, listVideoConfigs, getImageConfig, getTtsConfig } from '../llm/llm-config.ts';
 import { LLMFactory } from '../llm/llm-factory.ts';
 import { humanMessage, aiMessage, systemMessage, toolMessage } from '../types/llm-types.ts';
+import type { MessageContent, ContentPart } from '../types/llm-types.ts';
 import { convertJsonSchemaToZod } from '../utils/json-schema-to-zod.ts';
 import type {
   P2PModelInfo,
   P2PWireMessage,
+  P2PWireContentPart,
   P2PWireTool,
   RemoteModel,
   ModelTaskInvokeMessage,
@@ -625,11 +627,13 @@ export class P2PManager {
 
       // Convert wire messages to BaseMessage format (with tool context)
       const baseMessages = messages.map(m => {
-        if (m.role === 'user' || m.role === 'human') return humanMessage(m.content);
-        if (m.role === 'assistant' || m.role === 'ai') return aiMessage(m.content, m.tool_calls);
-        if (m.role === 'system') return systemMessage(m.content);
-        if (m.role === 'tool' && m.tool_call_id) return toolMessage(m.content, m.tool_call_id, m.name ?? '');
-        return humanMessage(m.content);
+        const content = wireContentToMessageContent(m.content);
+        const textContent = typeof content === 'string' ? content : content.filter(p => p.type === 'text').map(p => (p as { type: 'text'; text: string }).text).join('');
+        if (m.role === 'user' || m.role === 'human') return humanMessage(content);
+        if (m.role === 'assistant' || m.role === 'ai') return aiMessage(textContent, m.tool_calls);
+        if (m.role === 'system') return systemMessage(textContent);
+        if (m.role === 'tool' && m.tool_call_id) return toolMessage(textContent, m.tool_call_id, m.name ?? '');
+        return humanMessage(content);
       });
 
       // Bind tools if provided — create stub StructuredTool objects from JSON schemas
@@ -1305,4 +1309,13 @@ export class P2PManager {
 
     return result;
   }
+}
+
+/** Convert P2P wire content (string or ContentPart[]) to internal MessageContent. */
+function wireContentToMessageContent(content: string | P2PWireContentPart[]): MessageContent {
+  if (typeof content === 'string') return content;
+  return content.map((p): ContentPart => {
+    if (p.type === 'image') return { type: 'image', data: p.data, mediaType: p.mediaType };
+    return { type: 'text', text: p.text };
+  });
 }

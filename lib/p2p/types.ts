@@ -12,11 +12,15 @@ export interface P2PWireTool {
 
 export interface P2PWireMessage {
   role: string;
-  content: string;
+  content: string | P2PWireContentPart[];
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   name?: string;
 }
+
+export type P2PWireContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mediaType: string };
 
 // --- P2P Agent Info (what peers share about their agents) ---
 

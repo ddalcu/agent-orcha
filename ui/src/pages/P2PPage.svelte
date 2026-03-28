@@ -12,8 +12,18 @@
   import StreamStatusBar from '../components/chat/StreamStatusBar.svelte';
   import StreamStatsBar from '../components/chat/StreamStatsBar.svelte';
   import ModelOutput from '../components/chat/ModelOutput.svelte';
+  import AttachmentPreview from '../components/chat/AttachmentPreview.svelte';
+
+  // --- Constants ---
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB per file
 
   // --- Types ---
+
+  interface Attachment {
+    data: string;
+    mediaType: string;
+    name: string;
+  }
 
   interface ModelOutputEntry {
     task: string;
@@ -28,6 +38,7 @@
     type: 'user' | 'response';
     id: string;
     content: string;
+    attachments?: Attachment[] | null;
     tools: ToolEntry[];
     thinkingSections: ThinkingEntry[];
     modelOutputs: ModelOutputEntry[];
@@ -113,6 +124,7 @@
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let chatInputRef = $state<ChatInput | null>(null);
   let chatMessagesRef = $state<ChatMessages | null>(null);
+  let pendingAttachments = $state<Attachment[]>([]);
   let sidebarFilter = $state('');
 
   let filteredPeers = $derived(sidebarFilter
@@ -358,10 +370,57 @@
     }
   }
 
+  // --- File Attachments ---
+
+  function handleFileAttach(files: File[]) {
+    const needsConversion = ['image/webp', 'image/bmp', 'image/tiff'];
+    for (const file of files) {
+      if (file.size > MAX_FILE_SIZE) {
+        alert(`File "${file.name}" exceeds the 10 MB limit.`);
+        continue;
+      }
+      if (needsConversion.includes(file.type)) {
+        convertImageToJpeg(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+          pendingAttachments = [...pendingAttachments, { data: base64, mediaType: file.type || 'application/octet-stream', name: file.name }];
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  }
+
+  function convertImageToJpeg(file: File) {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d')!.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      pendingAttachments = [...pendingAttachments, { data: dataUrl.split(',')[1], mediaType: 'image/jpeg', name: file.name }];
+    };
+    img.src = url;
+  }
+
+  function removeAttachment(index: number) {
+    pendingAttachments = pendingAttachments.filter((_, i) => i !== index);
+  }
+
+  function clearAttachments() {
+    pendingAttachments = [];
+  }
+
   // --- Chat ---
 
   function handleSubmit(message: string) {
-    if (!message.trim() || (!selectedAgent && !selectedModel) || isStreaming) return;
+    const hasAttachments = pendingAttachments.length > 0;
+    if ((!message.trim() && !hasAttachments) || (!selectedAgent && !selectedModel) || isStreaming) return;
     sendMessage(message.trim());
   }
 
@@ -373,10 +432,15 @@
   async function sendMessage(message: string) {
     if (!selectedAgent && !selectedModel) return;
 
+    const hasAttachments = pendingAttachments.length > 0;
+    const attachments = hasAttachments ? [...pendingAttachments] : null;
+    clearAttachments();
+
     const userBubble: ChatBubble = {
       type: 'user',
       id: `user-${Date.now()}`,
-      content: message,
+      content: message || '(attached files)',
+      attachments,
       tools: [],
       thinkingSections: [],
       modelOutputs: [],
@@ -431,7 +495,8 @@
       let response: Response;
       if (selectedAgent) {
         const inputVar = selectedAgent.inputVariables[0] || 'input';
-        const input = { [inputVar]: message };
+        const input: Record<string, unknown> = { [inputVar]: message };
+        if (attachments?.length) input.attachments = attachments;
         response = await api.streamP2PAgent(
           selectedAgent.peerId,
           selectedAgent.name,
@@ -445,6 +510,7 @@
           selectedModel!.name,
           message,
           sessionId,
+          attachments,
           { signal: abortController.signal },
         );
       }
@@ -1151,7 +1217,7 @@
         {:else}
           {#each bubbles as bubble (bubble.id)}
             {#if bubble.type === 'user'}
-              <UserBubble content={bubble.content} />
+              <UserBubble content={bubble.content} attachments={bubble.attachments} />
             {:else}
               <ResponseBubble
                 id={bubble.id}
@@ -1187,11 +1253,13 @@
 
       <!-- Chat input -->
       <div class="p2p-input-area">
+        <AttachmentPreview attachments={pendingAttachments} onremove={removeAttachment} />
         <ChatInput
           bind:this={chatInputRef}
           disabled={isStreaming}
           placeholder="Message {selectedAgent?.name ?? selectedModel?.name ?? ''}..."
           onsubmit={handleSubmit}
+          onfileselect={handleFileAttach}
         />
       </div>
     {/if}

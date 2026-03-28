@@ -638,6 +638,7 @@ img { display: block; max-width: 100%; }
 .app-content {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
   position: relative;
   padding: var(--sp-5) var(--sp-6);
 }
