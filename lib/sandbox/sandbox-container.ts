@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from '../utils/child-process.ts';
 import { logger } from '../logger.ts';
 import type { SandboxStatus } from './types.ts';
 
@@ -68,6 +68,52 @@ export class SandboxContainer {
   }
 
   /**
+   * Check if the sandbox container exists (running or stopped).
+   */
+  private containerExists(): boolean {
+    if (!this.dockerPath) return false;
+
+    try {
+      execFileSync(this.dockerPath, [
+        'container', 'inspect', CONTAINER_NAME,
+      ], { stdio: 'pipe', timeout: 5000, env: this.dockerEnv() });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Start an existing stopped container.
+   */
+  private startExistingContainer(): Promise<boolean> {
+    return new Promise((resolve) => {
+      execFile(this.dockerPath!, [
+        'start', CONTAINER_NAME,
+      ], { timeout: 30_000, env: this.dockerEnv() }, (error) => {
+        if (error) {
+          logger.error(`[Sandbox] Failed to start existing container: ${error.message}`);
+          resolve(false);
+          return;
+        }
+        this.waitForCDP().then((ready) => {
+          if (ready) {
+            logger.info('[Sandbox] Container ready (CDP: localhost:9222, VNC: localhost:6080)');
+            this.running = true;
+            this._status = 'running';
+            this._error = null;
+          } else {
+            logger.warn('[Sandbox] Container started but CDP not responding');
+            this._status = 'failed';
+            this._error = 'Container started but CDP not responding';
+          }
+          resolve(ready);
+        });
+      });
+    });
+  }
+
+  /**
    * Start the sandbox container by pulling and running the published image.
    */
   async start(): Promise<boolean> {
@@ -84,6 +130,13 @@ export class SandboxContainer {
       this._status = 'running';
       this._error = null;
       return true;
+    }
+
+    // If the container exists but is stopped, restart it
+    if (this.containerExists()) {
+      logger.info('[Sandbox] Restarting existing container...');
+      this._status = 'starting';
+      return this.startExistingContainer();
     }
 
     logger.info(`[Sandbox] Pulling ${SANDBOX_IMAGE}...`);
@@ -256,7 +309,7 @@ export class SandboxContainer {
     const start = Date.now();
     while (Date.now() - start < maxWait) {
       try {
-        const response = await fetch('http://localhost:9222/json/version');
+        const response = await fetch('http://127.0.0.1:9222/json/version');
         if (response.ok) return true;
       } catch {
         // Not ready yet

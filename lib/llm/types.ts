@@ -4,30 +4,50 @@ import { z } from 'zod';
 export type {
   ModelConfig,
   EmbeddingModelConfig,
-  LLMJsonConfig,
+  ModelsConfig,
 } from './llm-config.ts';
 
 export {
   ModelConfigSchema,
   EmbeddingModelConfigSchema,
-  LLMJsonConfigSchema,
+  ModelsConfigSchema,
 } from './llm-config.ts';
 
-// Schema for agent LLM reference (can be string or object with overrides)
-export const AgentLLMRefSchema = z.union([
-  z.string(), // Just the config name: "default"
+// Schema for per-type model references on an agent
+// String shorthand: "omni" → { llm: "omni" }
+// Object with temp: { llm: "omni", temperature: 0.7 }
+// Per-type: { llm: "gpt4", image: "flux", video: "wan2", tts: "qwen" }
+export const AgentModelRefSchema = z.union([
+  z.string(),
   z.object({
-    name: z.string(),
+    llm: z.string().optional(),
+    image: z.string().optional(),
+    video: z.string().optional(),
+    tts: z.string().optional(),
     temperature: z.number().min(0).max(2).optional(),
   }),
 ]);
 
-export type AgentLLMRef = z.infer<typeof AgentLLMRefSchema>;
+export type AgentModelRef = z.infer<typeof AgentModelRefSchema>;
 
-// Helper to resolve agent LLM reference to name and optional overrides
-export function resolveAgentLLMRef(ref: AgentLLMRef): { name: string; temperature?: number } {
+export interface ResolvedModelRef {
+  llm: string;
+  image?: string;
+  video?: string;
+  tts?: string;
+  temperature?: number;
+}
+
+// Resolve agent model reference to per-type config keys
+export function resolveAgentModelRef(ref: AgentModelRef): ResolvedModelRef {
   if (typeof ref === 'string') {
-    return { name: ref };
+    return { llm: ref };
   }
-  return ref;
+  return {
+    llm: ref.llm ?? 'default',
+    image: ref.image,
+    video: ref.video,
+    tts: ref.tts,
+    temperature: ref.temperature,
+  };
 }

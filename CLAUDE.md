@@ -44,9 +44,9 @@ All knowledge stores use a **unified SQLite + sqlite-vec** persistence layer. Th
 - `graph.extractionMode`, `graph.extraction`, `graph.communities`, `graph.cache`, `graph.store`
 - `search.localSearch`, `search.globalSearch`
 
-### LLM Configuration
+### Model Configuration
 
-All LLM and embedding configs live in `llm.json`. The `LLMFactory` creates model instances by config name. Embedding providers: OpenAI-compatible, Gemini. Configured via `lib/llm/`.
+All model configs live in `models.yaml` (YAML format) with sections: `llm` (chat models), `embeddings`, `image`, `video`, `tts`. Each section has named configs pointing to a provider + model combination. The `LLMFactory` creates chat model instances; image/video/TTS tools resolve their models from the corresponding section. Agents reference models via the `model:` field which can be a string (LLM shorthand) or per-type object: `model: { llm: gpt4, image: flux, video: wan2, tts: qwen }`. The `GET /api/llm/config` endpoint returns the config with the LLM section keyed as `llm` (matching the YAML key), image/tts/video sections as-is. Image/TTS model activation routes (`POST /api/local-llm/models/:id/activate-image`, `activate-tts`) scan the model directory, load via OmniModelCache, and auto-configure `models.yaml`. Download routes accept an optional `category` query param; when `category=image|tts` and no existing config exists for that slot, `models.yaml` is auto-configured on download completion.
 
 ### Tool System
 
@@ -54,9 +54,9 @@ Tools are provided to agents via prefixed references:
 - `mcp:<server>` — MCP server tools
 - `knowledge:<store>` — Knowledge store search + graph tools
 - `function:<name>` — Custom JS functions
-- `builtin:<name>` — Built-in tools (e.g., `ask_user`, `canvas_write`)
+- `builtin:<name>` — Built-in tools (e.g., `ask_user`, `canvas_write`, `generate_image`, `generate_tts`, `generate_video`)
 
-Built-in tools: `ask_user` (interrupt for user input), `save_memory` (auto-injected with memory config), `canvas_write` (write/replace content in the canvas side pane), `canvas_append` (append to existing canvas content). Canvas tools are registered in `Orchestrator.registerBuiltInTools()`. The frontend intercepts `tool_end` events to render content. `canvas_write` supports three formats: `markdown` (rendered rich text), `html` (live iframe), `code` (syntax-highlighted with `language` param).
+Built-in tools: `ask_user` (interrupt for user input), `save_memory` (auto-injected with memory config), `canvas_write` (write/replace content in the canvas side pane), `canvas_append` (append to existing canvas content), `generate_image` (image generation via omni/P2P), `generate_tts` (text-to-speech via omni/P2P), `generate_video` (distributed video generation via P2P — registered only when P2P is enabled). Canvas tools are registered in `Orchestrator.registerBuiltInTools()`. Model tools (`generate_image`, `generate_tts`) are registered in `Orchestrator.registerModelTools()`. Video tool is registered in `Orchestrator.registerP2PTools()`. The frontend intercepts `tool_end` events to render content. `canvas_write` supports three formats: `markdown` (rendered rich text), `html` (live iframe), `code` (syntax-highlighted with `language` param). P2P model tools use the unified `model_task_*` protocol (`model_task_invoke`, `model_task_result`, `model_task_stream`, `model_task_stream_end`, `model_task_error`) for all task types (chat, image, video_frame, tts).
 
 Knowledge tools are created by `lib/tools/built-in/knowledge-tools-factory.ts`. Stores with entities get extra graph tools (traverse, entity_lookup, graph_schema).
 
@@ -75,26 +75,32 @@ Skills are prompt augmentation files (`skills/*/SKILL.md`) with YAML frontmatter
 **VM Execution:** `vm-executor.ts` — `sandbox_exec`, `sandbox_web_fetch`, `sandbox_web_search`
 **Shell:** `sandbox-shell.ts` — `sandbox_shell` executes commands as non-root `sandbox` user
 **Browser:** `sandbox-browser.ts` — CDP-based Chromium control with `sandbox_browser_navigate`, `sandbox_browser_observe`, `sandbox_browser_click`, `sandbox_browser_type`, `sandbox_browser_screenshot`, `sandbox_browser_evaluate`. Uses `cdp-client.ts` (WebSocket CDP) and `page-readiness.ts` (DOM observation). Browser tools return multimodal `ContentPart[]` (images).
-**Vision Browser:** `vision-browser.ts` — Pixel-coordinate browser control using CDP Input events. Tools: `sandbox_vision_screenshot`, `sandbox_vision_navigate`, `sandbox_vision_click`, `sandbox_vision_type`, `sandbox_vision_scroll`, `sandbox_vision_key`, `sandbox_vision_drag`. Every action tool auto-captures a JPEG screenshot (quality 55) and returns it as a `ContentPart[]` image, cutting the screenshot→infer→act loop to one call per action. Designed for use with vision LLMs (e.g., Qwen3-VL via LM Studio). Uses its own CDPClient/PageReadiness instances independent of the existing DOM-based browser tools.
+**Vision Browser:** `vision-browser.ts` — Pixel-coordinate browser control using CDP Input events. Tools: `sandbox_vision_screenshot`, `sandbox_vision_navigate`, `sandbox_vision_click`, `sandbox_vision_type`, `sandbox_vision_scroll`, `sandbox_vision_key`, `sandbox_vision_drag`. Every action tool auto-captures a JPEG screenshot (quality 55) and returns it as a `ContentPart[]` image, cutting the screenshot→infer→act loop to one call per action. Designed for use with vision models (e.g., Qwen3-VL via LM Studio). Uses its own CDPClient/PageReadiness instances independent of the existing DOM-based browser tools.
 **Config:** `SandboxConfig` in `types.ts` with `browserCdpUrl` field (default: `http://localhost:9222`)
 
 ### P2P Network
 
-`lib/p2p/p2p-manager.ts` manages Hyperswarm-based peer-to-peer sharing. P2P is **enabled by default** (`P2P_ENABLED !== 'false'`). Agents with `p2p: true` and LLMs with `p2p: true` + `active !== false` are shared.
+`lib/p2p/p2p-manager.ts` manages Hyperswarm-based peer-to-peer sharing. P2P is **enabled by default** (`P2P_ENABLED !== 'false'`). Agents with `p2p: { share: true }` are shared to the network. Agents with `p2p: { leverage: true }` can discover and use remote models. Models with `share: true` in `models.yaml` (or `P2P_SHARE_LLMS=true` for all) are shared.
 
 **Key files:**
 - `lib/p2p/p2p-manager.ts` — `P2PManager` class (swarm lifecycle, catalog broadcast, rate limiting)
 - `lib/p2p/p2p-protocol.ts` — Wire protocol over Hyperswarm sockets
-- `lib/p2p/types.ts` — Message types, `P2PStatus`, `PeerInfo`, `P2PAgentInfo`, `P2PLLMInfo`
+- `lib/p2p/types.ts` — Message types, `P2PStatus`, `PeerInfo`, `P2PAgentInfo`, `P2PModelInfo`
 - `src/routes/p2p.route.ts` — REST API (`/api/p2p/*`)
 
 **Runtime configuration** (all configurable via `PATCH /api/p2p/settings` or the P2P tab UI):
 - Peer name (`P2P_PEER_NAME` env var, default: hostname)
 - Network key (`P2P_NETWORK_KEY` env var, default: `agent-orcha-default`) — SHA-256 hashed for topic
-- Rate limit (`P2P_RATE_LIMIT` env var, default: 60 req/min, 0 = unlimited) — sliding window, applies to all incoming agent + LLM invoke requests
+- Rate limit (`P2P_RATE_LIMIT` env var, default: 60 req/min, 0 = unlimited) — sliding window, applies to all incoming agent + model task requests
 - Enable/disable toggle (`POST /api/p2p/toggle`) — creates/destroys `P2PManager` at runtime
 
-**LLM sharing:** `P2P_SHARE_LLMS=true` blanket-shares all active models. Otherwise per-model `p2p: true` in `llm.json`. The LLM tab UI has a Toggle per provider. `PATCH /api/llm/config/models/:name/p2p` toggles the flag and broadcasts catalog.
+**Model sharing:** `P2P_SHARE_LLMS=true` blanket-shares all active models. Otherwise per-model `share: true` in `models.yaml`. The Models tab UI has a Toggle per provider. `PATCH /api/llm/config/models/:name/share` toggles the flag and broadcasts catalog. **Model discovery is model-name based**: `p2p:model-name` matches by model string (case-insensitive, partial match), not by engine/provider. Multiple peers sharing the same model on different engines are all discoverable.
+
+**`p2p.leverage` vs `model: p2p`:** These are different features. `model: p2p` (or `model: p2p:<name>`) explicitly routes LLM calls to a remote peer. `p2p.leverage` controls how model tools (image, TTS, video) resolve to local vs remote peers. Modes: `false` (disabled), `'local-first'` (try local, P2P fallback), `'remote-first'` (try P2P, local fallback), `'remote-only'` (P2P only, fail if unavailable). Boolean `true` maps to `'local-first'` for backward compatibility. Leverage applies to model tools only — the chat LLM always resolves locally unless `model: p2p` is explicitly set.
+
+**Load balancing:** When multiple peers share the same model, `P2PManager.selectBestPeer()` picks the least-loaded peer using a combined score: client-side in-flight request count + peer-reported load from catalog broadcasts. Ties are broken randomly. Peers broadcast their `load` (active incoming task count) in `CatalogMessage` when tasks start and complete. In-flight counts are tracked via `incrementInFlight()`/`decrementInFlight()` in `invokeRemoteModelStream()` and `invokeRemoteModelTask()`.
+
+**Distributed video generation:** The `generate_video` built-in tool distributes frame generation across P2P peers sharing a video/image model. Each peer generates assigned frame ranges, frames are collected and stitched locally using ffmpeg. Protocol uses the unified `model_task_*` messages with `taskType: 'video_frame'`. `P2PManager.getRemoteModelsByName()` finds all peers matching a model name for parallel distribution.
 
 ### Published Agents
 
@@ -135,7 +141,7 @@ Two types: `type: 'steps'` (default, sequential/parallel) and `type: 'react'` (a
 
 ### Agent Config
 
-New fields beyond the base schema: `skills`, `memory`, `integrations`, `triggers`, `publish`.
+Key schema fields: `model` (string or `{ llm, image, video, tts }` per-type object), `p2p: { leverage, share }`, `skills`, `memory`, `integrations`, `triggers`, `publish`.
 
 ### Web UI (Studio)
 

@@ -3,7 +3,8 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { isSea, getOrchaDir, resolveWorkspace, scaffoldWorkspace } from '../../../lib/sea/bootstrap.ts';
-import { createSystemTray, type SystemTray } from '../../../lib/sea/system-tray.ts';
+import { TrayConsole } from '@agent-orcha/trayconsolejs';
+import { openAppWindow } from '../../../lib/sea/app-window.ts';
 
 const workspaceRoot = resolveWorkspace();
 
@@ -48,7 +49,7 @@ async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> 
   }
 
   // Check for config files
-  const configFiles = ['llm.json', 'mcp.json'];
+  const configFiles = ['models.yaml', 'mcp.json'];
   const missingConfigs = [];
 
   for (const file of configFiles) {
@@ -60,9 +61,9 @@ async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> 
     }
   }
 
-  if (missingConfigs.includes('llm.json')) {
-    console.error('\nWarning: llm.json not found. LLM functionality may not work correctly.');
-    console.error('Create llm.json with your LLM configuration.\n');
+  if (missingConfigs.includes('models.yaml')) {
+    console.error('\nWarning: models.yaml not found. Model functionality may not work correctly.');
+    console.error('Create models.yaml with your model configuration.\n');
   }
 
   if (missingConfigs.includes('mcp.json')) {
@@ -71,22 +72,104 @@ async function validateWorkspaceStructure(workspaceRoot: string): Promise<void> 
   }
 }
 
+/**
+ * Resolve icon paths for the tray. In SEA mode icons are extracted to ~/.orcha/,
+ * otherwise they're in the repo's scripts/ directory.
+ */
+function resolveIcons(): { ico: string; png: string } {
+  if (isSea()) {
+    const orchaDir = getOrchaDir();
+    return {
+      ico: path.join(orchaDir, 'native', 'tray-icon'),
+      png: path.join(orchaDir, 'native', 'tray-icon'),
+    };
+  }
+  return {
+    ico: path.join('scripts', 'AppIcon.ico'),
+    png: path.join('scripts', 'favicon.png'),
+  };
+}
+
 export async function startCommand(_args: string[]): Promise<void> {
-  // In SEA mode, tee stdout/stderr to a log file for the "View Logs" tray action
+  // In SEA mode, set up TrayConsole (log window + system tray) and pipe output to it
+  let trayConsole: TrayConsole | null = null;
+
+  // Hoisted so the tray onClicked handler can reference it before server init completes.
+  // Falls back to a simple quit if called before the server is set up.
+  let shutdown = (): void => {
+    trayConsole?.quit();
+    process.exit(0);
+  };
+
   if (isSea()) {
     const orchaDir = getOrchaDir();
     fsSync.mkdirSync(orchaDir, { recursive: true });
     const logStream = fsSync.createWriteStream(path.join(orchaDir, 'server.log'), { flags: 'w' });
+
+    // Point TrayConsole to the extracted binary in SEA mode
+    const tcBinName = process.platform === 'win32' ? 'trayconsole.exe' : 'trayconsole';
+    process.env.TRAYCONSOLE_BIN = path.join(orchaDir, 'native', tcBinName);
+
+    // Create tray console — it shows immediately with a log window
+    trayConsole = new TrayConsole({
+      icon: resolveIcons(),
+      tooltip: 'Agent Orcha',
+      title: 'Agent Orcha — Starting...',
+      onClicked: (id) => {
+        if (id === 'open') openAppWindow(`http://localhost:${process.env['PORT'] ?? '3000'}`);
+        else if (id === 'show') trayConsole!.showWindow();
+        else if (id === 'quit') shutdown();
+      },
+      onMenuRequested: () => [
+        { id: 'open', title: 'Open in Browser' },
+        { id: 'show', title: 'Show Console' },
+        { id: 'sep', separator: true },
+        { id: 'quit', title: 'Quit' },
+      ],
+    });
+
+    // Tee stdout/stderr to log file + tray console window
     const origStdoutWrite = process.stdout.write.bind(process.stdout);
     const origStderrWrite = process.stderr.write.bind(process.stderr);
     process.stdout.write = (chunk: any, ...args: any[]) => {
+      const text = typeof chunk === 'string' ? chunk : chunk.toString();
       logStream.write(chunk);
+      trayConsole?.appendLog(text);
       try { return origStdoutWrite(chunk, ...args); } catch { return true; }
     };
     process.stderr.write = (chunk: any, ...args: any[]) => {
+      const text = typeof chunk === 'string' ? chunk : chunk.toString();
       logStream.write(chunk);
+      trayConsole?.appendLog(text);
       try { return origStderrWrite(chunk, ...args); } catch { return true; }
     };
+
+    // Keep the tray console visible on fatal errors so the user can read what went wrong.
+    const handleFatalError = (label: string, err: unknown) => {
+      const msg = err instanceof Error ? err.stack ?? err.message : String(err);
+      const lines = [
+        '',
+        `*** ${label} ***`,
+        msg,
+        '',
+        'The application failed to start. The console will stay open so you can read the error above.',
+        'Right-click the tray icon and choose Quit to exit.',
+      ];
+      for (const line of lines) {
+        logStream.write(line + '\n');
+        trayConsole?.appendLog(line + '\n');
+      }
+      trayConsole?.setTitle('Agent Orcha — ERROR');
+      trayConsole?.showWindow();
+    };
+
+    process.on('uncaughtException', (err) => {
+      handleFatalError('Uncaught Exception', err);
+      // Do NOT exit — keep the tray console alive
+    });
+    process.on('unhandledRejection', (err) => {
+      handleFatalError('Unhandled Rejection', err);
+    });
   }
 
   // Scaffold workspace on first run (works for both SEA and non-SEA)
@@ -121,7 +204,8 @@ export async function startCommand(_args: string[]): Promise<void> {
   try {
     await validateWorkspaceStructure(workspaceRoot);
   } catch (error) {
-    process.exit(1);
+    if (!trayConsole) process.exit(1);
+    return; // uncaughtException handler keeps the tray alive
   }
 
   const port = parseInt(process.env['PORT'] ?? '3000', 10);
@@ -129,30 +213,42 @@ export async function startCommand(_args: string[]): Promise<void> {
 
   logger.info('Initializing Agent Orcha...');
 
-  const orchestrator = new Orchestrator({
-    workspaceRoot,
-  });
+  let orchestrator: Orchestrator | undefined;
+  let server: Awaited<ReturnType<typeof createServer>> | undefined;
 
-  await orchestrator.initialize();
+  try {
+    orchestrator = new Orchestrator({
+      workspaceRoot,
+    });
 
-  logger.info(`Loaded ${orchestrator.agents.names().length} agents`);
-  logger.info(`Loaded ${orchestrator.workflows.names().length} workflows`);
-  logger.info(`Loaded ${orchestrator.knowledge.listConfigs().length} knowledge configs`);
+    await orchestrator.initialize();
 
-  const server = await createServer(orchestrator);
+    logger.info(`Loaded ${orchestrator.agents.names().length} agents`);
+    logger.info(`Loaded ${orchestrator.workflows.names().length} workflows`);
+    logger.info(`Loaded ${orchestrator.knowledge.listConfigs().length} knowledge configs`);
 
-  let tray: SystemTray | null = null;
+    server = await createServer(orchestrator);
+  } catch (error) {
+    logger.error('Failed to initialize:', error);
+    if (!trayConsole) process.exit(1);
+    return; // uncaughtException/tray keeps process alive
+  }
+
   let shuttingDown = false;
-  const shutdown = async (): Promise<void> => {
+  shutdown = async (): Promise<void> => {
     if (shuttingDown) {
       logger.info('\nForce exit');
       process.exit(1);
     }
     shuttingDown = true;
     logger.info('\nShutting down...');
-    tray?.kill();
-    await server.close();
-    await orchestrator.close();
+    // Close tray immediately — don't make the user wait for async cleanup
+    trayConsole?.quit();
+    trayConsole = null;
+    // Force exit after 5s if async cleanup hangs
+    setTimeout(() => process.exit(0), 5000).unref();
+    await server!.close();
+    await orchestrator!.close();
     process.exit(0);
   };
 
@@ -164,16 +260,15 @@ export async function startCommand(_args: string[]): Promise<void> {
     const url = `http://localhost:${port}`;
     logger.info(`\nServer running at ${url}`);
 
-    if (isSea()) {
-      tray = createSystemTray(url, shutdown);
-      if (!tray) {
-        logger.info(`Open ${url} in your browser`);
-      }
+    if (trayConsole) {
+      trayConsole.setTitle(`Agent Orcha — ${url}`);
+      trayConsole.setTooltip(`Agent Orcha — ${url}`);
+      openAppWindow(url);
     } else {
       logger.info(`Open ${url} in your browser`);
     }
   } catch (error) {
     logger.error('Failed to start server:', error);
-    process.exit(1);
+    if (!trayConsole) process.exit(1);
   }
 }

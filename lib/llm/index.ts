@@ -1,17 +1,21 @@
 export { LLMFactory } from './llm-factory.ts';
 export {
-  loadLLMConfig,
+  loadModelsConfig,
   getModelConfig,
   getEmbeddingConfig,
   listModelConfigs,
   listEmbeddingConfigs,
-  isLLMConfigLoaded,
-  getLLMConfig,
-  getLLMConfigPath,
-  saveLLMConfig,
+  listImageConfigs,
+  listTtsConfigs,
+  listVideoConfigs,
+  getVideoConfig,
+  isModelsConfigLoaded,
+  getModelsConfig,
+  getModelsConfigPath,
+  saveModelsConfig,
   resolveApiKey,
   resolveDefaultName,
 } from './llm-config.ts';
-export type { ModelConfig, EmbeddingModelConfig, LLMJsonConfig } from './llm-config.ts';
-export { AgentLLMRefSchema, resolveAgentLLMRef } from './types.ts';
-export type { AgentLLMRef } from './types.ts';
+export type { ModelConfig, EmbeddingModelConfig, ImageModelConfig, TtsModelConfig, VideoModelConfig, ModelsConfig } from './llm-config.ts';
+export { AgentModelRefSchema, resolveAgentModelRef } from './types.ts';
+export type { AgentModelRef, ResolvedModelRef } from './types.ts';

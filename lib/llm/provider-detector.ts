@@ -1,6 +1,6 @@
 import type { ModelConfig } from './llm-config.ts';
 
-export type LLMProvider = 'openai' | 'gemini' | 'anthropic' | 'local';
+export type LLMProvider = 'openai' | 'gemini' | 'anthropic' | 'local' | 'omni';
 
 /**
  * Detects which LLM provider to use based on configuration

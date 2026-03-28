@@ -1,6 +1,7 @@
 <script lang="ts">
   import yaml from 'js-yaml';
   import { api } from '../lib/services/api.js';
+  import Toggle from '../components/Toggle.svelte';
 
   const TOOL_PREFIXES: Record<string, string> = {
     mcp: 'tool-chip-mcp',
@@ -88,7 +89,13 @@
   let pubPassword = $derived((typeof d.publish === 'object' && d.publish?.password) || '');
 
   // P2P
-  let p2pEnabled = $derived(d.p2p === true || (typeof d.p2p === 'object' && d.p2p?.enabled));
+  let p2pLeverageMode = $derived<string>(
+    d.p2p === true ? 'local-first'
+    : (typeof d.p2p === 'object' && d.p2p?.leverage)
+      ? (d.p2p.leverage === true ? 'local-first' : d.p2p.leverage)
+      : 'off'
+  );
+  let p2pShare = $derived(d.p2p === true || (typeof d.p2p === 'object' && d.p2p?.share === true));
 
   // Questions
   let questions = $derived<string[]>(d.sampleQuestions || []);
@@ -411,8 +418,29 @@
   }
 
   // --- P2P handlers ---
-  function handleP2PToggle(checked: boolean) {
-    d.p2p = checked ? true : undefined;
+  function handleP2PShare(checked: boolean) {
+    const current = d.p2p === true ? { leverage: 'local-first' as string | boolean, share: true }
+      : (typeof d.p2p === 'object' && d.p2p) ? { ...d.p2p }
+      : { leverage: false as string | boolean, share: false };
+    current.share = checked;
+    if (!current.leverage && !current.share) {
+      d.p2p = undefined;
+    } else {
+      d.p2p = current;
+    }
+    emitChange();
+  }
+
+  function handleP2PLeverage(mode: string) {
+    const current = d.p2p === true ? { leverage: 'local-first' as string | boolean, share: true }
+      : (typeof d.p2p === 'object' && d.p2p) ? { ...d.p2p }
+      : { leverage: false as string | boolean, share: false };
+    current.leverage = mode === 'off' ? false : mode;
+    if (!current.leverage && !current.share) {
+      d.p2p = undefined;
+    } else {
+      d.p2p = current;
+    }
     emitChange();
   }
 
@@ -781,12 +809,34 @@
         </div>
       {/if}
 
-      <h3 class="section-title mt-4">P2P</h3>
-      <label class="flex items-center gap-2 text-xs text-secondary cursor-pointer">
-        <input type="checkbox" checked={p2pEnabled}
-               onchange={(e: Event) => handleP2PToggle((e.target as HTMLInputElement).checked)} />
-        Share on P2P network
-      </label>
+      <h3 class="section-title mt-4">P2P Network</h3>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-share-nodes text-xs {p2pShare ? 'text-accent' : 'text-muted'}"></i>
+          <span class="text-xs text-secondary">Share agent to peers</span>
+        </div>
+        <Toggle active={p2pShare} onchange={(v) => handleP2PShare(v)} />
+      </div>
+      <div class="mt-3">
+        <div class="flex items-center gap-2 mb-1">
+          <i class="fas fa-rotate text-xs {p2pLeverageMode !== 'off' ? 'text-accent' : 'text-muted'}"></i>
+          <span class="text-xs text-secondary">P2P model leverage</span>
+        </div>
+        <select class="composer-input-field" value={p2pLeverageMode}
+                onchange={(e: Event) => handleP2PLeverage((e.target as HTMLSelectElement).value)}>
+          <option value="off">Off</option>
+          <option value="local-first">Local-first</option>
+          <option value="remote-first">Remote-first</option>
+          <option value="remote-only">Remote-only</option>
+        </select>
+        {#if p2pLeverageMode === 'local-first'}
+          <p class="text-2xs text-muted mt-1">Use local models, fall back to P2P peers if local fails or is unavailable</p>
+        {:else if p2pLeverageMode === 'remote-first'}
+          <p class="text-2xs text-muted mt-1">Try P2P peers first for model tasks (image, TTS), fall back to local if no peers respond</p>
+        {:else if p2pLeverageMode === 'remote-only'}
+          <p class="text-2xs text-muted mt-1">Only use P2P peers for model tasks (image, TTS) — skip local models entirely</p>
+        {/if}
+      </div>
     </div>
   </div>
 

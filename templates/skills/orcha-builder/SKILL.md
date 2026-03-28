@@ -10,8 +10,8 @@ description: Documentation for creating and modifying ORCHA resources (agents, w
 ```yaml
 name: my-agent
 description: What the agent does
-llm:
-  name: default
+model:
+  llm: default
   temperature: 0.7
 prompt:
   system: |
@@ -28,7 +28,8 @@ tools:                                # mcp:<server> | knowledge:<store> | funct
                                       #   vision_type, vision_scroll, vision_key, vision_drag
                                       #   (requires EXPERIMENTAL_VISION=true)
                                       # sandbox: file_read, file_write, file_edit, file_insert, file_replace_lines
-                                      # builtin: ask_user, save_memory, canvas_write, canvas_append
+                                      # builtin: ask_user, save_memory, canvas_write, canvas_append, generate_image, generate_tts, generate_video
+                                      #   generate_video: distributed video generation via P2P (requires P2P enabled)
                                       #   (conditional: integration_post, integration_context, email_send)
 skills:
   - skill-name                        # or use mode: all to attach all skills
@@ -60,14 +61,16 @@ triggers:
     input:
       query: "Task"
 publish: true                         # or { enabled: true, password: "secret" }
-p2p: true                             # share this agent on the P2P network
+p2p:                                  # P2P network config
+  share: true                         # share this agent on the P2P network
+  leverage: false                     # P2P model fallback — if a model (LLM, image, TTS) isn't available locally, search peers by name
 sampleQuestions:                       # optional — clickable chips shown in chat UI on initial load
   - "What can you help me with?"
   - "Summarize the latest report"
 ```
 
 Published agents are accessible at `/chat/<agent-name>` with optional per-agent password.
-Agents with `p2p: true` are shared on the P2P network (enabled by default). P2P settings (peer name, network key, rate limit) are configurable in the P2P tab UI or via environment variables.
+Agents with `p2p.share: true` are shared on the P2P network (enabled by default). Agents with `p2p.leverage: true` get P2P model fallback — if a model (LLM, image, or TTS) isn't available locally, the agent searches P2P peers by model name. This is different from `model: p2p` which explicitly routes LLM calls to a remote peer. P2P settings (peer name, network key, rate limit) are configurable in the P2P tab UI or via environment variables.
 
 ## Step-Based Workflows (`workflows/<name>.workflow.yaml`)
 
@@ -174,7 +177,7 @@ splitter:
   type: recursive                     # character | recursive | token | markdown
   chunkSize: 1000
   chunkOverlap: 200
-embedding: default                    # reference to llm.json config
+embedding: default                    # reference to models.yaml config
 search:
   defaultK: 4
   scoreThreshold: 0.5
@@ -227,38 +230,57 @@ Markdown files with YAML frontmatter (`name`, `description`). Content is injecte
 
 Remote: `url`. Local: `command` + `args`. Optional: `headers`, `env`, `timeout`, `transport`, `description`. Transport is auto-detected. To add a server: read `mcp.json`, add entry, write back, then reference as `mcp:<name>` in agent tools.
 
-## LLM Configuration (`llm.json`)
+## Model Configuration (`models.yaml`)
 
-```json
-{
-  "default": "llama-cpp",
-  "llama-cpp": {
-    "engine": "llama-cpp",
-    "model": "qwen3-8b",
-    "temperature": 0.7,
-    "reasoningBudget": 4096,
-    "thinkingBudget": 4096
-  },
-  "ollama-model": {
-    "engine": "ollama",
-    "model": "llama3",
-    "temperature": 0.5
-  },
-  "embeddings": {
-    "engine": "llama-cpp",
-    "model": "nomic-embed",
-    "type": "embedding"
-  },
-  "engineUrls": {
-    "llama-cpp": "http://localhost:8080",
-    "mlx-serve": "http://localhost:8081",
-    "ollama": "http://localhost:11434",
-    "lmstudio": "http://localhost:1234"
-  }
-}
+```yaml
+version: "1.0"
+
+llm:
+  default: omni
+  omni:
+    provider: omni
+    model: Qwen3.5-4B-IQ4_NL
+    reasoningBudget: 0
+    contextSize: 32768
+    active: true
+    share: true
+  lmstudio:
+    provider: local
+    engine: lmstudio
+    baseUrl: http://localhost:1234/v1
+    model: qwen3.5-4b-mlx
+    active: false
+  openai:
+    provider: openai
+    apiKey: ${OPENAI_API_KEY}
+    model: gpt-4.1
+    active: false
+
+embeddings:
+  default: omni
+  omni:
+    provider: omni
+    model: nomic-embed-text-v1.5.Q4_K_M
+
+image:
+  default: omni
+  omni:
+    modelPath: .models/flux2-klein/flux-2-klein-4b-Q4_K_M.gguf
+    llm: .models/flux2-klein/Qwen3-4B-Q4_K_M.gguf
+    vae: .models/flux2-klein/flux2-vae.safetensors
+    steps: 20
+    description: flux2-klein
+    share: true
+
+tts:
+  default: omni
+  omni:
+    modelPath: .models/qwen3-tts
+    description: Qwen3 TTS 0.6B
+    share: true
 ```
 
-The `"default"` key is a string pointer to another config name. Engines: `llama-cpp`, `mlx-serve`, `ollama`, `lmstudio`. Use `reasoningBudget`/`thinkingBudget` for thinking models. Values support `${ENV_VAR}` substitution.
+The `default` key is a string pointer to another config name. Providers: `omni`, `local`, `openai`, `anthropic`, `gemini`. Use `reasoningBudget`/`thinkingBudget` for thinking models. Use `share: true` to share a model on the P2P network. Values support `${ENV_VAR}` substitution.
 
 ## Environment Variable Substitution
 

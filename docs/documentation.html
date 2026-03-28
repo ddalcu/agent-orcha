@@ -178,7 +178,7 @@
                 <li><code>workflows/</code> - Example workflow definitions</li>
                 <li><code>functions/</code> - Custom JavaScript functions</li>
                 <li><code>knowledge/</code> - Knowledge store configurations and data</li>
-                <li><code>llm.json</code> - LLM provider settings</li>
+                <li><code>models.yaml</code> - LLM provider settings</li>
                 <li><code>mcp.json</code> - MCP server configuration</li>
               </ul>
             </div>
@@ -192,58 +192,50 @@
           </div>
           <div class="expandable-content">
             <div class="expandable-body">
-              <p>Edit <code>llm.json</code> to configure your LLM providers. Agent Orcha supports OpenAI, Anthropic, Gemini, and local models.</p>
+              <p>Edit <code>models.yaml</code> to configure your LLM providers. Agent Orcha supports OpenAI, Anthropic, Gemini, and local models.</p>
               <div class="code-block">
                 <div class="code-header">
                   <span class="code-language">JSON</span>
                   <button class="code-copy-btn" data-copy-target="llm-config">Copy</button>
                 </div>
                 <div class="code-content">
-                  <pre id="llm-config"><code>{
-  "version": "1.0",
-  "models": {
-    "default": "llama-cpp",
-    "llama-cpp": {
-      "provider": "local",
-      "engine": "llama-cpp",
-      "model": "Qwen3.5-4B-IQ4_NL",
-      "reasoningBudget": 0,
-      "contextSize": 32768
-    },
-    "lmstudio": {
-      "provider": "local",
-      "engine": "lmstudio",
-      "baseUrl": "http://localhost:1234/v1",
-      "model": "your-model-name",
-      "reasoningBudget": 0
-    },
-    "anthropic": {
-      "provider": "anthropic",
-      "apiKey": "${ANTHROPIC_API_KEY}",
-      "model": "claude-sonnet-4-6",
-      "thinkingBudget": 5000
-    },
-    "openai": {
-      "provider": "openai",
-      "apiKey": "${OPENAI_API_KEY}",
-      "model": "gpt-4o",
-      "temperature": 0.7
-    }
-  },
-  "embeddings": {
-    "default": "llama-cpp",
-    "llama-cpp": {
-      "provider": "local",
-      "engine": "llama-cpp",
-      "model": "nomic-embed-text-v1.5.Q4_K_M"
-    },
-    "openai": {
-      "provider": "openai",
-      "apiKey": "${OPENAI_API_KEY}",
-      "model": "text-embedding-3-small"
-    }
-  }
-}</code></pre>
+                  <pre id="llm-config"><code>version: "1.0"
+llm:
+  default: omni
+  omni:
+    provider: omni
+    model: Qwen3.5-4B-IQ4_NL
+    reasoningBudget: 0
+    contextSize: 32768
+    active: true
+    share: true
+  lmstudio:
+    provider: local
+    engine: lmstudio
+    baseUrl: http://localhost:1234/v1
+    model: your-model-name
+    active: false
+  anthropic:
+    provider: anthropic
+    apiKey: ${ANTHROPIC_API_KEY}
+    model: claude-sonnet-4-6
+    thinkingBudget: 5000
+    active: false
+  openai:
+    provider: openai
+    apiKey: ${OPENAI_API_KEY}
+    model: gpt-4o
+    temperature: 0.7
+    active: false
+embeddings:
+  default: omni
+  omni:
+    provider: omni
+    model: nomic-embed-text-v1.5.Q4_K_M
+  openai:
+    provider: openai
+    apiKey: ${OPENAI_API_KEY}
+    model: text-embedding-3-small</code></pre>
                 </div>
               </div>
               <p><strong>Key concepts:</strong></p>
@@ -579,7 +571,7 @@ output:
 description: string             # Human-readable description (required)
 version: string                 # Semantic version (default: "1.0.0")
 
-llm: string | object            # Reference to LLM config in llm.json
+llm: string | object            # Reference to LLM config in models.yaml
   # Simple: llm: default
   # With override: llm: { name: default, temperature: 0.3 }
 
@@ -591,7 +583,7 @@ tools:                          # Tools available to agent (optional)
   - mcp:&lt;server-name&gt;           # MCP server tools
   - knowledge:&lt;store-name&gt;      # Knowledge store search
   - function:&lt;function-name&gt;    # Custom functions
-  - builtin:&lt;tool-name&gt;         # Built-in tools (ask_user, save_memory)
+  - builtin:&lt;tool-name&gt;         # Built-in tools (ask_user, save_memory, generate_image, generate_tts, generate_video)
   - sandbox:&lt;tool-name&gt;         # Sandbox tools (exec, shell, browser_*, vision_*, file_*, web_*)
   - workspace:&lt;tool-name&gt;       # Workspace tools (read, write, delete, list, list_resources, diagnostics)
 
@@ -853,7 +845,7 @@ prompt:
   goal: string                  # Goal template (supports {{input.*}})
 
 graph:
-  model: string                 # LLM config name from llm.json
+  model: string                 # LLM config name from models.yaml
   executionMode: react | single-turn  # Default: react
   tools:
     mode: all | include | exclude | none
@@ -1757,22 +1749,18 @@ p2p: true</code></pre>
         </div>
 
         <h4>Sharing LLM Engines</h4>
-        <p>Add <code>"p2p": true</code> to a model entry in <code>llm.json</code>, or use the P2P share toggle on each provider in the LLM tab. Only active models with <code>p2p: true</code> are shared. Other instances can then use the remote LLM by configuring an agent with <code>llm: "p2p"</code> or <code>llm: "p2p:model-name"</code>.</p>
+        <p>Add <code>share: true</code> to a model entry in <code>models.yaml</code>, or use the P2P share toggle on each provider in the LLM tab. Only active models with <code>share: true</code> are shared. Other instances can then use the remote LLM by configuring an agent with <code>model: "p2p"</code> or <code>model: "p2p:model-name"</code>.</p>
         <div class="code-block">
           <div class="code-header">
-            <span class="code-language">JSON</span>
+            <span class="code-language">YAML</span>
           </div>
           <div class="code-content">
-            <pre><code>{
-  "models": {
-    "llama-cpp": {
-      "provider": "local",
-      "engine": "llama-cpp",
-      "model": "Qwen3.5-9B-Q4_K_M",
-      "p2p": true
-    }
-  }
-}</code></pre>
+            <pre><code>llm:
+  omni:
+    provider: omni
+    model: Qwen3.5-4B-IQ4_NL
+    active: true
+    share: true</code></pre>
           </div>
         </div>
         <p>Alternatively, set <code>P2P_SHARE_LLMS=true</code> to share all active models without marking them individually.</p>
@@ -1788,6 +1776,55 @@ p2p: true</code></pre>
           <li>Conversation history for remote LLMs is managed on the caller side &mdash; the host peer is stateless</li>
           <li>No API keys, base URLs, or engine details are shared &mdash; only the model name, provider, and model identifier</li>
         </ul>
+
+        <h4>P2P Model Leverage</h4>
+        <p>Control how agents use remote peer models for image, TTS, and video tasks via the <code>p2p.leverage</code> field:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-language">YAML</span>
+          </div>
+          <div class="code-content">
+            <pre><code>p2p:
+  share: true
+  leverage: remote-first</code></pre>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Mode</th>
+              <th>Behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>false</code></td>
+              <td>P2P leverage disabled (default)</td>
+            </tr>
+            <tr>
+              <td><code>local-first</code></td>
+              <td>Use local models; fall back to P2P if local fails or is unavailable</td>
+            </tr>
+            <tr>
+              <td><code>remote-first</code></td>
+              <td>Try P2P peers first for model tasks (image, TTS); fall back to local if no peers respond</td>
+            </tr>
+            <tr>
+              <td><code>remote-only</code></td>
+              <td>Only use P2P peers for model tasks &mdash; skip local models entirely</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>The leverage modes apply to <strong>model tools</strong> (image generation, TTS, video). For explicit P2P LLM chat routing, use <code>model: p2p</code> or <code>model: p2p:model-name</code>. Boolean <code>true</code> is backward-compatible and maps to <code>local-first</code>.</p>
+
+        <h4>Load Balancing</h4>
+        <p>When multiple peers share the same model, requests are automatically distributed using a <strong>least-loaded</strong> selection strategy:</p>
+        <ul>
+          <li><strong>Client-side tracking</strong> &mdash; Each node tracks in-flight requests per peer. New requests are routed to the peer with the fewest outstanding requests from this node.</li>
+          <li><strong>Peer-reported load</strong> &mdash; Peers broadcast their current active task count via catalog updates when tasks start and complete. Other nodes factor this into peer selection.</li>
+          <li><strong>Tie-breaking</strong> &mdash; When multiple peers have equal load scores, one is chosen at random to avoid clustering.</li>
+        </ul>
+        <p>This ensures requests spread evenly across peers without requiring a central coordinator. The combined score (in-flight from caller + reported load from peer) gives accurate load distribution even when multiple callers share the same peers.</p>
 
         <h4>P2P Configuration UI</h4>
         <p>The <strong>P2P</strong> tab in Studio provides a settings panel (shown when no agent/LLM is selected) where you can:</p>
@@ -1880,7 +1917,7 @@ splitter:                       # Text chunking (required)
   chunkSize: number             # Characters per chunk (default: 1000)
   chunkOverlap: number          # Overlap between chunks (default: 200)
 
-embedding: string               # Reference to embedding config in llm.json (default: "default")
+embedding: string               # Reference to embedding config in models.yaml (default: "default")
 
 graph:                          # Optional - enables entity graph
   directMapping:                # Maps structured data to entities and relationships
@@ -2919,12 +2956,12 @@ Response (auth disabled):
             <tr>
               <td>GET</td>
               <td><code>/api/llm/config</code></td>
-              <td>Get the full llm.json configuration</td>
+              <td>Get the full models.yaml configuration</td>
             </tr>
             <tr>
               <td>PUT</td>
               <td><code>/api/llm/config</code></td>
-              <td>Update the llm.json configuration</td>
+              <td>Update the models.yaml configuration</td>
             </tr>
           </tbody>
         </table>
@@ -3347,27 +3384,23 @@ publish:
           </tbody>
         </table>
 
-        <h4>Configuration in llm.json</h4>
+        <h4>Configuration in models.yaml</h4>
         <div class="code-block">
           <div class="code-header">
-            <span class="code-language">JSON</span>
+            <span class="code-language">YAML</span>
           </div>
           <div class="code-content">
-            <pre><code>{
-  "models": {
-    "default": "llama-cpp",
-    "llama-cpp": {
-      "provider": "local",
-      "engine": "llama-cpp",
-      "model": "Qwen3.5-4B-IQ4_NL",
-      "reasoningBudget": 0,
-      "contextSize": 32768
-    }
-  }
-}</code></pre>
+            <pre><code>llm:
+  default: omni
+  omni:
+    provider: omni
+    model: Qwen3.5-4B-IQ4_NL
+    reasoningBudget: 0
+    contextSize: 32768
+    active: true</code></pre>
           </div>
         </div>
-        <p>The <code>engine</code> field selects the runtime. The <code>model</code> field specifies which model file (for llama-cpp/mlx-serve) or model name (for ollama/lmstudio) to load. Engines are managed via the Local LLM tab in Studio or the <code>/api/local-llm</code> API.</p>
+        <p>The <code>engine</code> field selects the runtime for external engines (ollama, lmstudio). The <code>model</code> field specifies which model to load. The <code>active</code> flag enables/disables a provider. Engines are managed via the Local LLM tab in Studio or the <code>/api/local-llm</code> API.</p>
 
         <!-- Environment Variable Substitution -->
         <h2 id="env-var-substitution" class="mt-2xl">Environment Variable Substitution</h2>
@@ -3413,7 +3446,7 @@ publish:
 }</code></pre>
           </div>
         </div>
-        <p>Environment variable substitution works in <code>llm.json</code>, <code>mcp.json</code>, and YAML configuration files (agent, knowledge, workflow definitions).</p>
+        <p>Environment variable substitution works in <code>models.yaml</code>, <code>mcp.json</code>, and YAML configuration files (agent, knowledge, workflow definitions).</p>
 
         <!-- Thinking / Reasoning -->
         <h2 id="thinking-reasoning" class="mt-2xl">Thinking / Reasoning</h2>

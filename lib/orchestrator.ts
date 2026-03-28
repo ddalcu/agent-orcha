@@ -14,10 +14,10 @@ import { SkillLoader, type Skill } from './skills/index.ts';
 import { ToolRegistry } from './tools/tool-registry.ts';
 import { ToolDiscovery } from './tools/tool-discovery.ts';
 import { MCPConfigSchema } from './mcp/types.ts';
-import { loadLLMConfig, getLLMConfig, listModelConfigs, getModelConfig, getEmbeddingConfig, resolveApiKey } from './llm/llm-config.ts';
+import { loadModelsConfig, getModelsConfig, getModelsConfigPath, saveModelsConfig, listModelConfigs, getModelConfig, getEmbeddingConfig, resolveApiKey } from './llm/llm-config.ts';
 import { detectProvider } from './llm/provider-detector.ts';
 import { LLMFactory } from './llm/llm-factory.ts';
-import { resolveAgentLLMRef } from './llm/types.ts';
+import { resolveAgentModelRef } from './llm/types.ts';
 import { ConversationStore } from './memory/conversation-store.ts';
 import { MemoryManager } from './memory/memory-manager.ts';
 import { TaskManager } from './tasks/task-manager.ts';
@@ -31,13 +31,16 @@ import { createBrowserTools } from './sandbox/sandbox-browser.ts';
 import { createVisionBrowserTools } from './sandbox/vision-browser.ts';
 import { SandboxConfigSchema } from './sandbox/types.ts';
 import { substituteEnvVars } from './utils/env-substitution.ts';
-import { engineRegistry } from './local-llm/engine-registry.ts';
 import { ModelManager } from './local-llm/model-manager.ts';
 import { buildWorkspaceTools, type WorkspaceToolDeps, type WorkspaceResourceSummary, type DiagnosticsReport } from './tools/workspace/workspace-tools.ts';
 import { IntegrationManager } from './integrations/integration-manager.ts';
 import type { IntegrationAccessor } from './integrations/types.ts';
 import { TriggerManager } from './triggers/trigger-manager.ts';
 import { createCanvasWriteTool, createCanvasAppendTool } from './tools/built-in/canvas-write.tool.ts';
+import { createVideoGenerateTool } from './tools/built-in/video-generate.tool.ts';
+import { buildModelTools, setGeneratedDir, setWorkspaceRoot } from './tools/built-in/model-tool-factory.ts';
+import { listImageConfigs, listTtsConfigs } from './llm/llm-config.ts';
+import { OmniModelCache } from './llm/providers/omni-model-cache.ts';
 import { P2PManager } from './p2p/p2p-manager.ts';
 import type { SandboxConfig, SandboxStatus } from './sandbox/types.ts';
 import type { AgentDefinition, AgentResult } from './agents/types.ts';
@@ -61,7 +64,7 @@ export interface OrchestratorConfig {
   functionsDir?: string;
   skillsDir?: string;
   mcpConfigPath?: string;
-  llmConfigPath?: string;
+  modelsConfigPath?: string;
   sandboxConfigPath?: string;
 }
 
@@ -88,6 +91,8 @@ export class Orchestrator {
   private integrationManager: IntegrationManager | null = null;
   private triggerManager: TriggerManager | null = null;
   private sandboxContainer: SandboxContainer | null = null;
+  private inContainerSandboxStatus: SandboxStatus = 'idle';
+  private inContainerSandboxError: string | null = null;
   /** @internal — accessed by p2p routes via _p2pManager */
   _p2pManager: P2PManager | null = null;
 
@@ -102,7 +107,7 @@ export class Orchestrator {
       functionsDir: config.functionsDir ?? path.join(config.workspaceRoot, 'functions'),
       skillsDir: config.skillsDir ?? path.join(config.workspaceRoot, 'skills'),
       mcpConfigPath: config.mcpConfigPath ?? path.join(config.workspaceRoot, 'mcp.json'),
-      llmConfigPath: config.llmConfigPath ?? path.join(config.workspaceRoot, 'llm.json'),
+      modelsConfigPath: config.modelsConfigPath ?? path.join(config.workspaceRoot, 'models.yaml'),
       sandboxConfigPath: config.sandboxConfigPath ?? path.join(config.workspaceRoot, 'sandbox.json'),
     };
 
@@ -124,15 +129,17 @@ export class Orchestrator {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    // Load LLM config first - required for agents and embeddings
-    logger.info('[Orchestrator] Loading LLM config...');
-    await loadLLMConfig(this.config.llmConfigPath);
+    // Load models config first - required for agents and embeddings
+    logger.info('[Orchestrator] Loading models config...');
+    await loadModelsConfig(this.config.modelsConfigPath);
 
-    // Kill any orphaned llama-server / mlx-serve processes from a previous run, then set base dir
-    engineRegistry.killAllOrphans();
-    engineRegistry.setBaseDir(this.config.workspaceRoot);
+    // Migrate loose .gguf files into subdirectories and fix stale config paths
+    await this.migrateModelStorage();
 
     await this.checkLlmReadiness();
+
+    // Set up models dir for LLMFactory to resolve model names to paths
+    LLMFactory.setModelsDir(path.join(this.config.workspaceRoot, '.models'));
 
     await this.loadMCPConfig();
     this.mcpClient.initialize(); // non-blocking — connects in background
@@ -140,6 +147,8 @@ export class Orchestrator {
     // Load function tools and skills
     await this.functionLoader.loadAll();
     await this.skillLoader.loadAll();
+    setGeneratedDir(path.join(this.config.workspaceRoot, '.generated'));
+    setWorkspaceRoot(this.config.workspaceRoot);
 
     // Load sandbox config
     await this.loadSandboxConfig();
@@ -154,7 +163,7 @@ export class Orchestrator {
       workspaceTools,
     );
     this.registerBuiltInTools();
-    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.skillLoader, this.memoryManager, this.integrations);
+    this.agentExecutor = new AgentExecutor(this.toolRegistry, this.conversationStore, this.config.workspaceRoot, this.skillLoader, this.memoryManager, this.integrations);
     this.workflowExecutor = new WorkflowExecutor(this.agentLoader, this.agentExecutor);
 
     // Initialize ReAct workflow components
@@ -190,6 +199,132 @@ export class Orchestrator {
       this._p2pManager = new P2PManager(this);
       await this._p2pManager.start();
       LLMFactory.setP2PManager(this._p2pManager);
+      this.agentExecutor.p2pManager = this._p2pManager;
+      this.registerP2PTools();
+      this.registerModelTools();
+    }
+  }
+
+  /** Migrate loose .gguf files in .models/ into subdirectories and fix stale models.yaml paths. */
+  private async migrateModelStorage(): Promise<void> {
+    const manager = new ModelManager(this.config.workspaceRoot);
+    const migrated = await manager.migrateLooseModels();
+
+    // Always check for broken image/tts paths in models.yaml and try to fix them
+    await this.fixBrokenModelPaths(migrated);
+  }
+
+  /** Fix image/tts config paths that point to non-existent files by scanning subdirectories. */
+  private async fixBrokenModelPaths(migrated: Map<string, string>): Promise<void> {
+    const config = getModelsConfig();
+    const configPath = getModelsConfigPath();
+    if (!config || !configPath) return;
+
+    let changed = false;
+    const modelsRoot = path.join(this.config.workspaceRoot, '.models');
+    const fs = await import('fs/promises');
+
+    const fixPath = async (p: string | undefined): Promise<string | undefined> => {
+      if (!p) return p;
+
+      // Check if it was just migrated
+      const abs = path.isAbsolute(p) ? p : path.join(this.config.workspaceRoot, p);
+      if (migrated.has(abs)) {
+        const newAbs = migrated.get(abs)!;
+        changed = true;
+        return '.models/' + path.relative(modelsRoot, newAbs).replace(/\\/g, '/');
+      }
+
+      // Check .models/filename → .models/dir/filename migration pattern
+      if (p.startsWith('.models/')) {
+        const relPath = p.replace(/^\.models\//, '');
+        if (!relPath.includes('/')) {
+          const absOld = path.join(modelsRoot, relPath);
+          if (migrated.has(absOld)) {
+            const newAbs = migrated.get(absOld)!;
+            changed = true;
+            return '.models/' + path.relative(modelsRoot, newAbs).replace(/\\/g, '/');
+          }
+        }
+      }
+
+      // Check if the path actually exists — if it does, no fix needed
+      try {
+        await fs.stat(abs);
+        return p;
+      } catch { /* file doesn't exist, try to find it */ }
+
+      // Path is broken — try to find the file in subdirectories
+      const fileName = path.basename(p);
+      const ext = path.extname(fileName).toLowerCase();
+      try {
+        const dirs = await fs.readdir(modelsRoot, { withFileTypes: true });
+        for (const d of dirs) {
+          if (!d.isDirectory()) continue;
+          // Exact match first
+          const candidate = path.join(modelsRoot, d.name, fileName);
+          try {
+            await fs.stat(candidate);
+            changed = true;
+            logger.info(`[Orchestrator] Fixed broken path: ${p} → .models/${d.name}/${fileName}`);
+            return `.models/${d.name}/${fileName}`;
+          } catch { /* not here */ }
+
+          // Fuzzy match: find a file with the same extension (for VAE/safetensors renamed files)
+          if (ext === '.safetensors' || ext === '.gguf') {
+            const dirFiles = await fs.readdir(path.join(modelsRoot, d.name));
+            const match = dirFiles.find(f => f.endsWith(ext) && !f.endsWith('.meta.json'));
+            if (match && dirFiles.filter(f => f.endsWith(ext) && !f.endsWith('.meta.json')).length === 1) {
+              // Only use fuzzy match if there's exactly one file with that extension
+              changed = true;
+              logger.info(`[Orchestrator] Fixed broken path: ${p} → .models/${d.name}/${match}`);
+              return `.models/${d.name}/${match}`;
+            }
+          }
+        }
+      } catch { /* modelsRoot may not exist */ }
+
+      return p;
+    };
+
+    if (config.image) {
+      for (const [, imgCfg] of Object.entries(config.image)) {
+        if (typeof imgCfg === 'string') continue; // skip pointer entries like default: "omni"
+        imgCfg.modelPath = await fixPath(imgCfg.modelPath);
+        imgCfg.vae = await fixPath(imgCfg.vae);
+        imgCfg.clipL = await fixPath(imgCfg.clipL);
+        imgCfg.t5xxl = await fixPath(imgCfg.t5xxl);
+        imgCfg.llm = await fixPath(imgCfg.llm);
+
+        // Auto-detect missing llm encoder for FLUX.2 models
+        if (!imgCfg.llm && imgCfg.modelPath?.includes('flux')) {
+          const modelDir = path.dirname(
+            path.isAbsolute(imgCfg.modelPath) ? imgCfg.modelPath : path.join(this.config.workspaceRoot, imgCfg.modelPath),
+          );
+          try {
+            const dirFiles = await fs.readdir(modelDir);
+            const qwenFile = dirFiles.find(f => /qwen.*\.gguf$/i.test(f) && !f.toLowerCase().includes('mmproj') && !f.endsWith('.meta.json'));
+            if (qwenFile) {
+              imgCfg.llm = `.models/${path.relative(modelsRoot, path.join(modelDir, qwenFile)).replace(/\\/g, '/')}`;
+              changed = true;
+              logger.info(`[Orchestrator] Auto-detected FLUX LLM encoder: ${imgCfg.llm}`);
+            }
+          } catch { /* ok */ }
+        }
+      }
+    }
+    if (config.tts) {
+      for (const [, ttsCfg] of Object.entries(config.tts)) {
+        if (typeof ttsCfg === 'string') continue; // skip pointer entries
+        ttsCfg.modelPath = (await fixPath(ttsCfg.modelPath)) ?? ttsCfg.modelPath;
+      }
+    }
+
+    if (changed) {
+      await saveModelsConfig(configPath, config);
+      // Reload so the rest of startup sees the corrected paths
+      await loadModelsConfig(configPath);
+      logger.info('[Orchestrator] Updated models.yaml paths (fixed broken model references)');
     }
   }
 
@@ -197,9 +332,9 @@ export class Orchestrator {
     const issues: string[] = [];
     const manager = new ModelManager(this.config.workspaceRoot);
 
-    const llmConfig = getLLMConfig();
-    const hasDefaultModel = llmConfig?.models['default'] !== undefined;
-    const hasDefaultEmb = llmConfig?.embeddings['default'] !== undefined;
+    const modelsConfig = getModelsConfig();
+    const hasDefaultModel = modelsConfig?.llm['default'] !== undefined;
+    const hasDefaultEmb = modelsConfig?.embeddings['default'] !== undefined;
     const checks: [string, boolean, () => { model: string; baseUrl?: string; apiKey?: string }][] = [
       ['Chat model', hasDefaultModel, () => getModelConfig('default')],
       ['Embedding', hasDefaultEmb, () => getEmbeddingConfig('default')],
@@ -212,7 +347,7 @@ export class Orchestrator {
       if (provider === 'local' && !config.baseUrl) {
         const filePath = await manager.findModelFile(config.model);
         if (!filePath) issues.push(`${label}: model "${config.model}" not downloaded`);
-      } else if (provider !== 'local') {
+      } else if (provider !== 'local' && provider !== 'omni') {
         const key = resolveApiKey(provider, config.apiKey);
         if (!key) issues.push(`${label}: no API key for ${provider}`);
       }
@@ -257,6 +392,10 @@ export class Orchestrator {
         this.launchSandboxContainer().catch((err) => {
           logger.error(`[Sandbox] Failed to launch container: ${err.message}`);
         });
+      } else if (process.env['BROWSER_SANDBOX'] === 'true') {
+        this.probeCDP().catch((err) => {
+          logger.error(`[Sandbox] CDP probe failed: ${err.message}`);
+        });
       }
     } else {
       this.vmExecutor = null;
@@ -267,6 +406,29 @@ export class Orchestrator {
     if (existsSync('/.dockerenv')) return true;
     if (existsSync('/run/.containerenv')) return true;
     return process.env['BROWSER_SANDBOX'] === 'true';
+  }
+
+  private async probeCDP(): Promise<void> {
+    this.inContainerSandboxStatus = 'starting';
+    const maxWait = 60_000;
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+      try {
+        const res = await fetch('http://127.0.0.1:9222/json/version');
+        if (res.ok) {
+          this.inContainerSandboxStatus = 'running';
+          this.inContainerSandboxError = null;
+          logger.info('[Sandbox] In-container CDP ready');
+          return;
+        }
+      } catch {
+        // CDP not ready yet
+      }
+      await new Promise((r) => setTimeout(r, 1_000));
+    }
+    this.inContainerSandboxStatus = 'failed';
+    this.inContainerSandboxError = 'CDP not responding on localhost:9222';
+    logger.warn('[Sandbox] In-container CDP not responding after 60s');
   }
 
   private async launchSandboxContainer(): Promise<void> {
@@ -335,6 +497,31 @@ export class Orchestrator {
   private registerBuiltInTools(): void {
     this.toolRegistry.registerBuiltIn('canvas_write', createCanvasWriteTool());
     this.toolRegistry.registerBuiltIn('canvas_append', createCanvasAppendTool());
+    this.registerP2PTools();
+    this.registerModelTools();
+  }
+
+  private registerModelTools(): void {
+    const p2pDeps = this._p2pManager
+      ? { manager: this._p2pManager, leverage: 'local-first' as const }
+      : undefined;
+    const { image, tts } = buildModelTools(listImageConfigs(), listTtsConfigs(), p2pDeps);
+    this.toolRegistry.unregisterBuiltIn('generate_image');
+    this.toolRegistry.unregisterBuiltIn('generate_tts');
+    if (image) this.toolRegistry.registerBuiltIn('generate_image', image);
+    if (tts) this.toolRegistry.registerBuiltIn('generate_tts', tts);
+  }
+
+  /** Register (or re-register) tools that depend on the P2P manager being available. */
+  registerP2PTools(): void {
+    if (this._p2pManager) {
+      this.toolRegistry.registerBuiltIn('generate_video', createVideoGenerateTool({
+        p2pManager: this._p2pManager,
+        generatedDir: path.join(this.config.workspaceRoot, '.generated'),
+      }));
+    } else {
+      this.toolRegistry.unregisterBuiltIn('generate_video');
+    }
   }
 
   private buildWorkspaceToolsMap(): Map<string, StructuredTool> {
@@ -360,7 +547,7 @@ export class Orchestrator {
     // Agent diagnostics
     const agents = await Promise.all(
       this.agentLoader.list().map(async (agent) => {
-        const { name: llmName } = resolveAgentLLMRef(agent.llm);
+        const { llm: llmName } = resolveAgentModelRef(agent.model);
 
         const tools = await Promise.all(
           agent.tools.map(async (toolRef) => {
@@ -418,8 +605,10 @@ export class Orchestrator {
       getVmExecutor: () => this.vmExecutor,
       isEnabled: () => this.sandboxConfig?.enabled ?? false,
       getStatus: () => ({
-        status: this.sandboxContainer?.status ?? (this.sandboxConfig?.enabled ? 'idle' : 'idle'),
-        error: this.sandboxContainer?.error ?? null,
+        status: this.sandboxContainer?.status
+          ?? (process.env['BROWSER_SANDBOX'] === 'true' ? this.inContainerSandboxStatus : 'idle'),
+        error: this.sandboxContainer?.error
+          ?? (process.env['BROWSER_SANDBOX'] === 'true' ? this.inContainerSandboxError : null),
       }),
     };
   }
@@ -488,6 +677,13 @@ export class Orchestrator {
     };
   }
 
+  get models() {
+    return {
+      listImage: () => listImageConfigs(),
+      listTts: () => listTtsConfigs(),
+    };
+  }
+
   get tasks(): TaskAccessor {
     return {
       getManager: () => this.taskManager,
@@ -528,8 +724,8 @@ export class Orchestrator {
     return this.config.workspaceRoot;
   }
 
-  get llmConfigPath(): string {
-    return this.config.llmConfigPath;
+  get modelsConfigPath(): string {
+    return this.config.modelsConfigPath;
   }
 
   get memory(): MemoryAccessor {
@@ -602,7 +798,7 @@ export class Orchestrator {
       return 'skill';
     }
 
-    // Singleton configs (mcp.json, llm.json, sandbox.json) — deleting is unusual, no-op
+    // Singleton configs (mcp.json, models.yaml, sandbox.json) — deleting is unusual, no-op
     return 'none';
   }
 
@@ -662,10 +858,11 @@ export class Orchestrator {
       return 'mcp';
     }
 
-    if (relativePath === 'llm.json') {
-      await loadLLMConfig(this.config.llmConfigPath);
+    if (relativePath === 'models.yaml') {
+      await loadModelsConfig(this.config.modelsConfigPath);
       LLMFactory.clearCache();
-      return 'llm';
+      this.registerModelTools();
+      return 'models';
     }
 
     if (relativePath === 'sandbox.json') {
@@ -1009,8 +1206,8 @@ export class Orchestrator {
       await this._p2pManager.close();
     }
 
-    // Stop all local engine processes before anything else
-    await engineRegistry.unloadAll();
+    // Unload all in-process models
+    await OmniModelCache.unloadAll();
 
     if (this.triggerManager?.close) {
       this.triggerManager.close();

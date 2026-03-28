@@ -4,7 +4,7 @@ import {
   listModelConfigs, getModelConfig,
   getEmbeddingConfig,
   resolveApiKey,
-  getLLMConfig, saveLLMConfig,
+  getModelsConfig, saveModelsConfig,
   resolveDefaultName,
 } from '../../lib/llm/index.ts';
 import { ModelConfigSchema, EmbeddingModelConfigSchema } from '../../lib/llm/llm-config.ts';
@@ -68,11 +68,14 @@ async function buildUserContent(text: string, attachments?: Attachment[]): Promi
 }
 
 async function checkConfigReady(
-  config: { provider?: string; baseUrl?: string; apiKey?: string; model: string },
+  config: { provider?: string; baseUrl?: string; apiKey?: string; model: string; active?: boolean },
   manager: ModelManager,
 ): Promise<{ ready: boolean; reason?: string }> {
+  if (config.active === false) {
+    return { ready: false, reason: `Model "${config.model}" is not active` };
+  }
   const provider = detectProvider(config as any);
-  if (provider === 'local' && !config.baseUrl) {
+  if (provider === 'omni' || (provider === 'local' && !config.baseUrl)) {
     const filePath = await manager.findModelFile(config.model);
     if (!filePath) return { ready: false, reason: `Model "${config.model}" not downloaded` };
   } else if (provider !== 'local') {
@@ -84,23 +87,22 @@ async function checkConfigReady(
 
 export const llmRoutes: FastifyPluginAsync = async (fastify) => {
   const manager = new ModelManager(fastify.orchestrator.workspaceRoot);
-  const llmJsonPath = fastify.orchestrator.llmConfigPath;
+  const modelsConfigPath = fastify.orchestrator.modelsConfigPath;
 
-  // GET /config — full llm.json with redacted API keys + env var info
+  // GET /config — full models config with redacted API keys + env var info
   fastify.get('/config', async () => {
-    const config = getLLMConfig();
-    if (!config) return { version: '1.0', models: {}, embeddings: {} };
+    const config = getModelsConfig();
+    if (!config) return { version: '1.0', llm: {}, embeddings: {} };
 
-    const models: Record<string, any> = {};
-    for (const [name, m] of Object.entries(config.models)) {
+    const llmModels: Record<string, any> = {};
+    for (const [name, m] of Object.entries(config.llm)) {
       if (typeof m === 'string') {
-        // String pointer — pass through as-is
-        models[name] = m;
+        llmModels[name] = m;
         continue;
       }
       const provider = detectProvider(m);
       const envVar = PROVIDER_ENV_VARS[provider];
-      models[name] = {
+      llmModels[name] = {
         ...m,
         apiKey: redactKey(m.apiKey),
         _provider: provider,
@@ -121,15 +123,22 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       };
     }
 
-    return { version: config.version, models, embeddings };
+    return {
+      version: config.version,
+      llm: llmModels,
+      embeddings,
+      ...(config.image ? { image: config.image } : {}),
+      ...(config.video ? { video: config.video } : {}),
+      ...(config.tts ? { tts: config.tts } : {}),
+    };
   });
 
   // PUT /config/models/:name — upsert a model config entry (or set pointer for 'default')
   fastify.put<{ Params: { name: string }; Body: any }>(
     '/config/models/:name',
     async (request) => {
-      const config = getLLMConfig();
-      if (!config) throw new Error('No llm.json loaded');
+      const config = getModelsConfig();
+      if (!config) throw new Error('No models config loaded');
 
       const { name } = request.params;
       const body: Record<string, any> = { ...(request.body as Record<string, any>) };
@@ -137,8 +146,8 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       // If writing a string pointer (e.g. setting default to a key name)
       if (typeof request.body === 'string' || (typeof body._pointer === 'string')) {
         const pointer = typeof request.body === 'string' ? request.body : body._pointer;
-        config.models[name] = pointer;
-        await saveLLMConfig(llmJsonPath, config);
+        config.llm[name] = pointer;
+        await saveModelsConfig(modelsConfigPath, config);
         LLMFactory.clearCache();
         return { ok: true };
       }
@@ -150,7 +159,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       delete body._pointer;
 
       // Preserve existing API key if redacted or empty
-      const existing = config.models[name];
+      const existing = config.llm[name];
       const existingObj = (existing && typeof existing !== 'string') ? existing : null;
       if (!body.apiKey || body.apiKey.startsWith('••••')) {
         if (existingObj?.apiKey) {
@@ -168,16 +177,16 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       if (body.reasoningBudget == null) delete body.reasoningBudget;
       if (body.contextSize == null) delete body.contextSize;
 
-      // Preserve active and p2p flags from existing entry if not provided
+      // Preserve active and share flags from existing entry if not provided
       if (body.active == null && existingObj?.active != null) {
         body.active = existingObj.active;
       }
-      if (body.p2p == null && existingObj?.p2p != null) {
-        body.p2p = existingObj.p2p;
+      if (body.share == null && existingObj?.share != null) {
+        body.share = existingObj.share;
       }
 
-      config.models[name] = ModelConfigSchema.parse(body);
-      await saveLLMConfig(llmJsonPath, config);
+      config.llm[name] = ModelConfigSchema.parse(body);
+      await saveModelsConfig(modelsConfigPath, config);
       LLMFactory.clearCache();
 
       return { ok: true };
@@ -188,42 +197,72 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch<{ Params: { name: string }; Body: { active: boolean } }>(
     '/config/models/:name/active',
     async (request, reply) => {
-      const config = getLLMConfig();
-      if (!config) throw new Error('No llm.json loaded');
+      const config = getModelsConfig();
+      if (!config) throw new Error('No models config loaded');
 
       const { name } = request.params;
       const { active } = request.body as any;
-      const entry = config.models[name];
+      const entry = config.llm[name];
       if (!entry || typeof entry === 'string') {
         return reply.status(404).send({ error: `Model "${name}" not found` });
       }
 
       entry.active = active;
-      await saveLLMConfig(llmJsonPath, config);
+      await saveModelsConfig(modelsConfigPath, config);
       LLMFactory.clearCache();
 
       return { ok: true };
     },
   );
 
-  // PATCH /config/models/:name/p2p — toggle p2p flag
-  fastify.patch<{ Params: { name: string }; Body: { p2p: boolean } }>(
-    '/config/models/:name/p2p',
+  // PATCH /config/models/:name/share — toggle share flag for LLM models
+  fastify.patch<{ Params: { name: string }; Body: { share: boolean } }>(
+    '/config/models/:name/share',
     async (request, reply) => {
-      const config = getLLMConfig();
-      if (!config) throw new Error('No llm.json loaded');
+      const config = getModelsConfig();
+      if (!config) throw new Error('No models config loaded');
 
       const { name } = request.params;
-      const { p2p } = request.body as any;
-      const entry = config.models[name];
+      const { share } = request.body as any;
+      const entry = config.llm[name];
       if (!entry || typeof entry === 'string') {
         return reply.status(404).send({ error: `Model "${name}" not found` });
       }
 
-      entry.p2p = p2p;
-      await saveLLMConfig(llmJsonPath, config);
+      entry.share = share;
+      await saveModelsConfig(modelsConfigPath, config);
 
       // Broadcast updated catalog so peers see the change
+      const manager = (fastify.orchestrator as any)._p2pManager;
+      manager?.broadcastCatalog();
+
+      return { ok: true };
+    },
+  );
+
+  // PATCH /config/:section/:name/share — toggle share flag for image/tts/video models
+  fastify.patch<{ Params: { section: string; name: string }; Body: { share: boolean } }>(
+    '/config/:section/:name/share',
+    async (request, reply) => {
+      const config = getModelsConfig();
+      if (!config) throw new Error('No models config loaded');
+
+      const { section, name } = request.params;
+      if (!['image', 'tts', 'video'].includes(section)) {
+        return reply.status(400).send({ error: `Invalid section "${section}". Must be image, tts, or video.` });
+      }
+
+      const sectionData = config[section as 'image' | 'tts' | 'video'];
+      if (!sectionData) return reply.status(404).send({ error: `No ${section} config found` });
+
+      const entry = sectionData[name];
+      if (!entry || typeof entry === 'string') {
+        return reply.status(404).send({ error: `${section} model "${name}" not found` });
+      }
+
+      (entry as any).share = (request.body as any).share;
+      await saveModelsConfig(modelsConfigPath, config);
+
       const manager = (fastify.orchestrator as any)._p2pManager;
       manager?.broadcastCatalog();
 
@@ -235,21 +274,21 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete<{ Params: { name: string } }>(
     '/config/models/:name',
     async (request, reply) => {
-      const config = getLLMConfig();
-      if (!config) throw new Error('No llm.json loaded');
+      const config = getModelsConfig();
+      if (!config) throw new Error('No models config loaded');
 
       const { name } = request.params;
       if (name === 'default') {
         return reply.status(400).send({ error: 'Cannot delete the default pointer' });
       }
       // Prevent deleting the entry that default currently points to
-      const defaultTarget = resolveDefaultName('models');
+      const defaultTarget = resolveDefaultName('llm');
       if (name === defaultTarget) {
         return reply.status(400).send({ error: `Cannot delete "${name}" — it is the current default. Change the default first.` });
       }
 
-      delete config.models[name];
-      await saveLLMConfig(llmJsonPath, config);
+      delete config.llm[name];
+      await saveModelsConfig(modelsConfigPath, config);
       LLMFactory.clearCache();
 
       return { ok: true };
@@ -260,8 +299,8 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.put<{ Params: { name: string }; Body: any }>(
     '/config/embeddings/:name',
     async (request) => {
-      const config = getLLMConfig();
-      if (!config) throw new Error('No llm.json loaded');
+      const config = getModelsConfig();
+      if (!config) throw new Error('No models config loaded');
 
       const { name } = request.params;
       const body: Record<string, any> = { ...(request.body as Record<string, any>) };
@@ -270,7 +309,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       if (typeof request.body === 'string' || (typeof body._pointer === 'string')) {
         const pointer = typeof request.body === 'string' ? request.body : body._pointer;
         config.embeddings[name] = pointer;
-        await saveLLMConfig(llmJsonPath, config);
+        await saveModelsConfig(modelsConfigPath, config);
         return { ok: true };
       }
 
@@ -288,7 +327,7 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       if (body.dimensions == null) delete body.dimensions;
 
       config.embeddings[name] = EmbeddingModelConfigSchema.parse(body);
-      await saveLLMConfig(llmJsonPath, config);
+      await saveModelsConfig(modelsConfigPath, config);
 
       return { ok: true };
     },
@@ -297,10 +336,10 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /readiness — check if default model + embedding are usable
   fastify.get('/readiness', async () => {
     const issues: string[] = [];
-    const config = getLLMConfig();
+    const config = getModelsConfig();
 
     // Check if default exists (either as a concrete entry or as a pointer to one)
-    const hasDefaultModel = config?.models['default'] !== undefined;
+    const hasDefaultModel = config?.llm['default'] !== undefined;
     if (hasDefaultModel) {
       try {
         const result = await checkConfigReady(getModelConfig('default'), manager);
@@ -330,10 +369,10 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
   // List all available LLM configs (only active ones)
   fastify.get('/', async () => {
     const names = listModelConfigs();
-    const fullConfig = getLLMConfig();
+    const fullConfig = getModelsConfig();
     return names
       .filter((name) => {
-        const entry = fullConfig?.models[name];
+        const entry = fullConfig?.llm[name];
         if (!entry || typeof entry === 'string') return true;
         return entry.active !== false;
       })

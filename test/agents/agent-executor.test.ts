@@ -5,14 +5,14 @@ import { fileURLToPath } from 'url';
 import { AgentExecutor } from '../../lib/agents/agent-executor.ts';
 import { ConversationStore } from '../../lib/memory/conversation-store.ts';
 import { MemoryManager } from '../../lib/memory/memory-manager.ts';
-import { loadLLMConfig } from '../../lib/llm/llm-config.ts';
+import { loadModelsConfig } from '../../lib/llm/llm-config.ts';
 import { LLMFactory } from '../../lib/llm/llm-factory.ts';
 import type { ChatModel, ChatModelResponse, StructuredTool } from '../../lib/types/llm-types.ts';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturePath = path.join(__dirname, '..', 'fixtures', 'llm.json');
+const fixturePath = path.join(__dirname, '..', 'fixtures', 'models.yaml');
 
 // Minimal mock tool registry
 function mockToolRegistry(tools: any[] = []) {
@@ -26,7 +26,7 @@ function minimalDefinition(overrides: Record<string, any> = {}) {
   return {
     name: 'test-agent',
     description: 'Test agent',
-    llm: 'default',
+    model: 'default',
     prompt: {
       system: 'You are a test assistant.',
       inputVariables: ['message'],
@@ -39,12 +39,12 @@ function minimalDefinition(overrides: Record<string, any> = {}) {
 
 describe('AgentExecutor', () => {
   before(async () => {
-    await loadLLMConfig(fixturePath);
+    await loadModelsConfig(fixturePath);
   });
 
   it('should construct with required deps', () => {
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     assert.ok(executor);
   });
 
@@ -52,14 +52,14 @@ describe('AgentExecutor', () => {
     const store = new ConversationStore();
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-exec-'));
     const memoryManager = new MemoryManager(tempDir);
-    const executor = new AgentExecutor(mockToolRegistry(), store, undefined, memoryManager);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', undefined, memoryManager);
     assert.ok(executor);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
   it('should create instance without tools', async () => {
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
     assert.ok(instance.definition);
     assert.ok(typeof instance.invoke === 'function');
@@ -75,7 +75,7 @@ describe('AgentExecutor', () => {
     // Save some memory content
     await memoryManager.save('test-agent', 'Important fact: user likes cats', 100);
 
-    const executor = new AgentExecutor(mockToolRegistry(), store, undefined, memoryManager);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', undefined, memoryManager);
     const def = minimalDefinition({ memory: { enabled: true, maxLines: 50 } });
     const instance = await executor.createInstance(def);
 
@@ -91,7 +91,7 @@ describe('AgentExecutor', () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-exec-'));
     const memoryManager = new MemoryManager(tempDir);
 
-    const executor = new AgentExecutor(mockToolRegistry(), store, undefined, memoryManager);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', undefined, memoryManager);
     const def = minimalDefinition({ memory: true });
     const instance = await executor.createInstance(def);
 
@@ -106,7 +106,7 @@ describe('AgentExecutor', () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-exec-'));
     const memoryManager = new MemoryManager(tempDir);
 
-    const executor = new AgentExecutor(mockToolRegistry(), store, undefined, memoryManager);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', undefined, memoryManager);
     const def = minimalDefinition({ memory: false });
     const instance = await executor.createInstance(def);
 
@@ -118,7 +118,7 @@ describe('AgentExecutor', () => {
 
   it('should not augment prompt when memory not configured', async () => {
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
     assert.ok(!instance.definition.prompt.system.includes('long_term_memory'));
   });
@@ -129,7 +129,7 @@ describe('AgentExecutor', () => {
       resolveForAgent: () => '## Skill: Test\nDo test things',
     } as any;
 
-    const executor = new AgentExecutor(mockToolRegistry(), store, mockSkillLoader);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', mockSkillLoader);
     const def = minimalDefinition({ skills: 'all' });
     const instance = await executor.createInstance(def);
 
@@ -138,7 +138,7 @@ describe('AgentExecutor', () => {
 
   it('should format user message with single input variable', async () => {
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       prompt: { system: 'test', inputVariables: ['question'] },
     });
@@ -155,7 +155,7 @@ describe('AgentExecutor', () => {
 
   it('should format user message with no input variables', async () => {
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       prompt: { system: 'test', inputVariables: [] },
     });
@@ -165,7 +165,7 @@ describe('AgentExecutor', () => {
 
   it('should format user message with multiple input variables', async () => {
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       prompt: { system: 'test', inputVariables: ['name', 'age', 'job'] },
     });
@@ -179,7 +179,7 @@ describe('AgentExecutor', () => {
       resolveForAgent: () => '## Skill: Code\nRun code',
     } as any;
 
-    const executor = new AgentExecutor(mockToolRegistry(), store, mockSkillLoader);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', mockSkillLoader);
     const def = minimalDefinition({ skills: 'all' });
     const instance = await executor.createInstance(def);
 
@@ -192,7 +192,7 @@ describe('AgentExecutor', () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-exec-'));
     const memoryManager = new MemoryManager(tempDir);
 
-    const executor = new AgentExecutor(mockToolRegistry(), store, undefined, memoryManager);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', undefined, memoryManager);
     const def = minimalDefinition({ memory: { enabled: false } });
     const instance = await executor.createInstance(def);
 
@@ -206,7 +206,7 @@ describe('AgentExecutor', () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-exec-'));
     const memoryManager = new MemoryManager(tempDir);
 
-    const executor = new AgentExecutor(mockToolRegistry(), store, undefined, memoryManager);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', undefined, memoryManager);
     const def = minimalDefinition({ memory: true });
     const instance = await executor.createInstance(def);
 
@@ -217,7 +217,7 @@ describe('AgentExecutor', () => {
 
   it('should not augment skills when skillLoader not provided', async () => {
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({ skills: 'all' });
     const instance = await executor.createInstance(def);
 
@@ -231,7 +231,7 @@ describe('AgentExecutor', () => {
       resolveForAgent: () => '',
     } as any;
 
-    const executor = new AgentExecutor(mockToolRegistry(), store, mockSkillLoader);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', mockSkillLoader);
     const def = minimalDefinition({ skills: 'all' });
     const instance = await executor.createInstance(def);
 
@@ -261,8 +261,8 @@ describe('AgentExecutor invoke/stream', () => {
   let originalCreate: typeof LLMFactory.create;
 
   before(async () => {
-    const fixturePath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'llm.json');
-    await loadLLMConfig(fixturePath);
+    const fixturePath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'models.yaml');
+    await loadModelsConfig(fixturePath);
     originalCreate = LLMFactory.create;
   });
 
@@ -275,7 +275,7 @@ describe('AgentExecutor invoke/stream', () => {
     LLMFactory.create = async () => mockChatModel('Hello from mock!');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ message: 'hi' });
@@ -287,7 +287,7 @@ describe('AgentExecutor invoke/stream', () => {
     LLMFactory.create = async () => mockChatModel('Session response');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ input: { message: 'hi' }, sessionId: 'sess-1' });
@@ -315,7 +315,7 @@ describe('AgentExecutor invoke/stream', () => {
       schema: { type: 'object', properties: {} },
       invoke: async () => 'ok',
     } as StructuredTool;
-    const executor = new AgentExecutor(mockToolRegistry([mockTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([mockTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ message: 'hi' });
@@ -327,7 +327,7 @@ describe('AgentExecutor invoke/stream', () => {
     LLMFactory.create = async () => mockChatModel('Streamed content');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const chunks: any[] = [];
@@ -366,7 +366,7 @@ describe('AgentExecutor invoke/stream', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([greetTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([greetTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const chunks: any[] = [];
@@ -382,7 +382,7 @@ describe('AgentExecutor invoke/stream', () => {
     LLMFactory.create = async () => mockChatModel('Multi-var response');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       prompt: { system: 'test', inputVariables: ['name', 'age'] },
     });
@@ -396,7 +396,7 @@ describe('AgentExecutor invoke/stream', () => {
     LLMFactory.create = async () => mockChatModel('No-var response');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       prompt: { system: 'test', inputVariables: [] },
     });
@@ -419,7 +419,7 @@ describe('AgentExecutor invoke/stream', () => {
     };
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store, undefined, undefined, mockIntegrations);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp', undefined, undefined, mockIntegrations);
     const def = minimalDefinition({
       integrations: [{ type: 'collabnook', url: 'ws://test', channel: 'test', botName: 'bot' }],
     });
@@ -431,7 +431,7 @@ describe('AgentExecutor invoke/stream', () => {
     LLMFactory.create = async () => mockChatModel('{"result": "structured data"}');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       output: { format: 'structured', schema: { type: 'object', properties: { result: { type: 'string' } } } },
     });
@@ -446,7 +446,7 @@ describe('AgentExecutor invoke/stream', () => {
     LLMFactory.create = async () => mockChatModel('Session AI response');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ input: { message: 'hi' }, sessionId: 'sess-store' });
@@ -460,7 +460,7 @@ describe('AgentExecutor invoke/stream', () => {
     LLMFactory.create = async () => mockChatModel('not json');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       output: { format: 'structured', schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } } },
     });
@@ -487,7 +487,7 @@ describe('AgentExecutor invoke/stream', () => {
     };
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({
@@ -520,7 +520,7 @@ describe('AgentExecutor invoke/stream', () => {
     };
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     // text/plain attachment — base64 encoded "Hello world"
@@ -538,7 +538,7 @@ describe('AgentExecutor invoke/stream', () => {
     LLMFactory.create = async () => mockChatModel('No attachment');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     // Attachment with missing data/mediaType should be skipped
@@ -553,7 +553,7 @@ describe('AgentExecutor invoke/stream', () => {
     LLMFactory.create = async () => mockChatModel('Streamed session');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const chunks: any[] = [];
@@ -580,7 +580,7 @@ describe('AgentExecutor invoke/stream', () => {
     };
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const chunks: any[] = [];
@@ -608,7 +608,7 @@ describe('AgentExecutor invoke/stream', () => {
     };
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const chunks: any[] = [];
@@ -635,7 +635,7 @@ describe('AgentExecutor invoke/stream', () => {
     };
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       output: { format: 'structured' },
     });
@@ -659,8 +659,8 @@ describe('AgentExecutor extractStructuredOutput (via invoke)', () => {
   let originalCreate: typeof LLMFactory.create;
 
   before(async () => {
-    const fp = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'llm.json');
-    await loadLLMConfig(fp);
+    const fp = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'models.yaml');
+    await loadModelsConfig(fp);
     originalCreate = LLMFactory.create;
   });
 
@@ -694,7 +694,7 @@ describe('AgentExecutor extractStructuredOutput (via invoke)', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const def = minimalDefinition({
       output: { format: 'structured' },
     });
@@ -717,7 +717,7 @@ describe('AgentExecutor extractStructuredOutput (via invoke)', () => {
     };
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       output: { format: 'structured' },
     });
@@ -731,7 +731,7 @@ describe('AgentExecutor extractStructuredOutput (via invoke)', () => {
     LLMFactory.create = async () => mockChatModel('not valid json');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       output: { format: 'structured' },
     });
@@ -745,7 +745,7 @@ describe('AgentExecutor extractStructuredOutput (via invoke)', () => {
     LLMFactory.create = async () => mockChatModel('{"parsed": true}');
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry(), store);
+    const executor = new AgentExecutor(mockToolRegistry(), store, '/tmp');
     const def = minimalDefinition({
       output: { format: 'structured' },
     });
@@ -762,8 +762,8 @@ describe('AgentExecutor invokeWithTools', () => {
   let originalCreate: typeof LLMFactory.create;
 
   before(async () => {
-    const fp = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'llm.json');
-    await loadLLMConfig(fp);
+    const fp = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'models.yaml');
+    await loadModelsConfig(fp);
     originalCreate = LLMFactory.create;
   });
 
@@ -800,7 +800,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ input: { message: 'hi' }, sessionId: 'sess-tools' });
@@ -830,7 +830,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ message: 'hi' });
@@ -851,7 +851,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const def = minimalDefinition({
       output: {
         format: 'structured',
@@ -878,7 +878,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ message: 'empty' });
@@ -905,7 +905,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([dummyTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ message: 'abort' });
@@ -940,7 +940,7 @@ describe('AgentExecutor invokeWithTools', () => {
     } as StructuredTool;
 
     const store = new ConversationStore();
-    const executor = new AgentExecutor(mockToolRegistry([greetTool]), store);
+    const executor = new AgentExecutor(mockToolRegistry([greetTool]), store, '/tmp');
     const instance = await executor.createInstance(minimalDefinition());
 
     const result = await instance.invoke({ input: { message: 'greet Bob' }, sessionId: 'sess-tool-summary' });

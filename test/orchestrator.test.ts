@@ -87,14 +87,14 @@ describe('Orchestrator', () => {
     // Write a minimal LLM config
     const llmConfig = {
       version: '1.0',
-      models: {
+      llm: {
         default: { model: 'gpt-4o-mini', provider: 'openai', maxTokens: 4096 },
       },
       embeddings: {
         default: { model: 'text-embedding-3-small', provider: 'openai' },
       },
     };
-    await fs.writeFile(path.join(tempDir, 'llm.json'), JSON.stringify(llmConfig));
+    await fs.writeFile(path.join(tempDir, 'models.yaml'), JSON.stringify(llmConfig));
 
     const orch = createOrch({ workspaceRoot: tempDir });
     await orch.initialize();
@@ -108,14 +108,14 @@ describe('Orchestrator', () => {
   it('should not re-initialize if already initialized', async () => {
     const llmConfig = {
       version: '1.0',
-      models: {
+      llm: {
         default: { model: 'gpt-4o-mini', provider: 'openai', maxTokens: 4096 },
       },
       embeddings: {
         default: { model: 'text-embedding-3-small', provider: 'openai' },
       },
     };
-    await fs.writeFile(path.join(tempDir, 'llm.json'), JSON.stringify(llmConfig));
+    await fs.writeFile(path.join(tempDir, 'models.yaml'), JSON.stringify(llmConfig));
 
     const orch = createOrch({ workspaceRoot: tempDir });
     await orch.initialize();
@@ -250,7 +250,7 @@ describe('Orchestrator', () => {
       functionsDir: path.join(tempDir, 'functions'),
       skillsDir: path.join(tempDir, 'skills'),
       mcpConfigPath: path.join(tempDir, 'mcp.json'),
-      llmConfigPath: path.join(tempDir, 'llm.json'),
+      modelsConfigPath: path.join(tempDir, 'models.yaml'),
       sandboxConfigPath: path.join(tempDir, 'sandbox.json'),
     });
     assert.ok(orch);
@@ -446,24 +446,25 @@ describe('Orchestrator', () => {
     assert.equal(await orch.unloadFile('skills/gone/SKILL.md'), 'skill');
   });
 
-  it('should handle reloadFile for llm.json', async () => {
+  it('should handle reloadFile for models.yaml', async () => {
     // Write a valid LLM config
     const llmConfig = {
       version: '1.0',
-      models: {
+      llm: {
         default: { model: 'gpt-4o-mini', provider: 'openai', maxTokens: 4096 },
       },
       embeddings: {
         default: { model: 'text-embedding-3-small', provider: 'openai' },
       },
     };
-    await fs.writeFile(path.join(tempDir, 'llm.json'), JSON.stringify(llmConfig));
+    await fs.writeFile(path.join(tempDir, 'models.yaml'), JSON.stringify(llmConfig));
 
     const orch = createOrch({ workspaceRoot: tempDir });
     (orch as any).initialized = true;
+    (orch as any).toolRegistry = { registerBuiltIn: () => {}, unregisterBuiltIn: () => {} };
 
-    const result = await orch.reloadFile('llm.json');
-    assert.equal(result, 'llm');
+    const result = await orch.reloadFile('models.yaml');
+    assert.equal(result, 'models');
   });
 
   it('should handle reloadFile for sandbox.json', async () => {
@@ -825,9 +826,9 @@ describe('Orchestrator', () => {
     assert.equal(result.metadata.success, true);
   });
 
-  it('should expose llmConfigPath', () => {
+  it('should expose modelsConfigPath', () => {
     const orch = createOrch({ workspaceRoot: tempDir });
-    assert.equal(orch.llmConfigPath, path.join(tempDir, 'llm.json'));
+    assert.equal(orch.modelsConfigPath, path.join(tempDir, 'models.yaml'));
   });
 
   it('should stream resume react workflow', async () => {

@@ -163,10 +163,12 @@ export interface P2PRemoteAgent {
   peerName: string;
 }
 
-export interface P2PRemoteLLM {
+export interface P2PRemoteModel {
   name: string;
   provider: string;
   model: string;
+  type?: string;       // 'chat' | 'image' | 'tts'
   peerId: string;
   peerName: string;
+  capabilities?: string[];
 }

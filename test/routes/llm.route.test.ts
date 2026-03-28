@@ -6,11 +6,11 @@ import * as os from 'os';
 import { fileURLToPath } from 'url';
 import { createTestApp } from '../helpers/mock-fastify.ts';
 import { llmRoutes } from '../../src/routes/llm.route.ts';
-import { loadLLMConfig, getLLMConfig } from '../../lib/llm/llm-config.ts';
+import { loadModelsConfig, getModelsConfig } from '../../lib/llm/llm-config.ts';
 import { LLMFactory } from '../../lib/llm/llm-factory.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturePath = path.join(__dirname, '..', 'fixtures', 'llm.json');
+const fixturePath = path.join(__dirname, '..', 'fixtures', 'models.yaml');
 
 /** Helper to build the tasks mock used by chat/stream routes */
 function mockTasks(extra: Record<string, any> = {}) {
@@ -28,10 +28,10 @@ function mockTasks(extra: Record<string, any> = {}) {
   };
 }
 
-/** Create a temporary copy of llm.json for tests that mutate config */
-function createTempLlmJson(): string {
+/** Create a temporary copy of models.yaml for tests that mutate config */
+function createTempModelsYaml(): string {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-test-'));
-  const tmpPath = path.join(tmpDir, 'llm.json');
+  const tmpPath = path.join(tmpDir, 'models.yaml');
   fs.copyFileSync(fixturePath, tmpPath);
   return tmpPath;
 }
@@ -40,12 +40,12 @@ describe('llm.route', () => {
   let app: any;
 
   before(async () => {
-    await loadLLMConfig(fixturePath);
+    await loadModelsConfig(fixturePath);
   });
 
   afterEach(async () => {
     // Reload fixture to undo any mutations from PUT/DELETE tests
-    await loadLLMConfig(fixturePath);
+    await loadModelsConfig(fixturePath);
     if (app) await app.close();
   });
 
@@ -61,62 +61,62 @@ describe('llm.route', () => {
       const body = JSON.parse(res.payload);
 
       assert.equal(body.version, '1.0');
-      assert.ok(body.models);
+      assert.ok(body.llm);
       assert.ok(body.embeddings);
 
       // String pointer should be passed through as-is
-      assert.equal(body.models.default, 'openai');
+      assert.equal(body.llm.default, 'openai');
       assert.equal(body.embeddings.default, 'openai');
 
       // Gemini has apiKey "test-gemini-key-not-real" — should be redacted to ••••real
-      assert.equal(body.models.gemini.apiKey, '••••real');
+      assert.equal(body.llm.gemini.apiKey, '••••real');
 
       // Claude has apiKey "test-anthropic-key-not-real" — should be redacted to ••••real
-      assert.equal(body.models.claude.apiKey, '••••real');
+      assert.equal(body.llm.claude.apiKey, '••••real');
 
       // openai model (no apiKey) — apiKey should be undefined
-      assert.equal(body.models.openai.apiKey, undefined);
+      assert.equal(body.llm.openai.apiKey, undefined);
 
       // Models should have _provider, _hasEnvKey, _envVar
-      assert.ok(body.models.gemini._provider);
-      assert.equal(typeof body.models.gemini._hasEnvKey, 'boolean');
-      assert.ok(body.models.gemini._envVar);
+      assert.ok(body.llm.gemini._provider);
+      assert.equal(typeof body.llm.gemini._hasEnvKey, 'boolean');
+      assert.ok(body.llm.gemini._envVar);
     });
 
     it('should redact short keys (<=4 chars) to just dots', async () => {
-      const config = getLLMConfig()!;
-      const origGeminiKey = (config.models.gemini as any).apiKey;
-      (config.models.gemini as any).apiKey = 'ab';
+      const config = getModelsConfig()!;
+      const origGeminiKey = (config.llm.gemini as any).apiKey;
+      (config.llm.gemini as any).apiKey = 'ab';
 
       const result = await createTestApp(llmRoutes, '/api/llm');
       app = result.app;
 
       const res = await app.inject({ method: 'GET', url: '/api/llm/config' });
       const body = JSON.parse(res.payload);
-      assert.equal(body.models.gemini.apiKey, '••••');
+      assert.equal(body.llm.gemini.apiKey, '••••');
 
-      (config.models.gemini as any).apiKey = origGeminiKey;
+      (config.llm.gemini as any).apiKey = origGeminiKey;
     });
 
     it('should pass through env var patterns like ${VAR_NAME}', async () => {
-      const config = getLLMConfig()!;
-      const origGeminiKey = (config.models.gemini as any).apiKey;
-      (config.models.gemini as any).apiKey = '${MY_API_KEY}';
+      const config = getModelsConfig()!;
+      const origGeminiKey = (config.llm.gemini as any).apiKey;
+      (config.llm.gemini as any).apiKey = '${MY_API_KEY}';
 
       const result = await createTestApp(llmRoutes, '/api/llm');
       app = result.app;
 
       const res = await app.inject({ method: 'GET', url: '/api/llm/config' });
       const body = JSON.parse(res.payload);
-      assert.equal(body.models.gemini.apiKey, '${MY_API_KEY}');
+      assert.equal(body.llm.gemini.apiKey, '${MY_API_KEY}');
 
-      (config.models.gemini as any).apiKey = origGeminiKey;
+      (config.llm.gemini as any).apiKey = origGeminiKey;
     });
 
     it('should return empty undefined for key when apiKey is empty/falsy', async () => {
-      const config = getLLMConfig()!;
-      const origKey = (config.models.gemini as any).apiKey;
-      (config.models.gemini as any).apiKey = '';
+      const config = getModelsConfig()!;
+      const origKey = (config.llm.gemini as any).apiKey;
+      (config.llm.gemini as any).apiKey = '';
 
       const result = await createTestApp(llmRoutes, '/api/llm');
       app = result.app;
@@ -124,17 +124,17 @@ describe('llm.route', () => {
       const res = await app.inject({ method: 'GET', url: '/api/llm/config' });
       const body = JSON.parse(res.payload);
       // redactKey('') returns undefined
-      assert.equal(body.models.gemini.apiKey, undefined);
+      assert.equal(body.llm.gemini.apiKey, undefined);
 
-      (config.models.gemini as any).apiKey = origKey;
+      (config.llm.gemini as any).apiKey = origKey;
     });
 
-    it('should return empty config when no llm.json is loaded', async () => {
+    it('should return empty config when no models config is loaded', async () => {
       // Temporarily set the in-memory config to have no models/embeddings
       // by loading a minimal temp config that simulates empty state
-      const tmpPath = createTempLlmJson();
-      fs.writeFileSync(tmpPath, JSON.stringify({ version: '1.0', models: {}, embeddings: {} }));
-      await loadLLMConfig(tmpPath);
+      const tmpPath = createTempModelsYaml();
+      fs.writeFileSync(tmpPath, JSON.stringify({ version: '1.0', llm: {}, embeddings: {} }));
+      await loadModelsConfig(tmpPath);
 
       const result = await createTestApp(llmRoutes, '/api/llm');
       app = result.app;
@@ -143,7 +143,7 @@ describe('llm.route', () => {
       assert.equal(res.statusCode, 200);
       const body = JSON.parse(res.payload);
       assert.equal(body.version, '1.0');
-      assert.deepEqual(body.models, {});
+      assert.deepEqual(body.llm, {});
       assert.deepEqual(body.embeddings, {});
 
       fs.rmSync(path.dirname(tmpPath), { recursive: true });
@@ -154,8 +154,8 @@ describe('llm.route', () => {
 
   describe('PUT /config/models/:name', () => {
     it('should upsert a model config entry', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       const res = await app.inject({
@@ -170,8 +170,8 @@ describe('llm.route', () => {
       assert.equal(res.statusCode, 200);
       assert.deepEqual(JSON.parse(res.payload), { ok: true });
 
-      const config = getLLMConfig()!;
-      const saved = config.models['test-model'] as any;
+      const config = getModelsConfig()!;
+      const saved = config.llm['test-model'] as any;
       assert.equal(saved.model, 'gpt-4o');
       assert.equal(saved.temperature, 0.5);
 
@@ -179,8 +179,8 @@ describe('llm.route', () => {
     });
 
     it('should set a string pointer via _pointer field', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       const res = await app.inject({
@@ -189,15 +189,15 @@ describe('llm.route', () => {
         payload: { _pointer: 'gemini' },
       });
       assert.equal(res.statusCode, 200);
-      const config = getLLMConfig()!;
-      assert.equal(config.models.default, 'gemini');
+      const config = getModelsConfig()!;
+      assert.equal(config.llm.default, 'gemini');
 
       fs.rmSync(path.dirname(tmpPath), { recursive: true });
     });
 
     it('should preserve existing API key when redacted key is sent', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       // First set a model with a real API key
@@ -215,16 +215,16 @@ describe('llm.route', () => {
       });
       assert.equal(res.statusCode, 200);
 
-      const config = getLLMConfig()!;
-      const saved = config.models['key-test'] as any;
+      const config = getModelsConfig()!;
+      const saved = config.llm['key-test'] as any;
       assert.equal(saved.apiKey, 'sk-real-key-12345');
 
       fs.rmSync(path.dirname(tmpPath), { recursive: true });
     });
 
     it('should delete apiKey when redacted and no existing key', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       const res = await app.inject({
@@ -234,16 +234,16 @@ describe('llm.route', () => {
       });
       assert.equal(res.statusCode, 200);
 
-      const config = getLLMConfig()!;
-      const saved = config.models['no-key-test'] as any;
+      const config = getModelsConfig()!;
+      const saved = config.llm['no-key-test'] as any;
       assert.equal(saved.apiKey, undefined);
 
       fs.rmSync(path.dirname(tmpPath), { recursive: true });
     });
 
     it('should strip internal fields (_provider, _hasEnvKey, _envVar)', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       const res = await app.inject({
@@ -259,8 +259,8 @@ describe('llm.route', () => {
       });
       assert.equal(res.statusCode, 200);
 
-      const config = getLLMConfig()!;
-      const saved = config.models['strip-test'] as any;
+      const config = getModelsConfig()!;
+      const saved = config.llm['strip-test'] as any;
       assert.equal(saved._provider, undefined);
       assert.equal(saved._hasEnvKey, undefined);
       assert.equal(saved._envVar, undefined);
@@ -269,8 +269,8 @@ describe('llm.route', () => {
     });
 
     it('should remove empty optional fields (baseUrl, temperature, etc.)', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       const res = await app.inject({
@@ -289,8 +289,8 @@ describe('llm.route', () => {
       });
       assert.equal(res.statusCode, 200);
 
-      const config = getLLMConfig()!;
-      const saved = config.models['empty-fields'] as any;
+      const config = getModelsConfig()!;
+      const saved = config.llm['empty-fields'] as any;
       assert.equal(saved.baseUrl, undefined);
       assert.equal(saved.temperature, undefined);
       assert.equal(saved.maxTokens, undefined);
@@ -299,8 +299,8 @@ describe('llm.route', () => {
     });
 
     it('should preserve empty apiKey when existing is also empty (no apiKey)', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       // Update existing 'fast' which has no apiKey — send empty apiKey
@@ -311,8 +311,8 @@ describe('llm.route', () => {
       });
       assert.equal(res.statusCode, 200);
 
-      const config = getLLMConfig()!;
-      const saved = config.models['fast'] as any;
+      const config = getModelsConfig()!;
+      const saved = config.llm['fast'] as any;
       // Should not have apiKey at all
       assert.equal(saved.apiKey, undefined);
 
@@ -324,12 +324,12 @@ describe('llm.route', () => {
 
   describe('DELETE /config/models/:name', () => {
     it('should delete a model config entry', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
-      const configBefore = getLLMConfig()!;
-      assert.ok(configBefore.models['fast']);
+      const configBefore = getModelsConfig()!;
+      assert.ok(configBefore.llm['fast']);
 
       const res = await app.inject({
         method: 'DELETE',
@@ -338,8 +338,8 @@ describe('llm.route', () => {
       assert.equal(res.statusCode, 200);
       assert.deepEqual(JSON.parse(res.payload), { ok: true });
 
-      const configAfter = getLLMConfig()!;
-      assert.equal(configAfter.models['fast'], undefined);
+      const configAfter = getModelsConfig()!;
+      assert.equal(configAfter.llm['fast'], undefined);
 
       fs.rmSync(path.dirname(tmpPath), { recursive: true });
     });
@@ -376,8 +376,8 @@ describe('llm.route', () => {
 
   describe('PUT /config/embeddings/:name', () => {
     it('should upsert an embedding config entry', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       const res = await app.inject({
@@ -391,7 +391,7 @@ describe('llm.route', () => {
       assert.equal(res.statusCode, 200);
       assert.deepEqual(JSON.parse(res.payload), { ok: true });
 
-      const config = getLLMConfig()!;
+      const config = getModelsConfig()!;
       const saved = config.embeddings['test-emb'] as any;
       assert.equal(saved.model, 'text-embedding-3-large');
 
@@ -399,8 +399,8 @@ describe('llm.route', () => {
     });
 
     it('should set a string pointer via _pointer field', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       const res = await app.inject({
@@ -409,15 +409,15 @@ describe('llm.route', () => {
         payload: { _pointer: 'some-other' },
       });
       assert.equal(res.statusCode, 200);
-      const config = getLLMConfig()!;
+      const config = getModelsConfig()!;
       assert.equal(config.embeddings.default, 'some-other');
 
       fs.rmSync(path.dirname(tmpPath), { recursive: true });
     });
 
     it('should preserve existing API key when redacted key is sent', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       // Set embedding with real key
@@ -435,7 +435,7 @@ describe('llm.route', () => {
       });
       assert.equal(res.statusCode, 200);
 
-      const config = getLLMConfig()!;
+      const config = getModelsConfig()!;
       const saved = config.embeddings['key-emb'] as any;
       assert.equal(saved.apiKey, 'sk-emb-real-key');
 
@@ -443,8 +443,8 @@ describe('llm.route', () => {
     });
 
     it('should delete apiKey when redacted and no existing key', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       const res = await app.inject({
@@ -454,7 +454,7 @@ describe('llm.route', () => {
       });
       assert.equal(res.statusCode, 200);
 
-      const config = getLLMConfig()!;
+      const config = getModelsConfig()!;
       const saved = config.embeddings['no-key-emb'] as any;
       assert.equal(saved.apiKey, undefined);
 
@@ -462,8 +462,8 @@ describe('llm.route', () => {
     });
 
     it('should remove empty optional fields (baseUrl, dimensions)', async () => {
-      const tmpPath = createTempLlmJson();
-      const result = await createTestApp(llmRoutes, '/api/llm', { llmConfigPath: tmpPath });
+      const tmpPath = createTempModelsYaml();
+      const result = await createTestApp(llmRoutes, '/api/llm', { modelsConfigPath: tmpPath });
       app = result.app;
 
       const res = await app.inject({
@@ -478,7 +478,7 @@ describe('llm.route', () => {
       });
       assert.equal(res.statusCode, 200);
 
-      const config = getLLMConfig()!;
+      const config = getModelsConfig()!;
       const saved = config.embeddings['clean-emb'] as any;
       assert.equal(saved.baseUrl, undefined);
       assert.equal(saved.dimensions, undefined);
@@ -524,9 +524,9 @@ describe('llm.route', () => {
     });
 
     it('should report no default model/embedding when config is empty', async () => {
-      const tmpPath = createTempLlmJson();
-      fs.writeFileSync(tmpPath, JSON.stringify({ version: '1.0', models: {}, embeddings: {} }));
-      await loadLLMConfig(tmpPath);
+      const tmpPath = createTempModelsYaml();
+      fs.writeFileSync(tmpPath, JSON.stringify({ version: '1.0', llm: {}, embeddings: {} }));
+      await loadModelsConfig(tmpPath);
 
       const result = await createTestApp(llmRoutes, '/api/llm');
       app = result.app;
@@ -542,9 +542,9 @@ describe('llm.route', () => {
     });
 
     it('should report broken default pointer', async () => {
-      const config = getLLMConfig()!;
-      const origDefault = config.models.default;
-      config.models.default = 'nonexistent-model-xyz';
+      const config = getModelsConfig()!;
+      const origDefault = config.llm.default;
+      config.llm.default = 'nonexistent-model-xyz';
 
       const result = await createTestApp(llmRoutes, '/api/llm');
       app = result.app;
@@ -555,17 +555,17 @@ describe('llm.route', () => {
       assert.equal(body.ready, false);
       assert.ok(body.issues.some((i: string) => i.includes('broken') || i.includes('not found')));
 
-      config.models.default = origDefault;
+      config.llm.default = origDefault;
     });
 
     it('should report local model not downloaded when no baseUrl', async () => {
-      const config = getLLMConfig()!;
-      const origDefault = config.models.default;
-      config.models['local-no-base'] = {
+      const config = getModelsConfig()!;
+      const origDefault = config.llm.default;
+      config.llm['local-no-base'] = {
         provider: 'local' as any,
         model: 'some-nonexistent-model',
       } as any;
-      config.models.default = 'local-no-base';
+      config.llm.default = 'local-no-base';
 
       const result = await createTestApp(llmRoutes, '/api/llm');
       app = result.app;
@@ -576,8 +576,8 @@ describe('llm.route', () => {
       assert.equal(body.ready, false);
       assert.ok(body.issues.some((i: string) => i.includes('not downloaded')));
 
-      config.models.default = origDefault;
-      delete config.models['local-no-base'];
+      config.llm.default = origDefault;
+      delete config.llm['local-no-base'];
     });
   });
 

@@ -3,14 +3,14 @@ import { strict as assert } from 'node:assert';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { LLMFactory } from '../../lib/llm/llm-factory.ts';
-import { loadLLMConfig } from '../../lib/llm/llm-config.ts';
+import { loadModelsConfig, getModelsConfig } from '../../lib/llm/llm-config.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturePath = path.join(__dirname, '..', 'fixtures', 'llm.json');
+const fixturePath = path.join(__dirname, '..', 'fixtures', 'models.yaml');
 
 describe('LLMFactory — extended coverage', () => {
   before(async () => {
-    await loadLLMConfig(fixturePath);
+    await loadModelsConfig(fixturePath);
   });
 
   afterEach(() => {
@@ -152,12 +152,11 @@ describe('LLMFactory — extended coverage', () => {
       // The easiest way is to add a fixture entry with an unsupported provider
       // or mock detectProvider. Since we can't mock easily, we'll use
       // getModelConfig + detectProvider path by adding a config at runtime.
-      const { getLLMConfig } = await import('../../lib/llm/llm-config.ts');
-      const config = getLLMConfig();
+      const config = getModelsConfig();
 
       // Temporarily add a config with an unsupported provider
-      if (config && config.models) {
-        (config.models as any)['unsupported-provider'] = {
+      if (config && config.llm) {
+        (config.llm as any)['unsupported-provider'] = {
           provider: 'unsupported-xyz',
           model: 'some-model',
         };
@@ -170,82 +169,11 @@ describe('LLMFactory — extended coverage', () => {
         );
       } finally {
         // Clean up
-        if (config && config.models) {
-          delete (config.models as any)['unsupported-provider'];
+        if (config && config.llm) {
+          delete (config.llm as any)['unsupported-provider'];
         }
       }
     });
   });
 
-  describe('local provider without baseUrl', () => {
-    it('should auto-start local engine when no baseUrl is provided', async () => {
-      const { getLLMConfig } = await import('../../lib/llm/llm-config.ts');
-      const { engineRegistry } = await import('../../lib/local-llm/engine-registry.ts');
-      const config = getLLMConfig();
-
-      // Add a local config without baseUrl
-      if (config && config.models) {
-        (config.models as any)['local-no-baseurl'] = {
-          provider: 'local',
-          model: 'test-model',
-          engine: 'llama-cpp',
-        };
-      }
-
-      // Check if llama-cpp engine is registered
-      const engine = engineRegistry.getEngine('llama-cpp');
-
-      if (!engine) {
-        // Engine not registered; create() should throw "Unknown local engine"
-        // But first let's try a non-existent engine
-        if (config && config.models) {
-          (config.models as any)['local-no-engine'] = {
-            provider: 'local',
-            model: 'test-model',
-            engine: 'nonexistent-engine',
-          };
-        }
-
-        await assert.rejects(
-          () => LLMFactory.create('local-no-engine'),
-          /Unknown local engine/
-        );
-
-        // Clean up
-        if (config && config.models) {
-          delete (config.models as any)['local-no-engine'];
-          delete (config.models as any)['local-no-baseurl'];
-        }
-      } else {
-        // Engine exists - this would try to actually start it, skip
-        if (config && config.models) {
-          delete (config.models as any)['local-no-baseurl'];
-        }
-      }
-    });
-
-    it('should throw for unknown local engine', async () => {
-      const { getLLMConfig } = await import('../../lib/llm/llm-config.ts');
-      const config = getLLMConfig();
-
-      if (config && config.models) {
-        (config.models as any)['local-bad-engine'] = {
-          provider: 'local',
-          model: 'test-model',
-          engine: 'does-not-exist-engine',
-        };
-      }
-
-      try {
-        await assert.rejects(
-          () => LLMFactory.create('local-bad-engine'),
-          /Unknown local engine/
-        );
-      } finally {
-        if (config && config.models) {
-          delete (config.models as any)['local-bad-engine'];
-        }
-      }
-    });
-  });
 });

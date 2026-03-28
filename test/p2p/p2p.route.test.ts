@@ -124,7 +124,7 @@ describe('P2P Routes', () => {
       ];
 
       const { app } = await createTestApp(p2pRoutes, '/api/p2p', {
-        _p2pManager: { getRemoteLLMs: () => llms },
+        _p2pManager: { getRemoteModels: () => llms },
       });
 
       const res = await app.inject({ method: 'GET', url: '/api/p2p/llms' });
@@ -166,15 +166,15 @@ describe('P2P Agent Schema', () => {
     assert.equal(parsed.p2p, true);
   });
 
-  it('should accept p2p: { enabled: true }', async () => {
+  it('should accept p2p: { leverage: true, share: true }', async () => {
     const { AgentDefinitionSchema } = await import('../../lib/agents/types.ts');
     const parsed = AgentDefinitionSchema.parse({
       name: 'test',
       description: 'Test agent',
       prompt: { system: 'hello' },
-      p2p: { enabled: true },
+      p2p: { leverage: true, share: true },
     });
-    assert.deepEqual(parsed.p2p, { enabled: true });
+    assert.deepEqual(parsed.p2p, { leverage: true, share: true });
   });
 
   it('should accept missing p2p field', async () => {
@@ -190,10 +190,12 @@ describe('P2P Agent Schema', () => {
   it('resolveP2PConfig should resolve all variants', async () => {
     const { resolveP2PConfig } = await import('../../lib/agents/types.ts');
 
-    assert.deepEqual(resolveP2PConfig(undefined), { enabled: false });
-    assert.deepEqual(resolveP2PConfig(false), { enabled: false });
-    assert.deepEqual(resolveP2PConfig(true), { enabled: true });
-    assert.deepEqual(resolveP2PConfig({ enabled: true }), { enabled: true });
-    assert.deepEqual(resolveP2PConfig({ enabled: false }), { enabled: false });
+    assert.deepEqual(resolveP2PConfig(undefined), { leverage: false, share: false });
+    assert.deepEqual(resolveP2PConfig(false), { leverage: false, share: false });
+    assert.deepEqual(resolveP2PConfig(true), { leverage: 'local-first', share: true });
+    assert.deepEqual(resolveP2PConfig({ leverage: true, share: false }), { leverage: 'local-first', share: false });
+    assert.deepEqual(resolveP2PConfig({ leverage: false, share: true }), { leverage: false, share: true });
+    assert.deepEqual(resolveP2PConfig({ leverage: 'remote-first', share: false }), { leverage: 'remote-first', share: false });
+    assert.deepEqual(resolveP2PConfig({ leverage: 'remote-only', share: false }), { leverage: 'remote-only', share: false });
   });
 });

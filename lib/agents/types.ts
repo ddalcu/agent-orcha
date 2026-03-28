@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AgentLLMRefSchema } from '../llm/types.ts';
+import { AgentModelRefSchema } from '../llm/types.ts';
 import { AgentSkillsConfigSchema } from '../skills/types.ts';
 import { IntegrationSchema } from '../integrations/types.ts';
 import { TriggerSchema } from '../triggers/types.ts';
@@ -8,7 +8,7 @@ export const ToolReferenceSchema = z.union([
   z.string(),
   z.object({
     name: z.string(),
-    source: z.enum(['mcp', 'knowledge', 'builtin', 'custom', 'sandbox', 'project']),
+    source: z.enum(['mcp', 'knowledge', 'builtin', 'custom', 'sandbox', 'project', 'models']),
     config: z.record(z.unknown()).optional(),
   }),
 ]);
@@ -38,17 +38,29 @@ export const AgentPublishConfigSchema = z.union([
 
 export type AgentPublishConfig = z.infer<typeof AgentPublishConfigSchema>;
 
+export const LeverageModeSchema = z.union([
+  z.boolean(),
+  z.enum(['local-first', 'remote-first', 'remote-only']),
+]);
+
+export type LeverageMode = false | 'local-first' | 'remote-first' | 'remote-only';
+
 export const AgentP2PConfigSchema = z.union([
   z.boolean(),
-  z.object({ enabled: z.boolean() }),
+  z.object({
+    leverage: LeverageModeSchema.default(false),
+    share: z.boolean().default(false),
+  }),
 ]);
 
 export type AgentP2PConfig = z.infer<typeof AgentP2PConfigSchema>;
 
-export function resolveP2PConfig(config?: AgentP2PConfig): { enabled: boolean } {
-  if (config === undefined || config === false) return { enabled: false };
-  if (config === true) return { enabled: true };
-  return { enabled: config.enabled };
+export function resolveP2PConfig(config?: AgentP2PConfig): { leverage: LeverageMode; share: boolean } {
+  if (config === undefined || config === false) return { leverage: false, share: false };
+  if (config === true) return { leverage: 'local-first', share: true };
+  const lev = config.leverage;
+  const mode: LeverageMode = lev === true ? 'local-first' : lev === false ? false : lev;
+  return { leverage: mode, share: config.share };
 }
 
 export function resolvePublishConfig(
@@ -63,7 +75,7 @@ export const AgentDefinitionSchema = z.object({
   name: z.string().describe('Unique agent identifier'),
   description: z.string().describe('Human-readable description'),
   version: z.string().default('1.0.0'),
-  llm: AgentLLMRefSchema.default('default'),
+  model: AgentModelRefSchema.default('default'),
   prompt: z.object({
     system: z.string().describe('System prompt for the agent'),
     inputVariables: z.array(z.string()).default([]),

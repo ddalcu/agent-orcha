@@ -20,6 +20,8 @@ Dockerfile.deploy
 .models
 .llama-server
 .mlx-serve
+.sd-cpp
+.generated
 templates/llm.json
 agent-orcha-*.tgz
 .memory

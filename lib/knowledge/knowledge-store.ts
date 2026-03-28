@@ -12,7 +12,8 @@ import { OpenAIEmbeddingsProvider } from '../llm/providers/openai-embeddings.ts'
 import { GeminiEmbeddingsProvider } from '../llm/providers/gemini-embeddings.ts';
 import { getEmbeddingConfig, resolveApiKey } from '../llm/llm-config.ts';
 import { detectProvider } from '../llm/provider-detector.ts';
-import { engineRegistry } from '../local-llm/engine-registry.ts';
+import { OmniEmbeddingsProvider } from '../llm/providers/omni-embeddings.ts';
+import { resolveModelFile } from '../local-llm/resolve-model-path.ts';
 import { DatabaseLoader, WebLoader, TextLoader, JSONLoader, CSVLoader, PDFLoader } from './loaders/index.ts';
 import cron from 'node-cron';
 import { substituteEnvVars } from '../utils/env-substitution.ts';
@@ -238,7 +239,7 @@ export class KnowledgeStore {
 
     try {
       // 1. Create embeddings and test to get dimensions
-      const embeddings = await KnowledgeStore.createEmbeddings(config.embedding);
+      const embeddings = await KnowledgeStore.createEmbeddings(config.embedding, this.workspaceRoot);
       const testEmbedding = await embeddings.embedQuery('dimension test');
       const dimensions = testEmbedding.length;
       logger.info(`Embedding dimensions: ${dimensions}`);
@@ -569,23 +570,25 @@ export class KnowledgeStore {
 
   // --- Static Helpers (reused from old KnowledgeStoreFactory) ---
 
-  static async createEmbeddings(configName: string): Promise<Embeddings> {
+  static async createEmbeddings(configName: string, workspaceRoot?: string): Promise<Embeddings> {
     const embeddingConfig = getEmbeddingConfig(configName);
     const eosToken = embeddingConfig.eosToken;
 
     const provider = detectProvider(embeddingConfig);
     logger.info(`Embedding model: ${embeddingConfig.model} (provider: ${provider})${embeddingConfig.baseUrl ? `, URL: ${embeddingConfig.baseUrl}` : ''}`);
 
-    // Auto-start local embedding server if needed (skip if user provides their own baseUrl)
-    if (provider === 'local' && !embeddingConfig.baseUrl) {
-      const engineName = embeddingConfig.engine ?? 'llama-cpp';
-      const engine = engineRegistry.getEngine(engineName);
-      if (engine) await engine.ensureRunningEmbedding(embeddingConfig.model);
-    }
-
     let baseEmbeddings: Embeddings;
 
     switch (provider) {
+      case 'omni': {
+        // Resolve model path — scan subdirectories in .models/
+        let modelPath = embeddingConfig.model;
+        if (!modelPath.includes('/') && !modelPath.includes('\\') && workspaceRoot) {
+          modelPath = await resolveModelFile(path.join(workspaceRoot, '.models'), modelPath);
+        }
+        baseEmbeddings = new OmniEmbeddingsProvider({ modelPath });
+        break;
+      }
       case 'gemini':
         baseEmbeddings = new GeminiEmbeddingsProvider({
           modelName: embeddingConfig.model,
@@ -597,12 +600,7 @@ export class KnowledgeStore {
       case 'anthropic':
       default: {
         const apiKey = resolveApiKey(provider, embeddingConfig.apiKey);
-        let baseURL = embeddingConfig.baseUrl;
-        if (provider === 'local' && !baseURL) {
-          const engineName = embeddingConfig.engine ?? 'llama-cpp';
-          const engine = engineRegistry.getEngine(engineName);
-          baseURL = (engine?.getEmbeddingBaseUrl() ?? 'http://127.0.0.1:9991') + '/v1';
-        }
+        const baseURL = embeddingConfig.baseUrl;
         baseEmbeddings = new OpenAIEmbeddingsProvider({
           modelName: embeddingConfig.model,
           apiKey,

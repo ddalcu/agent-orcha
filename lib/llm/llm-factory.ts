@@ -1,36 +1,112 @@
 import { OpenAIChatModel } from './providers/openai-chat-model.ts';
 import { AnthropicChatModel } from './providers/anthropic-chat-model.ts';
 import { GeminiChatModel } from './providers/gemini-chat-model.ts';
+import { OmniChatModel } from './providers/omni-chat-model.ts';
 import { P2PChatModel } from '../p2p/p2p-chat-model.ts';
 import type { ChatModel } from '../types/llm-types.ts';
-import { getModelConfig, getLLMConfig, getLLMConfigPath, saveLLMConfig, resolveApiKey, type ModelConfig } from './llm-config.ts';
-import { resolveAgentLLMRef, type AgentLLMRef } from './types.ts';
+import { getModelConfig, listModelConfigs, resolveApiKey, type ModelConfig } from './llm-config.ts';
+import { resolveAgentModelRef, type AgentModelRef } from './types.ts';
 import { detectProvider, type LLMProvider } from './provider-detector.ts';
-import { engineRegistry } from '../local-llm/engine-registry.ts';
 import { logger } from '../logger.ts';
 import type { P2PManager } from '../p2p/p2p-manager.ts';
+import type { LeverageMode } from '../agents/types.ts';
+import { resolveModelFile } from '../local-llm/resolve-model-path.ts';
 
 export class LLMFactory {
   private static instances: Map<string, ChatModel> = new Map();
   private static p2pManager: P2PManager | null = null;
+  private static modelsDir: string | null = null;
 
   static setP2PManager(manager: P2PManager): void {
     this.p2pManager = manager;
   }
 
-  /**
-   * Create an LLM instance from a config name (defined in llm.json)
-   * @param ref - Config name as string, or object with name and optional temperature override
-   */
-  static async create(ref: AgentLLMRef = 'default'): Promise<ChatModel> {
-    const { name, temperature: tempOverride } = resolveAgentLLMRef(ref);
+  static setModelsDir(dir: string): void {
+    this.modelsDir = dir;
+  }
 
-    // Handle P2P LLM references: "p2p" or "p2p:model-name"
-    if (name === 'p2p' || name.startsWith('p2p:')) {
-      return this.createP2P(name, tempOverride);
+  /**
+   * Create an LLM instance from a config name (defined in models.yaml)
+   * @param ref - Config name as string, or object with name and optional temperature override
+   * @param leverage - P2P leverage mode: false (disabled), 'local-first', 'remote-first', or 'remote-only'
+   */
+  static async create(ref: AgentModelRef = 'default', leverage: LeverageMode | boolean = false): Promise<ChatModel> {
+    const resolved = resolveAgentModelRef(ref);
+    const name = resolved.llm;
+    const tempOverride = resolved.temperature;
+
+    // Normalize boolean to LeverageMode
+    const mode: LeverageMode = leverage === true ? 'local-first' : leverage;
+
+    // remote-first: try P2P before local
+    if (mode === 'remote-first' && this.p2pManager) {
+      const remoteModels = this.p2pManager.getRemoteModelsByName(name);
+      if (remoteModels.length > 0) {
+        const match = this.p2pManager.selectBestPeer(remoteModels);
+        logger.info(`[LLMFactory] P2P remote-first: using ${match.model} from ${match.peerName}`);
+        return new P2PChatModel(this.p2pManager, match.peerId, match.name, tempOverride);
+      }
+      logger.info(`[LLMFactory] P2P remote-first: no remote peers for "${name}", falling back to local`);
     }
 
-    const config = getModelConfig(name);
+    // remote-only: only use P2P, no local fallback
+    if (mode === 'remote-only') {
+      if (!this.p2pManager) {
+        throw new Error(`Model "${name}" cannot be resolved: leverage is "remote-only" but P2P is not enabled`);
+      }
+      const remoteModels = this.p2pManager.getRemoteModelsByName(name);
+      if (remoteModels.length > 0) {
+        const match = this.p2pManager.selectBestPeer(remoteModels);
+        logger.info(`[LLMFactory] P2P remote-only: using ${match.model} from ${match.peerName}`);
+        return new P2PChatModel(this.p2pManager, match.peerId, match.name, tempOverride);
+      }
+      const available = this.p2pManager.getRemoteModels().map(m => `${m.model} (${m.peerName})`).join(', ');
+      throw new Error(`Model "${name}" not found on P2P network (remote-only). Available remote: ${available || 'none'}`);
+    }
+
+    // Step 1: Try exact config key match
+    let config: ModelConfig | undefined;
+    try {
+      config = getModelConfig(name);
+    } catch {
+      // Not found by config key — try step 2
+    }
+
+    // Step 2: Search by model string (case-insensitive partial match)
+    if (!config) {
+      const allNames = listModelConfigs();
+      for (const key of allNames) {
+        try {
+          const c = getModelConfig(key);
+          if (c.model.toLowerCase() === name.toLowerCase() ||
+              c.model.toLowerCase().includes(name.toLowerCase())) {
+            config = c;
+            break;
+          }
+        } catch {
+          // skip unreachable configs
+        }
+      }
+    }
+
+    // Step 3: P2P fallback for local-first mode
+    if (!config && mode === 'local-first' && this.p2pManager) {
+      const remoteModels = this.p2pManager.getRemoteModelsByName(name);
+      if (remoteModels.length > 0) {
+        const match = this.p2pManager.selectBestPeer(remoteModels);
+        logger.info(`[LLMFactory] P2P local-first fallback: using ${match.model} from ${match.peerName}`);
+        return new P2PChatModel(this.p2pManager, match.peerId, match.name, tempOverride);
+      }
+    }
+
+    if (!config) {
+      if (mode && this.p2pManager) {
+        const available = this.p2pManager.getRemoteModels().map(m => `${m.model} (${m.peerName})`).join(', ');
+        throw new Error(`Model "${name}" not found locally or on P2P network. Available remote: ${available || 'none'}`);
+      }
+      throw new Error(`Model "${name}" not found in models config`);
+    }
+
     const provider = detectProvider(config);
 
     // Apply temperature override if provided, otherwise use config temperature
@@ -40,31 +116,6 @@ export class LLMFactory {
     const cached = this.instances.get(key);
     if (cached) {
       return cached;
-    }
-
-    // Auto-start local engine if needed (skip if user provides their own baseUrl)
-    if (provider === 'local' && !config.baseUrl) {
-      const engineName = config.engine ?? 'llama-cpp';
-      const engine = engineRegistry.getEngine(engineName);
-      if (!engine) throw new Error(`Unknown local engine: ${engineName}`);
-
-      await engine.ensureRunningChat(config.model, {
-        contextSize: config.contextSize,
-        reasoningBudget: config.reasoningBudget,
-      });
-
-      // Persist auto-detected contextSize to llm.json
-      if (!config.contextSize) {
-        const detectedCtx = engine.getChatStatus().contextSize;
-        if (detectedCtx) {
-          config.contextSize = detectedCtx;
-          const fullConfig = getLLMConfig();
-          const configPath = getLLMConfigPath();
-          if (fullConfig && configPath) {
-            await saveLLMConfig(configPath, fullConfig);
-          }
-        }
-      }
     }
 
     logger.info(`[LLMFactory] Creating LLM: ${name} (provider: ${provider}, model: ${config.model}, temp: ${temperature ?? 'default'})`);
@@ -83,6 +134,9 @@ export class LLMFactory {
       case 'local':
         llm = this.createOpenAI(config, temperature, 'local');
         break;
+      case 'omni':
+        llm = await this.createOmni(config, temperature);
+        break;
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -93,14 +147,8 @@ export class LLMFactory {
 
   private static createOpenAI(config: ModelConfig, temperature?: number, provider: LLMProvider = 'openai'): ChatModel {
     const apiKey = resolveApiKey(provider, config.apiKey);
-    let baseURL = config.baseUrl;
-    let supportsVision = true;
-    if (provider === 'local' && !baseURL) {
-      const engineName = config.engine ?? 'llama-cpp';
-      const engine = engineRegistry.getEngine(engineName);
-      baseURL = (engine?.getChatBaseUrl() ?? 'http://127.0.0.1:9990') + '/v1';
-      supportsVision = engine?.getChatStatus().supportsVision ?? false;
-    }
+    const baseURL = config.baseUrl;
+    const supportsVision = true;
     return new OpenAIChatModel({
       modelName: config.model,
       apiKey,
@@ -138,37 +186,24 @@ export class LLMFactory {
     });
   }
 
-  private static getCacheKey(name: string, temperature: number): string {
-    return `${name}-${temperature}`;
+  private static async createOmni(config: ModelConfig, temperature?: number): Promise<ChatModel> {
+    // Resolve model path: scan subdirectories in .models/
+    let modelPath = config.model;
+    if (!modelPath.includes('/') && !modelPath.includes('\\') && this.modelsDir) {
+      modelPath = await resolveModelFile(this.modelsDir, modelPath);
+    }
+
+    return new OmniChatModel({
+      modelPath,
+      contextSize: config.contextSize,
+      maxTokens: config.maxTokens,
+      thinkingBudget: config.thinkingBudget ?? config.reasoningBudget,
+      ...(temperature !== undefined ? { temperature } : {}),
+    });
   }
 
-  private static createP2P(ref: string, temperature?: number): ChatModel {
-    if (!this.p2pManager) {
-      throw new Error('P2P is not enabled. Set P2P_ENABLED=true to use P2P LLMs.');
-    }
-
-    const remoteLLMs = this.p2pManager.getRemoteLLMs();
-    if (remoteLLMs.length === 0) {
-      throw new Error('No remote P2P LLMs available');
-    }
-
-    if (ref === 'p2p') {
-      // Auto-select first available remote LLM
-      const llm = remoteLLMs[0]!;
-      logger.info(`[LLMFactory] Auto-selected P2P LLM: ${llm.name} from ${llm.peerName}`);
-      return new P2PChatModel(this.p2pManager, llm.peerId, llm.name, temperature);
-    }
-
-    // "p2p:model-name" — find by name or model string
-    const modelRef = ref.slice(4); // strip "p2p:"
-    const match = remoteLLMs.find(l => l.name === modelRef || l.model === modelRef);
-    if (!match) {
-      const available = remoteLLMs.map(l => l.name).join(', ');
-      throw new Error(`P2P LLM "${modelRef}" not found. Available: ${available}`);
-    }
-
-    logger.info(`[LLMFactory] Using P2P LLM: ${match.name} from ${match.peerName}`);
-    return new P2PChatModel(this.p2pManager, match.peerId, match.name, temperature);
+  private static getCacheKey(name: string, temperature: number): string {
+    return `${name}-${temperature}`;
   }
 
   static clearCache(): void {

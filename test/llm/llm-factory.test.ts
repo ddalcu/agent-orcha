@@ -3,14 +3,14 @@ import { strict as assert } from 'node:assert';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { LLMFactory } from '../../lib/llm/llm-factory.ts';
-import { loadLLMConfig } from '../../lib/llm/llm-config.ts';
+import { loadModelsConfig } from '../../lib/llm/llm-config.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturePath = path.join(__dirname, '..', 'fixtures', 'llm.json');
+const fixturePath = path.join(__dirname, '..', 'fixtures', 'models.yaml');
 
 describe('LLMFactory', () => {
   before(async () => {
-    await loadLLMConfig(fixturePath);
+    await loadModelsConfig(fixturePath);
   });
 
   afterEach(() => {

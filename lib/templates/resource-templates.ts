@@ -6,7 +6,7 @@ const agentExample = (name: string) => ({
   name,
   description: 'TODO - describe what this agent does',
   version: '1.0.0',
-  llm: {
+  model: {
     name: 'default',
     temperature: 0.3,
   },

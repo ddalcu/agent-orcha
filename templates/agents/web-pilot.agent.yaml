@@ -2,8 +2,8 @@ name: web-pilot
 description: Browser agent — navigates, fills forms, clicks through pages using observe-act loop
 version: "1.0.0"
 
-llm:
-  name: default
+model:
+  llm: default
 
 prompt:
   system: |

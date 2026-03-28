@@ -26,6 +26,15 @@
     name: string;
   }
 
+  interface ModelOutputEntry {
+    task: string;
+    input?: string;
+    image?: string;
+    audio?: string;
+    video?: string;
+    error?: string;
+  }
+
   interface ChatBubble {
     type: 'user' | 'response' | 'system' | 'session-reset';
     id: string;
@@ -33,6 +42,7 @@
     attachments?: Attachment[] | null;
     tools: ToolEntry[];
     thinkingSections: ThinkingEntry[];
+    modelOutputs: ModelOutputEntry[];
     isLoading: boolean;
     error: string;
     stats: StatsData | null;
@@ -348,6 +358,43 @@
   let newSessionModalOpen = $state(false);
   let newAgentModalOpen = $state(false);
 
+  // Input context menu
+  let inputMenuOpen = $state(false);
+
+  // Prebuilt voices
+  interface VoiceEntry { filename: string; name: string; size: number }
+  let availableVoices = $state<VoiceEntry[]>([]);
+  let voiceLoading = $state<string | null>(null);
+
+  // Loop dialog
+  let loopDialogOpen = $state(false);
+  let loopDialogAmount = $state(5);
+  let loopDialogUnit = $state<'m' | 'h'>('m');
+  let loopDialogPrompt = $state('');
+
+  // Video settings dialog
+  interface VideoSettingsData {
+    totalFrames: number;
+    width: number;
+    height: number;
+    cfgScale: number;
+    steps: number;
+    seed: string;
+    fps: number;
+    enabled: boolean;
+  }
+  let videoSettingsOpen = $state(false);
+  let videoSettings = $state<VideoSettingsData>({
+    totalFrames: 24,
+    width: 512,
+    height: 512,
+    cfgScale: 7,
+    steps: 20,
+    seed: '',
+    fps: 12,
+    enabled: false,
+  });
+
   function createSession(type: string, name: string) {
     const session = sessionStore.create({
       agentName: type === 'agent' ? name : null,
@@ -388,6 +435,7 @@
       attachments,
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: false,
       error: '',
       stats: null,
@@ -405,6 +453,7 @@
       content: '',
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: true,
       error: '',
       stats: null,
@@ -422,6 +471,7 @@
       content,
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: false,
       error: '',
       stats: null,
@@ -471,6 +521,7 @@
       content: text,
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: false,
       error: '',
       stats: null,
@@ -488,6 +539,7 @@
       content: '',
       tools: [],
       thinkingSections: [],
+      modelOutputs: [],
       isLoading: false,
       error: '',
       stats: null,
@@ -730,7 +782,23 @@
         const agent = appStore.selectedAgent!;
         const inputVars = agent.inputVariables || ['message'];
         const inputObj: Record<string, unknown> = {};
-        inputObj[inputVars[0] || 'message'] = message;
+
+        // Inject video settings context if enabled
+        let finalMessage = message;
+        if (videoSettings.enabled && hasVideoTool) {
+          const vs = {
+            totalFrames: videoSettings.totalFrames,
+            width: videoSettings.width,
+            height: videoSettings.height,
+            cfgScale: videoSettings.cfgScale,
+            steps: videoSettings.steps,
+            fps: videoSettings.fps,
+            ...(videoSettings.seed ? { seed: parseInt(videoSettings.seed) } : {}),
+          };
+          finalMessage = `[video_settings: ${JSON.stringify(vs)}]\n\n${message}`;
+        }
+
+        inputObj[inputVars[0] || 'message'] = finalMessage;
         if (attachments) inputObj.attachments = attachments;
         response = await api.streamAgent(agent.name, inputObj, activeId, { signal: abortController.signal });
       } else {
@@ -896,6 +964,25 @@
             appendCanvas(parsed.content);
           } catch { /* ignore */ }
         }
+      }
+
+      // Intercept model tools (image, TTS, video generation)
+      if ((event.tool === 'generate_image' || event.tool === 'generate_tts' || event.tool === 'generate_video') && typeof event.output === 'string') {
+        try {
+          const parsed = JSON.parse(event.output);
+          if (parsed.__modelTask) {
+            updateBubble(responseId, b => {
+              b.modelOutputs = [...b.modelOutputs, {
+                task: parsed.task,
+                input: parsed.input,
+                image: parsed.image,
+                audio: parsed.audio,
+                video: parsed.video,
+                error: parsed.error,
+              }];
+            });
+          }
+        } catch (err) { console.error('[AgentsPage] Failed to parse model output:', err); }
       }
 
       updateBubble(responseId, b => {
@@ -1577,6 +1664,168 @@
     }
   }
 
+  // --- Input context menu ---
+
+  const FILE_ACCEPT = "image/*,audio/*,.wav,.mp3,.ogg,.flac,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.go,.rs,.rb,.php,.sql,.sh,.log,.ini,.toml,.env";
+
+  interface InputMenuItem {
+    id: string;
+    icon: string;
+    label: string;
+    description?: string;
+    accept?: string;
+    dividerBefore?: boolean;
+  }
+
+  const inputMenuItems = $derived.by((): InputMenuItem[] => {
+    const items: InputMenuItem[] = [];
+    const tools = toolNames;
+    const hasTts = tools.some(t => t === 'builtin:generate_tts' || t.startsWith('models:tts'));
+    const hasImageGen = tools.some(t => t === 'builtin:generate_image' || t.startsWith('models:image'));
+
+    if (hasTts) {
+      items.push({
+        id: 'upload-voice',
+        icon: 'fa-microphone',
+        label: 'Upload voice sample',
+        description: 'WAV file, 5\u201310s clear speech',
+        accept: 'audio/*,.wav,.mp3,.ogg,.flac',
+      });
+    }
+
+    items.push({
+      id: 'upload-image',
+      icon: 'fa-image',
+      label: 'Upload image',
+      description: hasImageGen ? 'Reference for generation' : 'Vision analysis',
+      accept: 'image/*',
+    });
+
+    items.push({
+      id: 'upload-file',
+      icon: 'fa-paperclip',
+      label: 'Upload file',
+      description: 'PDF, docs, code',
+      accept: FILE_ACCEPT,
+    });
+
+    if (hasVideoTool) {
+      items.push({
+        id: 'video-settings',
+        icon: 'fa-film',
+        label: 'Video settings',
+        description: videoSettings.enabled ? `${videoSettings.totalFrames}f, ${videoSettings.width}x${videoSettings.height}` : 'Configure generation',
+        dividerBefore: true,
+      });
+    }
+
+    items.push({
+      id: loopInterval ? 'stop-loop' : 'start-loop',
+      icon: 'fa-rotate',
+      label: loopInterval ? 'Stop loop' : 'Start loop',
+      description: loopInterval ? `Every ${loopLabel}` : 'Run a prompt on a timer',
+      dividerBefore: !hasVideoTool,
+    });
+
+    return items;
+  });
+
+  function toggleInputMenu() {
+    if (!hasActiveSession) {
+      showNewSessionModal();
+      return;
+    }
+    inputMenuOpen = !inputMenuOpen;
+    if (inputMenuOpen && hasTts && availableVoices.length === 0) {
+      loadVoices();
+    }
+  }
+
+  function handleMenuSelect(id: string) {
+    inputMenuOpen = false;
+
+    if (id === 'start-loop') {
+      loopDialogOpen = true;
+      return;
+    }
+    if (id === 'stop-loop') {
+      stopLoop();
+      return;
+    }
+    if (id === 'video-settings') {
+      videoSettingsOpen = true;
+      return;
+    }
+    if (id.startsWith('video-preset-')) {
+      return; // handled in applyVideoPreset
+    }
+
+    const item = inputMenuItems.find(i => i.id === id);
+    if (item?.accept) {
+      chatInputRef?.triggerFileSelect(item.accept);
+    }
+  }
+
+  function handleStartLoopDialog() {
+    if (!loopDialogPrompt.trim() || loopDialogAmount < 1) return;
+    const ms = loopDialogUnit === 'h' ? loopDialogAmount * 3600000 : loopDialogAmount * 60000;
+    const label = `${loopDialogAmount}${loopDialogUnit}`;
+    loopDialogOpen = false;
+    startLoop(ms, loopDialogPrompt.trim(), label);
+    loopDialogPrompt = '';
+    loopDialogAmount = 5;
+    loopDialogUnit = 'm';
+  }
+
+  // --- Video presets ---
+
+  const videoPresets = [
+    { id: 'quick', label: 'Quick', icon: 'fa-bolt', frames: 12, w: 256, h: 256, steps: 10, cfg: 7, fps: 8 },
+    { id: 'standard', label: 'Standard', icon: 'fa-circle-play', frames: 24, w: 512, h: 512, steps: 20, cfg: 7, fps: 12 },
+    { id: 'quality', label: 'Quality', icon: 'fa-star', frames: 48, w: 768, h: 768, steps: 30, cfg: 7, fps: 24 },
+    { id: 'cinematic', label: 'Cinematic', icon: 'fa-clapperboard', frames: 72, w: 1024, h: 576, steps: 40, cfg: 5, fps: 24 },
+  ];
+
+  function applyVideoPreset(presetId: string) {
+    const preset = videoPresets.find(p => p.id === presetId);
+    if (!preset) return;
+    videoSettings.totalFrames = preset.frames;
+    videoSettings.width = preset.w;
+    videoSettings.height = preset.h;
+    videoSettings.steps = preset.steps;
+    videoSettings.cfgScale = preset.cfg;
+    videoSettings.fps = preset.fps;
+    videoSettings.enabled = true;
+  }
+
+  // --- Prebuilt voices ---
+
+  async function loadVoices() {
+    try {
+      availableVoices = await api.getVoices();
+    } catch {
+      availableVoices = [];
+    }
+  }
+
+  async function selectVoice(voice: VoiceEntry) {
+    inputMenuOpen = false;
+    voiceLoading = voice.name;
+    try {
+      const data = await api.getVoiceData(voice.filename);
+      pendingAttachments = [...pendingAttachments, {
+        data: data.data,
+        mediaType: data.mediaType,
+        name: data.name,
+      }];
+      chatInputRef?.focus();
+    } catch (e) {
+      console.error('Failed to load voice:', e);
+    } finally {
+      voiceLoading = null;
+    }
+  }
+
   const hasArchitect = $derived(appStore.agents.some(a => a.name === 'architect'));
 
   // --- Session sidebar info ---
@@ -1623,6 +1872,9 @@
     return currentAgent.tools.map(t => typeof t === 'string' ? t : t.name);
   });
 
+  const hasTts = $derived(toolNames.some(t => t === 'builtin:generate_tts' || t.startsWith('models:tts')));
+  const hasVideoTool = $derived(toolNames.some(t => t.includes('generate_video')));
+
   const currentWorkflow = $derived.by(() => {
     if (!headerSession || headerSession.agentType !== 'workflow') return null;
     return appStore.workflows.find(w => w.name === headerSession!.workflowName) || null;
@@ -1653,10 +1905,12 @@
         <div class="text-muted text-sm text-center py-8">No conversations yet</div>
       {:else}
         {#each sessions as s}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
             class="session-item"
             class:active={s.id === activeSessionId}
+            role="button"
+            tabindex="0"
             onclick={(e: MouseEvent) => {
               if ((e.target as HTMLElement).closest('.session-delete-btn')) return;
               switchToSession(s.id);
@@ -1710,6 +1964,15 @@
               <span class="badge badge-pill badge-amber" title="Persistent memory enabled">
                 <i class="fas fa-brain text-2xs"></i> Memory
               </span>
+            {/if}
+            {#if videoSettings.enabled && hasVideoTool}
+              <button
+                class="badge badge-pill badge-purple cursor-pointer"
+                title="Video settings active — click to edit"
+                onclick={() => { videoSettingsOpen = true; }}
+              >
+                <i class="fas fa-film text-2xs"></i> {videoSettings.totalFrames}f {videoSettings.width}x{videoSettings.height}
+              </button>
             {/if}
             {#if toolNames.length > 0}
               <span class="tools-badge-wrapper">
@@ -1793,6 +2056,7 @@
                   content={bubble.content}
                   tools={bubble.tools}
                   thinkingSections={bubble.thinkingSections}
+                  modelOutputs={bubble.modelOutputs}
                   isLoading={bubble.isLoading}
                   error={bubble.error}
                 >
@@ -1841,6 +2105,46 @@
 
     <!-- Input Area -->
     <div class="chat-input-area">
+      {#if inputMenuOpen}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="input-menu-backdrop" role="button" tabindex="-1" onclick={() => { inputMenuOpen = false; }}></div>
+        <div class="input-menu">
+          {#each inputMenuItems as item}
+            {#if item.dividerBefore}
+              <div class="input-menu-divider"></div>
+            {/if}
+            <button class="input-menu-item" onclick={() => handleMenuSelect(item.id)}>
+              <i class="fas {item.icon} input-menu-icon"></i>
+              <div class="input-menu-text">
+                <span class="input-menu-label">{item.label}</span>
+                {#if item.description}
+                  <span class="input-menu-desc">{item.description}</span>
+                {/if}
+              </div>
+            </button>
+            {#if item.id === 'upload-voice' && availableVoices.length > 0}
+              <div class="input-menu-voices">
+                {#each availableVoices as voice}
+                  <button
+                    class="voice-chip"
+                    class:loading={voiceLoading === voice.name}
+                    disabled={voiceLoading !== null}
+                    title={voice.filename}
+                    onclick={() => selectVoice(voice)}
+                  >
+                    {#if voiceLoading === voice.name}
+                      <i class="fas fa-spinner fa-spin text-2xs"></i>
+                    {:else}
+                      <i class="fas fa-volume-high text-2xs"></i>
+                    {/if}
+                    {voice.name}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          {/each}
+        </div>
+      {/if}
       <AttachmentPreview attachments={pendingAttachments} onremove={removeAttachment} />
       <ChatInput
         bind:this={chatInputRef}
@@ -1849,6 +2153,7 @@
         placeholder="Ask anything"
         onsubmit={handleSubmit}
         onfileselect={handleFileAttach}
+        onplusclick={toggleInputMenu}
         onclick={handleInputClick}
       />
     </div>
@@ -1857,8 +2162,8 @@
 
 <!-- New Session Modal -->
 {#if newSessionModalOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
-  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) newSessionModalOpen = false; }} role="dialog">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) newSessionModalOpen = false; }} role="dialog" tabindex="-1">
     <div class="modal-content modal-content-sm">
       <div class="modal-header">
         <h3 class="text-lg font-semibold text-primary">New conversation</h3>
@@ -1918,8 +2223,8 @@
 
 <!-- New Agent Modal -->
 {#if newAgentModalOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
-  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) newAgentModalOpen = false; }} role="dialog">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) newAgentModalOpen = false; }} role="dialog" tabindex="-1">
     <div class="modal-content modal-content-sm">
       <div class="modal-header">
         <h3 class="text-lg font-semibold text-primary">Create a new agent</h3>
@@ -1950,6 +2255,188 @@
           </div>
           <i class="fas fa-chevron-right text-xs text-muted"></i>
         </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Loop Dialog -->
+{#if loopDialogOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) loopDialogOpen = false; }} role="dialog" tabindex="-1">
+    <div class="modal-content loop-dialog">
+      <div class="modal-header">
+        <h3 class="text-lg font-semibold text-primary">Start loop</h3>
+        <button class="modal-close-btn" title="Close" onclick={() => { loopDialogOpen = false; }}>
+          <i class="fas fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-4">
+        <div class="mb-3">
+          <label for="loop-interval" class="text-sm text-muted mb-1 block">Interval</label>
+          <div class="flex items-center gap-2">
+            <input
+              id="loop-interval"
+              type="number"
+              min="1"
+              max="999"
+              bind:value={loopDialogAmount}
+              class="input loop-interval-num"
+            />
+            <select bind:value={loopDialogUnit} class="select loop-interval-unit">
+              <option value="m">minutes</option>
+              <option value="h">hours</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-4">
+          <label for="loop-prompt" class="text-sm text-muted mb-1 block">Prompt</label>
+          <textarea
+            id="loop-prompt"
+            bind:value={loopDialogPrompt}
+            rows="3"
+            class="textarea loop-prompt-textarea"
+            placeholder="What should run each cycle?"
+            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleStartLoopDialog(); }}
+          ></textarea>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button class="btn btn-ghost" onclick={() => { loopDialogOpen = false; }}>Cancel</button>
+          <button class="btn btn-accent" disabled={!loopDialogPrompt.trim() || loopDialogAmount < 1} onclick={handleStartLoopDialog}>
+            <i class="fas fa-play text-xs"></i> Start
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if videoSettingsOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) videoSettingsOpen = false; }} role="dialog" tabindex="-1">
+    <div class="modal-content video-settings-dialog">
+      <div class="modal-header">
+        <h3 class="text-lg font-semibold text-primary">
+          <i class="fas fa-film text-accent mr-2"></i>Video Settings
+        </h3>
+        <button class="modal-close-btn" title="Close" onclick={() => { videoSettingsOpen = false; }}>
+          <i class="fas fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-4">
+        <div class="video-presets mb-3">
+          {#each videoPresets as preset}
+            <button class="video-preset-btn" onclick={() => applyVideoPreset(preset.id)} title="{preset.frames}f, {preset.w}x{preset.h}, {preset.steps} steps">
+              <i class="fas {preset.icon}"></i>
+              <span>{preset.label}</span>
+            </button>
+          {/each}
+        </div>
+        <div class="video-settings-grid">
+          <div class="video-setting-group">
+            <label for="vs-frames" class="text-sm text-muted mb-1 block">Total Frames</label>
+            <input
+              id="vs-frames"
+              type="number"
+              min="1"
+              max="300"
+              bind:value={videoSettings.totalFrames}
+              class="input"
+            />
+            <span class="video-setting-hint">{(videoSettings.totalFrames / videoSettings.fps).toFixed(1)}s at {videoSettings.fps}fps</span>
+          </div>
+
+          <div class="video-setting-group">
+            <label for="vs-fps" class="text-sm text-muted mb-1 block">FPS</label>
+            <input
+              id="vs-fps"
+              type="number"
+              min="1"
+              max="60"
+              bind:value={videoSettings.fps}
+              class="input"
+            />
+          </div>
+
+          <div class="video-setting-group">
+            <label for="vs-width" class="text-sm text-muted mb-1 block">Width</label>
+            <input
+              id="vs-width"
+              type="number"
+              min="64"
+              max="2048"
+              step="64"
+              bind:value={videoSettings.width}
+              class="input"
+            />
+          </div>
+
+          <div class="video-setting-group">
+            <label for="vs-height" class="text-sm text-muted mb-1 block">Height</label>
+            <input
+              id="vs-height"
+              type="number"
+              min="64"
+              max="2048"
+              step="64"
+              bind:value={videoSettings.height}
+              class="input"
+            />
+          </div>
+
+          <div class="video-setting-group">
+            <label for="vs-cfg" class="text-sm text-muted mb-1 block">CFG Scale</label>
+            <input
+              id="vs-cfg"
+              type="number"
+              min="1"
+              max="30"
+              step="0.5"
+              bind:value={videoSettings.cfgScale}
+              class="input"
+            />
+          </div>
+
+          <div class="video-setting-group">
+            <label for="vs-steps" class="text-sm text-muted mb-1 block">Steps</label>
+            <input
+              id="vs-steps"
+              type="number"
+              min="1"
+              max="100"
+              bind:value={videoSettings.steps}
+              class="input"
+            />
+          </div>
+
+          <div class="video-setting-group video-setting-full">
+            <label for="vs-seed" class="text-sm text-muted mb-1 block">Seed (optional)</label>
+            <input
+              id="vs-seed"
+              type="text"
+              placeholder="Random"
+              bind:value={videoSettings.seed}
+              class="input"
+            />
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center mt-4 pt-3 border-t border-default">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              bind:checked={videoSettings.enabled}
+              class="video-toggle"
+            />
+            <span class="text-sm text-muted">Include settings with messages</span>
+          </label>
+          <div class="flex gap-2">
+            <button class="btn btn-ghost" onclick={() => { videoSettingsOpen = false; }}>Cancel</button>
+            <button class="btn btn-accent" onclick={() => { videoSettings.enabled = true; videoSettingsOpen = false; }}>
+              <i class="fas fa-check text-xs"></i> Apply
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

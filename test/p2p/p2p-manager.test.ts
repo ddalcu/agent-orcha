@@ -8,7 +8,7 @@ function makeAgent(name: string, p2p: boolean): AgentDefinition {
     name,
     description: `${name} description`,
     version: '1.0.0',
-    llm: 'default',
+    model: 'default',
     prompt: { system: 'You are helpful', inputVariables: ['input'] },
     tools: [],
     p2p,
@@ -139,10 +139,10 @@ describe('P2PManager', () => {
     });
   });
 
-  describe('remote LLMs', () => {
+  describe('remote models', () => {
     it('should return empty array when no peers', () => {
       const mgr = new P2PManager(createMockOrchestrator([agentA]));
-      assert.deepEqual(mgr.getRemoteLLMs(), []);
+      assert.deepEqual(mgr.getRemoteModels(), []);
     });
   });
 
@@ -158,11 +158,11 @@ describe('P2PManager', () => {
       );
     });
 
-    it('should error when invoking LLM on non-existent peer', async () => {
+    it('should error when invoking model on non-existent peer', async () => {
       const mgr = new P2PManager(createMockOrchestrator([agentA]));
       await assert.rejects(
         async () => {
-          const gen = mgr.invokeRemoteLLM('fake-peer-id', 'model', []);
+          const gen = mgr.invokeRemoteModelStream('fake-peer-id', 'model', {});
           await gen.next();
         },
         { message: /not connected/ },

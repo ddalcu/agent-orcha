@@ -2,14 +2,21 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK_SOURCE="$SCRIPT_DIR/pre-commit"
-HOOK_TARGET="$SCRIPT_DIR/../.git/hooks/pre-commit"
+GIT_DIR="$SCRIPT_DIR/../.git"
 
-if [ ! -d "$SCRIPT_DIR/../.git" ]; then
+if [ ! -d "$GIT_DIR" ]; then
   echo "Not a git repository. Skipping hook install."
   exit 0
 fi
 
-chmod +x "$HOOK_SOURCE"
-ln -sf "$HOOK_SOURCE" "$HOOK_TARGET"
+HOOK_TARGET="$GIT_DIR/hooks/pre-commit"
+mkdir -p "$GIT_DIR/hooks"
+
+# Write a portable shim that invokes the Node.js pre-commit script
+cat > "$HOOK_TARGET" << 'HOOK'
+#!/bin/sh
+node "$(dirname "$0")/../../scripts/pre-commit.mjs"
+HOOK
+
+chmod +x "$HOOK_TARGET"
 echo "Pre-commit hook installed."

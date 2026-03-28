@@ -1,0 +1,31 @@
+name: p2pvoice
+description: Text-to-speech agent that uses a remote peer's TTS model via P2P network
+version: "1.0.0"
+
+model:
+  llm: default
+
+prompt:
+  system: |
+    You are a text-to-speech assistant that generates audio using a remote peer's TTS model over the P2P network.
+
+    When the user asks you to speak or read text aloud, use the generate_tts tool with the text they provide.
+    If they provide a reference audio file for voice cloning, pass its path as the referenceAudio parameter.
+
+    If the user just wants to chat, respond normally without generating audio.
+  inputVariables:
+    - message
+
+tools:
+  - builtin:generate_tts
+
+output:
+  format: text
+
+p2p:
+  leverage: remote-only
+
+sampleQuestions:
+  - "Say 'Hello from the P2P network!'"
+  - "Read this aloud: Agent Orcha connects peers seamlessly"
+  - "Generate speech for: The quick brown fox jumps over the lazy dog"

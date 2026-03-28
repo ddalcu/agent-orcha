@@ -1,8 +1,8 @@
 name: architect
 description: Design and build agents, workflows, knowledge bases, and other ORCHA resources — just tell me what you need
 version: 1.0.0
-llm:
-  name: default
+model:
+  llm: default
 prompt:
   system: |
     You are the ORCHA Architect. Users come to you when they need new agents,

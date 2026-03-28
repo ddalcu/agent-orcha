@@ -1,16 +1,23 @@
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { createReActAgent } from './react-loop.ts';
 import { humanMessage, aiMessage, contentToText } from '../types/llm-types.ts';
 import type { ChatModel, BaseMessage, MessageContent, ContentPart } from '../types/llm-types.ts';
 import type { StructuredTool } from '../types/llm-types.ts';
 import type { AgentDefinition, AgentInstance, AgentResult, AgentInvokeOptions, AgentMemoryConfig } from './types.ts';
+import { resolveP2PConfig } from './types.ts';
 import { LLMFactory } from '../llm/llm-factory.ts';
+import { resolveAgentModelRef } from '../llm/types.ts';
 import type { ToolRegistry } from '../tools/tool-registry.ts';
 import type { ConversationStore } from '../memory/conversation-store.ts';
 import type { SkillLoader } from '../skills/skill-loader.ts';
 import type { MemoryManager } from '../memory/memory-manager.ts';
 import type { IntegrationAccessor } from '../integrations/types.ts';
+import type { P2PManager } from '../p2p/p2p-manager.ts';
 import { createMemorySaveTool } from '../tools/built-in/memory-save.tool.ts';
 import { createIntegrationTools } from '../tools/built-in/integration-tools.ts';
+import { buildModelTools } from '../tools/built-in/model-tool-factory.ts';
+import { listImageConfigs, listTtsConfigs } from '../llm/llm-config.ts';
 import { StructuredOutputWrapper } from './structured-output-wrapper.ts';
 import { logLLMCallStart, logLLMCallEnd } from '../llm/llm-call-logger.ts';
 import { extractDocumentText } from '../utils/document-extract.ts';
@@ -28,10 +35,13 @@ export class AgentExecutor {
   private skillLoader?: SkillLoader;
   private memoryManager?: MemoryManager;
   private integrations?: IntegrationAccessor;
+  private workspaceRoot: string;
+  p2pManager?: P2PManager;
 
-  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, skillLoader?: SkillLoader, memoryManager?: MemoryManager, integrations?: IntegrationAccessor) {
+  constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, workspaceRoot: string, skillLoader?: SkillLoader, memoryManager?: MemoryManager, integrations?: IntegrationAccessor) {
     this.toolRegistry = toolRegistry;
     this.conversationStore = conversationStore;
+    this.workspaceRoot = workspaceRoot;
     this.skillLoader = skillLoader;
     this.memoryManager = memoryManager;
     this.integrations = integrations;
@@ -68,12 +78,33 @@ export class AgentExecutor {
       };
     }
 
-    let llm = await LLMFactory.create(augmentedDefinition.llm);
+    const modelRef = resolveAgentModelRef(augmentedDefinition.model);
+    const { leverage } = resolveP2PConfig(definition.p2p);
+    // For chat LLM, only use P2P as a fallback (local-first). The remote-first/remote-only
+    // modes are for model tools (TTS, image, video). Explicit P2P chat uses model: p2p.
+    const llmLeverage = leverage === 'local-first' ? 'local-first' : false;
+    let llm = await LLMFactory.create(
+      modelRef.temperature !== undefined ? { llm: modelRef.llm, temperature: modelRef.temperature } : modelRef.llm,
+      llmLeverage,
+    );
 
     // Wrap LLM with structured output if configured
     llm = StructuredOutputWrapper.wrapLLM(llm, augmentedDefinition.output);
 
     const tools = await this.toolRegistry.resolveTools(augmentedDefinition.tools);
+
+    // Override model tools with per-agent leverage mode if remote-first or remote-only
+    if ((leverage === 'remote-first' || leverage === 'remote-only') && this.p2pManager) {
+      const agentP2PDeps = { manager: this.p2pManager, leverage };
+      const overrides = buildModelTools(listImageConfigs(), listTtsConfigs(), agentP2PDeps);
+      for (let i = 0; i < tools.length; i++) {
+        if (tools[i]!.name === 'generate_image' && overrides.image) {
+          tools[i] = overrides.image;
+        } else if (tools[i]!.name === 'generate_tts' && overrides.tts) {
+          tools[i] = overrides.tts;
+        }
+      }
+    }
 
     // Auto-inject memory tool if configured
     if (memoryConfig && this.memoryManager) {
@@ -367,6 +398,18 @@ export class AgentExecutor {
 
       if (att.mediaType.startsWith('image/')) {
         parts.push({ type: 'image', data: att.data, mediaType: att.mediaType });
+      } else if (att.mediaType.startsWith('audio/')) {
+        // Save audio to disk so tools (like TTS voice cloning) can reference it by path
+        try {
+          const generatedDir = path.join(this.workspaceRoot, '.generated');
+          await fs.mkdir(generatedDir, { recursive: true });
+          const fileName = `ref_${Date.now()}_${att.name || 'audio.wav'}`;
+          const filePath = path.join(generatedDir, fileName);
+          await fs.writeFile(filePath, Buffer.from(att.data, 'base64'));
+          parts.push({ type: 'text', text: `[Uploaded audio file saved at: ${filePath}]\nUse this as referenceAudio path for voice cloning.` });
+        } catch (err: any) {
+          parts.push({ type: 'text', text: `[Failed to save audio ${att.name ?? 'attachment'}: ${err.message}]` });
+        }
       } else {
         try {
           const doc = await extractDocumentText(att.data, att.mediaType, att.name);

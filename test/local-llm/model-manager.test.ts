@@ -33,14 +33,17 @@ async function createGgufFile(
   }
 }
 
-/** Create an MLX model directory with config.json */
-async function createMlxModel(
+/** Create a directory-based model with .meta.json */
+async function createDirModel(
   dirName: string,
   opts?: { repo?: string; downloadedAt?: string; downloading?: boolean; fileContents?: Record<string, string> },
 ) {
   const dirPath = path.join(MODELS_DIR, dirName);
   await fs.mkdir(dirPath, { recursive: true });
-  await fs.writeFile(path.join(dirPath, 'config.json'), '{}');
+  const meta: Record<string, string> = {};
+  if (opts?.repo) meta.repo = opts.repo;
+  if (opts?.downloadedAt) meta.downloadedAt = opts.downloadedAt;
+  await fs.writeFile(path.join(dirPath, '.meta.json'), JSON.stringify(meta, null, 2));
 
   if (opts?.fileContents) {
     for (const [name, content] of Object.entries(opts.fileContents)) {
@@ -50,13 +53,6 @@ async function createMlxModel(
 
   if (opts?.downloading) {
     await fs.writeFile(path.join(dirPath, '.downloading'), '');
-  }
-
-  if (opts?.repo || opts?.downloadedAt) {
-    const meta: Record<string, string> = {};
-    if (opts.repo) meta.repo = opts.repo;
-    if (opts.downloadedAt) meta.downloadedAt = opts.downloadedAt;
-    await fs.writeFile(path.join(dirPath, '.meta.json'), JSON.stringify(meta, null, 2));
   }
 }
 
@@ -112,7 +108,6 @@ describe('ModelManager', () => {
       assert.equal(models.length, 1);
       assert.equal(models[0].id, 'test-model');
       assert.equal(models[0].fileName, 'test-model.gguf');
-      assert.equal(models[0].type, 'gguf');
       assert.equal(models[0].repo, 'user/test-model');
       assert.equal(models[0].downloadedAt, '2024-01-01T00:00:00.000Z');
       assert.equal(models[0].sizeBytes, 100);
@@ -127,8 +122,8 @@ describe('ModelManager', () => {
       assert.equal(models[0].fileName, 'test-model.gguf');
     });
 
-    it('lists MLX model directories', async () => {
-      await createMlxModel('Qwen-4bit', {
+    it('lists directory-based models', async () => {
+      await createDirModel('Qwen-4bit', {
         repo: 'mlx-community/Qwen-4bit',
         downloadedAt: '2024-06-01T00:00:00.000Z',
         fileContents: { 'weights.safetensors': 'data' },
@@ -137,19 +132,18 @@ describe('ModelManager', () => {
       const models = await manager.listModels();
       assert.equal(models.length, 1);
       assert.equal(models[0].id, 'Qwen-4bit');
-      assert.equal(models[0].type, 'mlx');
       assert.equal(models[0].repo, 'mlx-community/Qwen-4bit');
     });
 
-    it('skips MLX directories with .downloading marker', async () => {
-      await createMlxModel('incomplete-model', { downloading: true });
+    it('skips directory models with .downloading marker', async () => {
+      await createDirModel('incomplete-model', { downloading: true });
 
       const models = await manager.listModels();
       assert.equal(models.length, 0);
     });
 
-    it('skips directories without config.json', async () => {
-      // Create a plain directory with no config.json
+    it('skips directories without .meta.json', async () => {
+      // Create a plain directory with no .meta.json
       await fs.mkdir(path.join(MODELS_DIR, 'random-dir'), { recursive: true });
       await fs.writeFile(path.join(MODELS_DIR, 'random-dir', 'somefile.txt'), 'data');
 
@@ -167,14 +161,14 @@ describe('ModelManager', () => {
       assert.ok(!isNaN(Date.parse(models[0].downloadedAt)));
     });
 
-    it('lists both GGUF and MLX models together', async () => {
+    it('lists both GGUF and directory-based models together', async () => {
       await createGgufFile('model-a.gguf', { repo: 'user/a' });
-      await createMlxModel('model-b', { repo: 'user/b' });
+      await createDirModel('model-b', { repo: 'user/b' });
 
       const models = await manager.listModels();
       assert.equal(models.length, 2);
-      const types = models.map(m => m.type).sort();
-      assert.deepEqual(types, ['gguf', 'mlx']);
+      const ids = models.map(m => m.id).sort();
+      assert.deepEqual(ids, ['model-a', 'model-b']);
     });
 
     it('skips non-gguf files', async () => {
@@ -195,7 +189,6 @@ describe('ModelManager', () => {
       const model = await manager.getModel('my-model');
       assert.ok(model);
       assert.equal(model.id, 'my-model');
-      assert.equal(model.type, 'gguf');
     });
 
     it('returns null when model is not found', async () => {
@@ -212,7 +205,6 @@ describe('ModelManager', () => {
 
       const result = await manager.findModelFile('some-model');
       assert.ok(result);
-      assert.equal(result.type, 'gguf');
       assert.ok(result.filePath.endsWith('some-model.gguf'));
     });
 
@@ -221,15 +213,15 @@ describe('ModelManager', () => {
 
       const result = await manager.findModelFile('some-model.gguf');
       assert.ok(result);
-      assert.equal(result.type, 'gguf');
+      assert.ok(result.filePath.endsWith('some-model.gguf'));
     });
 
-    it('finds MLX model by id', async () => {
-      await createMlxModel('mlx-model');
+    it('finds directory-based model by id', async () => {
+      await createDirModel('dir-model');
 
-      const result = await manager.findModelFile('mlx-model');
+      const result = await manager.findModelFile('dir-model');
       assert.ok(result);
-      assert.equal(result.type, 'mlx');
+      assert.ok(result.filePath.endsWith('dir-model'));
     });
 
     it('returns null when model is not found', async () => {
@@ -307,13 +299,13 @@ describe('ModelManager', () => {
       assert.ok(files.includes('other-mmproj-f16.gguf'));
     });
 
-    it('deletes MLX model directory', async () => {
-      await createMlxModel('mlx-to-delete', { repo: 'mlx-community/model' });
+    it('deletes directory-based model', async () => {
+      await createDirModel('dir-to-delete', { repo: 'user/model' });
 
-      await manager.deleteModel('mlx-to-delete');
+      await manager.deleteModel('dir-to-delete');
 
       const files = await fs.readdir(MODELS_DIR);
-      assert.ok(!files.includes('mlx-to-delete'));
+      assert.ok(!files.includes('dir-to-delete'));
     });
 
     it('throws when model is not found', async () => {
@@ -408,18 +400,16 @@ describe('ModelManager', () => {
       assert.equal(result[0].downloadedBytes, 5000);
     });
 
-    it('detects interrupted MLX downloads (.downloading marker in directory)', async () => {
-      await createMlxModel('mlx-partial', {
+    it('reports directory models with .downloading marker as interrupted', async () => {
+      await createDirModel('dir-partial', {
         downloading: true,
-        repo: 'mlx-community/partial',
+        repo: 'user/partial',
         fileContents: { 'weights.safetensors': 'partial-data' },
       });
 
       const result = await manager.getInterruptedDownloads();
       assert.equal(result.length, 1);
-      assert.equal(result[0].fileName, 'mlx-partial');
-      assert.equal(result[0].repo, 'mlx-community/partial');
-      assert.ok(result[0].downloadedBytes > 0);
+      assert.equal(result[0].fileName, 'dir-partial');
     });
 
     it('skips files that are actively being downloaded', async () => {
@@ -440,20 +430,12 @@ describe('ModelManager', () => {
       activeDownloads.clear();
     });
 
-    it('skips MLX directories that are actively being downloaded', async () => {
-      await createMlxModel('mlx-active', { downloading: true });
-
-      const activeDownloads = (manager as any)._activeDownloads as Map<string, any>;
-      activeDownloads.set('mlx:mlx-community/mlx-active', {
-        repo: 'mlx-community/mlx-active',
-        fileName: 'mlx-active',
-        progress: { fileName: 'mlx-active', downloadedBytes: 50, totalBytes: 100, percent: 50 },
-      });
+    it('reports directory models with .downloading marker in interrupted check', async () => {
+      await createDirModel('dir-active', { downloading: true });
 
       const result = await manager.getInterruptedDownloads();
-      assert.equal(result.length, 0);
-
-      activeDownloads.clear();
+      assert.equal(result.length, 1);
+      assert.equal(result[0].fileName, 'dir-active');
     });
 
     it('handles interrupted GGUF download without meta file', async () => {
@@ -486,13 +468,10 @@ describe('ModelManager', () => {
       assert.ok(!files.includes('model.gguf.meta.json'));
     });
 
-    it('deletes interrupted MLX download directory', async () => {
-      await createMlxModel('mlx-interrupted', { downloading: true });
-
-      await manager.deleteInterruptedDownload('mlx-interrupted');
-
-      const files = await fs.readdir(MODELS_DIR);
-      assert.ok(!files.includes('mlx-interrupted'));
+    it('handles non-existent interrupted download gracefully', async () => {
+      await fs.mkdir(MODELS_DIR, { recursive: true });
+      // Should not throw even if no matching .downloading file exists
+      await manager.deleteInterruptedDownload('nonexistent.gguf');
     });
 
     it('handles missing download files gracefully', async () => {
@@ -522,9 +501,11 @@ describe('ModelManager', () => {
     });
 
     it('handles 416 status (range not satisfiable — file already complete)', async () => {
-      await fs.mkdir(MODELS_DIR, { recursive: true });
+      // The new downloadModel creates a subdirectory, so we pre-create the partial there
+      const subDir = path.join(MODELS_DIR, 'complete');
+      await fs.mkdir(subDir, { recursive: true });
       const content = Buffer.alloc(500);
-      await fs.writeFile(path.join(MODELS_DIR, 'complete.gguf.downloading'), content);
+      await fs.writeFile(path.join(subDir, 'complete.gguf.downloading'), content);
 
       const originalFetch = globalThis.fetch;
       globalThis.fetch = mock.fn(async () => ({
@@ -536,12 +517,11 @@ describe('ModelManager', () => {
       try {
         const result = await manager.downloadModel('user/repo', 'complete.gguf');
         assert.equal(result.fileName, 'complete.gguf');
-        assert.equal(result.type, 'gguf');
         assert.equal(result.repo, 'user/repo');
         assert.ok(result.downloadedAt);
 
-        // Verify file was renamed from .downloading to final
-        const files = await fs.readdir(MODELS_DIR);
+        // Verify file was renamed from .downloading to final in subdirectory
+        const files = await fs.readdir(subDir);
         assert.ok(files.includes('complete.gguf'));
         assert.ok(!files.includes('complete.gguf.downloading'));
       } finally {
@@ -620,14 +600,15 @@ describe('ModelManager', () => {
 
         assert.equal(result.fileName, 'dl-test.gguf');
         assert.equal(result.id, 'dl-test');
-        assert.equal(result.type, 'gguf');
         assert.equal(result.repo, 'user/repo');
         assert.ok(result.downloadedAt);
 
-        // Verify the file exists
-        const files = await fs.readdir(MODELS_DIR);
-        assert.ok(files.includes('dl-test.gguf'));
-        assert.ok(!files.includes('dl-test.gguf.downloading'));
+        // Verify the file exists in its subdirectory
+        const dirs = await fs.readdir(MODELS_DIR);
+        assert.ok(dirs.includes('dl-test'), 'subdirectory should exist');
+        const subFiles = await fs.readdir(path.join(MODELS_DIR, 'dl-test'));
+        assert.ok(subFiles.includes('dl-test.gguf'), 'gguf file should be in subdirectory');
+        assert.ok(!subFiles.includes('dl-test.gguf.downloading'));
 
         // Verify progress was reported
         assert.ok(progressUpdates.length > 0);
@@ -685,9 +666,10 @@ describe('ModelManager', () => {
     });
 
     it('resumes download with Range header when partial file exists', async () => {
-      await fs.mkdir(MODELS_DIR, { recursive: true });
-      // Create a partial download file
-      await fs.writeFile(path.join(MODELS_DIR, 'resume.gguf.downloading'), Buffer.alloc(500));
+      // downloadModel creates a subdirectory, so place partial file there
+      const subDir = path.join(MODELS_DIR, 'resume');
+      await fs.mkdir(subDir, { recursive: true });
+      await fs.writeFile(path.join(subDir, 'resume.gguf.downloading'), Buffer.alloc(500));
 
       const originalFetch = globalThis.fetch;
       let capturedHeaders: Record<string, string> = {};
@@ -753,20 +735,20 @@ describe('ModelManager', () => {
     });
   });
 
-  // ─── downloadMlxModel ──────────────────────────────────────────────────
+  // ─── downloadDirectory ─────────────────────────────────────────────────
 
-  describe('downloadMlxModel', () => {
-    it('throws if already downloading the same MLX repo', async () => {
+  describe('downloadDirectory', () => {
+    it('throws if already downloading the same directory', async () => {
       const activeDownloads = (manager as any)._activeDownloads as Map<string, any>;
-      activeDownloads.set('mlx:mlx-community/model', {
-        repo: 'mlx-community/model',
+      activeDownloads.set('dir:user/model', {
+        repo: 'user/model',
         fileName: 'model',
         progress: { fileName: 'model', downloadedBytes: 0, totalBytes: 0, percent: 0 },
       });
 
       await assert.rejects(
-        () => manager.downloadMlxModel('mlx-community/model'),
-        { message: 'Already downloading mlx-community/model' },
+        () => manager.downloadDirectory('user/model'),
+        { message: 'Already downloading dir:user/model' },
       );
 
       activeDownloads.clear();
@@ -781,7 +763,7 @@ describe('ModelManager', () => {
 
       try {
         await assert.rejects(
-          () => manager.downloadMlxModel('mlx-community/bad-model'),
+          () => manager.downloadDirectory('user/bad-model'),
           { message: 'HuggingFace API error: 500' },
         );
       } finally {
@@ -789,7 +771,7 @@ describe('ModelManager', () => {
       }
     });
 
-    it('downloads MLX model files and removes .downloading marker', async () => {
+    it('downloads model files and removes .downloading marker', async () => {
       const originalFetch = globalThis.fetch;
       const fileData = Buffer.from('weight-data');
 
@@ -824,11 +806,10 @@ describe('ModelManager', () => {
       }) as any;
 
       try {
-        const result = await manager.downloadMlxModel('mlx-community/TestModel-4bit');
-        assert.equal(result.type, 'mlx');
+        const result = await manager.downloadDirectory('user/TestModel-4bit');
         assert.equal(result.fileName, 'TestModel-4bit');
         assert.equal(result.id, 'TestModel-4bit');
-        assert.equal(result.repo, 'mlx-community/TestModel-4bit');
+        assert.equal(result.repo, 'user/TestModel-4bit');
         assert.ok(result.downloadedAt);
 
         // Verify .downloading marker was removed
@@ -848,7 +829,7 @@ describe('ModelManager', () => {
       })) as any;
 
       try {
-        await manager.downloadMlxModel('mlx-community/fail').catch(() => {});
+        await manager.downloadDirectory('user/fail').catch(() => {});
         assert.equal(manager.getActiveDownloads().length, 0);
       } finally {
         globalThis.fetch = originalFetch;
@@ -863,6 +844,8 @@ describe('ModelManager', () => {
       const modelDir = path.join(MODELS_DIR, 'ResumeModel');
       await fs.mkdir(modelDir, { recursive: true });
       await fs.writeFile(path.join(modelDir, 'config.json'), '{}');
+      await fs.writeFile(path.join(modelDir, '.downloading'), '');
+      await fs.writeFile(path.join(modelDir, '.meta.json'), JSON.stringify({ repo: 'user/ResumeModel' }));
 
       let downloadedFiles: string[] = [];
       let callCount = 0;
@@ -895,7 +878,7 @@ describe('ModelManager', () => {
       }) as any;
 
       try {
-        await manager.downloadMlxModel('mlx-community/ResumeModel');
+        await manager.downloadDirectory('user/ResumeModel', undefined, undefined, 'ResumeModel');
         // config.json is 2 bytes but the file on disk is also 2 bytes ('{}')
         // so it should skip config.json and only download weights.safetensors
         assert.equal(downloadedFiles.length, 1);
@@ -937,7 +920,7 @@ describe('ModelManager', () => {
       }) as any;
 
       try {
-        await manager.downloadMlxModel('mlx-community/NestedModel');
+        await manager.downloadDirectory('user/NestedModel');
         const nestedFile = path.join(MODELS_DIR, 'NestedModel', 'subdir', 'nested-file.bin');
         const stat = await fs.stat(nestedFile);
         assert.ok(stat.isFile());
@@ -986,56 +969,11 @@ describe('ModelManager', () => {
       }) as any;
 
       try {
-        const results = await manager.browseHuggingFace('test', 5, 'gguf');
+        const results = await manager.browseHuggingFace('test', 5);
         assert.ok(results.length > 0);
         assert.equal(results[0].repoId, 'user/test-gguf');
         assert.equal(results[0].ggufFiles.length, 2);
         assert.ok(capturedUrls[0].includes('filter=gguf'));
-      } finally {
-        globalThis.fetch = originalFetch;
-      }
-    });
-
-    it('searches for MLX models with mlx-community prefix', async () => {
-      const originalFetch = globalThis.fetch;
-      let capturedUrls: string[] = [];
-
-      globalThis.fetch = mock.fn(async (url: string) => {
-        capturedUrls.push(url);
-        if (url.includes('/api/models?search=')) {
-          return {
-            status: 200,
-            ok: true,
-            json: async () => [{
-              modelId: 'mlx-community/test-mlx',
-              author: 'mlx-community',
-              likes: 5,
-              downloads: 500,
-              tags: ['mlx'],
-            }],
-          };
-        }
-        return {
-          status: 200,
-          ok: true,
-          json: async () => ({
-            tags: ['mlx'],
-            siblings: [
-              { rfilename: 'model.safetensors', size: 5000000 },
-              { rfilename: 'config.json', size: 100 },
-            ],
-          }),
-        };
-      }) as any;
-
-      try {
-        const results = await manager.browseHuggingFace('test', 5, 'mlx');
-        assert.ok(results.length > 0);
-        // MLX results should have __mlx_repo__ as fileName
-        assert.equal(results[0].ggufFiles[0].fileName, '__mlx_repo__');
-        assert.ok(capturedUrls[0].includes('filter=mlx'));
-        // Should prefix with mlx-community for bare queries
-        assert.ok(capturedUrls[0].includes('mlx-community%2Ftest'));
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -1054,7 +992,7 @@ describe('ModelManager', () => {
       }) as any;
 
       try {
-        await manager.browseHuggingFace('https://huggingface.co/user/model', 5, 'gguf');
+        await manager.browseHuggingFace('https://huggingface.co/user/model', 5);
         // Should have searched for 'user/model', not the full URL
         assert.ok(capturedUrls[0].includes('search=user%2Fmodel'));
       } finally {
@@ -1076,7 +1014,7 @@ describe('ModelManager', () => {
 
       try {
         // Query that looks like owner/repo without 'gguf' → triggers extra search
-        await manager.browseHuggingFace('TheBloke/model', 5, 'gguf');
+        await manager.browseHuggingFace('TheBloke/model', 5);
         // Should have done two searches: 'TheBloke/model' and 'model'
         assert.equal(searchUrls.length, 2);
       } finally {
@@ -1111,7 +1049,7 @@ describe('ModelManager', () => {
       }) as any;
 
       try {
-        const results = await manager.browseHuggingFace('user/same-model', 5, 'gguf');
+        const results = await manager.browseHuggingFace('user/same-model', 5);
         // Even though both searches return the same model, it should only appear once
         assert.equal(results.length, 1);
       } finally {
@@ -1131,40 +1069,6 @@ describe('ModelManager', () => {
           () => manager.browseHuggingFace('test'),
           { message: 'HuggingFace API error: 503' },
         );
-      } finally {
-        globalThis.fetch = originalFetch;
-      }
-    });
-
-    it('skips MLX repos without safetensors', async () => {
-      const originalFetch = globalThis.fetch;
-
-      globalThis.fetch = mock.fn(async (url: string) => {
-        if (url.includes('/api/models?search=')) {
-          return {
-            status: 200,
-            ok: true,
-            json: async () => [{
-              modelId: 'user/no-safetensors',
-              author: 'user',
-              likes: 1,
-              downloads: 100,
-              tags: ['mlx'],
-            }],
-          };
-        }
-        return {
-          status: 200,
-          ok: true,
-          json: async () => ({
-            siblings: [{ rfilename: 'readme.md', size: 100 }],
-          }),
-        };
-      }) as any;
-
-      try {
-        const results = await manager.browseHuggingFace('test', 5, 'mlx');
-        assert.equal(results.length, 0);
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -1192,42 +1096,10 @@ describe('ModelManager', () => {
       }) as any;
 
       try {
-        const results = await manager.browseHuggingFace('test', 5, 'gguf');
+        const results = await manager.browseHuggingFace('test', 5);
         // Should still return result, just without ggufFiles
         assert.equal(results.length, 1);
         assert.equal(results[0].ggufFiles.length, 0);
-      } finally {
-        globalThis.fetch = originalFetch;
-      }
-    });
-
-    it('sorts MLX results prioritizing mlx-community repos', async () => {
-      const originalFetch = globalThis.fetch;
-
-      globalThis.fetch = mock.fn(async (url: string) => {
-        if (url.includes('/api/models?search=')) {
-          return {
-            status: 200,
-            ok: true,
-            json: async () => [
-              { modelId: 'other/model', downloads: 5000, tags: ['mlx'] },
-              { modelId: 'mlx-community/model', downloads: 100, tags: ['mlx'] },
-            ],
-          };
-        }
-        return {
-          status: 200,
-          ok: true,
-          json: async () => ({
-            siblings: [{ rfilename: 'model.safetensors', size: 1000 }],
-          }),
-        };
-      }) as any;
-
-      try {
-        const results = await manager.browseHuggingFace('model', 5, 'mlx');
-        // mlx-community should come first despite lower downloads
-        assert.equal(results[0].repoId, 'mlx-community/model');
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -1259,7 +1131,7 @@ describe('ModelManager', () => {
       }) as any;
 
       try {
-        const results = await manager.browseHuggingFace('test', 3, 'gguf');
+        const results = await manager.browseHuggingFace('test', 3);
         assert.equal(results.length, 3);
       } finally {
         globalThis.fetch = originalFetch;

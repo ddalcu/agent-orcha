@@ -5,6 +5,7 @@
     placeholder?: string;
     onsubmit: (message: string) => void;
     onfileselect?: (files: File[]) => void;
+    onplusclick?: (event: MouseEvent) => void;
     onclick?: () => void;
   }
   let {
@@ -13,13 +14,14 @@
     placeholder = 'Ask anything',
     onsubmit,
     onfileselect,
+    onplusclick,
     onclick,
   }: Props = $props();
 
   let textareaEl = $state<HTMLTextAreaElement | null>(null);
   let fileInputEl = $state<HTMLInputElement | null>(null);
 
-  const FILE_ACCEPT = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.go,.rs,.rb,.php,.sql,.sh,.log,.ini,.toml,.env";
+  const FILE_ACCEPT = "image/*,audio/*,.wav,.mp3,.ogg,.flac,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.go,.rs,.rb,.php,.sql,.sh,.log,.ini,.toml,.env";
 
   function handleInput() {
     if (!textareaEl) return;
@@ -81,6 +83,13 @@
       textareaEl.style.height = 'auto';
     }
   }
+
+  export function triggerFileSelect(accept?: string) {
+    if (fileInputEl) {
+      fileInputEl.accept = accept || FILE_ACCEPT;
+      fileInputEl.click();
+    }
+  }
 </script>
 
 <div class="chat-input-wrap">
@@ -108,7 +117,7 @@
       type="button"
       class="attach-btn"
       title="Attach files"
-      onclick={() => fileInputEl?.click()}
+      onclick={(e: MouseEvent) => onplusclick ? onplusclick(e) : fileInputEl?.click()}
     >
       <i class="fas fa-plus text-sm"></i>
     </button>

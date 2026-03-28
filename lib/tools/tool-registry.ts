@@ -104,6 +104,20 @@ export class ToolRegistry {
         return [workspaceTool];
       }
 
+      case 'models': {
+        // Deprecated: models:image:* → builtin:generate_image, models:tts:* → builtin:generate_tts
+        logger.warn(`Deprecated tool reference "models:${name}". Use "builtin:generate_image" or "builtin:generate_tts" instead.`);
+        if (name.startsWith('image:')) {
+          const builtin = this.builtInTools.get('generate_image');
+          return builtin ? [builtin] : [];
+        }
+        if (name.startsWith('tts:')) {
+          const builtin = this.builtInTools.get('generate_tts');
+          return builtin ? [builtin] : [];
+        }
+        return [];
+      }
+
       default:
         logger.warn(`Unknown tool source: ${source}`);
         return [];
@@ -179,4 +193,5 @@ export class ToolRegistry {
   getAllWorkspaceTools(): StructuredTool[] {
     return Array.from(this.workspaceTools.values());
   }
+
 }

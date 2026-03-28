@@ -5,8 +5,8 @@ import assert from 'node:assert';
 let execFileSyncFn: (...args: any[]) => any;
 let execFileFn: (...args: any[]) => any;
 
-// Mock child_process
-mock.module('node:child_process', {
+// Mock the child-process wrapper used by sandbox-container
+mock.module('../../lib/utils/child-process.ts', {
   namedExports: {
     execFileSync: (...args: any[]) => execFileSyncFn(...args),
     execFile: (...args: any[]) => execFileFn(...args),
@@ -140,7 +140,7 @@ describe('SandboxContainer', () => {
     it('should pull image, start container and wait for CDP', async () => {
       execFileSyncFn = (cmd: string, args: string[]) => {
         if (args && args[0] === 'version') return Buffer.from('ok');
-        if (args && args[0] === 'container') return Buffer.from('false');
+        if (args && args[0] === 'container') throw new Error('No such container');
         return Buffer.from('');
       };
 
@@ -170,7 +170,7 @@ describe('SandboxContainer', () => {
     it('should return false when docker run fails', async () => {
       execFileSyncFn = (cmd: string, args: string[]) => {
         if (args && args[0] === 'version') return Buffer.from('ok');
-        if (args && args[0] === 'container') return Buffer.from('false');
+        if (args && args[0] === 'container') throw new Error('No such container');
         return Buffer.from('');
       };
 

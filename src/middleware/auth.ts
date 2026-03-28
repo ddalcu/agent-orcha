@@ -96,6 +96,16 @@ function isPublicRequest(url: string): boolean {
   return !path.startsWith('/api/');
 }
 
+/**
+ * Validate auth from a raw cookie header string.
+ * Used by WebSocket upgrade handlers that bypass Fastify's onRequest hook.
+ */
+export function isAuthedCookie(cookieHeader: string | undefined): boolean {
+  if (!isAuthEnabled()) return true;
+  const token = parseCookies(cookieHeader)[COOKIE_NAME];
+  return !!token && isValidSession(token);
+}
+
 // --- Plugin (fp breaks encapsulation so the hook applies globally) ---
 const authPluginImpl: FastifyPluginAsync = async (fastify) => {
   fastify.addHook('onRequest', async (request, reply) => {

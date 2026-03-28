@@ -1,1180 +1,982 @@
 {
-    "openapi": "3.0.0",
-    "info": {
-        "title": "Agent Orcha API",
-        "version": "0.0.3",
-        "description": "API for orchestrating agents, workflows, knowledge stores, functions, MCP servers, and LLMs."
-    },
-    "servers": [
-        {
-            "url": "http://localhost:3000",
-            "description": "Local Development Server"
-        }
-    ],
-    "paths": {
-        "/health": {
-            "get": {
-                "summary": "Health Check",
-                "description": "Returns the status of the server.",
-                "responses": {
-                    "200": {
-                        "description": "Server is healthy",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {
-                                            "type": "string",
-                                            "example": "ok"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/agents": {
-            "get": {
-                "summary": "List Agents",
-                "tags": ["Agents"],
-                "responses": {
-                    "200": {
-                        "description": "List of available agents",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": { "type": "string" },
-                                            "description": { "type": "string" },
-                                            "version": { "type": "string" },
-                                            "tools": { "type": "array", "items": { "type": "string" } },
-                                            "inputVariables": { "type": "array", "items": { "type": "string" } }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/agents/{name}": {
-            "get": {
-                "summary": "Get Agent Details",
-                "tags": ["Agents"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Agent details",
-                        "content": {
-                            "application/json": {
-                                "schema": { "type": "object" }
-                            }
-                        }
-                    },
-                    "404": { "description": "Agent not found" }
-                }
-            }
-        },
-        "/api/agents/{name}/invoke": {
-            "post": {
-                "summary": "Invoke Agent",
-                "tags": ["Agents"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "input": { "type": "object" },
-                                    "sessionId": { "type": "string", "description": "Optional session ID for conversation memory" }
-                                },
-                                "required": ["input"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Agent execution result",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "output": {},
-                                        "metadata": {
-                                            "type": "object",
-                                            "properties": {
-                                                "tokensUsed": { "type": "integer" },
-                                                "toolCalls": { "type": "array", "items": { "type": "object" } },
-                                                "duration": { "type": "integer" },
-                                                "sessionId": { "type": "string" },
-                                                "messagesInSession": { "type": "integer" },
-                                                "structuredOutputValid": { "type": "boolean" }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "404": { "description": "Agent not found" },
-                    "500": { "description": "Internal server error" }
-                }
-            }
-        },
-        "/api/agents/{name}/stream": {
-            "post": {
-                "summary": "Stream Agent Execution",
-                "tags": ["Agents"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "input": { "type": "object" },
-                                    "sessionId": { "type": "string" }
-                                },
-                                "required": ["input"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Server-Sent Events stream",
-                        "content": {
-                            "text/event-stream": {
-                                "schema": { "type": "string" }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/agents/sessions/stats": {
-            "get": {
-                "summary": "Get Session Statistics",
-                "tags": ["Agents"],
-                "responses": {
-                    "200": {
-                        "description": "Session statistics",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "totalSessions": { "type": "integer" }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/agents/sessions/{sessionId}": {
-            "get": {
-                "summary": "Get Session Details",
-                "tags": ["Agents"],
-                "parameters": [
-                    {
-                        "name": "sessionId",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Session details",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "sessionId": { "type": "string" },
-                                        "messageCount": { "type": "integer" },
-                                        "messages": { "type": "array", "items": { "type": "object" } }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "404": { "description": "Session not found" }
-                }
-            },
-            "delete": {
-                "summary": "Clear Session",
-                "tags": ["Agents"],
-                "parameters": [
-                    {
-                        "name": "sessionId",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Session cleared",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "success": { "type": "boolean" }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/workflows": {
-            "get": {
-                "summary": "List Workflows",
-                "tags": ["Workflows"],
-                "responses": {
-                    "200": {
-                        "description": "List of available workflows",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": { "type": "string" },
-                                            "description": { "type": "string" },
-                                            "version": { "type": "string" },
-                                            "type": { "type": "string", "enum": ["steps", "react"] },
-                                            "inputSchema": { "type": "object" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/workflows/{name}": {
-            "get": {
-                "summary": "Get Workflow Details",
-                "tags": ["Workflows"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Workflow details",
-                        "content": {
-                            "application/json": {
-                                "schema": { "type": "object" }
-                            }
-                        }
-                    },
-                    "404": { "description": "Workflow not found" }
-                }
-            }
-        },
-        "/api/workflows/{name}/run": {
-            "post": {
-                "summary": "Run Workflow",
-                "tags": ["Workflows"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "input": { "type": "object" }
-                                },
-                                "required": ["input"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Workflow execution result",
-                        "content": {
-                            "application/json": {
-                                "schema": { "type": "object" }
-                            }
-                        }
-                    },
-                    "404": { "description": "Workflow not found" },
-                    "500": { "description": "Internal server error" }
-                }
-            }
-        },
-        "/api/workflows/{name}/stream": {
-            "post": {
-                "summary": "Stream Workflow Execution",
-                "tags": ["Workflows"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "input": { "type": "object" }
-                                },
-                                "required": ["input"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Server-Sent Events stream",
-                        "content": {
-                            "text/event-stream": {
-                                "schema": { "type": "string" }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/knowledge": {
-            "get": {
-                "summary": "List Knowledge Stores",
-                "tags": ["Knowledge"],
-                "responses": {
-                    "200": {
-                        "description": "List of available knowledge stores",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": { "type": "string" },
-                                            "description": { "type": "string" },
-                                            "kind": { "type": "string", "enum": ["vector", "graph-rag"] },
-                                            "source": { "type": "string" },
-                                            "store": { "type": "string" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/knowledge/{name}": {
-            "get": {
-                "summary": "Get Knowledge Store Config",
-                "tags": ["Knowledge"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Knowledge store configuration",
-                        "content": {
-                            "application/json": {
-                                "schema": { "type": "object" }
-                            }
-                        }
-                    },
-                    "404": { "description": "Knowledge store not found" }
-                }
-            }
-        },
-        "/api/knowledge/{name}/search": {
-            "post": {
-                "summary": "Search Knowledge Store",
-                "tags": ["Knowledge"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "query": { "type": "string" },
-                                    "k": { "type": "integer", "default": 4 }
-                                },
-                                "required": ["query"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Search results",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "results": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "content": { "type": "string" },
-                                                    "metadata": { "type": "object" },
-                                                    "score": { "type": "number" }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "404": { "description": "Knowledge store not found" },
-                    "500": { "description": "Internal server error" }
-                }
-            }
-        },
-        "/api/knowledge/{name}/refresh": {
-            "post": {
-                "summary": "Refresh Knowledge Store",
-                "tags": ["Knowledge"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Refresh result",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "success": { "type": "boolean" }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "500": { "description": "Internal server error" }
-                }
-            }
-        },
-        "/api/knowledge/{name}/add": {
-            "post": {
-                "summary": "Add Documents to Knowledge Store",
-                "tags": ["Knowledge"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "documents": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "content": { "type": "string" },
-                                                "metadata": { "type": "object" }
-                                            },
-                                            "required": ["content"]
-                                        }
-                                    }
-                                },
-                                "required": ["documents"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Addition result",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "success": { "type": "boolean" },
-                                        "added": { "type": "integer" }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "404": { "description": "Knowledge store not found" },
-                    "500": { "description": "Internal server error" }
-                }
-            }
-        },
-        "/api/knowledge/{name}/entities": {
-            "get": {
-                "summary": "Get GraphRAG Entities",
-                "description": "Returns entities extracted from a GraphRAG knowledge store.",
-                "tags": ["Knowledge"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List of entities",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "id": { "type": "string" },
-                                            "type": { "type": "string" },
-                                            "name": { "type": "string" },
-                                            "description": { "type": "string" },
-                                            "properties": { "type": "object" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "404": { "description": "Knowledge store not found" }
-                }
-            }
-        },
-        "/api/knowledge/{name}/communities": {
-            "get": {
-                "summary": "Get GraphRAG Communities",
-                "description": "Returns communities detected in a GraphRAG knowledge store.",
-                "tags": ["Knowledge"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List of communities",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "id": { "type": "string" },
-                                            "nodeIds": { "type": "array", "items": { "type": "string" } },
-                                            "summary": { "type": "string" },
-                                            "title": { "type": "string" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "404": { "description": "Knowledge store not found" }
-                }
-            }
-        },
-        "/api/knowledge/{name}/edges": {
-            "get": {
-                "summary": "Get GraphRAG Edges",
-                "description": "Returns edges (relationships) from a GraphRAG knowledge store.",
-                "tags": ["Knowledge"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List of edges",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "id": { "type": "string" },
-                                            "type": { "type": "string" },
-                                            "sourceId": { "type": "string" },
-                                            "targetId": { "type": "string" },
-                                            "description": { "type": "string" },
-                                            "weight": { "type": "number" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "404": { "description": "Knowledge store not found" }
-                }
-            }
-        },
-        "/api/functions": {
-            "get": {
-                "summary": "List Functions",
-                "tags": ["Functions"],
-                "responses": {
-                    "200": {
-                        "description": "List of available functions",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": { "type": "string" },
-                                            "description": { "type": "string" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/functions/{name}": {
-            "get": {
-                "summary": "Get Function Details",
-                "tags": ["Functions"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Function details with parameter schema",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "name": { "type": "string" },
-                                        "description": { "type": "string" },
-                                        "parameters": { "type": "object" }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "404": { "description": "Function not found" }
-                }
-            }
-        },
-        "/api/functions/{name}/call": {
-            "post": {
-                "summary": "Call Function",
-                "tags": ["Functions"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "arguments": { "type": "object" }
-                                },
-                                "required": ["arguments"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Function result",
-                        "content": {
-                            "application/json": {
-                                "schema": { "type": "object" }
-                            }
-                        }
-                    },
-                    "404": { "description": "Function not found" },
-                    "500": { "description": "Internal server error" }
-                }
-            }
-        },
-        "/api/mcp": {
-            "get": {
-                "summary": "List MCP Servers",
-                "tags": ["MCP"],
-                "responses": {
-                    "200": {
-                        "description": "List of configured MCP servers",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": { "type": "string" },
-                                            "description": { "type": "string" },
-                                            "transport": { "type": "string" },
-                                            "enabled": { "type": "boolean" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/mcp/{name}": {
-            "get": {
-                "summary": "Get MCP Server Config",
-                "tags": ["MCP"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "MCP server configuration",
-                        "content": {
-                            "application/json": {
-                                "schema": { "type": "object" }
-                            }
-                        }
-                    },
-                    "404": { "description": "MCP server not found" }
-                }
-            }
-        },
-        "/api/mcp/{name}/tools": {
-            "get": {
-                "summary": "Get MCP Server Tools",
-                "tags": ["MCP"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List of tools available on the MCP server",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": { "type": "string" },
-                                            "description": { "type": "string" },
-                                            "inputSchema": { "type": "object" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "404": { "description": "MCP server not found" }
-                }
-            }
-        },
-        "/api/mcp/{name}/call": {
-            "post": {
-                "summary": "Call MCP Tool",
-                "tags": ["MCP"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "tool": { "type": "string", "description": "Name of the tool to call" },
-                                    "arguments": { "type": "object", "description": "Tool arguments" }
-                                },
-                                "required": ["tool", "arguments"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Tool execution result",
-                        "content": {
-                            "application/json": {
-                                "schema": { "type": "object" }
-                            }
-                        }
-                    },
-                    "404": { "description": "MCP server not found" },
-                    "500": { "description": "Internal server error" }
-                }
-            }
-        },
-        "/api/files/tree": {
-            "get": {
-                "summary": "Get File Tree",
-                "description": "Returns the project directory tree structure.",
-                "tags": ["Files"],
-                "responses": {
-                    "200": {
-                        "description": "Directory tree",
-                        "content": {
-                            "application/json": {
-                                "schema": { "type": "object" }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/files/read": {
-            "get": {
-                "summary": "Read File",
-                "description": "Read file contents by path.",
-                "tags": ["Files"],
-                "parameters": [
-                    {
-                        "name": "path",
-                        "in": "query",
-                        "required": true,
-                        "schema": { "type": "string" },
-                        "description": "Relative file path"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "File contents",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "content": { "type": "string" },
-                                        "path": { "type": "string" }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "400": { "description": "Invalid path" },
-                    "404": { "description": "File not found" }
-                }
-            }
-        },
-        "/api/files/write": {
-            "put": {
-                "summary": "Write File",
-                "description": "Write content to a file. Triggers hot-reload for config files.",
-                "tags": ["Files"],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "path": { "type": "string", "description": "Relative file path" },
-                                    "content": { "type": "string", "description": "File content" }
-                                },
-                                "required": ["path", "content"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Write result",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "success": { "type": "boolean" }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "400": { "description": "Invalid path" },
-                    "500": { "description": "Internal server error" }
-                }
-            }
-        },
-        "/api/llm": {
-            "get": {
-                "summary": "List LLMs",
-                "tags": ["LLM"],
-                "responses": {
-                    "200": {
-                        "description": "List of available LLMs",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": { "type": "string" },
-                                            "model": { "type": "string" },
-                                            "temperature": { "type": "number" },
-                                            "baseUrl": { "type": "string", "nullable": true }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/llm/{name}": {
-            "get": {
-                "summary": "Get LLM Details",
-                "tags": ["LLM"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "LLM details",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "name": { "type": "string" },
-                                        "model": { "type": "string" },
-                                        "temperature": { "type": "number" },
-                                        "baseUrl": { "type": "string", "nullable": true }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "404": { "description": "LLM not found" }
-                }
-            }
-        },
-        "/api/llm/{name}/chat": {
-            "post": {
-                "summary": "Chat with LLM",
-                "tags": ["LLM"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "message": { "type": "string" }
-                                },
-                                "required": ["message"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Chat response",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "output": { "type": "string" },
-                                        "model": { "type": "string" },
-                                        "metadata": {
-                                            "type": "object",
-                                            "properties": {
-                                                "temperature": { "type": "number" }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "400": { "description": "Invalid request" },
-                    "429": { "description": "Rate limit exceeded" },
-                    "500": { "description": "Internal server error" }
-                }
-            }
-        },
-        "/api/llm/{name}/stream": {
-            "post": {
-                "summary": "Stream Chat with LLM",
-                "tags": ["LLM"],
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "path",
-                        "required": true,
-                        "schema": { "type": "string" }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "message": { "type": "string" }
-                                },
-                                "required": ["message"]
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Server-Sent Events stream",
-                        "content": {
-                            "text/event-stream": {
-                                "schema": { "type": "string" }
-                            }
-                        }
-                    },
-                    "400": { "description": "Invalid request" }
-                }
-            }
-        }
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Agent Orcha API",
+    "version": "1.0.0",
+    "description": "API for orchestrating agents, workflows, knowledge stores, functions, MCP servers, LLMs, and local model management."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
     }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "tags": ["Infrastructure"],
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "ok" },
+                    "version": { "type": "string" },
+                    "timestamp": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/check": {
+      "get": {
+        "summary": "Check Auth Status",
+        "tags": ["Auth"],
+        "responses": {
+          "200": {
+            "description": "Auth status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authenticated": { "type": "boolean" },
+                    "required": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "Login",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": { "type": "string" }
+                },
+                "required": ["password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Authenticated (sets session cookie)" },
+          "401": { "description": "Invalid password" },
+          "429": { "description": "Rate limit exceeded" }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "summary": "Logout",
+        "tags": ["Auth"],
+        "responses": {
+          "200": { "description": "Session cleared" }
+        }
+      }
+    },
+    "/api/agents": {
+      "get": {
+        "summary": "List Agents",
+        "tags": ["Agents"],
+        "responses": {
+          "200": {
+            "description": "List of available agents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string" },
+                      "description": { "type": "string" },
+                      "version": { "type": "string" },
+                      "tools": { "type": "array", "items": { "type": "string" } },
+                      "memory": {},
+                      "inputVariables": { "type": "array", "items": { "type": "string" } },
+                      "publish": { "type": "object" },
+                      "sampleQuestions": { "type": "array", "items": { "type": "string" } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{name}": {
+      "get": {
+        "summary": "Get Agent Details",
+        "tags": ["Agents"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Agent details" },
+          "404": { "description": "Agent not found" }
+        }
+      }
+    },
+    "/api/agents/{name}/invoke": {
+      "post": {
+        "summary": "Invoke Agent",
+        "tags": ["Agents"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": { "type": "object" },
+                  "sessionId": { "type": "string" }
+                },
+                "required": ["input"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "output": {},
+                    "metadata": {
+                      "type": "object",
+                      "properties": {
+                        "tokensUsed": { "type": "integer" },
+                        "toolCalls": { "type": "array" },
+                        "duration": { "type": "integer" },
+                        "sessionId": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Agent not found" }
+        }
+      }
+    },
+    "/api/agents/{name}/stream": {
+      "post": {
+        "summary": "Stream Agent Execution (SSE)",
+        "tags": ["Agents"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": { "type": "object" },
+                  "sessionId": { "type": "string" }
+                },
+                "required": ["input"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "SSE stream: task_id, content, thinking, tool_start, tool_end, error, [DONE]", "content": { "text/event-stream": { "schema": { "type": "string" } } } }
+        }
+      }
+    },
+    "/api/agents/sessions/stats": {
+      "get": {
+        "summary": "Get Session Statistics",
+        "tags": ["Agents"],
+        "responses": {
+          "200": {
+            "description": "Session stats",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "totalSessions": { "type": "integer" } } } } }
+          }
+        }
+      }
+    },
+    "/api/agents/sessions/{sessionId}": {
+      "get": {
+        "summary": "Get Session Details",
+        "tags": ["Agents"],
+        "parameters": [{ "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Session details" },
+          "404": { "description": "Session not found" }
+        }
+      },
+      "delete": {
+        "summary": "Clear Session",
+        "tags": ["Agents"],
+        "parameters": [{ "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Session cleared" }
+        }
+      }
+    },
+    "/api/agents/sessions/{sessionId}/messages": {
+      "get": {
+        "summary": "Get Session Messages",
+        "tags": ["Agents"],
+        "parameters": [{ "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Array of messages" },
+          "404": { "description": "Session not found" }
+        }
+      }
+    },
+    "/api/llm/config": {
+      "get": {
+        "summary": "Get LLM Config",
+        "tags": ["LLM"],
+        "responses": {
+          "200": {
+            "description": "Full llm.json with redacted API keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": { "type": "string" },
+                    "models": { "type": "object" },
+                    "embeddings": { "type": "object" },
+                    "image": { "type": "object" },
+                    "tts": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/llm/config/models/{name}": {
+      "put": {
+        "summary": "Upsert Model Config",
+        "tags": ["LLM"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "OK" } }
+      },
+      "delete": {
+        "summary": "Delete Model Config",
+        "tags": ["LLM"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted" }, "400": { "description": "Cannot delete default" } }
+      }
+    },
+    "/api/llm/config/models/{name}/active": {
+      "patch": {
+        "summary": "Toggle Model Active",
+        "tags": ["LLM"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "active": { "type": "boolean" } }, "required": ["active"] } } } },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/llm/config/models/{name}/p2p": {
+      "patch": {
+        "summary": "Toggle Model P2P Sharing",
+        "tags": ["LLM"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "p2p": { "type": "boolean" } }, "required": ["p2p"] } } } },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/llm/config/embeddings/{name}": {
+      "put": {
+        "summary": "Upsert Embedding Config",
+        "tags": ["LLM"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/llm/readiness": {
+      "get": {
+        "summary": "Check LLM Readiness",
+        "tags": ["LLM"],
+        "responses": {
+          "200": {
+            "description": "Readiness status",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "ready": { "type": "boolean" }, "issues": { "type": "array", "items": { "type": "string" } } } } } }
+          }
+        }
+      }
+    },
+    "/api/llm": {
+      "get": {
+        "summary": "List Active LLMs",
+        "tags": ["LLM"],
+        "responses": { "200": { "description": "Array of active LLM configs" } }
+      }
+    },
+    "/api/llm/{name}": {
+      "get": {
+        "summary": "Get LLM Details",
+        "tags": ["LLM"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "LLM config" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/llm/{name}/chat": {
+      "post": {
+        "summary": "Chat with LLM",
+        "tags": ["LLM"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "sessionId": { "type": "string" }, "attachments": { "type": "array" } }, "required": ["message"] } } } },
+        "responses": { "200": { "description": "Chat response with output and model name" }, "400": { "description": "Message required" } }
+      }
+    },
+    "/api/llm/{name}/stream": {
+      "post": {
+        "summary": "Stream Chat with LLM (SSE)",
+        "tags": ["LLM"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "sessionId": { "type": "string" } }, "required": ["message"] } } } },
+        "responses": { "200": { "description": "SSE stream: task_id, content, thinking, usage, [DONE]" }, "400": { "description": "Message required" } }
+      }
+    },
+    "/api/local-llm/engines": {
+      "get": {
+        "summary": "List Local Engines",
+        "tags": ["Local LLM"],
+        "responses": {
+          "200": {
+            "description": "Engine availability",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "omni": { "type": "object" }, "ollama": { "type": "object" }, "lmstudio": { "type": "object" } } } } }
+          }
+        }
+      }
+    },
+    "/api/local-llm/engines/urls": {
+      "get": {
+        "summary": "Get Engine URLs",
+        "tags": ["Local LLM"],
+        "responses": { "200": { "description": "Custom engine base URLs" } }
+      },
+      "post": {
+        "summary": "Set Engine URL",
+        "tags": ["Local LLM"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "engine": { "type": "string" }, "url": { "type": "string" } }, "required": ["engine", "url"] } } } },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/local-llm/engines/activate": {
+      "post": {
+        "summary": "Activate External Engine Model",
+        "tags": ["Local LLM"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "engine": { "type": "string" }, "model": { "type": "string" }, "role": { "type": "string" } }, "required": ["engine", "model"] } } } },
+        "responses": { "200": { "description": "Model activated" } }
+      }
+    },
+    "/api/local-llm/engines/context": {
+      "post": {
+        "summary": "Update Context Size",
+        "tags": ["Local LLM"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "contextSize": { "type": "integer" } }, "required": ["contextSize"] } } } },
+        "responses": { "200": { "description": "Context size updated" } }
+      }
+    },
+    "/api/local-llm/engines/unload": {
+      "post": {
+        "summary": "Unload External Engine Model",
+        "tags": ["Local LLM"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "engine": { "type": "string" }, "model": { "type": "string" } }, "required": ["engine", "model"] } } } },
+        "responses": { "200": { "description": "Model unloaded" } }
+      }
+    },
+    "/api/local-llm/status": {
+      "get": {
+        "summary": "Get Local LLM Status",
+        "tags": ["Local LLM"],
+        "responses": {
+          "200": {
+            "description": "System and model status",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "omni": { "type": "object" }, "available": { "type": "boolean" }, "lastActiveModel": { "type": "string" }, "systemRamBytes": { "type": "integer" }, "freeRamBytes": { "type": "integer" }, "gpu": { "type": "object" }, "defaultProvider": { "type": "string" }, "platform": { "type": "string" }, "arch": { "type": "string" } } } } }
+          }
+        }
+      }
+    },
+    "/api/local-llm/models": {
+      "get": {
+        "summary": "List Downloaded Models",
+        "tags": ["Local LLM"],
+        "responses": { "200": { "description": "Array of local models with id, fileName, filePath, sizeBytes, repo, downloadedAt" } }
+      }
+    },
+    "/api/local-llm/models/downloads": {
+      "get": {
+        "summary": "Get Active Downloads",
+        "tags": ["Local LLM"],
+        "responses": { "200": { "description": "Array of active download progress" } }
+      }
+    },
+    "/api/local-llm/models/interrupted": {
+      "get": {
+        "summary": "Get Interrupted Downloads",
+        "tags": ["Local LLM"],
+        "responses": { "200": { "description": "Array of interrupted downloads" } }
+      }
+    },
+    "/api/local-llm/models/interrupted/{fileName}": {
+      "delete": {
+        "summary": "Delete Interrupted Download",
+        "tags": ["Local LLM"],
+        "parameters": [{ "name": "fileName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/local-llm/models/download": {
+      "get": {
+        "summary": "Download Model (SSE)",
+        "tags": ["Local LLM"],
+        "parameters": [
+          { "name": "repo", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "fileName", "in": "query", "schema": { "type": "string" } },
+          { "name": "type", "in": "query", "schema": { "type": "string", "enum": ["gguf", "dir", "bundle"] } },
+          { "name": "subdir", "in": "query", "schema": { "type": "string" } },
+          { "name": "targetDir", "in": "query", "schema": { "type": "string" } },
+          { "name": "files", "in": "query", "schema": { "type": "string" }, "description": "JSON array for bundle downloads" }
+        ],
+        "responses": { "200": { "description": "SSE stream: progress events, complete event, optional mmproj event" } }
+      }
+    },
+    "/api/local-llm/models/{id}/activate": {
+      "post": {
+        "summary": "Activate Omni Chat Model",
+        "tags": ["Local LLM"],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Model loaded" } }
+      }
+    },
+    "/api/local-llm/models/{id}/activate-embedding": {
+      "post": {
+        "summary": "Activate Omni Embedding Model",
+        "tags": ["Local LLM"],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Embedding model loaded" } }
+      }
+    },
+    "/api/local-llm/models/{id}": {
+      "delete": {
+        "summary": "Delete Model",
+        "tags": ["Local LLM"],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Model deleted" }, "409": { "description": "Model is currently active" } }
+      }
+    },
+    "/api/local-llm/browse": {
+      "get": {
+        "summary": "Browse HuggingFace Models",
+        "tags": ["Local LLM"],
+        "parameters": [
+          { "name": "q", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Array of HuggingFace model results" } }
+      }
+    },
+    "/api/local-llm/stop": {
+      "post": { "summary": "Unload Omni Chat Model", "tags": ["Local LLM"], "responses": { "200": { "description": "Model unloaded" } } }
+    },
+    "/api/local-llm/stop-embedding": {
+      "post": { "summary": "Unload Omni Embedding Model", "tags": ["Local LLM"], "responses": { "200": { "description": "Model unloaded" } } }
+    },
+    "/api/local-llm/stop-image": {
+      "post": { "summary": "Unload Omni Image Model", "tags": ["Local LLM"], "responses": { "200": { "description": "Model unloaded" } } }
+    },
+    "/api/local-llm/stop-tts": {
+      "post": { "summary": "Unload Omni TTS Model", "tags": ["Local LLM"], "responses": { "200": { "description": "Model unloaded" } } }
+    },
+    "/api/local-llm/start-embedding": {
+      "post": { "summary": "Pre-load Omni Embedding Model", "tags": ["Local LLM"], "responses": { "200": { "description": "Model loaded" }, "400": { "description": "No embedding model configured" } } }
+    },
+    "/api/local-llm/start-image": {
+      "post": { "summary": "Pre-load Omni Image Model", "tags": ["Local LLM"], "responses": { "200": { "description": "Model loaded" }, "400": { "description": "No image model configured" } } }
+    },
+    "/api/local-llm/start-tts": {
+      "post": { "summary": "Pre-load Omni TTS Model", "tags": ["Local LLM"], "responses": { "200": { "description": "Model loaded" }, "400": { "description": "No TTS model configured" } } }
+    },
+    "/api/knowledge": {
+      "get": {
+        "summary": "List Knowledge Stores",
+        "tags": ["Knowledge"],
+        "responses": {
+          "200": {
+            "description": "Array of knowledge stores with status",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "hasGraph": { "type": "boolean" }, "description": { "type": "string" }, "source": { "type": "string" }, "status": { "type": "string" }, "chunkCount": { "type": "integer" }, "entityCount": { "type": "integer" }, "isIndexing": { "type": "boolean" } } } } } }
+          }
+        }
+      }
+    },
+    "/api/knowledge/{name}": {
+      "get": {
+        "summary": "Get Knowledge Store Config",
+        "tags": ["Knowledge"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Store config" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/knowledge/{name}/status": {
+      "get": {
+        "summary": "Get Knowledge Store Status",
+        "tags": ["Knowledge"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Status with chunk/entity counts, indexing state" } }
+      }
+    },
+    "/api/knowledge/{name}/index": {
+      "post": {
+        "summary": "Trigger Indexing",
+        "tags": ["Knowledge"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Indexing started" }, "409": { "description": "Already indexing" } }
+      }
+    },
+    "/api/knowledge/{name}/index/stream": {
+      "get": {
+        "summary": "Index Progress Stream (SSE)",
+        "tags": ["Knowledge"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "SSE stream of indexing progress" } }
+      }
+    },
+    "/api/knowledge/{name}/search": {
+      "post": {
+        "summary": "Search Knowledge Store",
+        "tags": ["Knowledge"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "query": { "type": "string" }, "k": { "type": "integer", "default": 4 } }, "required": ["query"] } } } },
+        "responses": { "200": { "description": "Search results with content, metadata, score" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/knowledge/{name}/refresh": {
+      "post": {
+        "summary": "Refresh Knowledge Store",
+        "tags": ["Knowledge"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Refresh triggered" } }
+      }
+    },
+    "/api/knowledge/{name}/add": {
+      "post": {
+        "summary": "Add Documents",
+        "tags": ["Knowledge"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "documents": { "type": "array", "items": { "type": "object", "properties": { "content": { "type": "string" }, "metadata": { "type": "object" } }, "required": ["content"] } } }, "required": ["documents"] } } } },
+        "responses": { "200": { "description": "Documents added", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "added": { "type": "integer" } } } } } } }
+      }
+    },
+    "/api/knowledge/{name}/entities": {
+      "get": {
+        "summary": "Get Graph Entities",
+        "tags": ["Knowledge"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Array of entities" }, "400": { "description": "Store has no graph entities" } }
+      }
+    },
+    "/api/knowledge/{name}/edges": {
+      "get": {
+        "summary": "Get Graph Edges",
+        "tags": ["Knowledge"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Array of edges" }, "400": { "description": "Store has no graph entities" } }
+      }
+    },
+    "/api/workflows": {
+      "get": {
+        "summary": "List Workflows",
+        "tags": ["Workflows"],
+        "responses": {
+          "200": {
+            "description": "Array of workflows",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "version": { "type": "string" }, "type": { "type": "string", "enum": ["steps", "react"] }, "inputSchema": { "type": "object" }, "sampleQuestions": { "type": "array" } } } } } }
+          }
+        }
+      }
+    },
+    "/api/workflows/{name}": {
+      "get": {
+        "summary": "Get Workflow Details",
+        "tags": ["Workflows"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Workflow details" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/workflows/{name}/run": {
+      "post": {
+        "summary": "Run Workflow",
+        "tags": ["Workflows"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "input": { "type": "object" } }, "required": ["input"] } } } },
+        "responses": { "200": { "description": "Workflow result" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/workflows/{name}/stream": {
+      "post": {
+        "summary": "Stream Workflow (SSE)",
+        "tags": ["Workflows"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "input": { "type": "object" }, "threadId": { "type": "string" } }, "required": ["input"] } } } },
+        "responses": { "200": { "description": "SSE stream" } }
+      }
+    },
+    "/api/workflows/{name}/resume": {
+      "post": {
+        "summary": "Resume Workflow",
+        "tags": ["Workflows"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "threadId": { "type": "string" }, "answer": { "type": "string" } }, "required": ["threadId", "answer"] } } } },
+        "responses": { "200": { "description": "SSE stream" } }
+      }
+    },
+    "/api/mcp": {
+      "get": { "summary": "List MCP Servers", "tags": ["MCP"], "responses": { "200": { "description": "Array of MCP servers" } } }
+    },
+    "/api/mcp/{name}": {
+      "get": {
+        "summary": "Get MCP Server Config",
+        "tags": ["MCP"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "MCP server config" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/mcp/{name}/tools": {
+      "get": {
+        "summary": "Get MCP Server Tools",
+        "tags": ["MCP"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Array of tool schemas" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/mcp/{name}/call": {
+      "post": {
+        "summary": "Call MCP Tool",
+        "tags": ["MCP"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "tool": { "type": "string" }, "arguments": { "type": "object" } }, "required": ["tool", "arguments"] } } } },
+        "responses": { "200": { "description": "Tool result" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/functions": {
+      "get": { "summary": "List Functions", "tags": ["Functions"], "responses": { "200": { "description": "Array of functions" } } }
+    },
+    "/api/functions/{name}": {
+      "get": {
+        "summary": "Get Function Details",
+        "tags": ["Functions"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Function with parameter schema" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/functions/{name}/call": {
+      "post": {
+        "summary": "Call Function",
+        "tags": ["Functions"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "arguments": { "type": "object" } }, "required": ["arguments"] } } } },
+        "responses": { "200": { "description": "Function result" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/skills": {
+      "get": { "summary": "List Skills", "tags": ["Skills"], "responses": { "200": { "description": "Array of skills" } } }
+    },
+    "/api/skills/{name}": {
+      "get": {
+        "summary": "Get Skill Content",
+        "tags": ["Skills"],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Skill content" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/files/tree": {
+      "get": { "summary": "Get File Tree", "tags": ["Files"], "responses": { "200": { "description": "Directory tree" } } }
+    },
+    "/api/files/read": {
+      "get": {
+        "summary": "Read File",
+        "tags": ["Files"],
+        "parameters": [{ "name": "path", "in": "query", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "File contents" }, "400": { "description": "Path required" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/files/write": {
+      "put": {
+        "summary": "Write File",
+        "tags": ["Files"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" } }, "required": ["path", "content"] } } } },
+        "responses": { "200": { "description": "Write result with reload info" } }
+      }
+    },
+    "/api/files/create": {
+      "post": {
+        "summary": "Create File",
+        "tags": ["Files"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" } }, "required": ["path"] } } } },
+        "responses": { "200": { "description": "File created" }, "409": { "description": "File exists" } }
+      }
+    },
+    "/api/files/rename": {
+      "post": {
+        "summary": "Rename File",
+        "tags": ["Files"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "oldPath": { "type": "string" }, "newPath": { "type": "string" } }, "required": ["oldPath", "newPath"] } } } },
+        "responses": { "200": { "description": "File renamed" } }
+      }
+    },
+    "/api/files/delete": {
+      "delete": {
+        "summary": "Delete File",
+        "tags": ["Files"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"] } } } },
+        "responses": { "200": { "description": "File deleted" } }
+      }
+    },
+    "/api/files/template": {
+      "get": {
+        "summary": "Get Resource Template",
+        "tags": ["Files"],
+        "parameters": [
+          { "name": "type", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "name", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Template content" }, "400": { "description": "Type and name required" } }
+      }
+    },
+    "/api/graph/config": {
+      "get": {
+        "summary": "Get Graph Config",
+        "tags": ["Graph"],
+        "responses": { "200": { "description": "Graph configuration", "content": { "application/json": { "schema": { "type": "object", "properties": { "configured": { "type": "boolean" } } } } } } }
+      }
+    },
+    "/api/graph/knowledge-bases": {
+      "get": { "summary": "Get Knowledge Base Graph Nodes", "tags": ["Graph"], "responses": { "200": { "description": "Nodes and edges" } } }
+    },
+    "/api/graph/full": {
+      "get": {
+        "summary": "Get Full Graph",
+        "tags": ["Graph"],
+        "parameters": [{ "name": "limit", "in": "query", "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "All nodes and edges" } }
+      }
+    },
+    "/api/graph/neighbors/{nodeId}": {
+      "get": {
+        "summary": "Get Node Neighbors",
+        "tags": ["Graph"],
+        "parameters": [
+          { "name": "nodeId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "depth", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Expanded node with neighbors" } }
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "summary": "List Tasks",
+        "tags": ["Tasks"],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "kind", "in": "query", "schema": { "type": "string" } },
+          { "name": "target", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Array of tasks (events excluded)" } }
+      }
+    },
+    "/api/tasks/{id}": {
+      "get": {
+        "summary": "Get Task",
+        "tags": ["Tasks"],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Task with events" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/tasks/agent": {
+      "post": {
+        "summary": "Submit Agent Task",
+        "tags": ["Tasks"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "agent": { "type": "string" }, "input": { "type": "object" }, "sessionId": { "type": "string" } }, "required": ["agent", "input"] } } } },
+        "responses": { "202": { "description": "Task accepted" }, "404": { "description": "Agent not found" } }
+      }
+    },
+    "/api/tasks/workflow": {
+      "post": {
+        "summary": "Submit Workflow Task",
+        "tags": ["Tasks"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "workflow": { "type": "string" }, "input": { "type": "object" } }, "required": ["workflow", "input"] } } } },
+        "responses": { "202": { "description": "Task accepted" }, "404": { "description": "Workflow not found" } }
+      }
+    },
+    "/api/tasks/{id}/cancel": {
+      "post": {
+        "summary": "Cancel Task",
+        "tags": ["Tasks"],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Task cancelled" } }
+      }
+    },
+    "/api/tasks/{id}/respond": {
+      "post": {
+        "summary": "Respond to Task",
+        "tags": ["Tasks"],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "response": { "type": "string" } }, "required": ["response"] } } } },
+        "responses": { "200": { "description": "Response accepted" } }
+      }
+    },
+    "/api/tasks/{id}/stream": {
+      "get": {
+        "summary": "Stream Task Events (SSE)",
+        "tags": ["Tasks"],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "SSE stream of task events" } }
+      }
+    },
+    "/chat/{agentName}": {
+      "get": {
+        "summary": "Standalone Agent Chat Page",
+        "tags": ["Chat"],
+        "parameters": [{ "name": "agentName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "HTML chat page" }, "404": { "description": "Agent not found or not published" } }
+      }
+    },
+    "/api/chat/{agentName}/config": {
+      "get": {
+        "summary": "Get Chat Agent Config",
+        "tags": ["Chat"],
+        "parameters": [{ "name": "agentName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Agent config (no password exposed)" } }
+      }
+    },
+    "/api/chat/{agentName}/auth": {
+      "post": {
+        "summary": "Authenticate for Chat",
+        "tags": ["Chat"],
+        "parameters": [{ "name": "agentName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "password": { "type": "string" } }, "required": ["password"] } } } },
+        "responses": { "200": { "description": "Token returned" }, "401": { "description": "Invalid password" } }
+      }
+    },
+    "/api/chat/{agentName}/stream": {
+      "post": {
+        "summary": "Stream Chat (SSE)",
+        "tags": ["Chat"],
+        "parameters": [{ "name": "agentName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "input": { "type": "object" }, "sessionId": { "type": "string" } }, "required": ["input"] } } } },
+        "responses": { "200": { "description": "SSE stream (requires x-chat-token header if password-protected)" } }
+      }
+    },
+    "/api/p2p/status": {
+      "get": {
+        "summary": "Get P2P Status",
+        "tags": ["P2P"],
+        "responses": { "200": { "description": "P2P status", "content": { "application/json": { "schema": { "type": "object", "properties": { "enabled": { "type": "boolean" }, "connected": { "type": "boolean" }, "peerCount": { "type": "integer" }, "peerName": { "type": "string" }, "networkKey": { "type": "string" }, "rateLimit": { "type": "integer" } } } } } } }
+      }
+    },
+    "/api/p2p/toggle": {
+      "post": {
+        "summary": "Toggle P2P",
+        "tags": ["P2P"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "enabled": { "type": "boolean" } }, "required": ["enabled"] } } } },
+        "responses": { "200": { "description": "P2P toggled" } }
+      }
+    },
+    "/api/p2p/settings": {
+      "patch": {
+        "summary": "Update P2P Settings",
+        "tags": ["P2P"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "peerName": { "type": "string" }, "networkKey": { "type": "string" }, "rateLimit": { "type": "integer" } } } } } },
+        "responses": { "200": { "description": "Settings updated" } }
+      }
+    },
+    "/api/p2p/peers": {
+      "get": { "summary": "List Peers", "tags": ["P2P"], "responses": { "200": { "description": "Array of connected peers" } } }
+    },
+    "/api/p2p/config": {
+      "get": { "summary": "Get P2P Sharing Config", "tags": ["P2P"], "responses": { "200": { "description": "What this instance shares" } } }
+    },
+    "/api/p2p/agents": {
+      "get": { "summary": "List Remote Agents", "tags": ["P2P"], "responses": { "200": { "description": "Array of remote agents" } } }
+    },
+    "/api/p2p/agents/{peerId}/{agentName}/stream": {
+      "post": {
+        "summary": "Invoke Remote Agent (SSE)",
+        "tags": ["P2P"],
+        "parameters": [
+          { "name": "peerId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "agentName", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "input": { "type": "object" }, "sessionId": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "SSE stream" } }
+      }
+    },
+    "/api/p2p/llms": {
+      "get": { "summary": "List Remote LLMs", "tags": ["P2P"], "responses": { "200": { "description": "Array of remote LLMs" } } }
+    },
+    "/api/p2p/llms/{peerId}/{modelName}/stream": {
+      "post": {
+        "summary": "Invoke Remote LLM (SSE)",
+        "tags": ["P2P"],
+        "parameters": [
+          { "name": "peerId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "modelName", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "sessionId": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "SSE stream" } }
+      }
+    },
+    "/api/tools": {
+      "get": {
+        "summary": "List All Tools",
+        "tags": ["Tools"],
+        "responses": { "200": { "description": "Tools grouped by source: mcp, function, knowledge, builtin, sandbox, workspace", "content": { "application/json": { "schema": { "type": "object" } } } } }
+      }
+    },
+    "/api/vnc/status": {
+      "get": {
+        "summary": "Get VNC/Sandbox Status",
+        "tags": ["VNC"],
+        "responses": { "200": { "description": "VNC status", "content": { "application/json": { "schema": { "type": "object", "properties": { "enabled": { "type": "boolean" }, "sandbox": { "type": "object" } } } } } } }
+      }
+    },
+    "/api/publish": {
+      "post": {
+        "summary": "Publish Key-Value",
+        "tags": ["Publish"],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "key": { "type": "string" }, "value": { "type": "string" } }, "required": ["key", "value"] } } } },
+        "responses": { "200": { "description": "Published" }, "400": { "description": "Key and value required" } }
+      }
+    },
+    "/api/logs/stream": {
+      "get": {
+        "summary": "Log Stream (SSE)",
+        "tags": ["Logs"],
+        "responses": { "200": { "description": "SSE stream of real-time log entries with backfill" } }
+      }
+    }
+  }
 }

@@ -1,8 +1,8 @@
 name: canvas
 description: Writing assistant that drafts content in a side canvas pane — articles, reports, code, games, and more
 version: 1.0.0
-llm:
-  name: p2p
+model:
+  llm: p2p
   temperature: 0.7
 prompt:
   system: |

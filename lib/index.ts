@@ -55,7 +55,7 @@ export type {
 
 // LLM
 export { LLMFactory } from './llm/index.ts';
-export type { ModelConfig, AgentLLMRef } from './llm/index.ts';
+export type { ModelConfig, AgentModelRef } from './llm/index.ts';
 
 // MCP
 export { MCPClientManager } from './mcp/index.ts';

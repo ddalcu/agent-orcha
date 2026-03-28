@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { P2PManager } from '../../lib/p2p/p2p-manager.ts';
 import { LLMFactory } from '../../lib/llm/index.ts';
+import type { VideoSettings, RemoteModel } from '../../lib/p2p/types.ts';
 
 interface InvokeParams {
   peerId: string;
@@ -51,12 +52,16 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
         orch._p2pManager = new P2PManager(fastify.orchestrator);
         await orch._p2pManager.start();
         LLMFactory.setP2PManager(orch._p2pManager);
+        orch.agentExecutor.p2pManager = orch._p2pManager;
+        fastify.orchestrator.registerP2PTools();
       }
     } else {
       if (orch._p2pManager) {
         await orch._p2pManager.close();
         orch._p2pManager = null;
         LLMFactory.setP2PManager(null as any);
+        orch.agentExecutor.p2pManager = undefined;
+        fastify.orchestrator.registerP2PTools();
       }
     }
 
@@ -95,10 +100,10 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/p2p/config — what this instance is sharing
   fastify.get('/config', async () => {
     const manager = getManager();
-    if (!manager) return { sharedAgents: [], sharedLLMs: [] };
+    if (!manager) return { sharedAgents: [], sharedModels: [] };
     return {
       sharedAgents: manager.getLocalP2PAgents(),
-      sharedLLMs: manager.getLocalP2PLLMs(),
+      sharedModels: manager.getLocalSharedModels(),
     };
   });
 
@@ -183,7 +188,7 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/llms', async (_req, reply) => {
     const manager = getManager();
     if (!manager) return reply.status(200).send([]);
-    return manager.getRemoteLLMs();
+    return manager.getRemoteModels();
   });
 
   // POST /api/p2p/llms/:peerId/:modelName/stream
@@ -233,7 +238,9 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       let fullContent = '';
 
       try {
-        const stream = manager.invokeRemoteLLM(peerId, modelName, wireMessages, undefined, abortController.signal);
+        const stream = manager.invokeRemoteModelStream(peerId, modelName, {
+          messages: wireMessages,
+        }, abortController.signal);
 
         for await (const chunk of stream) {
           if (abortController.signal.aborted) break;
@@ -273,6 +280,128 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       } finally {
         taskManager.unregisterAbort(task.id);
       }
+    }
+  );
+
+  // POST /api/p2p/video/generate — Distributed video generation via P2P
+  fastify.post<{ Body: { prompt: string; model?: string; settings?: Partial<VideoSettings> } }>(
+    '/video/generate',
+    async (request, reply) => {
+      const manager = getManager();
+      if (!manager) {
+        return reply.status(503).send({ error: 'P2P not enabled' });
+      }
+
+      const { prompt, model = 'wan2.2', settings: userSettings } = request.body as any;
+      if (!prompt || typeof prompt !== 'string') {
+        return reply.status(400).send({ error: 'prompt is required' });
+      }
+
+      const modelRef = model.toLowerCase();
+      const peers = manager.getRemoteModelsByName(modelRef);
+      if (peers.length === 0) {
+        return reply.status(404).send({ error: `No P2P peers found sharing model "${model}"`, availableModels: manager.getRemoteModels().map(l => l.model) });
+      }
+
+      const settings: VideoSettings = {
+        totalFrames: userSettings?.totalFrames ?? 24,
+        width: userSettings?.width ?? 512,
+        height: userSettings?.height ?? 512,
+        cfgScale: userSettings?.cfgScale ?? 7,
+        steps: userSettings?.steps ?? 20,
+        fps: userSettings?.fps ?? 12,
+        ...(userSettings?.seed !== undefined ? { seed: userSettings.seed } : {}),
+      };
+
+      // SSE stream for progress updates
+      reply.raw.setHeader('Content-Type', 'text/event-stream');
+      reply.raw.setHeader('Cache-Control', 'no-cache');
+      reply.raw.setHeader('Connection', 'keep-alive');
+
+      const abortController = new AbortController();
+      reply.raw.on('close', () => { if (!abortController.signal.aborted) abortController.abort(); });
+
+      // Distribute frames across peers
+      const framesPerPeer = Math.ceil(settings.totalFrames / peers.length);
+      const frameMap = new Map<number, string>(); // frameIndex → base64 data
+      const errors: string[] = [];
+
+      reply.raw.write(`data: ${JSON.stringify({ type: 'status', message: `Distributing ${settings.totalFrames} frames across ${peers.length} peer(s)` })}\n\n`);
+
+      const peerTasks = peers.map(async (peer: RemoteModel, idx: number) => {
+        const start = idx * framesPerPeer;
+        const end = Math.min(start + framesPerPeer, settings.totalFrames);
+        if (start >= settings.totalFrames) return;
+
+        try {
+          for (let frameIndex = start; frameIndex < end; frameIndex++) {
+            if (abortController.signal.aborted) break;
+            const result = await manager.invokeRemoteModelTask(
+              peer.peerId, peer.name, 'video_frame',
+              {
+                prompt,
+                width: settings.width,
+                height: settings.height,
+                steps: settings.steps,
+                cfgScale: settings.cfgScale,
+                seed: settings.seed,
+                frameIndex,
+                totalFrames: settings.totalFrames,
+              },
+              abortController.signal,
+            );
+            frameMap.set(frameIndex, result.data);
+            reply.raw.write(`data: ${JSON.stringify({ type: 'frame', frameIndex, total: settings.totalFrames, peer: peer.peerName })}\n\n`);
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push(`${peer.peerName}: ${msg}`);
+        }
+      });
+
+      await Promise.all(peerTasks);
+
+      reply.raw.write(`data: ${JSON.stringify({ type: 'status', message: `Received ${frameMap.size}/${settings.totalFrames} frames. Stitching...` })}\n\n`);
+
+      // Write frames to disk and stitch
+      const fs = await import('fs/promises');
+      const pathMod = await import('path');
+      const generatedDir = pathMod.default.join(fastify.orchestrator.workspaceRoot, '.generated');
+      const videoId = `video_${Date.now()}`;
+      const framesDir = pathMod.default.join(generatedDir, videoId);
+      await fs.mkdir(framesDir, { recursive: true });
+
+      for (let i = 0; i < settings.totalFrames; i++) {
+        const data = frameMap.get(i);
+        if (data) {
+          const padded = String(i + 1).padStart(6, '0');
+          await fs.writeFile(pathMod.default.join(framesDir, `frame_${padded}.png`), Buffer.from(data, 'base64'));
+        }
+      }
+
+      // Try stitching with ffmpeg
+      const outputPath = pathMod.default.join(generatedDir, `${videoId}.mp4`);
+      let resultPath = framesDir;
+      try {
+        const { execFile } = await import('child_process');
+        const { promisify } = await import('util');
+        const execFileAsync = promisify(execFile);
+        const framePattern = pathMod.default.join(framesDir, 'frame_%06d.png');
+        await execFileAsync('ffmpeg', [
+          '-y', '-framerate', String(settings.fps), '-i', framePattern,
+          '-vf', `minterpolate=fps=${settings.fps * 2}:mi_mode=blend`,
+          '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '23', '-preset', 'medium',
+          outputPath,
+        ], { timeout: 300_000 });
+        resultPath = outputPath;
+      } catch {
+        // Fall back to raw frames directory
+      }
+
+      const relativePath = `/generated/${pathMod.default.relative(generatedDir, resultPath)}`;
+      reply.raw.write(`data: ${JSON.stringify({ type: 'complete', video: relativePath, framesGenerated: frameMap.size, totalFrames: settings.totalFrames, peersUsed: peers.length, ...(errors.length ? { warnings: errors } : {}) })}\n\n`);
+      reply.raw.write('data: [DONE]\n\n');
+      reply.raw.end();
     }
   );
 };

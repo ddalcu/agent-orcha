@@ -3,32 +3,66 @@ import { strict as assert } from 'node:assert';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import {
-  loadLLMConfig,
+  loadModelsConfig,
   getModelConfig,
   getEmbeddingConfig,
   listModelConfigs,
   listEmbeddingConfigs,
-  isLLMConfigLoaded,
+  listImageConfigs,
+  listTtsConfigs,
+  isModelsConfigLoaded,
   resolveApiKey,
 } from '../../lib/llm/llm-config.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturePath = path.join(__dirname, '..', 'fixtures', 'llm.json');
+const fixturePath = path.join(__dirname, '..', 'fixtures', 'models.yaml');
 
-describe('loadLLMConfig', () => {
+describe('loadModelsConfig', () => {
   it('should load and validate config from fixture', async () => {
-    const config = await loadLLMConfig(fixturePath);
+    const config = await loadModelsConfig(fixturePath);
 
     assert.ok(config);
     assert.equal(config.version, '1.0');
-    assert.ok(config.models['default']);
+    assert.ok(config.llm['default']);
     assert.ok(config.embeddings['default']);
+  });
+
+  it('should load YAML config with share flags', async () => {
+    const config = await loadModelsConfig(fixturePath);
+
+    const sharedModel = config.llm['shared-model'];
+    assert.ok(sharedModel);
+    assert.ok(typeof sharedModel !== 'string');
+    assert.equal(sharedModel.share, true);
+    assert.equal(sharedModel.model, 'gpt-4o');
+  });
+
+  it('should list image configs with share flag', async () => {
+    const config = await loadModelsConfig(fixturePath);
+
+    const imageConfigs = listImageConfigs();
+    assert.ok(imageConfigs.length > 0);
+    const imageGen = imageConfigs.find(c => c.name === 'image-gen');
+    assert.ok(imageGen);
+    assert.equal(imageGen.config.share, true);
+    assert.equal(imageGen.config.description, 'FLUX.2 image generation');
+  });
+
+  it('should list tts configs with share flag', async () => {
+    const config = await loadModelsConfig(fixturePath);
+
+    const ttsConfigs = listTtsConfigs();
+    assert.ok(ttsConfigs.length > 0);
+    const tts = ttsConfigs.find(c => c.name === 'tts');
+    assert.ok(tts);
+    assert.equal(tts.config.share, true);
+    assert.equal(tts.config.description, 'Qwen3 TTS');
   });
 });
 
 describe('getModelConfig', () => {
   before(async () => {
-    await loadLLMConfig(fixturePath);
+    await loadModelsConfig(fixturePath);
   });
 
   it('should return config for known model', () => {
@@ -53,7 +87,7 @@ describe('getModelConfig', () => {
 
 describe('getEmbeddingConfig', () => {
   before(async () => {
-    await loadLLMConfig(fixturePath);
+    await loadModelsConfig(fixturePath);
   });
 
   it('should return config for known embedding', () => {
@@ -76,6 +110,7 @@ describe('listModelConfigs', () => {
     assert.ok(!names.includes('default'));
     assert.ok(names.includes('fast'));
     assert.ok(names.includes('openai'));
+    assert.ok(names.includes('shared-model'));
   });
 });
 
@@ -88,10 +123,10 @@ describe('listEmbeddingConfigs', () => {
   });
 });
 
-describe('isLLMConfigLoaded', () => {
+describe('isModelsConfigLoaded', () => {
   it('should return true after loading config', async () => {
-    await loadLLMConfig(fixturePath);
-    assert.equal(isLLMConfigLoaded(), true);
+    await loadModelsConfig(fixturePath);
+    assert.equal(isModelsConfigLoaded(), true);
   });
 });
 

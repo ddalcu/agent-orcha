@@ -72,6 +72,49 @@ const inlineStaticReadsPlugin = {
         resolveDir: path.resolve('.'),
       };
     });
+
+    // node-omni-orcha binding loader — replace with SEA-aware dlopen shim.
+    // The original uses createRequire(import.meta.url) which breaks in CJS SEA bundles.
+    build.onLoad({ filter: /node-omni-orcha[\\/](?:src|dist)[\\/]binding-loader\.[tj]s$/ }, async (args) => {
+      return {
+        contents: `
+          import { getNativeAddonPath, isSea } from './lib/sea/bootstrap.ts';
+          import { availableParallelism } from 'os';
+
+          // Preserve UV_THREADPOOL_SIZE side effect from original binding-loader
+          if (!process.env['UV_THREADPOOL_SIZE']) {
+            process.env['UV_THREADPOOL_SIZE'] = String(Math.max(availableParallelism(), 8));
+          }
+
+          let cachedBinding = null;
+
+          export function loadBinding() {
+            if (cachedBinding) return cachedBinding;
+
+            if (isSea()) {
+              const mod = { exports: {} };
+              process.dlopen(mod, getNativeAddonPath('omni'));
+              cachedBinding = mod.exports;
+              return cachedBinding;
+            }
+
+            // Non-SEA fallback (dev mode)
+            const { createRequire } = require('module');
+            const req = createRequire(__filename);
+            const p = process.platform, a = process.arch;
+            for (const c of [p + '-' + a + '-cuda', p + '-' + a]) {
+              try {
+                cachedBinding = req('@agent-orcha/node-omni-orcha-' + c + '/omni.node');
+                return cachedBinding;
+              } catch {}
+            }
+            throw new Error('omni.node native binding not found');
+          }
+        `,
+        loader: 'js',
+        resolveDir: path.resolve('.'),
+      };
+    });
   },
 };
 
@@ -183,28 +226,64 @@ for (const addon of ['sodium-native', 'udx-native']) {
   }
 }
 
-// System tray binary (macOS + Windows only; Linux is console-only)
-if (platform === 'darwin') {
-  const trayHelperPath = path.join('scripts', 'tray-helper');
-  if (fs.existsSync(trayHelperPath)) {
-    assets['native/tray-helper'] = trayHelperPath;
-  } else {
-    console.warn('tray-helper not found — run: swiftc -O -o scripts/tray-helper scripts/tray-helper.swift');
+// node-omni-orcha native addon (local LLM/TTS/STT/Image inference)
+// OMNI_VARIANT env var controls which binary to embed: 'cuda', 'cpu', or unset (auto-detect).
+{
+  const variant = process.env.OMNI_VARIANT?.toLowerCase();
+  const omniCandidates = variant === 'cuda'
+    ? [`@agent-orcha/node-omni-orcha-${platform}-${arch}-cuda`]
+    : variant === 'cpu'
+      ? [`@agent-orcha/node-omni-orcha-${platform}-${arch}`]
+      : [
+          `@agent-orcha/node-omni-orcha-${platform}-${arch}-cuda`,
+          `@agent-orcha/node-omni-orcha-${platform}-${arch}`,
+        ];
+
+  let omniFound = false;
+  for (const pkg of omniCandidates) {
+    const nodePath = path.join('node_modules', pkg, 'omni.node');
+    if (fs.existsSync(nodePath)) {
+      assets['native/omni.node'] = nodePath;
+      console.log(`Embedding omni.node from: ${pkg}`);
+      // Also embed .metallib if present (macOS pre-compiled Metal shaders)
+      const metallibPath = path.join('node_modules', pkg, 'default.metallib');
+      if (fs.existsSync(metallibPath)) {
+        assets['native/default.metallib'] = metallibPath;
+      }
+      omniFound = true;
+      break;
+    }
   }
-} else if (platform === 'win32') {
-  const trayBinName = 'tray_windows_release.exe';
-  const trayBinPath = path.join('node_modules', 'systray2', 'traybin', trayBinName);
-  if (fs.existsSync(trayBinPath)) {
-    assets[`native/${trayBinName}`] = trayBinPath;
-  } else {
-    console.warn(`systray2 binary not found: ${trayBinPath} — system tray won't work`);
+  if (!omniFound) {
+    console.warn('omni.node not found — local LLM/TTS/STT/Image will not work in SEA binary');
   }
 }
 
-// Tray icon
+// TrayConsole binary (macOS + Windows; Linux is console-only)
+{
+  const tcBinName = platform === 'win32' ? 'trayconsole.exe' : 'trayconsole';
+  const tcPkgMap = {
+    'win32-x64': '@agent-orcha/trayconsole-win32-x64',
+    'win32-arm64': '@agent-orcha/trayconsole-win32-arm64',
+    'darwin-x64': '@agent-orcha/trayconsole-darwin-x64',
+    'darwin-arm64': '@agent-orcha/trayconsole-darwin-arm64',
+  };
+  const tcPkg = tcPkgMap[`${platform}-${arch}`];
+  if (tcPkg) {
+    const tcBinPath = path.join('node_modules', tcPkg, 'bin', tcBinName);
+    if (fs.existsSync(tcBinPath)) {
+      assets[`native/${tcBinName}`] = tcBinPath;
+      console.log(`Embedding trayconsole from: ${tcPkg}`);
+    } else {
+      console.warn(`trayconsole binary not found: ${tcBinPath} — tray/console window won't work in SEA`);
+    }
+  }
+}
+
+// Tray icon (placed under native/ so seaBootstrap extracts it)
 const trayIconPath = platform === 'win32' ? 'scripts/AppIcon.ico' : 'scripts/favicon.png';
 if (fs.existsSync(trayIconPath)) {
-  assets['tray-icon'] = trayIconPath;
+  assets['native/tray-icon'] = trayIconPath;
 }
 
 console.log(`Embedding ${Object.keys(assets).length} assets`);
@@ -255,20 +334,19 @@ if (platform === 'darwin') {
     console.warn(`rcedit failed: ${e.message} — install with: npm i -D rcedit`);
   }
 
-  // Patch PE subsystem: Console (3) → GUI (2) so no console window is created on launch.
-  const buf = fs.readFileSync(outputPath);
-  const peOff = buf.readUInt32LE(0x3c);
-  if (buf.readUInt32LE(peOff) !== 0x00004550) {
-    throw new Error('Invalid PE signature in output binary');
-  }
-  const subsysOff = peOff + 0x5c;
-  const current = buf.readUInt16LE(subsysOff);
-  if (current === 3) {
-    buf.writeUInt16LE(2, subsysOff);
-    fs.writeFileSync(outputPath, buf);
+  // Patch PE subsystem from Console (3) to GUI (2) so Windows doesn't
+  // allocate a native console window on double-click. TrayConsole provides
+  // the log window and system tray instead.
+  const exeBuf = fs.readFileSync(outputPath);
+  const peOffset = exeBuf.readUInt32LE(0x3c);
+  const subsystemOffset = peOffset + 4 + 20 + 68; // PE sig + COFF header + OptionalHeader.Subsystem
+  const currentSubsystem = exeBuf.readUInt16LE(subsystemOffset);
+  if (currentSubsystem === 3) {
+    exeBuf.writeUInt16LE(2, subsystemOffset);
+    fs.writeFileSync(outputPath, exeBuf);
     console.log('Patched PE subsystem: Console → GUI');
   } else {
-    console.warn(`PE subsystem is ${current}, expected 3 (Console) — skipping patch`);
+    console.warn(`Unexpected PE subsystem value: ${currentSubsystem} — skipping patch`);
   }
 }
 

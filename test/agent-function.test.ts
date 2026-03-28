@@ -4,6 +4,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { FunctionLoader } from '../lib/functions/function-loader.ts';
 import { AgentExecutor } from '../lib/agents/agent-executor.ts';
+import { ConversationStore } from '../lib/memory/conversation-store.ts';
 import { LLMFactory } from '../lib/llm/llm-factory.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,7 +61,7 @@ describe('AgentExecutor', () => {
     });
 
     it('should create an agent instance and invoke it', async () => {
-        const executor = new AgentExecutor(mockToolRegistry);
+        const executor = new AgentExecutor(mockToolRegistry, new ConversationStore(), '/tmp');
 
         const agentDef = {
             name: 'test-agent',
@@ -71,7 +72,7 @@ describe('AgentExecutor', () => {
                 system: 'You are a test agent',
                 inputVariables: ['input']
             },
-            llm: { provider: 'mock', name: 'mock' },
+            model: 'default',
             tools: []
         } as any;
 
