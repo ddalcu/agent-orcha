@@ -430,29 +430,16 @@
         <pre class="mt-2 panel-sm text-xs text-primary overflow-x-auto">{escapeHtml(JSON.stringify(selectedTask.input, null, 2))}</pre>
       </details>
 
-      <!-- Result / Error -->
-      {#if selectedTask.error}
-        <div>
-          <span class="text-sm font-medium text-red block mb-2">Error</span>
-          <pre class="badge-outline-red rounded-lg p-4 text-xs overflow-x-auto">{escapeHtml(selectedTask.error)}</pre>
-        </div>
-      {:else if selectedTask.result}
-        <details open>
-          <summary class="text-sm font-medium text-secondary">
-            <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i> Result
-          </summary>
-          <pre class="mt-2 panel-sm text-xs text-primary overflow-x-auto overflow-y-auto monitor-scroll-panel">{escapeHtml(JSON.stringify(selectedTask.result, null, 2))}</pre>
-        </details>
-      {:else}
-        <div class="text-sm text-muted italic">Awaiting result...</div>
-      {/if}
-
-      <!-- Activity feed -->
+      <!-- Activity feed (show above result when task is working) -->
       {#if selectedTask.events?.length}
         <details open>
           <summary class="text-sm font-medium text-secondary">
             <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i>
-            Activity ({selectedTask.events.length} events)
+            {#if selectedTask.status === 'working'}
+              <i class="fas fa-circle text-green blink-dot"></i> Live Activity ({selectedTask.events.length} events)
+            {:else}
+              Activity ({selectedTask.events.length} events)
+            {/if}
           </summary>
           <div class="mt-2 panel-sm overflow-y-auto monitor-scroll-panel" bind:this={activityFeedEl}>
             {#each selectedTask.events as evt}
@@ -479,6 +466,23 @@
               </div>
             {/each}
           </div>
+        </details>
+      {:else if selectedTask.status === 'working'}
+        <div class="text-sm text-muted italic"><i class="fas fa-spinner fa-spin mr-1"></i> Waiting for activity...</div>
+      {/if}
+
+      <!-- Result / Error -->
+      {#if selectedTask.error}
+        <div>
+          <span class="text-sm font-medium text-red block mb-2">Error</span>
+          <pre class="badge-outline-red rounded-lg p-4 text-xs overflow-x-auto">{escapeHtml(selectedTask.error)}</pre>
+        </div>
+      {:else if selectedTask.result}
+        <details open={!selectedTask.events?.length}>
+          <summary class="text-sm font-medium text-secondary">
+            <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i> Result
+          </summary>
+          <pre class="mt-2 panel-sm text-xs text-primary overflow-x-auto overflow-y-auto monitor-scroll-panel">{escapeHtml(JSON.stringify(selectedTask.result, null, 2))}</pre>
         </details>
       {/if}
 

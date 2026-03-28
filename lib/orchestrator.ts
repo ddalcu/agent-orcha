@@ -222,6 +222,8 @@ export class Orchestrator {
         return { id: '', output: result.output };
       },
       submitAgent: (params) => this.taskManager.submitAgent(params),
+      streamAgent: (agentName, input, sessionId, signal, orgContext) =>
+        this.streamAgent(agentName, input, sessionId, signal, orgContext),
       listAgents: () => this.agentLoader.list().map(a => ({ name: a.name, description: a.description })),
       workspaceRoot: this.config.workspaceRoot,
     });
@@ -258,6 +260,13 @@ export class Orchestrator {
     });
     this._routineManager.startCronJobs();
     this._heartbeatManager.startAllHeartbeats();
+
+    // Wire org tools into agent executor (auto-injected when agents run with orgContext)
+    this.agentExecutor.orgToolDeps = {
+      tickets: this._ticketManager,
+      orgChart: this._orgChartManager,
+      submitAgent: (params) => this.taskManager.submitAgent(params),
+    };
 
     this.initialized = true;
 
@@ -995,6 +1004,7 @@ export class Orchestrator {
     input: Record<string, unknown>,
     sessionId?: string,
     signal?: AbortSignal,
+    orgContext?: import('./agents/types.ts').AgentOrgContext,
   ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
     this.ensureInitialized();
 
@@ -1004,7 +1014,7 @@ export class Orchestrator {
     }
 
     const instance = await this.agentExecutor.createInstance(definition);
-    yield* instance.stream({ input, sessionId, signal });
+    yield* instance.stream({ input, sessionId, signal, orgContext });
   }
 
   async runWorkflow(name: string, input: Record<string, unknown>): Promise<WorkflowResult> {

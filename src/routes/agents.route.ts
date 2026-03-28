@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { resolvePublishConfig } from '../../lib/agents/types.ts';
 import type { ContentPart } from '../../lib/types/llm-types.ts';
+import { StreamEventBuffer } from '../../lib/tasks/stream-event-buffer.ts';
 
 interface AgentParams {
   name: string;
@@ -9,19 +10,6 @@ interface AgentParams {
 interface InvokeBody {
   input: Record<string, unknown>;
   sessionId?: string;
-}
-
-/** Strip base64 image data from tool output so stored events stay small. */
-function summarizeOutput(output: unknown): unknown {
-  if (typeof output === 'string') return output.length > 500 ? output.slice(0, 500) + '...' : output;
-  if (Array.isArray(output)) {
-    return output.map((p: any) => {
-      if (p?.type === 'image') return { type: 'image', mediaType: p.mediaType, bytes: p.data?.length ?? 0 };
-      if (p?.type === 'text') return p;
-      return p;
-    });
-  }
-  return output;
 }
 
 export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -114,26 +102,10 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         const stream = fastify.orchestrator.streamAgent(name, input, sessionId, abortController.signal);
 
-        // Accumulate streaming text chunks into complete events
-        let pendingText = { type: '', content: '', timestamp: 0 };
-        let lastThinkingContent = '';
-
-        const flushPendingText = () => {
-          const text = pendingText.content.trim();
-          if (!text) { pendingText = { type: '', content: '', timestamp: 0 }; return; }
-          // Deduplicate repeated identical thinking blocks from misbehaving models
-          if (pendingText.type === 'thinking' && text === lastThinkingContent) {
-            pendingText = { type: '', content: '', timestamp: 0 };
-            return;
-          }
-          if (pendingText.type === 'thinking') lastThinkingContent = text;
-          taskManager.addEvent(task.id, {
-            type: pendingText.type as any,
-            timestamp: pendingText.timestamp,
-            content: text,
-          });
-          pendingText = { type: '', content: '', timestamp: 0 };
-        };
+        // Buffer per-token events into complete blocks for task store
+        const eventBuffer = new StreamEventBuffer((buffered) => {
+          taskManager.addEvent(task.id, buffered);
+        });
 
         for await (const chunk of stream) {
           if (abortController.signal.aborted) break;
@@ -146,27 +118,13 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
               const { type: _, ...metrics } = evt;
               taskManager.updateMetrics(task.id, metrics as any);
             }
-            // Accumulate thinking/content chunks into single events
-            if (evt.type === 'thinking' || evt.type === 'content') {
-              if (pendingText.type && pendingText.type !== evt.type) flushPendingText();
-              if (!pendingText.type) { pendingText.type = evt.type as string; pendingText.timestamp = Date.now(); }
-              pendingText.content += (evt.content as string) || '';
-            } else if (evt.type === 'tool_start' || evt.type === 'tool_end') {
-              // Tool event — flush accumulated text first, then store the tool event
-              flushPendingText();
-              const event: Record<string, unknown> = { type: evt.type, timestamp: Date.now() };
-              if (evt.tool) event.tool = evt.tool;
-              if (evt.input !== undefined) event.input = evt.input;
-              if (evt.output !== undefined) event.output = summarizeOutput(evt.output);
-              taskManager.addEvent(task.id, event as any);
-            } else {
-              // Other events (react_iteration, usage, etc.) — flush text but don't store
-              flushPendingText();
-            }
+            // Buffer event for task store (text accumulates, tools flush immediately)
+            eventBuffer.push(evt as any);
+            // SSE wire still gets every event for real-time streaming
             reply.raw.write(`data: ${JSON.stringify(evt)}\n\n`);
           }
         }
-        flushPendingText();
+        eventBuffer.flush();
 
         if (!abortController.signal.aborted) {
           taskManager.resolve(task.id, { output: 'stream completed' });

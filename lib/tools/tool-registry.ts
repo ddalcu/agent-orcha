@@ -13,6 +13,7 @@ export class ToolRegistry {
   private builtInTools: Map<string, StructuredTool> = new Map();
   private sandboxTools: Map<string, StructuredTool>;
   private workspaceTools: Map<string, StructuredTool>;
+  private orgTools: Map<string, StructuredTool>;
 
   constructor(
     mcpClient: MCPClientManager,
@@ -20,12 +21,14 @@ export class ToolRegistry {
     functionLoader: FunctionLoader,
     sandboxTools: Map<string, StructuredTool> = new Map(),
     workspaceTools: Map<string, StructuredTool> = new Map(),
+    orgTools: Map<string, StructuredTool> = new Map(),
   ) {
     this.mcpClient = mcpClient;
     this.knowledgeStores = knowledgeStores;
     this.functionLoader = functionLoader;
     this.sandboxTools = sandboxTools;
     this.workspaceTools = workspaceTools;
+    this.orgTools = orgTools;
   }
 
   async resolveTools(toolRefs: ToolReference[]): Promise<StructuredTool[]> {
@@ -102,6 +105,15 @@ export class ToolRegistry {
           return [];
         }
         return [workspaceTool];
+      }
+
+      case 'org': {
+        const orgTool = this.orgTools.get(name);
+        if (!orgTool) {
+          logger.warn(`Org tool "${name}" not found (available: ${Array.from(this.orgTools.keys()).join(', ') || 'none'})`);
+          return [];
+        }
+        return [orgTool];
       }
 
       case 'models': {
@@ -192,6 +204,14 @@ export class ToolRegistry {
 
   getAllWorkspaceTools(): StructuredTool[] {
     return Array.from(this.workspaceTools.values());
+  }
+
+  getAllOrgTools(): StructuredTool[] {
+    return Array.from(this.orgTools.values());
+  }
+
+  setOrgTools(tools: Map<string, StructuredTool>): void {
+    this.orgTools = tools;
   }
 
 }

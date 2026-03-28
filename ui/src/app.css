@@ -1780,6 +1780,15 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
   flex-shrink: 0;
   width: 4rem;
 }
+.blink-dot {
+  font-size: 0.5rem;
+  vertical-align: middle;
+  animation: blink-fade 1.2s ease-in-out infinite;
+}
+@keyframes blink-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
 
 /* ─── 15. McpView ─── */
 .mcp-tabs {

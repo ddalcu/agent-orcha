@@ -401,7 +401,7 @@
 
 <!-- Create Ticket Modal -->
 {#if showCreate}
-  <div class="modal-overlay" onclick={() => { showCreate = false; }} role="presentation">
+  <div class="modal-overlay" role="presentation">
     <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
       <h3>New Ticket</h3>
       {#if createError}

@@ -1,5 +1,6 @@
 import type { Organization, Ticket } from './types.ts';
 import type { OrgChartManager } from './org-chart-manager.ts';
+import type { AgentOrgContext } from '../agents/types.ts';
 import { logger } from '../logger.ts';
 
 interface AgentCEODeps {
@@ -7,19 +8,28 @@ interface AgentCEODeps {
     agentName: string,
     input: Record<string, unknown>,
     sessionId?: string,
-    orgContext?: import('./types.ts').AgentOrgContext,
+    orgContext?: AgentOrgContext,
   ) => Promise<{ id: string; output?: unknown }>;
   submitAgent: (params: {
     agent: string;
     input: Record<string, unknown>;
-    orgContext?: import('./types.ts').AgentOrgContext;
+    orgContext?: AgentOrgContext;
     onComplete?: (result: { output: unknown }) => void;
     onError?: (error: string) => void;
   }) => { id: string };
+  streamAgent: (
+    agentName: string,
+    input: Record<string, unknown>,
+    sessionId?: string,
+    signal?: AbortSignal,
+    orgContext?: AgentOrgContext,
+  ) => AsyncGenerator<string | Record<string, unknown>, void, unknown>;
   orgChart: OrgChartManager;
   listAgents: () => { name: string; description?: string }[];
   listTickets: (orgId: string) => { identifier: string; title: string; status: string; priority: string; assigneeAgent: string }[];
 }
+
+type CEOEvent = { type: string; content?: string; tool?: string; input?: unknown; output?: unknown };
 
 export class AgentCEO {
   private orgId: string;
@@ -33,6 +43,127 @@ export class AgentCEO {
   }
 
   async handleTicket(org: Organization, ticket: Ticket): Promise<{ taskId: string }> {
+    const ceoPrompt = this.buildTriagePrompt(org, ticket);
+    const orgContext = this.buildOrgContext(org, ticket);
+
+    const task = this.deps.submitAgent({
+      agent: this.agentName,
+      input: { query: ceoPrompt },
+      orgContext,
+    });
+
+    logger.info(`[AgentCEO] CEO "${this.agentName}" triaging ticket ${ticket.identifier} (task: ${task.id})`);
+    return { taskId: task.id };
+  }
+
+  async reviewTicket(org: Organization, ticket: Ticket, agentOutput: string): Promise<{ taskId: string }> {
+    const reviewPrompt = this.buildReviewPrompt(org, ticket, agentOutput);
+    const orgContext = this.buildOrgContext(org, ticket);
+
+    const task = this.deps.submitAgent({
+      agent: this.agentName,
+      input: { query: reviewPrompt },
+      orgContext,
+    });
+
+    logger.info(`[AgentCEO] CEO "${this.agentName}" reviewing ticket ${ticket.identifier} (task: ${task.id})`);
+    return { taskId: task.id };
+  }
+
+  async executeHeartbeat(
+    org: Organization,
+    prompt: string,
+    onEvent?: (event: CEOEvent) => void,
+  ): Promise<{ output: string; inputTokens?: number; outputTokens?: number }> {
+    const orgContext: AgentOrgContext = {
+      organization: {
+        id: org.id,
+        name: org.name,
+        description: org.description,
+        prefix: org.issuePrefix,
+      },
+    };
+
+    const stream = this.deps.streamAgent(
+      this.agentName,
+      { query: prompt },
+      undefined,
+      undefined,
+      orgContext,
+    );
+
+    let output = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    for await (const event of stream) {
+      if (typeof event === 'string') {
+        output += event;
+        onEvent?.({ type: 'content', content: event });
+        continue;
+      }
+
+      if (typeof event !== 'object' || event === null) continue;
+
+      const e = event as Record<string, unknown>;
+      const type = e.type as string;
+
+      switch (type) {
+        case 'content':
+          if (e.content) {
+            output += e.content as string;
+            onEvent?.({ type: 'content', content: e.content as string });
+          }
+          break;
+        case 'tool_start':
+          onEvent?.({ type: 'tool_start', tool: e.tool as string, input: e.input });
+          break;
+        case 'tool_end':
+          onEvent?.({ type: 'tool_end', tool: e.tool as string, output: e.output });
+          break;
+        case 'thinking':
+          onEvent?.({ type: 'thinking', content: e.content as string });
+          break;
+        case 'usage':
+          inputTokens += (e.input_tokens as number) || 0;
+          outputTokens += (e.output_tokens as number) || 0;
+          break;
+      }
+    }
+
+    logger.info(`[AgentCEO] CEO "${this.agentName}" heartbeat completed (${inputTokens + outputTokens} tokens)`);
+    return { output, inputTokens, outputTokens };
+  }
+
+  private buildOrgContext(org: Organization, ticket?: Ticket): AgentOrgContext {
+    const members = this.deps.orgChart.list(this.orgId);
+    const allTickets = this.deps.listTickets(this.orgId);
+    const activeTickets = allTickets.filter(t =>
+      t.identifier !== ticket?.identifier && t.status !== 'done' && t.status !== 'cancelled'
+    );
+
+    return {
+      organization: {
+        id: org.id,
+        name: org.name,
+        description: org.description,
+        prefix: org.issuePrefix,
+      },
+      ticket: ticket ? {
+        identifier: ticket.identifier,
+        title: ticket.title,
+        priority: ticket.priority,
+        description: ticket.description,
+      } : undefined,
+      orgChart: members.map(m => ({ agentName: m.agentName, role: m.role, title: m.title })),
+      activeTickets: activeTickets.map(t => ({
+        identifier: t.identifier, title: t.title, status: t.status,
+        priority: t.priority, assigneeAgent: t.assigneeAgent,
+      })),
+    };
+  }
+
+  private buildTriagePrompt(org: Organization, ticket: Ticket): string {
     const members = this.deps.orgChart.list(this.orgId);
     const agents = this.deps.listAgents();
     const allTickets = this.deps.listTickets(this.orgId);
@@ -50,7 +181,7 @@ export class AgentCEO {
       ? activeTickets.map(t => `- ${t.identifier}: ${t.title} [${t.status}] ${t.priority}${t.assigneeAgent ? ` → ${t.assigneeAgent}` : ''}`).join('\n')
       : 'No other active tickets.';
 
-    const ceoPrompt = `You are the CEO of organization "${org.name}" (${org.issuePrefix}).
+    return `You are the CEO of organization "${org.name}" (${org.issuePrefix}).
 
 ## Your Org Chart
 ${orgChartSummary}
@@ -73,36 +204,10 @@ You are fully autonomous — do NOT ask for permission or direction. Decide and 
 3. Create a new agent if no existing agent fits the task, then delegate to it
 
 Make a decision and execute it now.`;
-
-    const orgContext = {
-      organization: {
-        id: org.id,
-        name: org.name,
-        description: org.description,
-        prefix: org.issuePrefix,
-      },
-      ticket: {
-        identifier: ticket.identifier,
-        title: ticket.title,
-        priority: ticket.priority,
-        description: ticket.description,
-      },
-      orgChart: members.map(m => ({ agentName: m.agentName, role: m.role, title: m.title })),
-      activeTickets: activeTickets.map(t => ({ identifier: t.identifier, title: t.title, status: t.status, priority: t.priority, assigneeAgent: t.assigneeAgent })),
-    };
-
-    const task = this.deps.submitAgent({
-      agent: this.agentName,
-      input: { query: ceoPrompt },
-      orgContext,
-    });
-
-    logger.info(`[AgentCEO] CEO "${this.agentName}" triaging ticket ${ticket.identifier} (task: ${task.id})`);
-    return { taskId: task.id };
   }
 
-  async reviewTicket(org: Organization, ticket: Ticket, agentOutput: string): Promise<{ taskId: string }> {
-    const reviewPrompt = `You are the CEO of organization "${org.name}" (${org.issuePrefix}).
+  private buildReviewPrompt(org: Organization, ticket: Ticket, agentOutput: string): string {
+    return `You are the CEO of organization "${org.name}" (${org.issuePrefix}).
 
 ## Review Request
 An agent completed work on ticket **${ticket.identifier}**: ${ticket.title}
@@ -114,51 +219,5 @@ ${agentOutput.length > 3000 ? agentOutput.slice(0, 3000) + '\n\n... (truncated)'
 Review this work for quality, completeness, and correctness.
 - If satisfactory, note your approval
 - If improvements are needed, provide specific feedback`;
-
-    const orgContext = {
-      organization: {
-        id: org.id,
-        name: org.name,
-        description: org.description,
-        prefix: org.issuePrefix,
-      },
-      ticket: {
-        identifier: ticket.identifier,
-        title: ticket.title,
-        priority: ticket.priority,
-        description: ticket.description,
-      },
-    };
-
-    const task = this.deps.submitAgent({
-      agent: this.agentName,
-      input: { query: reviewPrompt },
-      orgContext,
-    });
-
-    logger.info(`[AgentCEO] CEO "${this.agentName}" reviewing ticket ${ticket.identifier} (task: ${task.id})`);
-    return { taskId: task.id };
-  }
-
-  async executeHeartbeat(org: Organization, prompt: string): Promise<{ output: string; taskId: string }> {
-    const orgContext = {
-      organization: {
-        id: org.id,
-        name: org.name,
-        description: org.description,
-        prefix: org.issuePrefix,
-      },
-    };
-
-    // Use submitAgent which returns immediately with a task ID
-    // The actual output comes asynchronously
-    const task = this.deps.submitAgent({
-      agent: this.agentName,
-      input: { query: prompt },
-      orgContext,
-    });
-
-    logger.info(`[AgentCEO] CEO "${this.agentName}" heartbeat started (task: ${task.id})`);
-    return { output: '', taskId: task.id };
   }
 }

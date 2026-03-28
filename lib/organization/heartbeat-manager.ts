@@ -9,6 +9,7 @@ import type { OrgChartManager } from './org-chart-manager.ts';
 import type { CEOCoordinator } from './ceo-coordinator.ts';
 import type { CEORunManager } from './ceo-run-manager.ts';
 import { logger } from '../logger.ts';
+import { StreamEventBuffer } from '../tasks/stream-event-buffer.ts';
 
 interface HeartbeatDeps {
   db: DatabaseSync;
@@ -167,6 +168,11 @@ export class HeartbeatManager {
 
     const run = this.deps.ceoRuns.startRun(orgId, 'heartbeat', triggerSource, task.id);
 
+    // Buffer per-token stream events into complete blocks for Monitor visibility
+    const eventBuffer = new StreamEventBuffer((buffered) => {
+      this.deps.addTaskEvent(task.id, buffered);
+    });
+
     try {
       // Build context
       const allTickets = this.deps.tickets.list(orgId);
@@ -249,12 +255,12 @@ At the end, provide:
 - **Handoff notes** for your next heartbeat`;
 
       // Execute via CEO coordinator
-      // Pipe Claude Code stream events into the task system for Monitor visibility
       const onEvent = (event: { type: string; content?: string; tool?: string; input?: unknown; output?: unknown }) => {
-        this.deps.addTaskEvent(task.id, { ...event, timestamp: Date.now() });
+        eventBuffer.push(event);
       };
 
       const result = await this.deps.ceo.executeHeartbeat(orgId, prompt, onEvent);
+      eventBuffer.flush();
 
       // Parse output for handoff notes (look for a section after "Handoff" or "Notes")
       const output = result.output || '';
@@ -290,6 +296,7 @@ At the end, provide:
       logger.info(`[HeartbeatManager] Heartbeat completed for org ${org.name}`);
       return completedRun;
     } catch (err) {
+      eventBuffer.flush();
       const errorMsg = err instanceof Error ? err.message : String(err);
       const failedRun = this.deps.ceoRuns.failRun(run.id, errorMsg);
       this.deps.rejectTask(task.id, errorMsg);

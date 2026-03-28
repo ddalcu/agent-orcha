@@ -18,6 +18,7 @@ import { createMemorySaveTool } from '../tools/built-in/memory-save.tool.ts';
 import { createIntegrationTools } from '../tools/built-in/integration-tools.ts';
 import { buildModelTools } from '../tools/built-in/model-tool-factory.ts';
 import { listImageConfigs, listTtsConfigs } from '../llm/llm-config.ts';
+import { buildOrgTools, type OrgToolDeps } from '../tools/org/org-tools.ts';
 import { StructuredOutputWrapper } from './structured-output-wrapper.ts';
 import { logLLMCallStart, logLLMCallEnd } from '../llm/llm-call-logger.ts';
 import { extractDocumentText } from '../utils/document-extract.ts';
@@ -37,6 +38,7 @@ export class AgentExecutor {
   private integrations?: IntegrationAccessor;
   private workspaceRoot: string;
   p2pManager?: P2PManager;
+  orgToolDeps?: Omit<OrgToolDeps, 'orgId'>;
 
   constructor(toolRegistry: ToolRegistry, conversationStore: ConversationStore, workspaceRoot: string, skillLoader?: SkillLoader, memoryManager?: MemoryManager, integrations?: IntegrationAccessor) {
     this.toolRegistry = toolRegistry;
@@ -139,7 +141,7 @@ export class AgentExecutor {
     const startTime = Date.now();
     const { input: actualInput, sessionId, orgContext } = this.parseInvokeOptions(input);
 
-    // Augment system prompt with company context if provided
+    // Augment system prompt with org context if provided
     let effectiveDefinition = definition;
     if (orgContext) {
       const contextPrompt = this.buildOrgContextPrompt(orgContext);
@@ -152,8 +154,14 @@ export class AgentExecutor {
       };
     }
 
-    if (tools.length > 0) {
-      return this.invokeWithTools(effectiveDefinition, llm, tools, actualInput, startTime, sessionId);
+    // Auto-inject org tools when invoked with org context
+    let effectiveTools = tools;
+    if (orgContext && this.orgToolDeps) {
+      effectiveTools = this.injectOrgTools(tools, orgContext.organization.id);
+    }
+
+    if (effectiveTools.length > 0) {
+      return this.invokeWithTools(effectiveDefinition, llm, effectiveTools, actualInput, startTime, sessionId);
     }
 
     return this.invokeWithoutTools(effectiveDefinition, llm, actualInput, startTime, sessionId);
@@ -210,6 +218,19 @@ export class AgentExecutor {
     }
 
     return prompt;
+  }
+
+  private injectOrgTools(tools: StructuredTool[], orgId: string): StructuredTool[] {
+    if (!this.orgToolDeps) return tools;
+    const orgToolMap = buildOrgTools({ ...this.orgToolDeps, orgId });
+    const orgToolList = Array.from(orgToolMap.values());
+    const existingNames = new Set(tools.map(t => t.name));
+    const newTools = orgToolList.filter(t => !existingNames.has(t.name));
+    if (newTools.length > 0) {
+      logger.info(`[AgentExecutor] Auto-injected ${newTools.length} org tools for org ${orgId}`);
+      return [...tools, ...newTools];
+    }
+    return tools;
   }
 
   private async invokeWithTools(
@@ -479,7 +500,7 @@ export class AgentExecutor {
   ): AsyncGenerator<string | Record<string, unknown>, void, unknown> {
     const { input: actualInput, sessionId, signal, orgContext } = this.parseInvokeOptions(input);
 
-    // Augment system prompt with company context if provided
+    // Augment system prompt with org context if provided
     if (orgContext) {
       const contextPrompt = this.buildOrgContextPrompt(orgContext);
       definition = {
@@ -489,6 +510,11 @@ export class AgentExecutor {
           system: `${definition.prompt.system}\n\n${contextPrompt}`,
         },
       };
+    }
+
+    // Auto-inject org tools when invoked with org context
+    if (orgContext && this.orgToolDeps) {
+      tools = this.injectOrgTools(tools, orgContext.organization.id);
     }
 
     if (tools.length > 0) {

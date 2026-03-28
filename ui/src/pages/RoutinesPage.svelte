@@ -357,7 +357,7 @@
 
 <!-- Create/Edit Routine Modal -->
 {#if showForm}
-  <div class="modal-overlay" onclick={() => { showForm = false; }} role="presentation">
+  <div class="modal-overlay" role="presentation">
     <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
       <h3>{editingRoutine ? 'Edit Routine' : 'New Routine'}</h3>
       {#if formError}

@@ -2,6 +2,7 @@ import type { Organization } from './types.ts';
 import type { OrgManager } from './org-manager.ts';
 import type { TicketManager } from './ticket-manager.ts';
 import type { OrgChartManager } from './org-chart-manager.ts';
+import type { AgentOrgContext } from '../agents/types.ts';
 import { AgentCEO } from './agent-ceo.ts';
 import { ClaudeCodeCEO } from './claude-code-ceo.ts';
 
@@ -13,15 +14,22 @@ interface CEOCoordinatorDeps {
     agentName: string,
     input: Record<string, unknown>,
     sessionId?: string,
-    orgContext?: { organization: { id: string; name: string; description: string; prefix: string }; ticket?: { identifier: string; title: string; priority: string; description: string } },
+    orgContext?: AgentOrgContext,
   ) => Promise<{ id: string; output?: unknown }>;
   submitAgent: (params: {
     agent: string;
     input: Record<string, unknown>;
-    orgContext?: { organization: { id: string; name: string; description: string; prefix: string }; ticket?: { identifier: string; title: string; priority: string; description: string } };
+    orgContext?: AgentOrgContext;
     onComplete?: (result: { output: unknown }) => void;
     onError?: (error: string) => void;
   }) => { id: string };
+  streamAgent: (
+    agentName: string,
+    input: Record<string, unknown>,
+    sessionId?: string,
+    signal?: AbortSignal,
+    orgContext?: AgentOrgContext,
+  ) => AsyncGenerator<string | Record<string, unknown>, void, unknown>;
   listAgents: () => { name: string; description?: string }[];
   workspaceRoot: string;
 }
@@ -112,8 +120,12 @@ export class CEOCoordinator {
 
     if (org.ceoType === 'agent') {
       const ceo = this.getAgentCEO(org);
-      const result = await ceo.executeHeartbeat(org, prompt);
-      return { output: result.output || '', taskId: result.taskId } as { output: string; taskId?: string };
+      const result = await ceo.executeHeartbeat(org, prompt, onEvent);
+      return {
+        output: result.output || '',
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+      };
     }
 
     if (org.ceoType === 'claude-code') {
@@ -169,6 +181,7 @@ export class CEOCoordinator {
       this.agentCEOs.set(org.id, new AgentCEO(org.id, config.agentName, {
         runAgent: this.deps.runAgent,
         submitAgent: this.deps.submitAgent,
+        streamAgent: this.deps.streamAgent,
         orgChart: this.deps.orgChart,
         listAgents: this.deps.listAgents,
         listTickets: (orgId) => this.deps.tickets.list(orgId).map(t => ({

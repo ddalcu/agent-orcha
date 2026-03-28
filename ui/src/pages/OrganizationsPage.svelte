@@ -106,7 +106,7 @@
 
   function selectAndGo(org: Organization) {
     orgStore.selectOrg(org);
-    appStore.setTab('tickets', org.id);
+    appStore.setTab('dashboard', org.id);
   }
 </script>
 
@@ -170,7 +170,7 @@
 </div>
 
 {#if showForm}
-  <div class="modal-overlay" onclick={() => { showForm = false; }} role="presentation">
+  <div class="modal-overlay" role="presentation">
     <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
       <h3>{editingOrg ? 'Edit Organization' : 'New Organization'}</h3>
 
@@ -259,7 +259,7 @@
 {/if}
 
 {#if confirmDelete}
-  <div class="modal-overlay" onclick={() => { confirmDelete = null; }} role="presentation">
+  <div class="modal-overlay" role="presentation">
     <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
       <h3>Delete Organization</h3>
       <p class="text-sm">
