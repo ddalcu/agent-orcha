@@ -32,7 +32,7 @@ export const ModelConfigSchema = z.object({
   provider: z.enum(['openai', 'gemini', 'anthropic', 'local', 'omni']).optional(),
   engine: z.enum(['llama-cpp', 'mlx-serve', 'ollama', 'lmstudio']).optional(),
   baseUrl: z.string().optional(),
-  apiKey: z.string().optional(),
+  apiKey: z.string().nullish(),
   model: z.string(),
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().optional(),
@@ -48,7 +48,7 @@ export const EmbeddingModelConfigSchema = z.object({
   provider: z.enum(['openai', 'gemini', 'anthropic', 'local', 'omni']).optional(),
   engine: z.enum(['llama-cpp', 'mlx-serve', 'ollama', 'lmstudio']).optional(),
   baseUrl: z.string().optional(),
-  apiKey: z.string().optional(),
+  apiKey: z.string().nullish(),
   model: z.string(),
   dimensions: z.number().optional(), // Embedding dimensions (optional, e.g., for OpenAI)
   eosToken: z.string().optional(), // EOS token to append to text (e.g., for Nomic models)
@@ -84,7 +84,7 @@ export const VideoModelConfigSchema = z.object({
   provider: z.enum(['openai', 'omni']).optional(),
   modelPath: z.string().optional().describe('Path to video diffusion model (omni provider)'),
   model: z.string().optional().describe('Model name (API providers like OpenAI Sora)'),
-  apiKey: z.string().optional(),
+  apiKey: z.string().nullish(),
   baseUrl: z.string().optional(),
   steps: z.number().optional().describe('Number of sampling steps'),
   width: z.number().optional().describe('Default frame width'),
