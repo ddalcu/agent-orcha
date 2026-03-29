@@ -10,8 +10,13 @@ enum AppTheme {
     static let border = Color(hex: 0x2A2A2A)
     static let success = Color(hex: 0x34C759)
     static let error = Color(hex: 0xFF3B30)
+    static let warning = Color(hex: 0xFF9500)
     static let userBubble = Color(hex: 0x6C5CE7)
     static let assistantBubble = Color(hex: 0x1C1C1E)
+    static let toolBackground = Color(hex: 0x1E1E2E)
+    static let rankGold = Color(hex: 0xFFD700)
+    static let rankSilver = Color(hex: 0xC0C0C0)
+    static let rankBronze = Color(hex: 0xCD7F32)
 }
 
 extension Color {

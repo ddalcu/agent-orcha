@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var viewModel: SettingsViewModel
+    @State private var showPrivacyReview = false
 
     var body: some View {
         NavigationStack {
@@ -41,6 +42,16 @@ struct SettingsView: View {
                     }
                 }
 
+                // Privacy
+                Section {
+                    privacySection
+                } header: {
+                    Text("Privacy")
+                } footer: {
+                    Text("P2P data sharing requires your consent per App Store guidelines.")
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+
                 // About
                 Section {
                     aboutSection
@@ -51,6 +62,68 @@ struct SettingsView: View {
             .scrollContentBackground(.hidden)
             .background(AppTheme.background)
             .navigationTitle("Settings")
+        }
+    }
+
+    // MARK: - Privacy
+
+    private var privacySection: some View {
+        Group {
+            HStack {
+                Label("P2P Data Sharing", systemImage: "hand.raised")
+                    .foregroundStyle(AppTheme.textPrimary)
+                Spacer()
+                if PrivacyConsentManager.shared.hasConsented {
+                    Text("Consented")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.success)
+                } else {
+                    Text("Not Consented")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+            }
+            .listRowBackground(AppTheme.surface)
+
+            if let date = PrivacyConsentManager.shared.consentDate {
+                HStack {
+                    Text("Consent Given")
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Spacer()
+                    Text(date, style: .date)
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+                .listRowBackground(AppTheme.surface)
+            }
+
+            Button {
+                showPrivacyReview = true
+            } label: {
+                Label("Review Privacy Details", systemImage: "doc.text")
+                    .foregroundStyle(AppTheme.accent)
+            }
+            .listRowBackground(AppTheme.surface)
+            .sheet(isPresented: $showPrivacyReview) {
+                PrivacyConsentView {
+                    if !PrivacyConsentManager.shared.hasConsented {
+                        PrivacyConsentManager.shared.grantConsent()
+                        viewModel.connect()
+                    }
+                    showPrivacyReview = false
+                }
+            }
+
+            if PrivacyConsentManager.shared.hasConsented {
+                Button(role: .destructive) {
+                    PrivacyConsentManager.shared.revokeConsent()
+                    viewModel.disconnect()
+                } label: {
+                    Label("Revoke Consent & Disconnect", systemImage: "xmark.shield")
+                        .foregroundStyle(AppTheme.error)
+                }
+                .listRowBackground(AppTheme.surface)
+            }
         }
     }
 
@@ -135,16 +208,21 @@ struct SettingsView: View {
     private var connectButton: some View {
         let isBusy = viewModel.connectionState == .connecting || viewModel.connectionState == .starting
         let showDisconnect = viewModel.isConnected || viewModel.connectionState == .reconnecting
+        let needsConsent = !PrivacyConsentManager.shared.hasConsented && !showDisconnect
 
         return Button {
-            viewModel.toggleConnection()
+            if needsConsent {
+                showPrivacyReview = true
+            } else {
+                viewModel.toggleConnection()
+            }
         } label: {
             HStack {
                 Spacer()
                 if isBusy {
                     ProgressView().controlSize(.small).tint(AppTheme.accent)
                 }
-                Text(showDisconnect ? "Disconnect" : "Connect")
+                Text(showDisconnect ? "Disconnect" : (needsConsent ? "Review Privacy & Connect" : "Connect"))
                     .fontWeight(.semibold)
                 Spacer()
             }

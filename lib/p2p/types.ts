@@ -57,6 +57,8 @@ export const P2PMessageTypes = [
   'model_task_stream',
   'model_task_stream_end',
   'model_task_error',
+  'leaderboard_request',
+  'leaderboard_response',
 ] as const;
 
 export type P2PMessageType = typeof P2PMessageTypes[number];
@@ -144,6 +146,19 @@ export interface ModelTaskErrorMessage {
   error: string;
 }
 
+// --- Leaderboard Messages ---
+
+export interface LeaderboardRequestMessage {
+  type: 'leaderboard_request';
+  requestId: string;
+}
+
+export interface LeaderboardResponseMessage {
+  type: 'leaderboard_response';
+  requestId: string;
+  entries: P2PLeaderboardEntry[];
+}
+
 // --- Video Settings (used by video tool, not a P2P message) ---
 
 export interface VideoSettings {
@@ -169,7 +184,9 @@ export type P2PMessage =
   | ModelTaskResultMessage
   | ModelTaskStreamMessage
   | ModelTaskStreamEndMessage
-  | ModelTaskErrorMessage;
+  | ModelTaskErrorMessage
+  | LeaderboardRequestMessage
+  | LeaderboardResponseMessage;
 
 // --- Peer tracking ---
 

@@ -77,6 +77,61 @@ class Protocol {
   }
 }
 
+// --- Content Filters ---
+
+// Track whether we're inside a tool_call block so we can suppress all tokens within it
+let inToolCallBlock = false
+
+/**
+ * Filter content chunks that are tool-call XML markup from the LLM's raw output.
+ * The LLM streams token-by-token, so `<tool_call>` may arrive as one chunk and
+ * the closing `</tool_call>` many chunks later. We track state to suppress the
+ * entire block.
+ * Returns true if this chunk should be hidden from the UI.
+ */
+function shouldFilterContent (text) {
+  if (typeof text !== 'string') return false
+  const trimmed = text.trim()
+  if (!trimmed) return false
+
+  // Detect start of tool_call or tool_history block
+  if (trimmed.includes('<tool_call>') || trimmed.startsWith('<tool_call') ||
+      trimmed.includes('<tool_history>') || trimmed.startsWith('<tool_history')) {
+    inToolCallBlock = true
+    return true
+  }
+
+  // Inside a block — suppress everything until closing tag
+  if (inToolCallBlock) {
+    if (trimmed.includes('</tool_call>') || trimmed.includes('</\ntool_call>') ||
+        trimmed.includes('</tool_history>')) {
+      inToolCallBlock = false
+    }
+    return true
+  }
+
+  // Standalone internal tags that might arrive outside tracked state
+  if (/^<\/?(?:tool_call|tool_history|function=|parameter=|\/function|\/parameter)/.test(trimmed)) {
+    return true
+  }
+
+  return false
+}
+
+/** Detect raw JSON event metadata that leaked into a string chunk */
+function isRawEventJSON (text) {
+  if (typeof text !== 'string') return false
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('{')) return false
+  try {
+    const obj = JSON.parse(trimmed)
+    // Known metadata event types that should not be shown as content
+    return obj.type === 'react_iteration' || obj.type === 'usage' || obj.type === 'result' || obj.type === 'warning'
+  } catch {
+    return false
+  }
+}
+
 // --- IPC Communication ---
 
 function sendEvent (event) {
@@ -115,10 +170,13 @@ function handleCommand (cmd) {
       disconnect()
       break
     case 'invoke_agent':
-      invokeAgent(cmd.requestId, cmd.peerId, cmd.agentName, cmd.input, cmd.sessionId)
+      invokeAgent(cmd.requestId, cmd.peerId, cmd.agentName, cmd.input, cmd.sessionId, cmd.attachments)
       break
     case 'invoke_llm':
       invokeLLM(cmd.requestId, cmd.peerId, cmd.modelName, cmd.messages, cmd.sessionId)
+      break
+    case 'request_leaderboard':
+      requestLeaderboard(cmd.requestId)
       break
     case 'abort':
       abortRequest(cmd.requestId)
@@ -155,7 +213,6 @@ async function connect (networkKey, name) {
 async function disconnect () {
   if (!swarm) return
 
-  // Abort all pending — clean up tracked peers
   for (const [peerId, peer] of peers) {
     peer.protocol.destroy()
   }
@@ -176,14 +233,14 @@ async function disconnect () {
 function onConnection (socket, _info) {
   const protocol = new Protocol(socket)
 
-  // Send handshake immediately (consumer-only: empty agents/llms)
+  // Send handshake immediately (consumer-only: empty agents/models)
   const handshake = {
     type: 'handshake',
     peerId: localPeerId,
     peerName: peerName,
     version: VERSION,
     agents: [],
-    llms: []
+    models: []
   }
   protocol.send(handshake)
 
@@ -206,7 +263,9 @@ function onConnection (socket, _info) {
       peerName: msg.peerName,
       version: msg.version,
       agents: msg.agents || [],
-      llms: msg.llms || [],
+      models: msg.models || msg.llms || [],
+      load: 0,
+      stats: null,
       connectedAt: Date.now()
     }
 
@@ -234,27 +293,109 @@ function setupPeerHandlers (peerId, protocol) {
     const peer = peers.get(peerId)
     if (!peer) return
     peer.info.agents = msg.agents || []
-    peer.info.llms = msg.llms || []
+    peer.info.models = msg.models || msg.llms || []
+    peer.info.load = msg.load || 0
+    peer.info.stats = msg.stats || null
     if (msg.peerName) peer.info.peerName = msg.peerName
 
     sendEvent({
       event: 'catalog_update',
       peerId,
       agents: peer.info.agents,
-      llms: peer.info.llms
+      models: peer.info.models,
+      load: peer.info.load,
+      stats: peer.info.stats
     })
   })
 
-  // Agent stream responses
+  // Agent stream responses — server sends rich typed chunks
   protocol.on('stream', (msg) => {
-    sendEvent({
-      event: 'stream_chunk',
-      requestId: msg.requestId,
-      chunk: msg.chunk
-    })
+    const chunk = msg.chunk
+    if (chunk && typeof chunk === 'object' && chunk.type) {
+      // Rich typed event from server
+      switch (chunk.type) {
+        case 'content': {
+          const text = chunk.content || ''
+          // Filter out raw tool call XML that some models emit as content
+          if (text && !shouldFilterContent(text)) {
+            sendEvent({
+              event: 'stream_chunk',
+              requestId: msg.requestId,
+              chunkType: 'content',
+              content: text
+            })
+          }
+          break
+        }
+        case 'thinking':
+          sendEvent({
+            event: 'stream_chunk',
+            requestId: msg.requestId,
+            chunkType: 'thinking',
+            content: chunk.content || ''
+          })
+          break
+        case 'tool_start':
+          sendEvent({
+            event: 'stream_event',
+            requestId: msg.requestId,
+            eventType: 'tool_start',
+            tool: chunk.tool,
+            input: typeof chunk.input === 'string' ? chunk.input : JSON.stringify(chunk.input || {}),
+            runId: chunk.runId || ''
+          })
+          break
+        case 'tool_end':
+          sendEvent({
+            event: 'stream_event',
+            requestId: msg.requestId,
+            eventType: 'tool_end',
+            tool: chunk.tool,
+            output: typeof chunk.output === 'string' ? chunk.output : JSON.stringify(chunk.output || ''),
+            runId: chunk.runId || ''
+          })
+          break
+        case 'usage':
+          sendEvent({
+            event: 'stream_event',
+            requestId: msg.requestId,
+            eventType: 'usage',
+            input_tokens: chunk.input_tokens || chunk.inputTokens || 0,
+            output_tokens: chunk.output_tokens || chunk.outputTokens || 0,
+            total_tokens: chunk.total_tokens || chunk.totalTokens || 0
+          })
+          break
+        case 'react_iteration':
+          // Internal ReAct loop markers — skip, don't forward to UI
+          break
+        default:
+          // Unknown event type — only forward if it has actual content, skip metadata
+          if (chunk.content && typeof chunk.content === 'string') {
+            sendEvent({
+              event: 'stream_chunk',
+              requestId: msg.requestId,
+              chunkType: 'content',
+              content: chunk.content
+            })
+          }
+          // else: silently drop non-content metadata events
+      }
+    } else if (typeof chunk === 'string') {
+      // Plain string chunk — filter out tool call XML and raw JSON metadata
+      if (!shouldFilterContent(chunk) && !isRawEventJSON(chunk)) {
+        sendEvent({
+          event: 'stream_chunk',
+          requestId: msg.requestId,
+          chunkType: 'content',
+          content: chunk
+        })
+      }
+    }
+    // else: non-string, non-object chunk — drop silently
   })
 
   protocol.on('stream_end', (msg) => {
+    inToolCallBlock = false // Reset filter state between requests
     sendEvent({
       event: 'stream_end',
       requestId: msg.requestId
@@ -269,52 +410,108 @@ function setupPeerHandlers (peerId, protocol) {
     })
   })
 
-  // LLM stream responses
-  protocol.on('llm_stream', (msg) => {
-    sendEvent({
-      event: 'llm_chunk',
-      requestId: msg.requestId,
-      chunk: msg.chunk
-    })
+  // Model task responses (used for LLM chat via model_task_invoke)
+  protocol.on('model_task_stream', (msg) => {
+    const chunk = msg.chunk
+    if (chunk && typeof chunk === 'object' && chunk.type) {
+      switch (chunk.type) {
+        case 'content':
+          sendEvent({
+            event: 'llm_chunk',
+            requestId: msg.requestId,
+            chunk: { type: 'content', content: chunk.content || '' }
+          })
+          break
+        case 'thinking':
+          sendEvent({
+            event: 'llm_chunk',
+            requestId: msg.requestId,
+            chunk: { type: 'thinking', content: chunk.content || '' }
+          })
+          break
+        case 'usage':
+          sendEvent({
+            event: 'llm_chunk',
+            requestId: msg.requestId,
+            chunk: {
+              type: 'usage',
+              input_tokens: chunk.input_tokens || chunk.inputTokens || 0,
+              output_tokens: chunk.output_tokens || chunk.outputTokens || 0,
+              total_tokens: chunk.total_tokens || chunk.totalTokens || 0
+            }
+          })
+          break
+        default:
+          // tool_calls or other — forward as content
+          if (chunk.content) {
+            sendEvent({
+              event: 'llm_chunk',
+              requestId: msg.requestId,
+              chunk: { type: 'content', content: chunk.content }
+            })
+          }
+      }
+    }
   })
 
-  protocol.on('llm_stream_end', (msg) => {
+  protocol.on('model_task_stream_end', (msg) => {
     sendEvent({
       event: 'llm_end',
       requestId: msg.requestId
     })
   })
 
-  protocol.on('llm_stream_error', (msg) => {
+  protocol.on('model_task_error', (msg) => {
     sendEvent({
       event: 'llm_error',
       requestId: msg.requestId,
       error: msg.error
     })
   })
+
+  // Model task result (for non-streaming tasks like image/tts)
+  protocol.on('model_task_result', (msg) => {
+    // Not used directly by iOS consumer — results come through agent tool_end events
+  })
+
+  // Leaderboard responses
+  protocol.on('leaderboard_response', (msg) => {
+    sendEvent({
+      event: 'leaderboard_response',
+      requestId: msg.requestId,
+      entries: msg.entries || []
+    })
+  })
 }
 
 // --- Agent Invocation ---
 
-function invokeAgent (requestId, peerId, agentName, input, sessionId) {
+function invokeAgent (requestId, peerId, agentName, input, sessionId, attachments) {
   const peer = peers.get(peerId)
   if (!peer) {
     sendEvent({ event: 'stream_error', requestId, error: 'Peer not found: ' + peerId })
     return
   }
 
+  const agentInput = Object.assign({}, input || {})
+
+  // Embed attachments in the input for the remote agent to process
+  if (attachments && attachments.length > 0) {
+    agentInput.__attachments = attachments
+  }
+
   const msg = {
     type: 'invoke',
     requestId,
     agentName,
-    input: input || {},
+    input: agentInput,
     sessionId: sessionId || ('ios-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8))
   }
 
   peer.protocol.send(msg)
 }
 
-// --- LLM Invocation ---
+// --- LLM Invocation (via model_task_invoke) ---
 
 function invokeLLM (requestId, peerId, modelName, messages, sessionId) {
   const peer = peers.get(peerId)
@@ -324,13 +521,36 @@ function invokeLLM (requestId, peerId, modelName, messages, sessionId) {
   }
 
   const msg = {
-    type: 'llm_invoke',
+    type: 'model_task_invoke',
     requestId,
+    taskType: 'chat',
     modelName,
-    messages: messages || []
+    params: {
+      messages: messages || []
+    }
   }
 
   peer.protocol.send(msg)
+}
+
+// --- Leaderboard ---
+
+function requestLeaderboard (requestId) {
+  // Send to the first connected peer that can respond
+  for (const [peerId, peer] of peers) {
+    peer.protocol.send({
+      type: 'leaderboard_request',
+      requestId: requestId || ('lb-' + Date.now())
+    })
+    return // Only need one response
+  }
+
+  // No peers connected
+  sendEvent({
+    event: 'leaderboard_response',
+    requestId: requestId || 'lb-nopeer',
+    entries: []
+  })
 }
 
 // --- Abort ---

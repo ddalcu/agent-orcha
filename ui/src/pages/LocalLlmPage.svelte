@@ -263,6 +263,11 @@
   let startingEmb = $state(false);
   let startingImage = $state(false);
   let startingTts = $state(false);
+  // GPU toggle per model slot — initialized from config, defaults to true when GPU available
+  let hasGpu = $derived(status?.gpu?.backend != null && status?.gpu?.backend !== 'cpu');
+  let chatUseGpu = $state<boolean | null>(null);
+  let imageUseGpu = $state<boolean | null>(null);
+  let ttsUseGpu = $state<boolean | null>(null);
 
   // ─── Config Resolvers ───
   function resolveDefault(section: 'models' | 'embeddings'): any {
@@ -612,6 +617,18 @@
     }
   });
 
+  // Sync GPU toggle state from config
+  $effect(() => {
+    if (llmConfig && hasGpu) {
+      const chatCfg = resolveDefault('models');
+      if (chatCfg && chatUseGpu === null) chatUseGpu = chatCfg.useGpu ?? true;
+      const imgCfg = imageConfigs.length > 0 ? imageConfigs[0][1] : null;
+      if (imgCfg && imageUseGpu === null) imageUseGpu = imgCfg.useGpu ?? true;
+      const ttsCfg = ttsConfigs.length > 0 ? ttsConfigs[0][1] : null;
+      if (ttsCfg && ttsUseGpu === null) ttsUseGpu = ttsCfg.useGpu ?? true;
+    }
+  });
+
   // Browse format auto-matches engine — omni only uses GGUF
   $effect(() => {
     if (isManagedEngine) {
@@ -690,7 +707,7 @@
     activateErrors = { ...activateErrors };
     delete activateErrors[id];
     try {
-      const result = await api.activateLocalModel(id);
+      const result = await api.activateLocalModel(id, hasGpu ? { useGpu: chatUseGpu ?? true } : undefined);
       if (result.error) throw new Error(result.error);
       await loadLlmConfig();
       await refresh();
@@ -733,7 +750,7 @@
     activateErrors = { ...activateErrors };
     delete activateErrors[id];
     try {
-      const result = await api.activateLocalImage(id);
+      const result = await api.activateLocalImage(id, hasGpu ? { useGpu: imageUseGpu ?? true } : undefined);
       if (result.error) throw new Error(result.error);
       await loadLlmConfig();
       await refresh();
@@ -750,7 +767,7 @@
     activateErrors = { ...activateErrors };
     delete activateErrors[id];
     try {
-      const result = await api.activateLocalTts(id);
+      const result = await api.activateLocalTts(id, hasGpu ? { useGpu: ttsUseGpu ?? true } : undefined);
       if (result.error) throw new Error(result.error);
       await loadLlmConfig();
       await refresh();
@@ -825,7 +842,7 @@
   async function startImage() {
     startingImage = true;
     try {
-      await api.startLocalImage();
+      await api.startLocalImage(hasGpu ? { useGpu: imageUseGpu ?? true } : undefined);
       await refresh();
     } catch (e) {
       console.error('Failed to start image model:', e);
@@ -837,7 +854,7 @@
   async function startTts() {
     startingTts = true;
     try {
-      await api.startLocalTts();
+      await api.startLocalTts(hasGpu ? { useGpu: ttsUseGpu ?? true } : undefined);
       await refresh();
     } catch (e) {
       console.error('Failed to start TTS model:', e);
@@ -1636,13 +1653,21 @@
                       {#if ctxSize}<span class="text-xs text-muted">{(ctxSize / 1024).toFixed(0)}K ctx</span>{/if}
                     {/if}
                   </div>
-                  <button class="btn btn-danger btn-sm" disabled={stoppingChat || applyingSettings} onclick={stopServer}>
-                    {#if stoppingChat}
-                      Stopping...
-                    {:else}
-                      <i class="fas fa-stop mr-1"></i>Stop
+                  <div class="flex items-center gap-2">
+                    {#if hasGpu}
+                      <span class="flex items-center gap-1 text-2xs text-muted" title="Model running with {(chatUseGpu ?? true) ? 'GPU' : 'CPU'}">
+                        <i class="fas {(chatUseGpu ?? true) ? 'fa-microchip' : 'fa-server'}"></i>
+                        {(chatUseGpu ?? true) ? 'GPU' : 'CPU'}
+                      </span>
                     {/if}
-                  </button>
+                    <button class="btn btn-danger btn-sm" disabled={stoppingChat || applyingSettings} onclick={stopServer}>
+                      {#if stoppingChat}
+                        Stopping...
+                      {:else}
+                        <i class="fas fa-stop mr-1"></i>Stop
+                      {/if}
+                    </button>
+                  </div>
                 </div>
 
                 <!-- Memory bar -->
@@ -1763,15 +1788,23 @@
                   {/if}
                 </div>
                 {#if lastActiveModelObj}
-                  <button class="btn btn-amber btn-sm"
-                    disabled={activatingModelId === lastActiveModel}
-                    onclick={() => activateModel(lastActiveModel!)}>
-                    {#if activatingModelId === lastActiveModel}
-                      <span class="spinner-sm"></span> Starting...
-                    {:else}
-                      <i class="fas fa-play mr-1"></i>Start
+                  <div class="flex items-center gap-2">
+                    {#if hasGpu}
+                      <label class="flex items-center gap-1 text-2xs text-muted cursor-pointer" title={(chatUseGpu ?? true) ? 'GPU enabled — click to use CPU' : 'CPU only — click to use GPU'}>
+                        <Toggle active={chatUseGpu ?? true} onchange={(v) => { chatUseGpu = v; }} />
+                        <span>GPU</span>
+                      </label>
                     {/if}
-                  </button>
+                    <button class="btn btn-amber btn-sm"
+                      disabled={activatingModelId === lastActiveModel}
+                      onclick={() => activateModel(lastActiveModel!)}>
+                      {#if activatingModelId === lastActiveModel}
+                        <span class="spinner-sm"></span> Starting...
+                      {:else}
+                        <i class="fas fa-play mr-1"></i>Start
+                      {/if}
+                    </button>
+                  </div>
                 {:else if chatNeedsDownload}
                   {@const isDownloading = activeDownloads.has(`${chatRecommended.repo}/${chatRecommended.file}`)}
                   <button class="btn btn-amber btn-sm" disabled={isDownloading}
@@ -1853,6 +1886,12 @@
                 </div>
                 <div class="flex items-center gap-2">
                   {#if imageLoaded}
+                    {#if hasGpu}
+                      <span class="flex items-center gap-1 text-2xs text-muted" title="Model running with {(imageUseGpu ?? true) ? 'GPU' : 'CPU'}">
+                        <i class="fas {(imageUseGpu ?? true) ? 'fa-microchip' : 'fa-server'}"></i>
+                        {(imageUseGpu ?? true) ? 'GPU' : 'CPU'}
+                      </span>
+                    {/if}
                     <button class="btn btn-danger btn-sm" disabled={stoppingImage} onclick={stopImage}>
                       {#if stoppingImage}<i class="fas fa-spinner fa-spin mr-1"></i>Stopping...{:else}<i class="fas fa-stop mr-1"></i>Stop{/if}
                     </button>
@@ -1867,6 +1906,12 @@
                       {/if}
                     </button>
                   {:else}
+                    {#if hasGpu}
+                      <label class="flex items-center gap-1 text-2xs text-muted cursor-pointer" title={(imageUseGpu ?? true) ? 'GPU enabled — click to use CPU' : 'CPU only — click to use GPU'}>
+                        <Toggle active={imageUseGpu ?? true} onchange={(v) => { imageUseGpu = v; }} />
+                        <span>GPU</span>
+                      </label>
+                    {/if}
                     <button class="btn btn-purple btn-sm" disabled={startingImage} onclick={startImage}>
                       {#if startingImage}<i class="fas fa-spinner fa-spin mr-1"></i>Loading...{:else}<i class="fas fa-play mr-1"></i>Start{/if}
                     </button>
@@ -1899,6 +1944,12 @@
                 </div>
                 <div class="flex items-center gap-2">
                   {#if ttsLoaded}
+                    {#if hasGpu}
+                      <span class="flex items-center gap-1 text-2xs text-muted" title="Model running with {(ttsUseGpu ?? true) ? 'GPU' : 'CPU'}">
+                        <i class="fas {(ttsUseGpu ?? true) ? 'fa-microchip' : 'fa-server'}"></i>
+                        {(ttsUseGpu ?? true) ? 'GPU' : 'CPU'}
+                      </span>
+                    {/if}
                     <button class="btn btn-danger btn-sm" disabled={stoppingTts} onclick={stopTts}>
                       {#if stoppingTts}<i class="fas fa-spinner fa-spin mr-1"></i>Stopping...{:else}<i class="fas fa-stop mr-1"></i>Stop{/if}
                     </button>
@@ -1913,6 +1964,12 @@
                       {/if}
                     </button>
                   {:else}
+                    {#if hasGpu}
+                      <label class="flex items-center gap-1 text-2xs text-muted cursor-pointer" title={(ttsUseGpu ?? true) ? 'GPU enabled — click to use CPU' : 'CPU only — click to use GPU'}>
+                        <Toggle active={ttsUseGpu ?? true} onchange={(v) => { ttsUseGpu = v; }} />
+                        <span>GPU</span>
+                      </label>
+                    {/if}
                     <button class="btn btn-green btn-sm" disabled={startingTts} onclick={startTts}>
                       {#if startingTts}<i class="fas fa-spinner fa-spin mr-1"></i>Loading...{:else}<i class="fas fa-play mr-1"></i>Start{/if}
                     </button>

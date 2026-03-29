@@ -38,6 +38,8 @@ import type {
   StreamErrorMessage,
   HandshakeMessage,
   CatalogMessage,
+  LeaderboardRequestMessage,
+  LeaderboardResponseMessage,
 } from './types.ts';
 import { P2PStats } from './p2p-stats.ts';
 
@@ -401,6 +403,31 @@ export class P2PManager {
         }
       }
     });
+
+    // Handle leaderboard requests from peers
+    protocol.on('leaderboard_request', async (msg) => {
+      const request = msg as LeaderboardRequestMessage;
+      try {
+        const entries = await this.getLeaderboard();
+        protocol.send({ type: 'leaderboard_response', requestId: request.requestId, entries });
+      } catch (err: any) {
+        logger.warn(`[P2P] Failed to serve leaderboard to peer ${peerId.slice(0, 8)}: ${err.message}`);
+      }
+    });
+
+    // Handle leaderboard responses (we are the requester)
+    protocol.on('leaderboard_response', (msg) => {
+      const response = msg as LeaderboardResponseMessage;
+      const req = this.pendingRequests.get(response.requestId);
+      if (req) {
+        req.chunks.push(response.entries);
+        req.done = true;
+        if (req.waiting) {
+          req.waiting();
+          req.waiting = null;
+        }
+      }
+    });
   }
 
   private getPeerName(peerId: string): string {
@@ -479,12 +506,72 @@ export class P2PManager {
     return chunk;
   }
 
+  /**
+   * Process __attachments from the invoke input (sent by mobile/remote clients).
+   * - Images: added to __multimodal array for multimodal LLM input
+   * - Audio: saved to .generated/ directory with a text annotation for TTS voice cloning
+   * - Other files: text annotation with file info
+   * Mutates input in place and removes __attachments key.
+   */
+  private processAttachments(input: Record<string, unknown>): void {
+    const attachments = input['__attachments'];
+    if (!Array.isArray(attachments) || attachments.length === 0) return;
+
+    delete input['__attachments'];
+
+    const multimodal: { type: 'image'; data: string; mediaType: string }[] = [];
+    const annotations: string[] = [];
+
+    for (const attachment of attachments) {
+      if (!attachment || typeof attachment !== 'object') continue;
+      const { data, mediaType, name } = attachment as { data?: string; mediaType?: string; name?: string };
+      if (!data || !mediaType) continue;
+
+      const fileName = name || 'unnamed';
+
+      if (mediaType.startsWith('image/')) {
+        multimodal.push({ type: 'image', data, mediaType });
+      } else if (mediaType.startsWith('audio/')) {
+        // Save audio to .generated/ for use as TTS reference audio
+        try {
+          const generatedDir = path.join(this.orchestrator.workspaceRoot, '.generated');
+          fs.mkdirSync(generatedDir, { recursive: true });
+          const ext = mediaType.split('/')[1]?.split(';')[0] || 'wav';
+          const safeFileName = `p2p-audio-${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}.${ext}`;
+          const filePath = path.join(generatedDir, safeFileName);
+          fs.writeFileSync(filePath, Buffer.from(data, 'base64'));
+          annotations.push(`[Uploaded audio: ${fileName}, saved at ${filePath}. Use as referenceAudio for TTS voice cloning.]`);
+          logger.info(`[P2P] Saved audio attachment "${fileName}" to ${filePath}`);
+        } catch (err: any) {
+          logger.warn(`[P2P] Failed to save audio attachment "${fileName}": ${err.message}`);
+          annotations.push(`[Uploaded audio: ${fileName}, type: ${mediaType} (failed to save)]`);
+        }
+      } else {
+        annotations.push(`[Uploaded file: ${fileName}, type: ${mediaType}]`);
+      }
+    }
+
+    if (multimodal.length > 0) {
+      input['__multimodal'] = multimodal;
+    }
+
+    if (annotations.length > 0) {
+      // Append annotations to the main text input
+      const mainKey = input['input'] !== undefined ? 'input' : Object.keys(input).find(k => typeof input[k] === 'string') || 'input';
+      const existing = typeof input[mainKey] === 'string' ? input[mainKey] as string : '';
+      input[mainKey] = (existing + '\n' + annotations.join('\n')).trim();
+    }
+  }
+
   private async handleInvokeRequest(
     peerId: string,
     protocol: P2PProtocol,
     invoke: InvokeMessage,
   ): Promise<void> {
     const { requestId, agentName, input, sessionId } = invoke;
+
+    // Extract attachments from input if present (sent by mobile/remote clients)
+    this.processAttachments(input);
 
     if (!this.checkRateLimit()) {
       protocol.send({ type: 'stream_error', requestId, error: 'Rate limit exceeded. Try again later.' });

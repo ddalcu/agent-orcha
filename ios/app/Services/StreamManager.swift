@@ -5,13 +5,13 @@ import Foundation
 @Observable
 final class StreamManager {
     /// Active agent stream continuations keyed by requestId
-    private var agentContinuations: [String: AsyncThrowingStream<String, Error>.Continuation] = [:]
+    private var agentContinuations: [String: AsyncThrowingStream<AgentStreamEvent, Error>.Continuation] = [:]
     /// Active LLM stream continuations keyed by requestId
     private var llmContinuations: [String: AsyncThrowingStream<LLMChunkType, Error>.Continuation] = [:]
 
-    // MARK: - Agent Streams
+    // MARK: - Agent Streams (rich events)
 
-    func createAgentStream(requestId: String) -> AsyncThrowingStream<String, Error> {
+    func createAgentStream(requestId: String) -> AsyncThrowingStream<AgentStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             self.agentContinuations[requestId] = continuation
             continuation.onTermination = { @Sendable _ in
@@ -22,8 +22,8 @@ final class StreamManager {
         }
     }
 
-    func yieldAgentChunk(requestId: String, chunk: String) {
-        agentContinuations[requestId]?.yield(chunk)
+    func yieldAgentEvent(requestId: String, event: AgentStreamEvent) {
+        agentContinuations[requestId]?.yield(event)
     }
 
     func finishAgentStream(requestId: String) {

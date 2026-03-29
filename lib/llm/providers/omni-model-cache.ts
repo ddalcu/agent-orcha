@@ -1,5 +1,5 @@
 import { loadModel, createModel, detectGpu } from '@agent-orcha/node-omni-orcha';
-import type { LlmModel, ImageModel, TtsModel, GpuInfo, LlmLoadOptions, ImageLoadOptions } from '@agent-orcha/node-omni-orcha';
+import type { LlmModel, ImageModel, TtsModel, GpuInfo, LlmLoadOptions, ImageLoadOptions, TtsLoadOptions } from '@agent-orcha/node-omni-orcha';
 import { logger } from '../../logger.ts';
 
 export interface OmniModelStatus {
@@ -106,7 +106,7 @@ export class OmniModelCache {
     return this.imageLoading;
   }
 
-  static async getTtsModel(modelPath: string): Promise<TtsModel> {
+  static async getTtsModel(modelPath: string, options?: TtsLoadOptions): Promise<TtsModel> {
     if (this.ttsModel && this.ttsPath === modelPath) {
       return this.ttsModel;
     }
@@ -119,7 +119,7 @@ export class OmniModelCache {
         }
         logger.info(`[OmniModelCache] Loading TTS model: ${modelPath}`);
         const model = createModel(modelPath, 'tts');
-        await model.load();
+        await model.load(options);
         this.ttsModel = model;
         this.ttsPath = modelPath;
         return this.ttsModel;

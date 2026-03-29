@@ -41,6 +41,7 @@ export const ModelConfigSchema = z.object({
   contextSize: z.number().optional(),
   active: z.boolean().optional(),
   share: z.boolean().optional(),
+  useGpu: z.boolean().optional(),
 });
 
 // Schema for individual embedding configuration
@@ -67,6 +68,7 @@ export const ImageModelConfigSchema = z.object({
   height: z.number().optional().describe('Default image height'),
   description: z.string().default(''),
   share: z.boolean().optional(),
+  useGpu: z.boolean().optional(),
 });
 
 // Schema for TTS model configuration
@@ -75,6 +77,7 @@ export const TtsModelConfigSchema = z.object({
   voice: z.string().optional().describe('Default voice name'),
   description: z.string().default(''),
   share: z.boolean().optional(),
+  useGpu: z.boolean().optional(),
 });
 
 export type ImageModelConfig = z.infer<typeof ImageModelConfigSchema>;

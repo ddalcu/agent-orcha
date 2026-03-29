@@ -1,4 +1,5 @@
 import SwiftUI
+import AVKit
 
 struct MessageBubble: View {
     let message: ChatMessage
@@ -8,9 +9,19 @@ struct MessageBubble: View {
             if message.role == .user { Spacer(minLength: 60) }
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 6) {
-                // Thinking section (for LLM thinking chunks)
+                // Thinking section
                 if let thinking = message.thinkingContent, !thinking.isEmpty {
                     thinkingSection(thinking)
+                }
+
+                // Tool calls section
+                if !message.toolCalls.isEmpty {
+                    toolCallsSection
+                }
+
+                // Media content (images, audio, video)
+                if !message.mediaContent.isEmpty {
+                    mediaSection
                 }
 
                 // Main content
@@ -18,7 +29,7 @@ struct MessageBubble: View {
                     Text(" ")
                         .font(.body)
                         .foregroundStyle(AppTheme.textPrimary)
-                } else {
+                } else if !message.content.isEmpty {
                     MarkdownText(message.content)
                         .textSelection(.enabled)
                 }
@@ -45,18 +56,41 @@ struct MessageBubble: View {
         message.role == .user ? AppTheme.userBubble : AppTheme.assistantBubble
     }
 
+    // MARK: - Thinking
+
     private func thinkingSection(_ thinking: String) -> some View {
-        DisclosureGroup {
-            Text(thinking)
-                .font(.caption)
-                .foregroundStyle(AppTheme.textSecondary)
-        } label: {
-            Label("Thinking", systemImage: "brain.head.profile")
-                .font(.caption)
-                .foregroundStyle(AppTheme.textSecondary)
-        }
-        .tint(AppTheme.textSecondary)
+        ThinkingView(thinking: thinking, isStreaming: message.isStreaming)
     }
+
+    // MARK: - Tool Calls
+
+    private var toolCallsSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(message.toolCalls) { tool in
+                ToolCallPill(toolCall: tool)
+            }
+        }
+    }
+
+    // MARK: - Media
+
+    private var mediaSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(message.mediaContent) { media in
+                if let dataURI = media.imageDataURI {
+                    InlineImageView(dataURI: dataURI)
+                }
+                if let dataURI = media.audioDataURI {
+                    InlineAudioPlayer(dataURI: dataURI)
+                }
+                if let dataURI = media.videoDataURI {
+                    InlineVideoPlayer(dataURI: dataURI)
+                }
+            }
+        }
+    }
+
+    // MARK: - Streaming Indicator
 
     private var streamingIndicator: some View {
         HStack(spacing: 4) {
@@ -75,6 +109,8 @@ struct MessageBubble: View {
         }
     }
 
+    // MARK: - Usage
+
     private func usageBar(_ usage: TokenUsage) -> some View {
         HStack(spacing: 8) {
             Label("\(usage.inputTokens)", systemImage: "arrow.down.circle")
@@ -83,6 +119,399 @@ struct MessageBubble: View {
         .font(.caption2)
         .foregroundStyle(AppTheme.textSecondary.opacity(0.7))
     }
+}
+
+// MARK: - Tool Call Pill
+
+// MARK: - Thinking View (auto-expands while streaming)
+
+private struct ThinkingView: View {
+    let thinking: String
+    let isStreaming: Bool
+
+    @State private var isExpanded = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "brain.head.profile")
+                        .font(.caption2)
+                    Text("Thinking")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                    if isStreaming {
+                        ProgressView()
+                            .scaleEffect(0.4)
+                    }
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                }
+                .foregroundStyle(AppTheme.textSecondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                Text(thinking)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary.opacity(0.8))
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+            }
+        }
+        .background(AppTheme.accent.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .onChange(of: isStreaming) {
+            // Collapse when streaming finishes
+            if !isStreaming {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isExpanded = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Tool Call Pill
+
+private struct ToolCallPill: View {
+    let toolCall: ToolCallInfo
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "wrench")
+                        .font(.caption2)
+                    Text(toolCall.tool)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                    Spacer()
+                    if toolCall.isDone {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.success)
+                    } else {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                    }
+                }
+                .foregroundStyle(AppTheme.textSecondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !toolCall.input.isEmpty {
+                        Text("Input:")
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.textSecondary.opacity(0.7))
+                        Text(toolCall.input.prefix(200) + (toolCall.input.count > 200 ? "..." : ""))
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                    if let output = toolCall.output, !output.isEmpty {
+                        Text("Output:")
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.textSecondary.opacity(0.7))
+                        Text(output.prefix(200) + (output.count > 200 ? "..." : ""))
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 6)
+            }
+        }
+        .background(AppTheme.toolBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+// MARK: - Inline Image View
+
+private struct InlineImageView: View {
+    let dataURI: String
+
+    @State private var image: UIImage?
+    @State private var showFullScreen = false
+    @State private var saved = false
+
+    var body: some View {
+        Group {
+            if let image {
+                VStack(spacing: 0) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .onTapGesture { showFullScreen = true }
+
+                    SaveButton(label: "Save to Photos", icon: "square.and.arrow.down", saved: saved) {
+                        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                        withAnimation { saved = true }
+                    }
+                }
+                .fullScreenCover(isPresented: $showFullScreen) {
+                    ZStack {
+                        Color.black.ignoresSafeArea()
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .ignoresSafeArea()
+                    }
+                    .onTapGesture { showFullScreen = false }
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(AppTheme.surface)
+                    .frame(height: 100)
+                    .overlay {
+                        ProgressView()
+                            .tint(AppTheme.accent)
+                    }
+            }
+        }
+        .task {
+            image = MediaCacheService.shared.imageFromDataURI(dataURI)
+        }
+    }
+}
+
+// MARK: - Inline Audio Player
+
+private struct InlineAudioPlayer: View {
+    let dataURI: String
+
+    @State private var audioPlayer: AVAudioPlayer?
+    @State private var audioFileURL: URL?
+    @State private var isPlaying = false
+    @State private var progress: Double = 0
+    @State private var timerTask: Task<Void, Never>?
+    @State private var showShareSheet = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Button {
+                    togglePlayback()
+                } label: {
+                    Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 40))
+                        .foregroundStyle(AppTheme.accent)
+                }
+                .buttonStyle(.plain)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(AppTheme.surface)
+                                .frame(height: 5)
+                            Capsule()
+                                .fill(AppTheme.accent)
+                                .frame(width: geo.size.width * progress, height: 5)
+                        }
+                        .frame(maxHeight: .infinity, alignment: .center)
+                    }
+                    .frame(height: 20)
+
+                    HStack {
+                        if let player = audioPlayer {
+                            Text(formatDuration(player.currentTime))
+                                .font(.caption2)
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .monospacedDigit()
+                            Spacer()
+                            Text(formatDuration(player.duration))
+                                .font(.caption2)
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .monospacedDigit()
+                        }
+                    }
+                }
+            }
+            .padding(12)
+
+            if audioFileURL != nil {
+                SaveButton(label: "Save Audio", icon: "square.and.arrow.down") {
+                    showShareSheet = true
+                }
+                .sheet(isPresented: $showShareSheet) {
+                    if let url = audioFileURL {
+                        ShareSheet(items: [url])
+                    }
+                }
+            }
+        }
+        .background(AppTheme.toolBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .task {
+            loadAudio()
+        }
+        .onDisappear {
+            timerTask?.cancel()
+            audioPlayer?.stop()
+        }
+    }
+
+    private func loadAudio() {
+        // Configure audio session for playback (required for iOS to output sound)
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            // Audio session config failed — playback may not work
+        }
+
+        guard let url = MediaCacheService.shared.fileURLFromDataURI(dataURI, fallbackExtension: "wav") else { return }
+        audioFileURL = url
+        audioPlayer = try? AVAudioPlayer(contentsOf: url)
+        audioPlayer?.prepareToPlay()
+    }
+
+    private func togglePlayback() {
+        guard let player = audioPlayer else { return }
+        if isPlaying {
+            player.pause()
+            isPlaying = false
+            timerTask?.cancel()
+        } else {
+            // Ensure audio session is active before playing
+            try? AVAudioSession.sharedInstance().setActive(true)
+            player.play()
+            isPlaying = true
+            startProgressTimer()
+        }
+    }
+
+    private func startProgressTimer() {
+        timerTask?.cancel()
+        timerTask = Task {
+            while !Task.isCancelled, let player = audioPlayer, player.isPlaying {
+                progress = player.currentTime / max(player.duration, 0.01)
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            if !Task.isCancelled {
+                isPlaying = false
+                progress = 0
+            }
+        }
+    }
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
+}
+
+// MARK: - Inline Video Player
+
+private struct InlineVideoPlayer: View {
+    let dataURI: String
+
+    @State private var playerItem: AVPlayerItem?
+    @State private var player: AVPlayer?
+    @State private var videoFileURL: URL?
+    @State private var showShareSheet = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Group {
+                if let player {
+                    VideoPlayer(player: player)
+                        .frame(maxWidth: .infinity)
+                        .aspectRatio(16/9, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(AppTheme.surface)
+                        .aspectRatio(16/9, contentMode: .fit)
+                        .overlay {
+                            ProgressView()
+                                .tint(AppTheme.accent)
+                        }
+                }
+            }
+
+            if videoFileURL != nil {
+                SaveButton(label: "Save Video", icon: "square.and.arrow.down") {
+                    showShareSheet = true
+                }
+                .sheet(isPresented: $showShareSheet) {
+                    if let url = videoFileURL {
+                        ShareSheet(items: [url])
+                    }
+                }
+            }
+        }
+        .task {
+            guard let url = MediaCacheService.shared.fileURLFromDataURI(dataURI, fallbackExtension: "mp4") else { return }
+            videoFileURL = url
+            let item = AVPlayerItem(url: url)
+            playerItem = item
+            player = AVPlayer(playerItem: item)
+        }
+        .onDisappear {
+            player?.pause()
+        }
+    }
+}
+
+// MARK: - Save Button
+
+private struct SaveButton: View {
+    let label: String
+    let icon: String
+    var saved: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: saved ? "checkmark.circle.fill" : icon)
+                    .font(.caption)
+                Text(saved ? "Saved" : label)
+                    .font(.caption)
+            }
+            .foregroundStyle(saved ? AppTheme.success : AppTheme.accent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+        }
+        .buttonStyle(.plain)
+        .disabled(saved)
+    }
+}
+
+// MARK: - Share Sheet
+
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Markdown Renderer

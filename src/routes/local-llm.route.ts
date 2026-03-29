@@ -681,10 +681,15 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         logger.info(`[LocalLLM] Auto-detected mmproj for activation: ${mmprojPath}`);
       }
 
+      // Read useGpu from request body (if provided) or existing config
+      const body = (request.body as any) || {};
+      const useGpu = body.useGpu ?? currentObj?.useGpu;
+
       try {
         await OmniModelCache.getLlmChat(model.filePath, {
           contextSize: currentObj?.contextSize,
           ...(mmprojPath ? { mmprojPath } : {}),
+          ...(useGpu != null ? { useGpu } : {}),
         });
       } catch (err: any) {
         logger.error('[LocalLLM] Failed to load model:', err);
@@ -702,6 +707,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         model: modelName,
         ...(currentObj?.contextSize ? { contextSize: currentObj.contextSize } : {}),
         reasoningBudget: currentObj?.reasoningBudget ?? existingObj?.reasoningBudget ?? 0,
+        ...(useGpu != null ? { useGpu } : {}),
       };
 
       // Update models.yaml — write to omni key and set default pointer
@@ -838,12 +844,18 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ error: 'No .gguf model file found in directory' });
       }
 
+      // Read useGpu from request body or existing config
+      const imgBody = (request.body as any) || {};
+      const existingImageConfig = getModelsConfig()?.image?.['omni'];
+      const imgUseGpu = imgBody.useGpu ?? (existingImageConfig && typeof existingImageConfig !== 'string' ? (existingImageConfig as any).useGpu : undefined);
+
       const modelPath = path.join(modelDir, mainModel);
       try {
         await OmniModelCache.getImageModel(modelPath, {
           ...(t5Encoder ? { t5xxlPath: path.join(modelDir, t5Encoder) } : {}),
           ...(llmCompanion ? { llmPath: path.join(modelDir, llmCompanion) } : {}),
           ...(vaeFile ? { vaePath: path.join(modelDir, vaeFile) } : {}),
+          ...(imgUseGpu != null ? { useGpu: imgUseGpu } : {}),
         });
       } catch (err: any) {
         logger.error('[LocalLLM] Failed to load image model:', err);
@@ -863,6 +875,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
             steps: (config.image['omni'] as any)?.steps ?? 20,
             description: model.fileName,
             share: true,
+            ...(imgUseGpu != null ? { useGpu: imgUseGpu } : {}),
           };
           config.image['default'] = 'omni';
           await saveModelsConfig(modelsConfigPath, config);
@@ -885,9 +898,14 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(404).send({ error: 'Model not found' });
       }
 
+      // Read useGpu from request body or existing config
+      const ttsBody = (request.body as any) || {};
+      const existingTtsConfig = getModelsConfig()?.tts?.['omni'];
+      const ttsUseGpu = ttsBody.useGpu ?? (existingTtsConfig && typeof existingTtsConfig !== 'string' ? (existingTtsConfig as any).useGpu : undefined);
+
       const modelPath = model.filePath;
       try {
-        await OmniModelCache.getTtsModel(modelPath);
+        await OmniModelCache.getTtsModel(modelPath, ttsUseGpu != null ? { useGpu: ttsUseGpu } : undefined);
       } catch (err: any) {
         logger.error('[LocalLLM] Failed to load TTS model:', err);
         return reply.status(500).send({ error: `Failed to load: ${err.message}` });
@@ -902,6 +920,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
             modelPath: `.models/${model.fileName}`,
             description: model.fileName,
             share: true,
+            ...(ttsUseGpu != null ? { useGpu: ttsUseGpu } : {}),
           };
           config.tts['default'] = 'omni';
           await saveModelsConfig(modelsConfigPath, config);
@@ -991,11 +1010,14 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // POST /start-image — pre-load the first configured image model
-  fastify.post('/start-image', async (_req, reply) => {
+  fastify.post('/start-image', async (req, reply) => {
     const configs = listImageConfigs();
     const first = configs[0];
     if (!first) return reply.status(400).send({ error: 'No image model configured in models.yaml' });
     if (!first.config.modelPath) return reply.status(400).send({ error: 'Image config has no modelPath' });
+
+    const body = (req.body as any) || {};
+    const useGpu = body.useGpu ?? (first.config as any).useGpu;
 
     const resolve = (p?: string) => p ? (path.isAbsolute(p) ? p : path.join(workspaceRoot, p)) : undefined;
     const modelPath = resolve(first.config.modelPath)!;
@@ -1004,17 +1026,50 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       ...(first.config.t5xxl ? { t5xxlPath: resolve(first.config.t5xxl) } : {}),
       ...(first.config.llm ? { llmPath: resolve(first.config.llm) } : {}),
       ...(first.config.vae ? { vaePath: resolve(first.config.vae) } : {}),
+      ...(useGpu != null ? { useGpu } : {}),
     });
+
+    // Persist useGpu to config if provided in body
+    if (body.useGpu != null) {
+      try {
+        const config = getModelsConfig();
+        if (config?.image?.[first.name] && typeof config.image[first.name] !== 'string') {
+          (config.image[first.name] as any).useGpu = body.useGpu;
+          await saveModelsConfig(modelsConfigPath, config);
+        }
+      } catch (err: any) {
+        logger.error('[LocalLLM] Failed to persist useGpu for image:', err);
+      }
+    }
+
     return { ok: true, status: OmniModelCache.getStatus() };
   });
 
   // POST /start-tts — pre-load the first configured TTS model
-  fastify.post('/start-tts', async (_req, reply) => {
+  fastify.post('/start-tts', async (req, reply) => {
     const configs = listTtsConfigs();
     const first = configs[0];
     if (!first) return reply.status(400).send({ error: 'No TTS model configured in models.yaml' });
+
+    const body = (req.body as any) || {};
+    const useGpu = body.useGpu ?? (first.config as any).useGpu;
+
     const modelPath = path.isAbsolute(first.config.modelPath) ? first.config.modelPath : path.join(workspaceRoot, first.config.modelPath);
-    await OmniModelCache.getTtsModel(modelPath);
+    await OmniModelCache.getTtsModel(modelPath, useGpu != null ? { useGpu } : undefined);
+
+    // Persist useGpu to config if provided in body
+    if (body.useGpu != null) {
+      try {
+        const config = getModelsConfig();
+        if (config?.tts?.[first.name] && typeof config.tts[first.name] !== 'string') {
+          (config.tts[first.name] as any).useGpu = body.useGpu;
+          await saveModelsConfig(modelsConfigPath, config);
+        }
+      } catch (err: any) {
+        logger.error('[LocalLLM] Failed to persist useGpu for tts:', err);
+      }
+    }
+
     return { ok: true, status: OmniModelCache.getStatus() };
   });
 

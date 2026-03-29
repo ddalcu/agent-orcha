@@ -50,6 +50,7 @@ image:
     height: 1024
     description: FLUX.2 image generation
     share: true
+    useGpu: true
 
 tts:
   tts:
@@ -57,3 +58,4 @@ tts:
     voice: default
     description: Qwen3 TTS
     share: true
+    useGpu: false

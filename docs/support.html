@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO Meta Tags -->
+  <title>Support - Agent Orcha</title>
+  <meta name="description" content="Get help with Agent Orcha and the AgentOrcha iOS app. FAQs, troubleshooting, and community support channels.">
+  <meta name="author" content="Agent Orcha">
+
+  <!-- Open Graph Tags -->
+  <meta property="og:title" content="Support - Agent Orcha">
+  <meta property="og:description" content="Get help with Agent Orcha and the AgentOrcha iOS app. FAQs, troubleshooting, and community support.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://agentorcha.com/support.html">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="assets/css/styles.css">
+
+  <style>
+    .support-content {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    .support-content h1 {
+      font-family: 'Lora', serif;
+      font-size: 2.2rem;
+      margin-bottom: 0.5rem;
+    }
+    .support-content .subtitle {
+      color: var(--text-secondary, #8b949e);
+      font-size: 1.05rem;
+      margin-bottom: 2.5rem;
+    }
+    .support-content h2 {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.3rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border, #30363d);
+    }
+    .support-content h3 {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.05rem;
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+      color: var(--text-primary, #e6edf3);
+    }
+    .support-content p,
+    .support-content li {
+      line-height: 1.7;
+      color: var(--text-secondary, #8b949e);
+    }
+    .support-content ul,
+    .support-content ol {
+      padding-left: 1.5rem;
+      margin: 0.75rem 0;
+    }
+    .support-content li {
+      margin-bottom: 0.4rem;
+    }
+    .support-content strong {
+      color: var(--text-primary, #e6edf3);
+    }
+    .support-content code {
+      background: var(--surface, #161b22);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9em;
+    }
+    .support-channels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+    .support-channel {
+      background: var(--surface, #161b22);
+      border: 1px solid var(--border, #30363d);
+      border-radius: 8px;
+      padding: 1.25rem;
+      text-decoration: none;
+      transition: border-color 0.2s;
+    }
+    .support-channel:hover {
+      border-color: var(--accent, #58a6ff);
+    }
+    .support-channel i {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+      display: block;
+      color: var(--accent, #58a6ff);
+    }
+    .support-channel h4 {
+      font-size: 1rem;
+      margin: 0 0 0.3rem;
+      color: var(--text-primary, #e6edf3);
+    }
+    .support-channel p {
+      font-size: 0.85rem;
+      margin: 0;
+      color: var(--text-secondary, #8b949e);
+    }
+    .faq-item {
+      margin-bottom: 1.5rem;
+    }
+    .faq-item summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--text-primary, #e6edf3);
+      padding: 0.5rem 0;
+      list-style: none;
+    }
+    .faq-item summary::-webkit-details-marker {
+      display: none;
+    }
+    .faq-item summary::before {
+      content: '\f054';
+      font-family: 'Font Awesome 6 Free';
+      font-weight: 900;
+      font-size: 0.7rem;
+      margin-right: 0.6rem;
+      display: inline-block;
+      transition: transform 0.2s;
+      color: var(--accent, #58a6ff);
+    }
+    .faq-item[open] summary::before {
+      transform: rotate(90deg);
+    }
+    .faq-item .faq-answer {
+      padding: 0.5rem 0 0.5rem 1.3rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-container">
+      <a href="index.html" class="nav-logo">
+        <img src="assets/images/logo-only.png" alt="Agent Orcha Logo">
+        <span>Agent Orcha</span>
+      </a>
+      <button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="hub.html">Hub</a></li>
+        <li><a href="https://github.com/ddalcu/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-npm"></i> NPM</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <section class="section">
+    <div class="support-content">
+      <h1>Support</h1>
+      <p class="subtitle">Get help with the AgentOrcha iOS app and the Agent Orcha framework.</p>
+
+      <!-- Support Channels -->
+      <h2>Contact &amp; Community</h2>
+      <div class="support-channels">
+        <a href="https://github.com/ddalcu/agent-orcha/issues" target="_blank" rel="noopener" class="support-channel">
+          <i class="fa-brands fa-github"></i>
+          <h4>GitHub Issues</h4>
+          <p>Report bugs or request features</p>
+        </a>
+        <a href="https://github.com/ddalcu/agent-orcha/discussions" target="_blank" rel="noopener" class="support-channel">
+          <i class="fa-solid fa-comments"></i>
+          <h4>Discussions</h4>
+          <p>Ask questions and share ideas</p>
+        </a>
+        <a href="documentation.html" class="support-channel">
+          <i class="fa-solid fa-book"></i>
+          <h4>Documentation</h4>
+          <p>Guides, API reference, and examples</p>
+        </a>
+      </div>
+      <p>For direct inquiries, you can reach us by opening an issue on our <a href="https://github.com/ddalcu/agent-orcha/issues" target="_blank" rel="noopener">GitHub repository</a>.</p>
+
+      <!-- FAQ - iOS App -->
+      <h2>Frequently Asked Questions — iOS App</h2>
+
+      <details class="faq-item">
+        <summary>What is AgentOrcha?</summary>
+        <div class="faq-answer">
+          <p>AgentOrcha is an iOS companion app for the Agent Orcha framework. It lets you chat with AI agents and local language models, connect to other Agent Orcha instances over a peer-to-peer network, and manage your P2P settings — all from your iPhone or iPad.</p>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>What iOS version is required?</summary>
+        <div class="faq-answer">
+          <p>AgentOrcha requires <strong>iOS 17.0</strong> or later.</p>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>Does the app require an internet connection?</summary>
+        <div class="faq-answer">
+          <p>An internet connection is only needed to download AI models from Hugging Face. Once downloaded, local LLM inference runs entirely on-device. P2P connections work over any network where peers can reach each other (local Wi-Fi or internet).</p>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>How do I connect to peers?</summary>
+        <div class="faq-answer">
+          <p>Go to the <strong>Network</strong> tab to see available peers. The app uses the Hyperswarm protocol to discover other Agent Orcha instances sharing the same network key. You can configure your peer name and network key in <strong>Settings</strong>. Use the default key to find public peers, or set a custom key for a private network.</p>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>I can't find any peers on the network</summary>
+        <div class="faq-answer">
+          <p>Try the following:</p>
+          <ul>
+            <li>Make sure at least one other Agent Orcha instance is running and connected to the same network key.</li>
+            <li>Check that your device has an active network connection.</li>
+            <li>If using a custom network key, verify that all peers are using the exact same key.</li>
+            <li>On corporate or restricted networks, the Hyperswarm protocol may be blocked. Try switching to a different network.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>How do I run a local AI model on my device?</summary>
+        <div class="faq-answer">
+          <p>Go to the <strong>Local LLM</strong> tab, browse the available models, and tap <strong>Download</strong> on the one you want. Once the download completes, select the model and start chatting. Models run entirely on your device — no data is sent externally.</p>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>The app is running slowly or models take a long time to respond</summary>
+        <div class="faq-answer">
+          <p>Local AI inference depends on your device's hardware. The app automatically selects the best model for your device based on available RAM. Tips:</p>
+          <ul>
+            <li>Close other apps to free up memory.</li>
+            <li>Ensure your device is not in Low Power Mode, which may throttle processing.</li>
+            <li>Newer devices with more RAM and a faster Neural Engine will perform significantly better.</li>
+            <li>The app requires an A14 chip or newer (iPhone 12+).</li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>Is my data private?</summary>
+        <div class="faq-answer">
+          <p>We do not operate servers, collect user data, or track usage. However, there are important distinctions depending on how you use the app:</p>
+          <ul>
+            <li><strong>Local LLM:</strong> Fully private. All processing happens on your device and no data leaves it.</li>
+            <li><strong>P2P chat with remote agents or models:</strong> Your messages are encrypted in transit using the Noise protocol, protecting them from network eavesdropping. However, the host peer that processes your request <strong>can see your messages</strong> — this is necessary for the host to forward them to the LLM for inference. This is the same trade-off as using any remote AI service. Only connect to peers you trust.</li>
+          </ul>
+          <p>See our <a href="privacy.html">Privacy Policy</a> for full details.</p>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>How do I delete downloaded models?</summary>
+        <div class="faq-answer">
+          <p>Go to the <strong>Local LLM</strong> tab, find the model you want to remove, and use the delete option. You can also remove all downloaded models by deleting and reinstalling the app.</p>
+        </div>
+      </details>
+
+      <!-- FAQ - Framework -->
+      <h2>Frequently Asked Questions — Framework</h2>
+
+      <details class="faq-item">
+        <summary>How do I install Agent Orcha?</summary>
+        <div class="faq-answer">
+          <p>The quickest way is via npx:</p>
+          <p><code>npx agent-orcha@latest</code></p>
+          <p>You can also run it with Docker or download the standalone binary from the <a href="https://github.com/ddalcu/agent-orcha/releases" target="_blank" rel="noopener">GitHub Releases</a> page. See the <a href="documentation.html#quick-start">Quick Start Guide</a> for full instructions.</p>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>What LLM providers are supported?</summary>
+        <div class="faq-answer">
+          <p>Agent Orcha is model-agnostic and supports OpenAI, Anthropic, Google Gemini, Ollama, LM Studio, local models via Omni, and remote models via the P2P network. Configure providers in <code>models.yaml</code>.</p>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>How do I report a bug?</summary>
+        <div class="faq-answer">
+          <p>Open an issue on our <a href="https://github.com/ddalcu/agent-orcha/issues" target="_blank" rel="noopener">GitHub Issues</a> page. Please include:</p>
+          <ul>
+            <li>A clear description of the problem</li>
+            <li>Steps to reproduce</li>
+            <li>Your platform and version (iOS version, device model, or framework version)</li>
+            <li>Any relevant error messages or screenshots</li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="faq-item">
+        <summary>Is Agent Orcha free?</summary>
+        <div class="faq-answer">
+          <p>Yes. Agent Orcha is 100% open source and released under the <a href="https://github.com/ddalcu/agent-orcha/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>. The iOS app and framework are free to use.</p>
+        </div>
+      </details>
+
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h4>Product</h4>
+          <ul class="footer-links">
+            <li><a href="documentation.html">Documentation</a></li>
+            <li><a href="documentation.html#quick-start">Quick Start</a></li>
+            <li><a href="documentation.html#examples">Examples</a></li>
+            <li><a href="documentation.html#api-reference">API Reference</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>Community</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/ddalcu/agent-orcha" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/issues" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Issues</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/discussions" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Discussions</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>Legal</h4>
+          <ul class="footer-links">
+            <li><a href="privacy.html">Privacy Policy</a></li>
+            <li><a href="support.html">Support</a></li>
+            <li><a href="https://github.com/ddalcu/agent-orcha/blob/main/LICENSE" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> License</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>About</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/ddalcu" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Author</a></li>
+            <li>MIT License</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Agent Orcha. Released under the MIT License. 100% open source and forever free.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="assets/js/main.js"></script>
+</body>
+</html>

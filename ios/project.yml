@@ -42,7 +42,8 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         UIRequiresFullScreen: true
         ITSAppUsesNonExemptEncryption: false
-        NSLocalNetworkUsageDescription: "AgentOrcha uses the local network to discover and communicate with P2P peers running Agent Orcha."
+        NSLocalNetworkUsageDescription: "Agent Orcha uses the local network to discover and communicate with peers on the P2P network. Your messages and attachments are sent directly to peers you choose to chat with, where they are processed by AI models. No data is sent until you grant consent and actively start a conversation."
+        NSPhotoLibraryUsageDescription: "Agent Orcha needs access to your photo library to attach images to chat messages sent to AI agents on the P2P network."
         NSBonjourServices:
           - "_agentorcha._tcp"
     entitlements:

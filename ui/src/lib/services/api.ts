@@ -126,8 +126,8 @@ export const api = {
   // Local LLM
   async getLocalLlmStatus() { return (await _fetch('/api/local-llm/status')).json(); },
   async getLocalLlmModels() { return (await _fetch('/api/local-llm/models')).json(); },
-  async activateLocalModel(id: string) {
-    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })).json();
+  async activateLocalModel(id: string, options?: { useGpu?: boolean }) {
+    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();
   },
   async deleteLocalModel(id: string) {
     return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}`, { method: 'DELETE' })).json();
@@ -166,11 +166,11 @@ export const api = {
   async activateLocalEmbedding(id: string) {
     return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-embedding`, { method: 'POST' })).json();
   },
-  async activateLocalImage(id: string) {
-    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-image`, { method: 'POST' })).json();
+  async activateLocalImage(id: string, options?: { useGpu?: boolean }) {
+    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-image`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();
   },
-  async activateLocalTts(id: string) {
-    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-tts`, { method: 'POST' })).json();
+  async activateLocalTts(id: string, options?: { useGpu?: boolean }) {
+    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-tts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();
   },
   async stopLocalLlm(engine?: string) {
     return (await _fetch('/api/local-llm/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(engine ? { engine } : {}) })).json();
@@ -187,11 +187,11 @@ export const api = {
   async startLocalEmbedding() {
     return (await _fetch('/api/local-llm/start-embedding', { method: 'POST' })).json();
   },
-  async startLocalImage() {
-    return (await _fetch('/api/local-llm/start-image', { method: 'POST' })).json();
+  async startLocalImage(options?: { useGpu?: boolean }) {
+    return (await _fetch('/api/local-llm/start-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();
   },
-  async startLocalTts() {
-    return (await _fetch('/api/local-llm/start-tts', { method: 'POST' })).json();
+  async startLocalTts(options?: { useGpu?: boolean }) {
+    return (await _fetch('/api/local-llm/start-tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();
   },
   async getEngines() { return (await _fetch('/api/local-llm/engines')).json(); },
   async activateEngine(engine: string, model: string, role = 'chat') {

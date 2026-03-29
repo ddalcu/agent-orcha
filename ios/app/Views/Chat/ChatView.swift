@@ -1,10 +1,14 @@
 import SwiftUI
+import PhotosUI
 
 struct ChatView: View {
     @Bindable var viewModel: ChatViewModel
     var onReset: (() -> Void)?
 
     @State private var inputText = ""
+    @State private var pendingAttachments: [Attachment] = []
+    @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var showingFilePicker = false
     @FocusState private var inputFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -13,6 +17,9 @@ struct ChatView: View {
             messageList
             if viewModel.isStreaming {
                 streamingBar
+            }
+            if !pendingAttachments.isEmpty {
+                attachmentPreview
             }
             inputBar
         }
@@ -44,6 +51,16 @@ struct ChatView: View {
                     .disabled(viewModel.isStreaming)
                 }
             }
+        }
+        .fileImporter(
+            isPresented: $showingFilePicker,
+            allowedContentTypes: [.pdf, .plainText, .json, .audio, .image],
+            allowsMultipleSelection: true
+        ) { result in
+            handleFileImport(result)
+        }
+        .onChange(of: selectedPhotos) {
+            handlePhotoSelection()
         }
     }
 
@@ -139,10 +156,46 @@ struct ChatView: View {
         .background(AppTheme.surfaceElevated)
     }
 
+    // MARK: - Attachment Preview
+
+    private var attachmentPreview: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(pendingAttachments) { attachment in
+                    AttachmentThumbnail(attachment: attachment) {
+                        pendingAttachments.removeAll { $0.id == attachment.id }
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+        }
+        .background(AppTheme.surfaceElevated)
+    }
+
     // MARK: - Input Bar
 
     private var inputBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
+            // Attachment menu (only for agents)
+            if case .agent = viewModel.target {
+                Menu {
+                    PhotosPicker(selection: $selectedPhotos, maxSelectionCount: 5, matching: .images) {
+                        Label("Photo Library", systemImage: "photo.on.rectangle")
+                    }
+                    Button {
+                        showingFilePicker = true
+                    } label: {
+                        Label("Browse Files", systemImage: "doc")
+                    }
+                } label: {
+                    Image(systemName: "paperclip")
+                        .font(.title3)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+                .disabled(viewModel.isStreaming)
+            }
+
             TextField("Message...", text: $inputText, axis: .vertical)
                 .lineLimit(1...5)
                 .textFieldStyle(.plain)
@@ -154,8 +207,11 @@ struct ChatView: View {
 
             Button {
                 let text = inputText
+                let attachments = pendingAttachments.isEmpty ? nil : pendingAttachments
                 inputText = ""
-                viewModel.send(text)
+                pendingAttachments = []
+                selectedPhotos = []
+                viewModel.send(text, attachments: attachments)
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
@@ -179,5 +235,91 @@ struct ChatView: View {
         case .agent: return "cpu"
         case .llm: return "brain"
         }
+    }
+
+    private func handlePhotoSelection() {
+        Task {
+            for item in selectedPhotos {
+                guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+                let mediaType = "image/jpeg"
+                let name = "photo_\(Int(Date().timeIntervalSince1970)).jpg"
+                pendingAttachments.append(Attachment(data: data, mediaType: mediaType, name: name))
+            }
+        }
+    }
+
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result else { return }
+        for url in urls {
+            guard url.startAccessingSecurityScopedResource() else { continue }
+            defer { url.stopAccessingSecurityScopedResource() }
+            guard let data = try? Data(contentsOf: url) else { continue }
+            let mediaType = mimeType(for: url.pathExtension)
+            pendingAttachments.append(Attachment(data: data, mediaType: mediaType, name: url.lastPathComponent))
+        }
+    }
+
+    private func mimeType(for ext: String) -> String {
+        switch ext.lowercased() {
+        case "jpg", "jpeg": return "image/jpeg"
+        case "png": return "image/png"
+        case "gif": return "image/gif"
+        case "pdf": return "application/pdf"
+        case "txt": return "text/plain"
+        case "json": return "application/json"
+        case "wav": return "audio/wav"
+        case "mp3": return "audio/mpeg"
+        case "m4a": return "audio/mp4"
+        default: return "application/octet-stream"
+        }
+    }
+}
+
+// MARK: - Attachment Thumbnail
+
+private struct AttachmentThumbnail: View {
+    let attachment: Attachment
+    let onRemove: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            if attachment.isImage, let image = UIImage(data: attachment.data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                VStack(spacing: 2) {
+                    Image(systemName: iconForType(attachment.mediaType))
+                        .font(.title3)
+                        .foregroundStyle(AppTheme.accent)
+                    Text(attachment.name)
+                        .font(.system(size: 8))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(1)
+                }
+                .frame(width: 56, height: 56)
+                .background(AppTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            Button {
+                onRemove()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .background(Circle().fill(AppTheme.background))
+            }
+            .offset(x: 4, y: -4)
+        }
+    }
+
+    private func iconForType(_ type: String) -> String {
+        if type.hasPrefix("audio/") { return "waveform" }
+        if type.hasPrefix("image/") { return "photo" }
+        if type.contains("pdf") { return "doc.richtext" }
+        return "doc"
     }
 }
