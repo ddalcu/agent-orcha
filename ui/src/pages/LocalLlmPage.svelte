@@ -453,10 +453,13 @@
     return null;
   });
 
-  // Recommended models not yet downloaded
+  // Recommended models not yet downloaded (also hide if interrupted/partial download exists)
   let pendingRecommended = $derived(
     getRecommendedModels(selectedEngine || 'omni')
       .filter(r => !isModelDownloaded(models, r.repo, r.file))
+      .filter(r => !interruptedDownloads.some((d: any) =>
+        d.fileName === r.file || d.repo === r.repo
+      ))
   );
 
   // Cloud config
@@ -1139,7 +1142,14 @@
   async function resumeInterruptedDownload(d: any) {
     if (!d.repo) return;
     interruptedDownloads = interruptedDownloads.filter((x: any) => x.fileName !== d.fileName);
-    downloadModel(d.repo, d.fileName);
+    // Match against recommended models to get full config (type, bundle, category) for correct download path
+    const rec = findRecommendedForModel(d.fileName, undefined) ??
+      RECOMMENDED_MODELS_GGUF.find(r => r.file === d.fileName || (r.repo === d.repo && r.file === d.fileName));
+    if (rec) {
+      downloadModel(rec.repo, rec.file, rec.type, rec.subdir, rec.type === 'dir' ? rec.file : undefined, rec.bundle, rec.category);
+    } else {
+      downloadModel(d.repo, d.fileName);
+    }
     startDownloadPolling();
   }
 
@@ -2192,7 +2202,7 @@
               {@const isImageLoaded = imageModelPath && (model.filePath === imageModelPath || model.filePath === imageModelPath.replace(/[/\\][^/\\]+$/, ''))}
               {@const isTtsLoaded = ttsModelPath && (model.filePath === ttsModelPath || model.filePath === ttsModelPath.replace(/[/\\][^/\\]+$/, ''))}
               {@const looksLikeEmbedding = /embed|MiniLM/i.test(model.fileName)}
-              {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
+              {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d|wan/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
               {@const looksLikeTTS = /tts|speech|qwen3.*tts|kokoro|parler/i.test(model.fileName) || /tts/i.test(model.repo || '') || Object.values(llmConfig?.tts || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
               {@const modelRole = looksLikeEmbedding ? 'embed' : looksLikeImage ? 'image' : looksLikeTTS ? 'tts' : 'llm'}
               {@const recInfo = getRecommendedInfo(model)}

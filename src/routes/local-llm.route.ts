@@ -602,8 +602,9 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
           }
         }
 
-        // Auto-configure models.yaml for image/tts bundles after download — only if slot is empty
-        if (model && (category === 'image' || category === 'tts')) {
+        // Auto-configure models.yaml for image/tts/video bundles after download — only if slot is empty
+        // Video models use the image pipeline (frame-by-frame generation), so configure both image + video sections
+        if (model && (category === 'image' || category === 'tts' || category === 'video')) {
           try {
             const config = getModelsConfig();
             if (config) {
@@ -611,7 +612,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
               const hasExistingImage = config.image && Object.values(config.image).some(v => typeof v === 'object' && (v as any).modelPath);
               const hasExistingTts = config.tts && Object.values(config.tts).some(v => typeof v === 'object' && (v as any).modelPath);
 
-              if (category === 'image' && type === 'bundle' && !hasExistingImage) {
+              if ((category === 'image' || category === 'video') && type === 'bundle' && !hasExistingImage) {
                 const bundleFiles = JSON.parse(filesJson!) as Array<{ repo: string; file: string; targetName?: string }>;
                 const mainFile = bundleFiles[0]!;
                 const vaeFile = bundleFiles.find(f => /vae/i.test(f.targetName || f.file));
@@ -627,6 +628,21 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
                   share: true,
                 };
                 config.image['default'] = 'omni';
+                // Video models also need a video config entry for P2P catalog advertising
+                if (category === 'video') {
+                  const hasExistingVideo = config.video && Object.values(config.video).some(v => typeof v === 'object' && (v as any).modelPath);
+                  if (!hasExistingVideo) {
+                    config.video = config.video || {};
+                    config.video['omni'] = {
+                      provider: 'omni',
+                      modelPath: `${modelDir}/${toFileName(mainFile)}`,
+                      steps: 20,
+                      description: model.fileName,
+                      share: true,
+                    };
+                    config.video['default'] = 'omni';
+                  }
+                }
                 await saveModelsConfig(modelsConfigPath, config);
                 LLMFactory.clearCache();
               } else if (category === 'tts' && !hasExistingTts) {
