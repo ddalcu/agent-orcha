@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { FastifyPluginAsync } from 'fastify';
 import { ModelManager } from '../../lib/local-llm/index.ts';
+import type { LocalModel } from '../../lib/local-llm/index.ts';
 import { generateDirName } from '../../lib/local-llm/model-manager.ts';
 import { resolveModelFile } from '../../lib/local-llm/resolve-model-path.ts';
 import { OmniModelCache } from '../../lib/llm/providers/omni-model-cache.ts';
@@ -515,6 +516,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     '/models/download',
     async (request, reply) => {
       const { repo, fileName, type, subdir, targetDir, files: filesJson, category } = request.query;
+      const modelType = category as LocalModel['modelType'] | undefined;
       if (!repo && type !== 'bundle') {
         return reply.status(400).send({ error: 'repo is required' });
       }
@@ -548,6 +550,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
                 reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
               }
             },
+            modelType,
           );
         } else if (type === 'dir') {
           // Directory download (multi-file models like TTS)
@@ -560,6 +563,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
             },
             subdir,
             targetDir,
+            modelType,
           );
         } else {
           // Single GGUF file download
@@ -571,6 +575,8 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
                 reply.raw.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
               }
             },
+            undefined,
+            modelType,
           );
 
           // Auto-download mmproj for vision models (into the same directory)

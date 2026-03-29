@@ -2135,9 +2135,16 @@
               {@const isImageLoaded = imageModelPath && (model.filePath === imageModelPath || model.filePath === imageModelPath.replace(/[/\\][^/\\]+$/, ''))}
               {@const isTtsLoaded = ttsModelPath && (model.filePath === ttsModelPath || model.filePath === ttsModelPath.replace(/[/\\][^/\\]+$/, ''))}
               {@const looksLikeEmbedding = /embed|MiniLM/i.test(model.fileName)}
-              {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d|wan/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
+              {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
               {@const looksLikeTTS = /tts|speech|qwen3.*tts|kokoro|parler/i.test(model.fileName) || /tts/i.test(model.repo || '') || Object.values(llmConfig?.tts || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
-              {@const modelRole = looksLikeEmbedding ? 'embed' : looksLikeImage ? 'image' : looksLikeTTS ? 'tts' : 'llm'}
+              <!-- modelType is set at download time via category. Regex fallback covers legacy models
+                   without modelType metadata. To close the gap for arbitrary HF search downloads,
+                   consider mapping HuggingFace pipelineTag to modelType during download. -->
+              {@const modelRole = model.modelType === 'image' || model.modelType === 'video' ? 'image'
+                : model.modelType === 'embed' ? 'embed'
+                : model.modelType === 'tts' ? 'tts'
+                : model.modelType === 'llm' ? 'llm'
+                : looksLikeEmbedding ? 'embed' : looksLikeImage ? 'image' : looksLikeTTS ? 'tts' : 'llm'}
               {@const recInfo = getRecommendedInfo(model)}
               {@const isActive = isChat || isEmb || isImageLoaded || isTtsLoaded}
               {@const cardCls = isChat ? 'llm-model-card active-chat' : isEmb ? 'llm-model-card active-emb' : isImageLoaded ? 'llm-model-card active-image' : isTtsLoaded ? 'llm-model-card active-tts' : 'llm-model-card'}

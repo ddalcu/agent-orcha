@@ -270,6 +270,7 @@ export class ModelManager {
           sizeBytes: stat.size,
           repo: meta?.repo,
           downloadedAt: meta?.downloadedAt ?? stat.birthtime.toISOString(),
+          ...(meta?.modelType ? { modelType: meta.modelType as LocalModel['modelType'] } : {}),
         });
         continue;
       }
@@ -304,6 +305,7 @@ export class ModelManager {
             sizeBytes,
             repo: meta?.repo,
             downloadedAt: meta?.downloadedAt ?? stat.birthtime.toISOString(),
+            ...(meta?.modelType ? { modelType: meta.modelType as LocalModel['modelType'] } : {}),
           });
         } else {
           // Multi-file directory (TTS, image bundle, etc.)
@@ -314,6 +316,7 @@ export class ModelManager {
             sizeBytes,
             repo: meta?.repo,
             downloadedAt: meta?.downloadedAt ?? stat.birthtime.toISOString(),
+            ...(meta?.modelType ? { modelType: meta.modelType as LocalModel['modelType'] } : {}),
           });
         }
       }
@@ -439,6 +442,7 @@ export class ModelManager {
     fileName: string,
     onProgress?: (progress: DownloadProgress) => void,
     targetDir?: string,
+    modelType?: LocalModel['modelType'],
   ): Promise<LocalModel> {
     const downloadKey = `${repo}/${fileName}`;
 
@@ -490,7 +494,7 @@ export class ModelManager {
       // 416 = Range Not Satisfiable — file is already complete
       if (response.status === 416) {
         await fs.rename(tempPath, finalPath);
-        const meta = { repo, downloadedAt: new Date().toISOString() };
+        const meta = { repo, downloadedAt: new Date().toISOString(), ...(modelType ? { modelType } : {}) };
         await fs.writeFile(fileMetaPath, JSON.stringify(meta, null, 2));
         await fs.writeFile(path.join(modelDir, '.meta.json'), JSON.stringify(meta, null, 2));
         const stat = await fs.stat(finalPath);
@@ -501,6 +505,7 @@ export class ModelManager {
           sizeBytes: stat.size,
           repo,
           downloadedAt: meta.downloadedAt,
+          modelType,
         };
       }
 
@@ -552,7 +557,7 @@ export class ModelManager {
 
       await fs.rename(tempPath, finalPath);
 
-      const meta = { repo, downloadedAt: new Date().toISOString() };
+      const meta = { repo, downloadedAt: new Date().toISOString(), ...(modelType ? { modelType } : {}) };
       await fs.writeFile(fileMetaPath, JSON.stringify(meta, null, 2));
       await fs.writeFile(path.join(modelDir, '.meta.json'), JSON.stringify(meta, null, 2));
 
@@ -564,6 +569,7 @@ export class ModelManager {
         sizeBytes: stat.size,
         repo,
         downloadedAt: meta.downloadedAt,
+        modelType,
       };
     } finally {
       this._activeDownloads.delete(downloadKey);
@@ -578,6 +584,7 @@ export class ModelManager {
     targetDir: string,
     files: Array<{ repo: string; file: string; targetName?: string }>,
     onProgress?: (progress: DownloadProgress) => void,
+    modelType?: LocalModel['modelType'],
   ): Promise<LocalModel> {
     const downloadKey = `bundle:${targetDir}`;
     if (this._activeDownloads.has(downloadKey)) {
@@ -595,7 +602,7 @@ export class ModelManager {
 
     const repos = [...new Set(files.map(f => f.repo))];
     const metaPath = path.join(modelDir, '.meta.json');
-    await fs.writeFile(metaPath, JSON.stringify({ repo: repos[0], repos }, null, 2));
+    await fs.writeFile(metaPath, JSON.stringify({ repo: repos[0], repos, ...(modelType ? { modelType } : {}) }, null, 2));
 
     const initialProgress: DownloadProgress = { fileName: targetDir, downloadedBytes: 0, totalBytes: 0, percent: 0 };
     this._activeDownloads.set(downloadKey, { downloadKey, repo: repos[0]!, fileName: targetDir, progress: initialProgress });
@@ -682,7 +689,7 @@ export class ModelManager {
       // Remove .downloading marker
       await fs.unlink(markerPath).catch(() => {});
 
-      const meta = { repo: repos[0], repos, downloadedAt: new Date().toISOString() };
+      const meta = { repo: repos[0], repos, downloadedAt: new Date().toISOString(), ...(modelType ? { modelType } : {}) };
       await fs.writeFile(metaPath, JSON.stringify(meta, null, 2));
 
       const sizeBytes = await this.dirSize(modelDir);
@@ -693,6 +700,7 @@ export class ModelManager {
         sizeBytes,
         repo: repos[0],
         downloadedAt: meta.downloadedAt,
+        modelType,
       };
     } finally {
       this._activeDownloads.delete(downloadKey);
@@ -709,6 +717,7 @@ export class ModelManager {
     onProgress?: (progress: DownloadProgress) => void,
     subdir?: string,
     targetDir?: string,
+    modelType?: LocalModel['modelType'],
   ): Promise<LocalModel> {
     const downloadKey = `dir:${repo}${subdir ? '/' + subdir : ''}`;
     if (this._activeDownloads.has(downloadKey)) {
@@ -726,7 +735,7 @@ export class ModelManager {
     await fs.writeFile(markerPath, '');
 
     const metaPath = path.join(modelDir, '.meta.json');
-    await fs.writeFile(metaPath, JSON.stringify({ repo }, null, 2));
+    await fs.writeFile(metaPath, JSON.stringify({ repo, ...(modelType ? { modelType } : {}) }, null, 2));
 
     const initialProgress: DownloadProgress = { fileName: dirName, downloadedBytes: 0, totalBytes: 0, percent: 0 };
     this._activeDownloads.set(downloadKey, { downloadKey, repo, fileName: dirName, progress: initialProgress });
@@ -815,7 +824,7 @@ export class ModelManager {
       // Remove .downloading marker
       await fs.unlink(markerPath).catch(() => {});
 
-      const meta = { repo, downloadedAt: new Date().toISOString() };
+      const meta = { repo, downloadedAt: new Date().toISOString(), ...(modelType ? { modelType } : {}) };
       await fs.writeFile(metaPath, JSON.stringify(meta, null, 2));
 
       const sizeBytes = await this.dirSize(modelDir);
@@ -826,6 +835,7 @@ export class ModelManager {
         sizeBytes,
         repo,
         downloadedAt: meta.downloadedAt,
+        modelType,
       };
     } finally {
       this._activeDownloads.delete(downloadKey);
@@ -964,7 +974,7 @@ export class ModelManager {
     return path.join(this.modelsDir, `${fileName}.meta.json`);
   }
 
-  private async readMeta(fileName: string): Promise<{ repo?: string; downloadedAt?: string } | null> {
+  private async readMeta(fileName: string): Promise<{ repo?: string; downloadedAt?: string; modelType?: string } | null> {
     try {
       const content = await fs.readFile(this.metaPath(fileName), 'utf-8');
       return JSON.parse(content);
@@ -973,7 +983,7 @@ export class ModelManager {
     }
   }
 
-  private async readMetaAt(metaPath: string): Promise<{ repo?: string; downloadedAt?: string } | null> {
+  private async readMetaAt(metaPath: string): Promise<{ repo?: string; downloadedAt?: string; modelType?: string } | null> {
     try {
       const content = await fs.readFile(metaPath, 'utf-8');
       return JSON.parse(content);
@@ -982,7 +992,7 @@ export class ModelManager {
     }
   }
 
-  private async readDirMeta(dirName: string): Promise<{ repo?: string; downloadedAt?: string } | null> {
+  private async readDirMeta(dirName: string): Promise<{ repo?: string; downloadedAt?: string; modelType?: string } | null> {
     try {
       const content = await fs.readFile(path.join(this.modelsDir, dirName, '.meta.json'), 'utf-8');
       return JSON.parse(content);

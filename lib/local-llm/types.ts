@@ -5,7 +5,7 @@ export interface LocalModel {
   sizeBytes: number;
   repo?: string;
   downloadedAt: string;
-  modelType?: 'llm' | 'image' | 'tts' | 'stt';
+  modelType?: 'llm' | 'embed' | 'image' | 'video' | 'tts' | 'stt';
 }
 
 export interface HuggingFaceGgufFile {

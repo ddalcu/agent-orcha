@@ -17,15 +17,16 @@ async function cleanup() {
 /** Create a GGUF file with optional meta */
 async function createGgufFile(
   fileName: string,
-  opts?: { sizeBytes?: number; repo?: string; downloadedAt?: string },
+  opts?: { sizeBytes?: number; repo?: string; downloadedAt?: string; modelType?: string },
 ) {
   await fs.mkdir(MODELS_DIR, { recursive: true });
   const content = Buffer.alloc(opts?.sizeBytes ?? 100);
   await fs.writeFile(path.join(MODELS_DIR, fileName), content);
-  if (opts?.repo || opts?.downloadedAt) {
+  if (opts?.repo || opts?.downloadedAt || opts?.modelType) {
     const meta: Record<string, string> = {};
     if (opts.repo) meta.repo = opts.repo;
     if (opts.downloadedAt) meta.downloadedAt = opts.downloadedAt;
+    if (opts.modelType) meta.modelType = opts.modelType;
     await fs.writeFile(
       path.join(MODELS_DIR, `${fileName}.meta.json`),
       JSON.stringify(meta, null, 2),
@@ -36,13 +37,14 @@ async function createGgufFile(
 /** Create a directory-based model with .meta.json */
 async function createDirModel(
   dirName: string,
-  opts?: { repo?: string; downloadedAt?: string; downloading?: boolean; fileContents?: Record<string, string> },
+  opts?: { repo?: string; downloadedAt?: string; downloading?: boolean; fileContents?: Record<string, string>; modelType?: string },
 ) {
   const dirPath = path.join(MODELS_DIR, dirName);
   await fs.mkdir(dirPath, { recursive: true });
   const meta: Record<string, string> = {};
   if (opts?.repo) meta.repo = opts.repo;
   if (opts?.downloadedAt) meta.downloadedAt = opts.downloadedAt;
+  if (opts?.modelType) meta.modelType = opts.modelType;
   await fs.writeFile(path.join(dirPath, '.meta.json'), JSON.stringify(meta, null, 2));
 
   if (opts?.fileContents) {
@@ -177,6 +179,52 @@ describe('ModelManager', () => {
 
       const models = await manager.listModels();
       assert.equal(models.length, 0);
+    });
+
+    it('reads modelType from meta for GGUF files', async () => {
+      await createGgufFile('embed-model.gguf', { repo: 'user/embed', modelType: 'embed' });
+
+      const models = await manager.listModels();
+      assert.equal(models.length, 1);
+      assert.equal(models[0].modelType, 'embed');
+    });
+
+    it('reads modelType from meta for directory-based models', async () => {
+      await createDirModel('wan22-5b', {
+        repo: 'QuantStack/Wan2.2-TI2V-5B-GGUF',
+        modelType: 'video',
+        fileContents: {
+          'Wan2.2-TI2V-5B-Q4_K_M.gguf': 'model',
+          'Wan2.2_VAE.safetensors': 'vae',
+          'umt5-xxl-encoder-Q8_0.gguf': 'encoder',
+        },
+      });
+
+      const models = await manager.listModels();
+      assert.equal(models.length, 1);
+      assert.equal(models[0].modelType, 'video');
+    });
+
+    it('returns undefined modelType when meta has no modelType', async () => {
+      await createGgufFile('plain-model.gguf', { repo: 'user/plain' });
+
+      const models = await manager.listModels();
+      assert.equal(models.length, 1);
+      assert.equal(models[0].modelType, undefined);
+    });
+
+    it('reads modelType for single-GGUF directory models', async () => {
+      await createDirModel('chat-model', {
+        repo: 'user/chat',
+        modelType: 'llm',
+        fileContents: { 'chat-model-Q4.gguf': 'data' },
+      });
+
+      const models = await manager.listModels();
+      assert.equal(models.length, 1);
+      assert.equal(models[0].modelType, 'llm');
+      // Single-GGUF dirs expose the file directly
+      assert.ok(models[0].filePath.endsWith('chat-model-Q4.gguf'));
     });
   });
 
