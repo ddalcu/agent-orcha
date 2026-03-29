@@ -308,6 +308,18 @@ describe('ModelManager', () => {
       assert.ok(!files.includes('dir-to-delete'));
     });
 
+    it('deletes single-GGUF directory model and its parent directory', async () => {
+      await createDirModel('single-gguf-dir', {
+        repo: 'user/llm',
+        fileContents: { 'model.gguf': 'fake-gguf-content', 'model.gguf.meta.json': '{"repo":"user/llm"}' },
+      });
+
+      await manager.deleteModel('single-gguf-dir');
+
+      const files = await fs.readdir(MODELS_DIR);
+      assert.ok(!files.includes('single-gguf-dir'));
+    });
+
     it('throws when model is not found', async () => {
       await assert.rejects(
         () => manager.deleteModel('nonexistent'),

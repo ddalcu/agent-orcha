@@ -850,10 +850,12 @@ export class ModelManager {
       }
     }
 
-    const stat = await fs.stat(model.filePath);
-    if (stat.isDirectory()) {
-      await fs.rm(model.filePath, { recursive: true });
-      logger.info(`[ModelManager] Deleted directory model: ${model.fileName}`);
+    // Directory models (including single-GGUF dirs) use the directory name as id
+    const dirPath = path.join(this.modelsDir, id);
+    const dirStat = await fs.stat(dirPath).catch(() => null);
+    if (dirStat?.isDirectory()) {
+      await fs.rm(dirPath, { recursive: true });
+      logger.info(`[ModelManager] Deleted directory model: ${id}`);
     } else {
       await fs.unlink(model.filePath);
       try {
