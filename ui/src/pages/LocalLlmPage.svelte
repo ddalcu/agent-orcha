@@ -2135,7 +2135,7 @@
               {@const isImageLoaded = imageModelPath && (model.filePath === imageModelPath || model.filePath === imageModelPath.replace(/[/\\][^/\\]+$/, ''))}
               {@const isTtsLoaded = ttsModelPath && (model.filePath === ttsModelPath || model.filePath === ttsModelPath.replace(/[/\\][^/\\]+$/, ''))}
               {@const looksLikeEmbedding = /embed|MiniLM/i.test(model.fileName)}
-              {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
+              {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d|wan/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
               {@const looksLikeTTS = /tts|speech|qwen3.*tts|kokoro|parler/i.test(model.fileName) || /tts/i.test(model.repo || '') || Object.values(llmConfig?.tts || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
               {@const modelRole = looksLikeEmbedding ? 'embed' : looksLikeImage ? 'image' : looksLikeTTS ? 'tts' : 'llm'}
               {@const recInfo = getRecommendedInfo(model)}
