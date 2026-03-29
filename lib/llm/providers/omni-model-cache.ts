@@ -30,66 +30,104 @@ export class OmniModelCache {
 
   private static llmChatMmproj: string | null = null;
 
+  // Pending load promises — prevents concurrent callers from double-loading the same slot.
+  private static llmChatLoading: Promise<LlmModel> | null = null;
+  private static llmEmbedLoading: Promise<LlmModel> | null = null;
+  private static imageLoading: Promise<ImageModel> | null = null;
+  private static ttsLoading: Promise<TtsModel> | null = null;
+
   static async getLlmChat(modelPath: string, options?: LlmLoadOptions): Promise<LlmModel> {
     const requestedMmproj = options?.mmprojPath ?? null;
     if (this.llmChat && this.llmChatPath === modelPath && this.llmChatMmproj === requestedMmproj) {
       return this.llmChat;
     }
-    if (this.llmChat) {
-      logger.info(`[OmniModelCache] Unloading chat LLM: ${this.llmChatPath}`);
-      await this.llmChat.unload();
-    }
-    logger.info(`[OmniModelCache] Loading chat LLM: ${modelPath}${requestedMmproj ? ` (mmproj: ${requestedMmproj})` : ''}`);
-    this.llmChat = await loadModel(modelPath, { ...options, type: 'llm', contextSize: options?.contextSize || 4096 }) as LlmModel;
-    this.llmChatPath = modelPath;
-    this.llmChatMmproj = requestedMmproj;
-    return this.llmChat;
+    if (this.llmChatLoading) return this.llmChatLoading;
+    this.llmChatLoading = (async () => {
+      try {
+        if (this.llmChat) {
+          logger.info(`[OmniModelCache] Unloading chat LLM: ${this.llmChatPath}`);
+          await this.llmChat.unload();
+        }
+        logger.info(`[OmniModelCache] Loading chat LLM: ${modelPath}${requestedMmproj ? ` (mmproj: ${requestedMmproj})` : ''}`);
+        this.llmChat = await loadModel(modelPath, { ...options, type: 'llm', contextSize: options?.contextSize || 4096 }) as LlmModel;
+        this.llmChatPath = modelPath;
+        this.llmChatMmproj = requestedMmproj;
+        return this.llmChat;
+      } finally {
+        this.llmChatLoading = null;
+      }
+    })();
+    return this.llmChatLoading;
   }
 
   static async getLlmEmbed(modelPath: string, options?: LlmLoadOptions): Promise<LlmModel> {
     if (this.llmEmbed && this.llmEmbedPath === modelPath) {
       return this.llmEmbed;
     }
-    if (this.llmEmbed) {
-      logger.info(`[OmniModelCache] Unloading embedding LLM: ${this.llmEmbedPath}`);
-      await this.llmEmbed.unload();
-    }
-    logger.info(`[OmniModelCache] Loading embedding LLM: ${modelPath}`);
-    this.llmEmbed = await loadModel(modelPath, { ...options, type: 'llm', embeddings: true, contextSize: options?.contextSize || 4096 }) as LlmModel;
-    this.llmEmbedPath = modelPath;
-    return this.llmEmbed;
+    if (this.llmEmbedLoading) return this.llmEmbedLoading;
+    this.llmEmbedLoading = (async () => {
+      try {
+        if (this.llmEmbed) {
+          logger.info(`[OmniModelCache] Unloading embedding LLM: ${this.llmEmbedPath}`);
+          await this.llmEmbed.unload();
+        }
+        logger.info(`[OmniModelCache] Loading embedding LLM: ${modelPath}`);
+        this.llmEmbed = await loadModel(modelPath, { ...options, type: 'llm', embeddings: true, contextSize: options?.contextSize || 4096 }) as LlmModel;
+        this.llmEmbedPath = modelPath;
+        return this.llmEmbed;
+      } finally {
+        this.llmEmbedLoading = null;
+      }
+    })();
+    return this.llmEmbedLoading;
   }
 
   static async getImageModel(modelPath: string, options?: ImageLoadOptions): Promise<ImageModel> {
     if (this.imageModel && this.imagePath === modelPath) {
       return this.imageModel;
     }
-    if (this.imageModel) {
-      logger.info(`[OmniModelCache] Unloading image model: ${this.imagePath}`);
-      await this.imageModel.unload();
-    }
-    logger.info(`[OmniModelCache] Loading image model: ${modelPath}`);
-    const model = createModel(modelPath, 'image');
-    await model.load({ keepVaeOnCpu: true, ...options });
-    this.imageModel = model;
-    this.imagePath = modelPath;
-    return this.imageModel;
+    if (this.imageLoading) return this.imageLoading;
+    this.imageLoading = (async () => {
+      try {
+        if (this.imageModel) {
+          logger.info(`[OmniModelCache] Unloading image model: ${this.imagePath}`);
+          await this.imageModel.unload();
+        }
+        logger.info(`[OmniModelCache] Loading image model: ${modelPath}`);
+        const model = createModel(modelPath, 'image');
+        await model.load({ keepVaeOnCpu: true, ...options });
+        this.imageModel = model;
+        this.imagePath = modelPath;
+        return this.imageModel;
+      } finally {
+        this.imageLoading = null;
+      }
+    })();
+    return this.imageLoading;
   }
 
   static async getTtsModel(modelPath: string): Promise<TtsModel> {
     if (this.ttsModel && this.ttsPath === modelPath) {
       return this.ttsModel;
     }
-    if (this.ttsModel) {
-      logger.info(`[OmniModelCache] Unloading TTS model: ${this.ttsPath}`);
-      await this.ttsModel.unload();
-    }
-    logger.info(`[OmniModelCache] Loading TTS model: ${modelPath}`);
-    const model = createModel(modelPath, 'tts');
-    await model.load();
-    this.ttsModel = model;
-    this.ttsPath = modelPath;
-    return this.ttsModel;
+    if (this.ttsLoading) return this.ttsLoading;
+    this.ttsLoading = (async () => {
+      try {
+        if (this.ttsModel) {
+          logger.info(`[OmniModelCache] Unloading TTS model: ${this.ttsPath}`);
+          await this.ttsModel.unload();
+        }
+        logger.info(`[OmniModelCache] Loading TTS model: ${modelPath}`);
+        const model = createModel(modelPath, 'tts');
+        await model.load();
+        this.ttsModel = model;
+        this.ttsPath = modelPath;
+        return this.ttsModel;
+      } finally {
+        this.ttsLoading = null;
+      }
+    })();
+    return this.ttsLoading;
   }
 
   static async unloadLlmChat(): Promise<void> {
