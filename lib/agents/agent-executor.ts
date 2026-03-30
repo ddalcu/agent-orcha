@@ -95,8 +95,8 @@ export class AgentExecutor {
 
     const tools = await this.toolRegistry.resolveTools(augmentedDefinition.tools);
 
-    // Override model tools with per-agent leverage mode if remote-first or remote-only
-    if ((leverage === 'remote-first' || leverage === 'remote-only') && this.p2pManager) {
+    // Override model tools with per-agent leverage mode
+    if (leverage && this.p2pManager) {
       const agentP2PDeps = { manager: this.p2pManager, leverage };
       const overrides = buildModelTools(listImageConfigs(), listTtsConfigs(), agentP2PDeps);
       for (let i = 0; i < tools.length; i++) {
@@ -104,6 +104,23 @@ export class AgentExecutor {
           tools[i] = overrides.image;
         } else if (tools[i]!.name === 'generate_tts' && overrides.tts) {
           tools[i] = overrides.tts;
+        } else if (tools[i]!.name === 'generate_video') {
+          const { createVideoGenerateTool } = await import('../tools/built-in/video-generate.tool.ts');
+          tools[i] = createVideoGenerateTool({
+            generatedDir: path.join(this.workspaceRoot, '.generated'),
+            p2pManager: this.p2pManager,
+            leverage,
+          });
+        }
+      }
+    } else {
+      // No leverage — ensure video tool runs locally only
+      for (let i = 0; i < tools.length; i++) {
+        if (tools[i]!.name === 'generate_video') {
+          const { createVideoGenerateTool } = await import('../tools/built-in/video-generate.tool.ts');
+          tools[i] = createVideoGenerateTool({
+            generatedDir: path.join(this.workspaceRoot, '.generated'),
+          });
         }
       }
     }

@@ -594,16 +594,14 @@ export class Orchestrator {
     if (tts) this.toolRegistry.registerBuiltIn('generate_tts', tts);
   }
 
-  /** Register (or re-register) tools that depend on the P2P manager being available. */
+  /** Register (or re-register) the video tool. Works locally by default; P2P only when leverage is set. */
   registerP2PTools(): void {
-    if (this._p2pManager) {
-      this.toolRegistry.registerBuiltIn('generate_video', createVideoGenerateTool({
-        p2pManager: this._p2pManager,
-        generatedDir: path.join(this.config.workspaceRoot, '.generated'),
-      }));
-    } else {
-      this.toolRegistry.unregisterBuiltIn('generate_video');
-    }
+    this.toolRegistry.unregisterBuiltIn('generate_video');
+    this.toolRegistry.registerBuiltIn('generate_video', createVideoGenerateTool({
+      generatedDir: path.join(this.config.workspaceRoot, '.generated'),
+      p2pManager: this._p2pManager ?? undefined,
+      leverage: this._p2pManager ? 'local-first' : false,
+    }));
   }
 
   private buildWorkspaceToolsMap(): Map<string, StructuredTool> {
