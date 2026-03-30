@@ -33,7 +33,7 @@ export interface P2PAgentInfo {
 
 // --- P2P Model Info (what peers share about their models) ---
 
-export type P2PModelType = 'chat' | 'image' | 'tts';
+export type P2PModelType = 'chat' | 'image' | 'video' | 'tts';
 
 export interface P2PModelInfo {
   name: string;           // config key on host
@@ -167,6 +167,7 @@ export interface VideoSettings {
   height: number;
   cfgScale: number;
   steps: number;
+  flowShift: number;
   seed?: number;
   fps: number;
 }

@@ -13,6 +13,7 @@ import {
   resolveDefaultName,
   listImageConfigs,
   listTtsConfigs,
+  listVideoConfigs,
 } from '../../lib/llm/index.ts';
 import { detectProvider } from '../../lib/llm/provider-detector.ts';
 import { execFileSync } from '../../lib/utils/child-process.ts';
@@ -477,6 +478,7 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
       lastActiveModel: state.lastActiveModel,
       systemRamBytes: os.totalmem(),
       freeRamBytes: os.freemem(),
+      processRssBytes: process.memoryUsage().rss,
       gpu: omniStatus.gpu,
       vram,
       defaultProvider,
@@ -603,24 +605,27 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         // Auto-configure models.yaml for image/tts/video bundles after download — only if slot is empty
-        // Video models use the image pipeline (frame-by-frame generation), so configure both image + video sections
         if (model && (category === 'image' || category === 'tts' || category === 'video')) {
           try {
             const config = getModelsConfig();
             if (config) {
               const modelDir = `.models/${model.fileName}`;
               const hasExistingImage = config.image && Object.values(config.image).some(v => typeof v === 'object' && (v as any).modelPath);
+              const hasExistingVideo = config.video && Object.values(config.video).some(v => typeof v === 'object' && (v as any).modelPath);
               const hasExistingTts = config.tts && Object.values(config.tts).some(v => typeof v === 'object' && (v as any).modelPath);
 
-              if ((category === 'image' || category === 'video') && type === 'bundle' && !hasExistingImage) {
+              if (category === 'image' && type === 'bundle' && !hasExistingImage) {
                 const bundleFiles = JSON.parse(filesJson!) as Array<{ repo: string; file: string; targetName?: string }>;
                 const mainFile = bundleFiles[0]!;
                 const vaeFile = bundleFiles.find(f => /vae/i.test(f.targetName || f.file));
-                const llmFile = bundleFiles.find(f => !(/vae/i.test(f.targetName || f.file)) && f !== mainFile);
                 const toFileName = (f: { file: string; targetName?: string }) => f.targetName || f.file.split('/').pop()!;
+                const nonMain = bundleFiles.filter(f => f !== mainFile && f !== vaeFile);
+                const t5File = nonMain.find(f => /umt5|t5.?xxl/i.test(toFileName(f)));
+                const llmFile = nonMain.find(f => f !== t5File);
                 config.image = config.image || {};
                 config.image['omni'] = {
                   modelPath: `${modelDir}/${toFileName(mainFile)}`,
+                  ...(t5File ? { t5xxl: `${modelDir}/${toFileName(t5File)}` } : {}),
                   ...(llmFile ? { llm: `${modelDir}/${toFileName(llmFile)}` } : {}),
                   ...(vaeFile ? { vae: `${modelDir}/${toFileName(vaeFile)}` } : {}),
                   steps: 20,
@@ -628,21 +633,26 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
                   share: true,
                 };
                 config.image['default'] = 'omni';
-                // Video models also need a video config entry for P2P catalog advertising
-                if (category === 'video') {
-                  const hasExistingVideo = config.video && Object.values(config.video).some(v => typeof v === 'object' && (v as any).modelPath);
-                  if (!hasExistingVideo) {
-                    config.video = config.video || {};
-                    config.video['omni'] = {
-                      provider: 'omni',
-                      modelPath: `${modelDir}/${toFileName(mainFile)}`,
-                      steps: 20,
-                      description: model.fileName,
-                      share: true,
-                    };
-                    config.video['default'] = 'omni';
-                  }
-                }
+                await saveModelsConfig(modelsConfigPath, config);
+                LLMFactory.clearCache();
+              } else if (category === 'video' && type === 'bundle' && !hasExistingVideo) {
+                const bundleFiles = JSON.parse(filesJson!) as Array<{ repo: string; file: string; targetName?: string }>;
+                const mainFile = bundleFiles[0]!;
+                const vaeFile = bundleFiles.find(f => /vae/i.test(f.targetName || f.file));
+                const toFileName = (f: { file: string; targetName?: string }) => f.targetName || f.file.split('/').pop()!;
+                const nonMain = bundleFiles.filter(f => f !== mainFile && f !== vaeFile);
+                const t5File = nonMain.find(f => /umt5|t5.?xxl/i.test(toFileName(f)));
+                config.video = config.video || {};
+                config.video['omni'] = {
+                  provider: 'omni',
+                  modelPath: `${modelDir}/${toFileName(mainFile)}`,
+                  ...(t5File ? { t5xxl: `${modelDir}/${toFileName(t5File)}` } : {}),
+                  ...(vaeFile ? { vae: `${modelDir}/${toFileName(vaeFile)}` } : {}),
+                  steps: 30,
+                  description: model.fileName,
+                  share: true,
+                };
+                config.video['default'] = 'omni';
                 await saveModelsConfig(modelsConfigPath, config);
                 LLMFactory.clearCache();
               } else if (category === 'tts' && !hasExistingTts) {
@@ -905,6 +915,84 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  // POST /models/:id/activate-video — configure + load a video model (WAN) with validation
+  fastify.post<{ Params: { id: string } }>(
+    '/models/:id/activate-video',
+    async (request, reply) => {
+      const model = await manager.getModel(request.params.id);
+      if (!model) {
+        return reply.status(404).send({ error: 'Model not found' });
+      }
+
+      const modelDir = model.filePath;
+      const relDir = `.models/${model.fileName}`;
+      let files: string[];
+      try {
+        files = await fs.readdir(modelDir);
+      } catch {
+        return reply.status(400).send({ error: 'Model directory not found — expected a bundle directory' });
+      }
+
+      const ggufFiles = files.filter(f => f.endsWith('.gguf'));
+      const vaeFile = files.find(f => /vae/i.test(f) && f.endsWith('.safetensors'));
+      const mainModel = ggufFiles.find(f => /wan/i.test(f))
+        || ggufFiles.find(f => f.toLowerCase().includes(model.fileName.toLowerCase()))
+        || ggufFiles[0];
+      const t5Encoder = ggufFiles.find(f => f !== mainModel && /umt5|t5.?xxl/i.test(f));
+
+      // Validate required companion files for WAN video models
+      if (!mainModel) {
+        return reply.status(400).send({ error: 'No video model .gguf found in directory' });
+      }
+      if (!t5Encoder) {
+        return reply.status(400).send({ error: 'Missing UMT5/T5-XXL text encoder (.gguf) — required for WAN video models' });
+      }
+      if (!vaeFile) {
+        return reply.status(400).send({ error: 'Missing VAE (.safetensors) — required for WAN video models' });
+      }
+
+      const vidBody = (request.body as any) || {};
+      const existingVideoConfig = getModelsConfig()?.video?.['omni'];
+      const vidUseGpu = vidBody.useGpu ?? (existingVideoConfig && typeof existingVideoConfig !== 'string' ? (existingVideoConfig as any).useGpu : undefined);
+
+      const modelPath = path.join(modelDir, mainModel);
+      try {
+        await OmniModelCache.getVideoModel(modelPath, {
+          t5xxlPath: path.join(modelDir, t5Encoder),
+          vaePath: path.join(modelDir, vaeFile),
+          ...(vidUseGpu != null ? { useGpu: vidUseGpu } : {}),
+        });
+      } catch (err: any) {
+        logger.error('[LocalLLM] Failed to load video model:', err);
+        return reply.status(500).send({ error: `Failed to load: ${err.message}` });
+      }
+
+      try {
+        const config = getModelsConfig();
+        if (config) {
+          config.video = config.video || {};
+          config.video['omni'] = {
+            provider: 'omni',
+            modelPath: `${relDir}/${mainModel}`,
+            t5xxl: `${relDir}/${t5Encoder}`,
+            vae: `${relDir}/${vaeFile}`,
+            steps: (config.video['omni'] as any)?.steps ?? 30,
+            description: model.fileName,
+            share: true,
+            ...(vidUseGpu != null ? { useGpu: vidUseGpu } : {}),
+          };
+          config.video['default'] = 'omni';
+          await saveModelsConfig(modelsConfigPath, config);
+          LLMFactory.clearCache();
+        }
+      } catch (err: any) {
+        logger.error('[LocalLLM] Failed to update models.yaml:', err);
+      }
+
+      return { ok: true, status: OmniModelCache.getStatus() };
+    },
+  );
+
   // POST /models/:id/activate-tts — configure + load a TTS model
   fastify.post<{ Params: { id: string } }>(
     '/models/:id/activate-tts',
@@ -1003,6 +1091,12 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
     return { ok: true };
   });
 
+  // POST /stop-video — unload omni video model
+  fastify.post('/stop-video', async () => {
+    await OmniModelCache.unloadVideo();
+    return { ok: true };
+  });
+
   // POST /stop-tts — unload omni TTS model
   fastify.post('/stop-tts', async () => {
     await OmniModelCache.unloadTts();
@@ -1055,6 +1149,41 @@ export const localLlmRoutes: FastifyPluginAsync = async (fastify) => {
         }
       } catch (err: any) {
         logger.error('[LocalLLM] Failed to persist useGpu for image:', err);
+      }
+    }
+
+    return { ok: true, status: OmniModelCache.getStatus() };
+  });
+
+  // POST /start-video — pre-load the first configured video model
+  fastify.post('/start-video', async (req, reply) => {
+    const configs = listVideoConfigs();
+    const first = configs[0];
+    if (!first) return reply.status(400).send({ error: 'No video model configured in models.yaml' });
+    if (!first.config.modelPath) return reply.status(400).send({ error: 'Video config has no modelPath' });
+
+    const body = (req.body as any) || {};
+    const useGpu = body.useGpu ?? (first.config as any).useGpu;
+
+    const resolve = (p?: string) => p ? (path.isAbsolute(p) ? p : path.join(workspaceRoot, p)) : undefined;
+    const modelPath = resolve(first.config.modelPath)!;
+    await OmniModelCache.getVideoModel(modelPath, {
+      ...(first.config.t5xxl ? { t5xxlPath: resolve(first.config.t5xxl) } : {}),
+      ...(first.config.vae ? { vaePath: resolve(first.config.vae) } : {}),
+      ...(first.config.clipL ? { clipLPath: resolve(first.config.clipL) } : {}),
+      ...(first.config.llm ? { llmPath: resolve(first.config.llm) } : {}),
+      ...(useGpu != null ? { useGpu } : {}),
+    });
+
+    if (body.useGpu != null) {
+      try {
+        const config = getModelsConfig();
+        if (config?.video?.[first.name] && typeof config.video[first.name] !== 'string') {
+          (config.video[first.name] as any).useGpu = body.useGpu;
+          await saveModelsConfig(modelsConfigPath, config);
+        }
+      } catch (err: any) {
+        logger.error('[LocalLLM] Failed to persist useGpu for video:', err);
       }
     }
 

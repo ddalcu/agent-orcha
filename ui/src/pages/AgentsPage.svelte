@@ -387,13 +387,13 @@
   }
   let videoSettingsOpen = $state(false);
   let videoSettings = $state<VideoSettingsData>({
-    totalFrames: 24,
-    width: 512,
-    height: 512,
-    cfgScale: 7,
-    steps: 20,
+    totalFrames: 9,
+    width: 832,
+    height: 480,
+    cfgScale: 5,
+    steps: 6,
     seed: '',
-    fps: 12,
+    fps: 16,
     enabled: false,
   });
 
@@ -1786,10 +1786,10 @@
   // --- Video presets ---
 
   const videoPresets = [
-    { id: 'quick', label: 'Quick', icon: 'fa-bolt', frames: 12, w: 256, h: 256, steps: 10, cfg: 7, fps: 8 },
-    { id: 'standard', label: 'Standard', icon: 'fa-circle-play', frames: 24, w: 512, h: 512, steps: 20, cfg: 7, fps: 12 },
-    { id: 'quality', label: 'Quality', icon: 'fa-star', frames: 48, w: 768, h: 768, steps: 30, cfg: 7, fps: 24 },
-    { id: 'cinematic', label: 'Cinematic', icon: 'fa-clapperboard', frames: 72, w: 1024, h: 576, steps: 40, cfg: 5, fps: 24 },
+    { id: 'quick',    label: 'Quick',    icon: 'fa-bolt',         frames: 9,  w: 832, h: 480, steps: 6,  cfg: 5, fps: 16 },
+    { id: 'standard', label: 'Standard', icon: 'fa-circle-play',  frames: 33, w: 832, h: 480, steps: 30, cfg: 5, fps: 16 },
+    { id: 'quality',  label: 'Quality',  icon: 'fa-star',         frames: 49, w: 832, h: 480, steps: 50, cfg: 5, fps: 16 },
+    { id: 'cinematic',label: 'Cinematic',icon: 'fa-clapperboard', frames: 81, w: 832, h: 480, steps: 50, cfg: 5, fps: 16 },
   ];
 
   function applyVideoPreset(presetId: string) {
@@ -2324,7 +2324,7 @@
     <div class="modal-content video-settings-dialog">
       <div class="modal-header">
         <h3 class="text-lg font-semibold text-primary">
-          <i class="fas fa-film text-accent mr-2"></i>Video Settings
+          <i class="fas fa-film text-accent mr-2"></i>Video Settings <span class="text-xs text-muted font-normal ml-1">WAN 2.2</span>
         </h3>
         <button class="modal-close-btn" title="Close" onclick={() => { videoSettingsOpen = false; }}>
           <i class="fas fa-xmark"></i>
@@ -2341,28 +2341,30 @@
         </div>
         <div class="video-settings-grid">
           <div class="video-setting-group">
-            <label for="vs-frames" class="text-sm text-muted mb-1 block">Total Frames</label>
+            <label for="vs-frames" class="text-sm text-muted mb-1 block">Frames</label>
             <input
               id="vs-frames"
               type="number"
-              min="1"
-              max="300"
+              min="5"
+              max="81"
+              step="4"
               bind:value={videoSettings.totalFrames}
               class="input"
             />
-            <span class="video-setting-hint">{(videoSettings.totalFrames / videoSettings.fps).toFixed(1)}s at {videoSettings.fps}fps</span>
+            <span class="video-setting-hint">{(videoSettings.totalFrames / videoSettings.fps).toFixed(1)}s &middot; WAN: 1+4n</span>
           </div>
 
           <div class="video-setting-group">
-            <label for="vs-fps" class="text-sm text-muted mb-1 block">FPS</label>
+            <label for="vs-steps" class="text-sm text-muted mb-1 block">Steps</label>
             <input
-              id="vs-fps"
+              id="vs-steps"
               type="number"
               min="1"
-              max="60"
-              bind:value={videoSettings.fps}
+              max="50"
+              bind:value={videoSettings.steps}
               class="input"
             />
+            <span class="video-setting-hint">6 fast &middot; 30 good &middot; 50 official</span>
           </div>
 
           <div class="video-setting-group">
@@ -2370,9 +2372,9 @@
             <input
               id="vs-width"
               type="number"
-              min="64"
-              max="2048"
-              step="64"
+              min="480"
+              max="832"
+              step="16"
               bind:value={videoSettings.width}
               class="input"
             />
@@ -2383,12 +2385,13 @@
             <input
               id="vs-height"
               type="number"
-              min="64"
-              max="2048"
-              step="64"
+              min="480"
+              max="832"
+              step="16"
               bind:value={videoSettings.height}
               class="input"
             />
+            <span class="video-setting-hint">832x480 &middot; 480x832 &middot; 624x624</span>
           </div>
 
           <div class="video-setting-group">
@@ -2397,7 +2400,7 @@
               id="vs-cfg"
               type="number"
               min="1"
-              max="30"
+              max="20"
               step="0.5"
               bind:value={videoSettings.cfgScale}
               class="input"
@@ -2405,13 +2408,13 @@
           </div>
 
           <div class="video-setting-group">
-            <label for="vs-steps" class="text-sm text-muted mb-1 block">Steps</label>
+            <label for="vs-fps" class="text-sm text-muted mb-1 block">FPS</label>
             <input
-              id="vs-steps"
+              id="vs-fps"
               type="number"
-              min="1"
-              max="100"
-              bind:value={videoSettings.steps}
+              min="8"
+              max="30"
+              bind:value={videoSettings.fps}
               class="input"
             />
           </div>

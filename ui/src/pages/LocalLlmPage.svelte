@@ -249,6 +249,7 @@
   let activateErrors = $state<Record<string, string>>({});
   let activatingEmbId = $state<string | null>(null);
   let activatingImageId = $state<string | null>(null);
+  let activatingVideoId = $state<string | null>(null);
   let activatingTtsId = $state<string | null>(null);
   let mmprojStatus = $state('');
   let mmprojInfo = $state<Record<string, { hasMmproj: boolean; repo: string | null; loading?: boolean }>>({});
@@ -259,14 +260,17 @@
   // Unloading
   let unloadingModel = $state<string | null>(null);
   let stoppingImage = $state(false);
+  let stoppingVideo = $state(false);
   let stoppingTts = $state(false);
   let startingEmb = $state(false);
   let startingImage = $state(false);
+  let startingVideo = $state(false);
   let startingTts = $state(false);
   // GPU toggle per model slot — initialized from config, defaults to true when GPU available
   let hasGpu = $derived(status?.gpu?.backend != null && status?.gpu?.backend !== 'cpu');
   let chatUseGpu = $state<boolean | null>(null);
   let imageUseGpu = $state<boolean | null>(null);
+  let videoUseGpu = $state<boolean | null>(null);
   let ttsUseGpu = $state<boolean | null>(null);
 
   // ─── Config Resolvers ───
@@ -311,17 +315,21 @@
   let embRunning = $derived(omniStatus?.llmEmbed?.loaded || false);
   let activeEmbModelPath = $derived(embRunning ? omniStatus?.llmEmbed?.modelPath : null);
 
-  // Image & TTS model status from omni cache
+  // Image, Video & TTS model status from omni cache
   let imageLoaded = $derived(omniStatus?.image?.loaded || false);
   let imageModelPath = $derived(imageLoaded ? omniStatus?.image?.modelPath : null);
   let imageModelName = $derived(imageModelPath ? imageModelPath.split('/').pop() : null);
+  let videoLoaded = $derived(omniStatus?.video?.loaded || false);
+  let videoModelPath = $derived(videoLoaded ? omniStatus?.video?.modelPath : null);
+  let videoModelName = $derived(videoModelPath ? videoModelPath.split('/').pop() : null);
   let ttsLoaded = $derived(omniStatus?.tts?.loaded || false);
   let ttsModelPath = $derived(ttsLoaded ? omniStatus?.tts?.modelPath : null);
   let ttsModelName = $derived(ttsModelPath ? ttsModelPath.split('/').pop() : null);
 
-  // Configured image/TTS models from models.yaml (these are "on-demand" slots)
+  // Configured image/video/TTS models from models.yaml (these are "on-demand" slots)
   // Filter out 'default' pointer entries so we only have concrete config objects
   let imageConfigs = $derived((Object.entries(llmConfig?.image || {}) as [string, any][]).filter(([k, v]) => k !== 'default' && typeof v === 'object'));
+  let videoConfigs = $derived((Object.entries(llmConfig?.video || {}) as [string, any][]).filter(([k, v]) => k !== 'default' && typeof v === 'object'));
   let ttsConfigs = $derived((Object.entries(llmConfig?.tts || {}) as [string, any][]).filter(([k, v]) => k !== 'default' && typeof v === 'object'));
 
   // Configured embedding model (on-demand — loads when knowledge stores initialize)
@@ -351,8 +359,10 @@
   // RAM & VRAM
   let totalRam = $derived(systemRamBytes);
   let freeRam = $state(0);
+  let processRss = $state(0);
   let usedRam = $derived(totalRam - freeRam);
   let ramPct = $derived(totalRam > 0 ? Math.round((usedRam / totalRam) * 100) : 0);
+  let appRamPct = $derived(totalRam > 0 ? Math.round((processRss / totalRam) * 100) : 0);
   let gpuVram = $derived(status?.vram?.totalBytes || status?.gpu?.vramBytes || 0);
   let gpuVramUsed = $derived(status?.vram?.usedBytes || 0);
   let gpuVramPct = $derived(gpuVram > 0 && gpuVramUsed > 0 ? Math.round((gpuVramUsed / gpuVram) * 100) : 0);
@@ -500,6 +510,7 @@
       status = await api.getLocalLlmStatus();
       systemRamBytes = status.systemRamBytes || 0;
       freeRam = status.freeRamBytes || 0;
+      processRss = status.processRssBytes || 0;
     } catch (e) {
       console.error('Failed to load local LLM status:', e);
     }
@@ -627,6 +638,8 @@
       if (chatCfg && chatUseGpu === null) chatUseGpu = chatCfg.useGpu ?? true;
       const imgCfg = imageConfigs.length > 0 ? imageConfigs[0][1] : null;
       if (imgCfg && imageUseGpu === null) imageUseGpu = imgCfg.useGpu ?? true;
+      const vidCfg = videoConfigs.length > 0 ? videoConfigs[0][1] : null;
+      if (vidCfg && videoUseGpu === null) videoUseGpu = vidCfg.useGpu ?? true;
       const ttsCfg = ttsConfigs.length > 0 ? ttsConfigs[0][1] : null;
       if (ttsCfg && ttsUseGpu === null) ttsUseGpu = ttsCfg.useGpu ?? true;
     }
@@ -765,6 +778,23 @@
     }
   }
 
+  async function activateVideo(id: string) {
+    activatingVideoId = id;
+    activateErrors = { ...activateErrors };
+    delete activateErrors[id];
+    try {
+      const result = await api.activateLocalVideo(id, hasGpu ? { useGpu: videoUseGpu ?? true } : undefined);
+      if (result.error) throw new Error(result.error);
+      await loadLlmConfig();
+      await refresh();
+    } catch (e: any) {
+      console.error('Failed to activate video model:', e);
+      activateErrors = { ...activateErrors, [id]: e.message };
+    } finally {
+      activatingVideoId = null;
+    }
+  }
+
   async function activateTts(id: string) {
     activatingTtsId = id;
     activateErrors = { ...activateErrors };
@@ -818,6 +848,18 @@
     }
   }
 
+  async function stopVideo() {
+    stoppingVideo = true;
+    try {
+      await api.stopLocalVideo();
+      await refresh();
+    } catch (e) {
+      console.error('Failed to stop video model:', e);
+    } finally {
+      stoppingVideo = false;
+    }
+  }
+
   async function stopTts() {
     stoppingTts = true;
     try {
@@ -851,6 +893,18 @@
       console.error('Failed to start image model:', e);
     } finally {
       startingImage = false;
+    }
+  }
+
+  async function startVideo() {
+    startingVideo = true;
+    try {
+      await api.startLocalVideo(hasGpu ? { useGpu: videoUseGpu ?? true } : undefined);
+      await refresh();
+    } catch (e) {
+      console.error('Failed to start video model:', e);
+    } finally {
+      startingVideo = false;
     }
   }
 
@@ -1625,11 +1679,16 @@
                 <span class="llm-mem-label"><i class="fas fa-memory mr-1"></i>RAM</span>
                 <div class="llm-mem-bar-wrap">
                   <div class="llm-mem-bar">
-                    <div class="llm-mem-fill {ramPct > 85 ? 'llm-mem-red' : ramPct > 70 ? 'llm-mem-amber' : 'llm-mem-green'}"
-                      style:width="{ramPct}%"></div>
+                    <div class="llm-mem-fill llm-mem-app" style:width="{appRamPct}%" title="App: {formatBytes(processRss)}"></div>
+                    <div class="llm-mem-fill llm-mem-system" style:width="{Math.max(0, ramPct - appRamPct)}%" title="Other: {formatBytes(usedRam - processRss)}"></div>
                   </div>
                 </div>
-                <span class="llm-mem-value {ramPct > 85 ? 'text-red' : ramPct > 70 ? 'text-amber' : 'text-muted'}">{formatBytes(usedRam)} / {formatBytes(totalRam)}</span>
+                <span class="llm-mem-value {ramPct > 85 ? 'text-red' : ramPct > 70 ? 'text-amber' : 'text-muted'}">
+                  <span class="llm-mem-app-label" title="Agent Orcha process">{formatBytes(processRss)}</span>
+                  <span class="text-muted"> / </span>
+                  <span title="System total used">{formatBytes(usedRam)}</span>
+                  <span class="text-muted"> / {formatBytes(totalRam)}</span>
+                </span>
               </div>
               {#if isCuda && gpuVram > 0}
                 <div class="llm-mem-row">
@@ -1873,7 +1932,7 @@
             </div>
           {/if}
 
-          <!-- Image / Video model -->
+          <!-- Image model -->
           {#if imageConfigs.length > 0}
             {@const imgCfg = imageConfigs[0][1]}
             {@const imgLabel = imgCfg.description || imgCfg.modelPath?.split('/').pop() || imageConfigs[0][0]}
@@ -1885,11 +1944,11 @@
                 <div class="flex items-center gap-3">
                   {#if imageLoaded}
                     <span class="llm-pulse llm-pulse-purple"></span>
-                    <span class="text-sm text-primary">Image / Video</span>
+                    <span class="text-sm text-primary">Image</span>
                     <span class="badge badge-purple font-mono">{imageModelName}</span>
                   {:else}
                     <i class="fas fa-image text-purple text-xs"></i>
-                    <span class="text-sm text-secondary">Image / Video</span>
+                    <span class="text-sm text-secondary">Image</span>
                     <span class="text-xs text-muted font-mono">{imgLabel}</span>
                     <span class="llm-ondemand-badge">on demand</span>
                   {/if}
@@ -1924,6 +1983,64 @@
                     {/if}
                     <button class="btn btn-purple btn-sm" disabled={startingImage} onclick={startImage}>
                       {#if startingImage}<i class="fas fa-spinner fa-spin mr-1"></i>Loading...{:else}<i class="fas fa-play mr-1"></i>Start{/if}
+                    </button>
+                  {/if}
+                </div>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Video model -->
+          {#if videoConfigs.length > 0}
+            {@const vidCfg = videoConfigs[0][1]}
+            {@const vidLabel = vidCfg.description || vidCfg.modelPath?.split('/').pop() || videoConfigs[0][0]}
+            {@const vidDirName = vidCfg.description || vidCfg.modelPath?.split('/').slice(-2, -1)[0] || vidCfg.modelPath?.split('/').pop() || ''}
+            {@const vidRecommended = findRecommendedForModel(vidDirName, 'video')}
+            {@const vidNeedsDownload = vidRecommended && !isModelDownloaded(models, vidRecommended.repo, vidRecommended.file)}
+            <div class="llm-server-section {videoLoaded ? '' : 'llm-slot-ondemand'}">
+              <div class="llm-section-content flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  {#if videoLoaded}
+                    <span class="llm-pulse llm-pulse-red"></span>
+                    <span class="text-sm text-primary">Video</span>
+                    <span class="badge badge-red font-mono">{videoModelName}</span>
+                  {:else}
+                    <i class="fas fa-video text-red text-xs"></i>
+                    <span class="text-sm text-secondary">Video</span>
+                    <span class="text-xs text-muted font-mono">{vidLabel}</span>
+                    <span class="llm-ondemand-badge">on demand</span>
+                  {/if}
+                </div>
+                <div class="flex items-center gap-2">
+                  {#if videoLoaded}
+                    {#if hasGpu}
+                      <span class="flex items-center gap-1 text-2xs text-muted" title="Model running with {(videoUseGpu ?? true) ? 'GPU' : 'CPU'}">
+                        <i class="fas {(videoUseGpu ?? true) ? 'fa-microchip' : 'fa-server'}"></i>
+                        {(videoUseGpu ?? true) ? 'GPU' : 'CPU'}
+                      </span>
+                    {/if}
+                    <button class="btn btn-danger btn-sm" disabled={stoppingVideo} onclick={stopVideo}>
+                      {#if stoppingVideo}<i class="fas fa-spinner fa-spin mr-1"></i>Stopping...{:else}<i class="fas fa-stop mr-1"></i>Stop{/if}
+                    </button>
+                  {:else if vidNeedsDownload}
+                    {@const isDownloading = activeDownloads.has(`bundle:${vidRecommended.file}`)}
+                    <button class="btn btn-red btn-sm" disabled={isDownloading}
+                      onclick={() => downloadModel(vidRecommended.repo, vidRecommended.file, vidRecommended.type, undefined, undefined, vidRecommended.bundle, vidRecommended.category)}>
+                      {#if isDownloading}
+                        <i class="fas fa-spinner fa-spin mr-1"></i>Downloading...
+                      {:else}
+                        <i class="fas fa-download mr-1"></i>Download
+                      {/if}
+                    </button>
+                  {:else}
+                    {#if hasGpu}
+                      <label class="flex items-center gap-1 text-2xs text-muted cursor-pointer" title={(videoUseGpu ?? true) ? 'GPU enabled — click to use CPU' : 'CPU only — click to use GPU'}>
+                        <Toggle active={videoUseGpu ?? true} onchange={(v) => { videoUseGpu = v; }} />
+                        <span>GPU</span>
+                      </label>
+                    {/if}
+                    <button class="btn btn-red btn-sm" disabled={startingVideo} onclick={startVideo}>
+                      {#if startingVideo}<i class="fas fa-spinner fa-spin mr-1"></i>Loading...{:else}<i class="fas fa-play mr-1"></i>Start{/if}
                     </button>
                   {/if}
                 </div>
@@ -1993,6 +2110,8 @@
             {@const chatEntry = llmConfig?.llm?.[selectedEngine]}
             {@const imgEntry = imageConfigs.length > 0 ? imageConfigs[0][1] : null}
             {@const imgName = imageConfigs.length > 0 ? imageConfigs[0][0] : ''}
+            {@const vidEntry = videoConfigs.length > 0 ? videoConfigs[0][1] : null}
+            {@const vidName = videoConfigs.length > 0 ? videoConfigs[0][0] : ''}
             {@const ttsEntry = ttsConfigs.length > 0 ? ttsConfigs[0][1] : null}
             {@const ttsName = ttsConfigs.length > 0 ? ttsConfigs[0][0] : ''}
             <div class="llm-server-section">
@@ -2014,9 +2133,18 @@
                     <div class="flex items-center justify-between">
                       <div class="flex items-center gap-2">
                         <i class="fas fa-image text-2xs text-purple"></i>
-                        <span class="text-xs text-secondary">Image / Video</span>
+                        <span class="text-xs text-secondary">Image</span>
                       </div>
                       <Toggle active={imgEntry?.share === true} disabled={togglingSectionP2P === `image:${imgName}`} onchange={() => toggleSectionP2P('image', imgName)} />
+                    </div>
+                  {/if}
+                  {#if vidEntry}
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-2">
+                        <i class="fas fa-video text-2xs text-red"></i>
+                        <span class="text-xs text-secondary">Video</span>
+                      </div>
+                      <Toggle active={vidEntry?.share === true} disabled={togglingSectionP2P === `video:${vidName}`} onchange={() => toggleSectionP2P('video', vidName)} />
                     </div>
                   {/if}
                   {#if ttsEntry}
@@ -2202,12 +2330,14 @@
               {@const isImageLoaded = imageModelPath && (model.filePath === imageModelPath || model.filePath === imageModelPath.replace(/[/\\][^/\\]+$/, ''))}
               {@const isTtsLoaded = ttsModelPath && (model.filePath === ttsModelPath || model.filePath === ttsModelPath.replace(/[/\\][^/\\]+$/, ''))}
               {@const looksLikeEmbedding = /embed|MiniLM/i.test(model.fileName)}
-              {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d|wan/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
+              {@const looksLikeVideo = /wan/i.test(model.fileName) || Object.values(llmConfig?.video || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
+              {@const looksLikeImage = /flux|stable.?diff|sdxl|sd[_-]?v?\d/i.test(model.fileName) || Object.values(llmConfig?.image || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
               {@const looksLikeTTS = /tts|speech|qwen3.*tts|kokoro|parler/i.test(model.fileName) || /tts/i.test(model.repo || '') || Object.values(llmConfig?.tts || {}).some((c: any) => model.filePath.endsWith(c.modelPath?.replace(/^\.models[/\\]/, '')))}
-              {@const modelRole = looksLikeEmbedding ? 'embed' : looksLikeImage ? 'image' : looksLikeTTS ? 'tts' : 'llm'}
+              {@const isVideoLoaded = videoModelPath && (model.filePath === videoModelPath || model.filePath === videoModelPath.replace(/[/\\][^/\\]+$/, ''))}
+              {@const modelRole = looksLikeEmbedding ? 'embed' : looksLikeVideo ? 'video' : looksLikeImage ? 'image' : looksLikeTTS ? 'tts' : 'llm'}
               {@const recInfo = getRecommendedInfo(model)}
-              {@const isActive = isChat || isEmb || isImageLoaded || isTtsLoaded}
-              {@const cardCls = isChat ? 'llm-model-card active-chat' : isEmb ? 'llm-model-card active-emb' : isImageLoaded ? 'llm-model-card active-image' : isTtsLoaded ? 'llm-model-card active-tts' : 'llm-model-card'}
+              {@const isActive = isChat || isEmb || isImageLoaded || isVideoLoaded || isTtsLoaded}
+              {@const cardCls = isChat ? 'llm-model-card active-chat' : isEmb ? 'llm-model-card active-emb' : isImageLoaded ? 'llm-model-card active-image' : isVideoLoaded ? 'llm-model-card active-video' : isTtsLoaded ? 'llm-model-card active-tts' : 'llm-model-card'}
               {@const caps = modelRole === 'llm' ? detectCapabilitiesFromFile(model) : null}
 
               <div class={cardCls} data-model-id={model.id}>
@@ -2217,9 +2347,12 @@
                       {#if isChat}<i class="fas fa-circle text-amber text-2xs"></i>{/if}
                       {#if isEmb}<i class="fas fa-circle text-blue text-2xs"></i>{/if}
                       {#if isImageLoaded}<i class="fas fa-circle text-purple text-2xs"></i>{/if}
+                      {#if isVideoLoaded}<i class="fas fa-circle text-red text-2xs"></i>{/if}
                       {#if isTtsLoaded}<i class="fas fa-circle text-green text-2xs"></i>{/if}
                       <span class="font-medium text-primary text-xs truncate">{model.fileName.replace(/\.gguf$/i, '')}</span>
-                      {#if modelRole === 'image'}
+                      {#if modelRole === 'video'}
+                        <span class="badge badge-red text-2xs">VIDEO</span>
+                      {:else if modelRole === 'image'}
                         <span class="badge badge-purple text-2xs">IMAGE</span>
                       {:else if modelRole === 'tts'}
                         <span class="badge badge-green text-2xs">TTS</span>
@@ -2276,6 +2409,20 @@
                           disabled={activatingEmbId === model.id}
                           onclick={() => activateEmbedding(model.id)}>
                           {#if activatingEmbId === model.id}
+                            <span class="spinner-sm"></span> Loading...
+                          {:else}
+                            <i class="fas fa-play mr-1"></i>Activate
+                          {/if}
+                        </button>
+                      {/if}
+                    {:else if modelRole === 'video'}
+                      {#if isVideoLoaded}
+                        <span class="badge badge-red">Active</span>
+                      {:else}
+                        <button class="btn btn-red btn-sm"
+                          disabled={activatingVideoId === model.id}
+                          onclick={() => activateVideo(model.id)}>
+                          {#if activatingVideoId === model.id}
                             <span class="spinner-sm"></span> Loading...
                           {:else}
                             <i class="fas fa-play mr-1"></i>Activate

@@ -169,6 +169,9 @@ export const api = {
   async activateLocalImage(id: string, options?: { useGpu?: boolean }) {
     return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-image`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();
   },
+  async activateLocalVideo(id: string, options?: { useGpu?: boolean }) {
+    return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-video`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();
+  },
   async activateLocalTts(id: string, options?: { useGpu?: boolean }) {
     return (await _fetch(`/api/local-llm/models/${encodeURIComponent(id)}/activate-tts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();
   },
@@ -181,6 +184,9 @@ export const api = {
   async stopLocalImage() {
     return (await _fetch('/api/local-llm/stop-image', { method: 'POST' })).json();
   },
+  async stopLocalVideo() {
+    return (await _fetch('/api/local-llm/stop-video', { method: 'POST' })).json();
+  },
   async stopLocalTts() {
     return (await _fetch('/api/local-llm/stop-tts', { method: 'POST' })).json();
   },
@@ -189,6 +195,9 @@ export const api = {
   },
   async startLocalImage(options?: { useGpu?: boolean }) {
     return (await _fetch('/api/local-llm/start-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();
+  },
+  async startLocalVideo(options?: { useGpu?: boolean }) {
+    return (await _fetch('/api/local-llm/start-video', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();
   },
   async startLocalTts(options?: { useGpu?: boolean }) {
     return (await _fetch('/api/local-llm/start-tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options || {}) })).json();

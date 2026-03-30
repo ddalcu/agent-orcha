@@ -1899,6 +1899,8 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
 .llm-pulse-green::before, .llm-pulse-green::after { background: var(--green-400); }
 .llm-pulse-blue::before, .llm-pulse-blue::after { background: var(--blue-400); }
 .llm-pulse-purple::before, .llm-pulse-purple::after { background: var(--purple-400); }
+.llm-pulse-red::before, .llm-pulse-red::after { background: var(--red-400); }
+.llm-pulse-amber::before, .llm-pulse-amber::after { background: var(--amber-400); }
 .llm-pulse-off {
   display: inline-flex;
   height: 10px;
@@ -1920,6 +1922,7 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
 .llm-model-card.active-chat  { border-color: var(--amber-400); background: rgba(251, 191, 36, 0.05); }
 .llm-model-card.active-emb   { border-color: var(--blue-400); background: rgba(96, 165, 250, 0.05); }
 .llm-model-card.active-image { border-color: var(--purple-400); background: rgba(168, 85, 247, 0.05); }
+.llm-model-card.active-video { border-color: var(--red-400); background: rgba(248, 113, 113, 0.05); }
 .llm-model-card.active-tts   { border-color: var(--green-400); background: rgba(74, 222, 128, 0.05); }
 .llm-model-path { font-size: 8px; line-height: 1.2; }
 
@@ -2021,21 +2024,27 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
   border-radius: var(--radius-full);
   height: 6px;
   overflow: hidden;
+  display: flex;
 }
 .llm-mem-fill {
   height: 100%;
-  border-radius: var(--radius-full);
   transition: width var(--fast);
 }
+.llm-mem-fill:first-child { border-radius: var(--radius-full) 0 0 var(--radius-full); }
+.llm-mem-fill:last-child  { border-radius: 0 var(--radius-full) var(--radius-full) 0; }
+.llm-mem-fill:only-child  { border-radius: var(--radius-full); }
 .llm-mem-value {
   font-size: 0.65rem;
   font-family: var(--font-mono);
   white-space: nowrap;
   flex-shrink: 0;
 }
-.llm-mem-green { background: var(--green); }
-.llm-mem-amber { background: var(--amber-400); }
-.llm-mem-red   { background: var(--red-400); }
+.llm-mem-green  { background: var(--green); }
+.llm-mem-amber  { background: var(--amber-400); }
+.llm-mem-red    { background: var(--red-400); }
+.llm-mem-app    { background: var(--blue-400); }
+.llm-mem-system { background: var(--border); }
+.llm-mem-app-label { color: var(--blue-400); font-weight: 600; }
 
 /* Model setting sliders */
 .llm-sliders-section {

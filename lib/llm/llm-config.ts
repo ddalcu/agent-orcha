@@ -90,12 +90,19 @@ export const VideoModelConfigSchema = z.object({
   model: z.string().optional().describe('Model name (API providers like OpenAI Sora)'),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
+  t5xxl: z.string().optional().describe('Path to UMT5/T5-XXL text encoder'),
+  vae: z.string().optional().describe('Path to VAE model'),
+  clipL: z.string().optional().describe('Path to CLIP-L encoder'),
+  llm: z.string().optional().describe('Path to LLM companion encoder'),
   steps: z.number().optional().describe('Number of sampling steps'),
+  cfgScale: z.number().optional().describe('CFG scale (TI2V-5B official: 5.0, A14B: 3.5)'),
+  flowShift: z.number().optional().describe('Flow shift (TI2V-5B official: 5.0, sd-cli default: 3.0)'),
   width: z.number().optional().describe('Default frame width'),
   height: z.number().optional().describe('Default frame height'),
   fps: z.number().optional().describe('Default frames per second'),
   description: z.string().default(''),
   share: z.boolean().optional(),
+  useGpu: z.boolean().optional(),
 });
 
 export type VideoModelConfig = z.infer<typeof VideoModelConfigSchema>;

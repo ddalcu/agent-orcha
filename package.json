@@ -52,7 +52,7 @@
     "build:binary": "node scripts/build-sea.mjs",
     "sea": "node scripts/build-sea.mjs && ./dist/sea/agent-orcha",
     "test:e2e": "npx playwright test",
-    "prepare": "node -e \"const fs=require('fs'),path=require('path');const d=path.join('.git','hooks');if(!fs.existsSync('.git'))process.exit(0);fs.mkdirSync(d,{recursive:true});fs.writeFileSync(path.join(d,'pre-commit'),'#!/bin/sh\\nnode \\\"$(dirname \\\"$0\\\")/../../scripts/pre-commit.mjs\\\"\\n');try{fs.chmodSync(path.join(d,'pre-commit'),0o755)}catch{}\""
+    "prepare": "husky"
   },
   "dependencies": {
     "@agent-orcha/node-omni-orcha": "^2026.329.443",
@@ -104,6 +104,7 @@
     "cross-env": "^10.1.0",
     "esbuild": "^0.25.12",
     "eslint": "^9.17.0",
+    "husky": "^9.1.7",
     "rcedit": "^5.0.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.0"
