@@ -2,7 +2,9 @@
   import { onMount, onDestroy, tick, untrack } from 'svelte';
   import yaml from 'js-yaml';
   import { api } from '../lib/services/api.js';
+  import { appStore } from '../lib/stores/app.svelte.js';
   import AgentComposer from './AgentComposer.svelte';
+  import KnowledgeComposer from './KnowledgeComposer.svelte';
 
   const ace = (globalThis as any).ace;
 
@@ -46,6 +48,14 @@
 
   function isAgentFile(path: string | null | undefined): boolean {
     return !!path && path.endsWith('.agent.yaml');
+  }
+
+  function isKnowledgeFile(path: string | null | undefined): boolean {
+    return !!path && path.endsWith('.knowledge.yaml');
+  }
+
+  function isVisualFile(path: string | null | undefined): boolean {
+    return isAgentFile(path) || isKnowledgeFile(path);
   }
 
   function getFileIcon(filename: string): { icon: string; color: string } {
@@ -98,8 +108,9 @@
   let aceEditorEl: HTMLDivElement | undefined = $state();
   let editor: any = null;
 
-  // Composer reference
+  // Composer references
   let composerRef: ReturnType<typeof AgentComposer> | undefined = $state();
+  let knowledgeComposerRef: ReturnType<typeof KnowledgeComposer> | undefined = $state();
   let composerData = $state<Record<string, any>>({});
 
   // Rename input ref
@@ -109,7 +120,7 @@
   let breadcrumb = $derived(currentFile ? currentFile.path.split('/').join(' / ') : 'Select a file to edit');
 
   // Show mode toggle
-  let showModeToggle = $derived(currentFile && isAgentFile(currentFile.path));
+  let showModeToggle = $derived(currentFile && isVisualFile(currentFile.path));
 
   // --- Lifecycle ---
   function handleKeyDown(e: KeyboardEvent) {
@@ -135,6 +146,13 @@
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('click', handleDocClick);
     loadTree();
+
+    // Handle pending create action from other pages
+    if (appStore.pendingAction?.type === 'create') {
+      const resourceType = appStore.pendingAction.resourceType;
+      appStore.pendingAction = null;
+      tick().then(() => selectResourceType(resourceType));
+    }
   });
 
   onDestroy(() => {
@@ -199,15 +217,15 @@
       savedContent = data.content;
       isDirty = false;
 
-      // Preserve visual/source choice when switching between agent files
-      if (!isAgentFile(filePath)) {
+      // Preserve visual/source choice when switching between visual-capable files
+      if (!isVisualFile(filePath)) {
         viewMode = 'source';
-      } else if (!isAgentFile(prevFilePath)) {
+      } else if (!isVisualFile(prevFilePath)) {
         viewMode = 'visual';
       }
       prevFilePath = filePath;
 
-      if (viewMode === 'visual' && isAgentFile(filePath)) {
+      if (viewMode === 'visual' && isVisualFile(filePath)) {
         try {
           const parsed = yaml.load(data.content);
           if (parsed && typeof parsed === 'object') {
@@ -260,8 +278,9 @@
     if (!currentFile || !isDirty) return;
 
     let content: string;
-    if (viewMode === 'visual' && composerRef) {
-      const data = composerRef.getData();
+    const activeComposer = isAgentFile(currentFile.path) ? composerRef : isKnowledgeFile(currentFile.path) ? knowledgeComposerRef : null;
+    if (viewMode === 'visual' && activeComposer) {
+      const data = activeComposer.getData();
       content = yaml.dump(data, { indent: 2, lineWidth: -1, noRefs: true, sortKeys: false });
     } else {
       if (!editor) return;
@@ -497,8 +516,9 @@
   async function switchToSource() {
     if (!currentFile) return;
 
-    if (composerRef && viewMode === 'visual') {
-      const data = composerRef.getData();
+    const activeComposer = isAgentFile(currentFile.path) ? composerRef : isKnowledgeFile(currentFile.path) ? knowledgeComposerRef : null;
+    if (activeComposer && viewMode === 'visual') {
+      const data = activeComposer.getData();
       currentFile = { ...currentFile, content: yaml.dump(data, { indent: 2, lineWidth: -1, noRefs: true, sortKeys: false }) };
     }
 
@@ -520,8 +540,9 @@
   // --- Composer change ---
   function handleComposerChange() {
     if (loading) return;
-    if (!composerRef) return;
-    const current = yaml.dump(composerRef.getData(), { indent: 2, lineWidth: -1, noRefs: true, sortKeys: false });
+    const activeComposer = currentFile && isAgentFile(currentFile.path) ? composerRef : currentFile && isKnowledgeFile(currentFile.path) ? knowledgeComposerRef : null;
+    if (!activeComposer) return;
+    const current = yaml.dump(activeComposer.getData(), { indent: 2, lineWidth: -1, noRefs: true, sortKeys: false });
     const dirty = current !== savedContent;
     if (dirty !== isDirty) {
       isDirty = dirty;
@@ -687,6 +708,10 @@
         <AgentComposer bind:this={composerRef}
                        bind:data={composerData}
                        onchange={handleComposerChange} />
+      {:else if viewMode === 'visual' && isKnowledgeFile(currentFile.path)}
+        <KnowledgeComposer bind:this={knowledgeComposerRef}
+                           bind:data={composerData}
+                           onchange={handleComposerChange} />
       {:else}
         <div class="h-full">
           <div bind:this={aceEditorEl} class="h-full w-full"></div>

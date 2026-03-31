@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { orgStore } from '../lib/stores/org.svelte.js';
   import { orgApi } from '../lib/services/org-api.js';
   import { appStore } from '../lib/stores/app.svelte.js';
@@ -12,13 +11,19 @@
   let showHbConfig = $state(false);
   let wakingCEO = $state(false);
 
-  onMount(async () => {
-    if (appStore.routeOrgId) {
-      await orgStore.selectOrgById(appStore.routeOrgId);
-    }
-    if (orgStore.selectedOrg) {
-      await orgStore.loadDashboard();
-      await loadHeartbeatConfig();
+  let lastLoadedOrgId: string | undefined;
+
+  $effect(() => {
+    const orgId = appStore.routeOrgId;
+    if (orgId && orgId !== lastLoadedOrgId) {
+      lastLoadedOrgId = orgId;
+      (async () => {
+        await orgStore.selectOrgById(orgId);
+        if (orgStore.selectedOrg) {
+          await orgStore.loadDashboard();
+          await loadHeartbeatConfig();
+        }
+      })();
     }
   });
 

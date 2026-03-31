@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { orgStore } from '../lib/stores/org.svelte.js';
   import { orgApi } from '../lib/services/org-api.js';
   import { appStore } from '../lib/stores/app.svelte.js';
@@ -34,20 +33,25 @@
   let activity = $state<TicketActivity[]>([]);
   let commentText = $state('');
 
-  onMount(async () => {
-    // Resolve organization from route
-    if (appStore.routeOrgId) {
-      await orgStore.selectOrgById(appStore.routeOrgId);
-    }
-    if (orgStore.selectedOrg) {
-      await orgStore.loadTickets();
-    }
-    agents = await api.getAgents();
+  let lastLoadedOrgId: string | undefined;
 
-    // Deep-link: open ticket detail if itemId in route
-    if (appStore.routeItemId && orgStore.selectedOrg) {
-      const ticket = orgStore.tickets.find(t => t.id === appStore.routeItemId);
-      if (ticket) await openDetail(ticket);
+  $effect(() => {
+    const orgId = appStore.routeOrgId;
+    if (orgId && orgId !== lastLoadedOrgId) {
+      lastLoadedOrgId = orgId;
+      (async () => {
+        await orgStore.selectOrgById(orgId);
+        if (orgStore.selectedOrg) {
+          await orgStore.loadTickets();
+        }
+        agents = await api.getAgents();
+
+        // Deep-link: open ticket detail if itemId in route
+        if (appStore.routeItemId && orgStore.selectedOrg) {
+          const ticket = orgStore.tickets.find(t => t.id === appStore.routeItemId);
+          if (ticket) await openDetail(ticket);
+        }
+      })();
     }
   });
 

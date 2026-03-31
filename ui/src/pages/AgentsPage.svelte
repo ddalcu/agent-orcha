@@ -419,6 +419,7 @@
 
   function createAgentViaIde() {
     newAgentModalOpen = false;
+    appStore.pendingAction = { type: 'create', resourceType: 'agent' };
     appStore.setTab('ide');
   }
 

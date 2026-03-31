@@ -106,7 +106,20 @@ enum IPCEventParser {
         return parseEvent(type: eventType, json: json)
     }
 
+    /// Parse a known event type from JSON. Returns nil for unrecognized or malformed events.
+    /// All field accesses use optional casts (as?) — never force-unwrap — so unknown
+    /// shapes or missing fields produce nil instead of crashing.
     private static func parseEvent(type: String, json: [String: Any]) -> IPCEvent? {
+        // Wrap entire body so that any unexpected runtime error (e.g. from
+        // JSONSerialization called inside helpers) is caught instead of crashing.
+        do {
+            return try parseEventThrowing(type: type, json: json)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func parseEventThrowing(type: String, json: [String: Any]) throws -> IPCEvent? {
         switch type {
         case "ready":
             return .ready
@@ -119,9 +132,7 @@ enum IPCEventParser {
             return .disconnected
 
         case "peer_joined":
-            guard let peerDict = json["peer"] as? [String: Any],
-                  let peerData = try? JSONSerialization.data(withJSONObject: peerDict),
-                  let peer = try? JSONDecoder().decode(PeerInfo.self, from: peerData) else {
+            guard let peer: PeerInfo = decodeCodable(json["peer"], as: PeerInfo.self) else {
                 return nil
             }
             return .peerJoined(peer: peer)
@@ -145,7 +156,6 @@ enum IPCEventParser {
             if let c = json["content"] as? String {
                 content = c
             } else if let chunk = json["chunk"] {
-                // Backward compat: old format where chunk is a string or object
                 if let s = chunk as? String {
                     content = s
                 } else if let d = chunk as? [String: Any], let c = d["content"] as? String {
@@ -191,6 +201,7 @@ enum IPCEventParser {
                     totalTokens: chunkDict["total_tokens"] as? Int ?? 0
                 ))
             default:
+                // Unknown LLM chunk type — skip without crashing
                 return nil
             }
             return .llmChunk(requestId: requestId, chunk: llmChunk)
@@ -214,6 +225,7 @@ enum IPCEventParser {
             return .error(message: message)
 
         default:
+            // Unknown event type from JS — silently ignore
             return nil
         }
     }

@@ -86,16 +86,13 @@ struct LocalLLMView: View {
                     .foregroundStyle(AppTheme.textSecondary.opacity(0.7))
             }
 
-        case .downloading(let progress):
-            VStack(spacing: 10) {
-                ProgressView(value: progress)
-                    .tint(AppTheme.accent)
-                    .frame(maxWidth: 280)
-                Text("Downloading... \(Int(progress * 100))%")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .monospacedDigit()
-            }
+        case .downloading(let progress, let downloadedBytes, let totalBytes):
+            DownloadProgressView(
+                progress: progress,
+                downloadedBytes: downloadedBytes,
+                totalBytes: totalBytes,
+                speed: viewModel.service.downloadSpeed
+            )
 
         case .downloaded:
             VStack(spacing: 10) {
@@ -106,13 +103,38 @@ struct LocalLLMView: View {
                     .foregroundStyle(AppTheme.textSecondary)
             }
 
-        case .loading:
-            VStack(spacing: 10) {
-                ProgressView()
-                    .tint(AppTheme.accent)
+        case .loading(let progress):
+            VStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .stroke(AppTheme.surface, lineWidth: 6)
+                        .frame(width: 80, height: 80)
+                    Circle()
+                        .trim(from: 0, to: max(progress, 0.02))
+                        .stroke(AppTheme.success, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .frame(width: 80, height: 80)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 0.3), value: progress)
+
+                    if progress > 0.01 {
+                        Text("\(Int(progress * 100))%")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .monospacedDigit()
+                    } else {
+                        ProgressView()
+                            .tint(AppTheme.success)
+                    }
+                }
+
                 Text("Loading model into memory...")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
+
+                ProgressView(value: progress)
+                    .tint(AppTheme.success)
+                    .frame(maxWidth: 280)
             }
 
         case .ready:
@@ -293,5 +315,82 @@ private struct LocalLLMChatView: View {
 
     private var canSend: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !viewModel.isStreaming
+    }
+}
+
+// MARK: - Download Progress
+
+private struct DownloadProgressView: View {
+    let progress: Double
+    let downloadedBytes: Int64
+    let totalBytes: Int64
+    let speed: Double
+
+    var body: some View {
+        VStack(spacing: 12) {
+            // Circular progress with percentage
+            ZStack {
+                Circle()
+                    .stroke(AppTheme.surface, lineWidth: 6)
+                    .frame(width: 80, height: 80)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(AppTheme.accent, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                    .frame(width: 80, height: 80)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.linear(duration: 0.3), value: progress)
+
+                Text("\(Int(progress * 100))%")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .monospacedDigit()
+            }
+
+            // Size info
+            if totalBytes > 0 {
+                Text("\(formatBytes(downloadedBytes)) / \(formatBytes(totalBytes))")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .monospacedDigit()
+            } else {
+                Text("Downloading...")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+
+            // Speed
+            if speed > 0 {
+                Text(formatSpeed(speed))
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary.opacity(0.8))
+                    .monospacedDigit()
+            }
+
+            // Linear progress bar as secondary indicator
+            ProgressView(value: progress)
+                .tint(AppTheme.accent)
+                .frame(maxWidth: 280)
+        }
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        if bytes >= 1_073_741_824 {
+            return String(format: "%.1f GB", Double(bytes) / 1_073_741_824)
+        } else if bytes >= 1_048_576 {
+            return String(format: "%.0f MB", Double(bytes) / 1_048_576)
+        } else if bytes >= 1024 {
+            return String(format: "%.0f KB", Double(bytes) / 1024)
+        }
+        return "\(bytes) B"
+    }
+
+    private func formatSpeed(_ bytesPerSec: Double) -> String {
+        if bytesPerSec >= 1_048_576 {
+            return String(format: "%.1f MB/s", bytesPerSec / 1_048_576)
+        } else if bytesPerSec >= 1024 {
+            return String(format: "%.0f KB/s", bytesPerSec / 1024)
+        }
+        return String(format: "%.0f B/s", bytesPerSec)
     }
 }

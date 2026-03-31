@@ -164,11 +164,46 @@ export class KnowledgeStore {
     this.configs.delete(name);
     this.activeIndexing.delete(name);
 
+    // Remove from pathToName
+    for (const [filePath, storeName] of this.pathToName) {
+      if (storeName === name) {
+        this.pathToName.delete(filePath);
+        break;
+      }
+    }
+
     logger.info(`Evicted knowledge store "${name}"`);
   }
 
   nameForPath(absolutePath: string): string | undefined {
     return this.pathToName.get(absolutePath);
+  }
+
+  getKnowledgeDir(): string {
+    return this.knowledgeDir;
+  }
+
+  getWorkspaceRoot(): string {
+    return this.workspaceRoot;
+  }
+
+  getFilePath(name: string): string | undefined {
+    for (const [filePath, storeName] of this.pathToName) {
+      if (storeName === name) return filePath;
+    }
+    return undefined;
+  }
+
+  async deleteData(name: string): Promise<void> {
+    const dbPath = path.join(this.workspaceRoot, '.knowledge-data', `${name}.db`);
+    try {
+      await fs.unlink(dbPath);
+      logger.info(`Deleted SQLite database for "${name}"`);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger.warn(`Failed to delete database for "${name}": ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
   }
 
   close(): void {

@@ -23,6 +23,11 @@ function parseHash(): { tab: TabId; orgId?: string; itemId?: string } {
   return { tab: 'agents' };
 }
 
+interface PendingAction {
+  type: 'create';
+  resourceType: string;
+}
+
 class AppStore {
   activeTab = $state<TabId>('agents');
   routeOrgId = $state<string | undefined>(undefined);
@@ -35,6 +40,7 @@ class AppStore {
   selectedWorkflow = $state<Workflow | null>(null);
   selectionType = $state<'agent' | 'llm' | 'workflow'>('agent');
   defaultLlmName = $state<string | null>(null);
+  pendingAction = $state<PendingAction | null>(null);
 
   constructor() {
     const initial = parseHash();

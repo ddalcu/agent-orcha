@@ -730,6 +730,10 @@ export class Orchestrator {
       getAllStatuses: () => this.knowledgeStoreManager.getAllStatuses(),
       getMetadataManager: () => this.knowledgeStoreManager.getMetadataManager(),
       isIndexing: (name: string) => this.knowledgeStoreManager.isIndexing(name),
+      getKnowledgeDir: () => this.knowledgeStoreManager.getKnowledgeDir(),
+      getWorkspaceRoot: () => this.knowledgeStoreManager.getWorkspaceRoot(),
+      getFilePath: (name: string) => this.knowledgeStoreManager.getFilePath(name),
+      deleteData: (name: string) => this.knowledgeStoreManager.deleteData(name),
     };
   }
 
@@ -1371,6 +1375,10 @@ interface KnowledgeAccessor {
   getAllStatuses: () => Promise<Map<string, KnowledgeStoreMetadata>>;
   getMetadataManager: () => KnowledgeMetadataManager;
   isIndexing: (name: string) => boolean;
+  getKnowledgeDir: () => string;
+  getWorkspaceRoot: () => string;
+  getFilePath: (name: string) => string | undefined;
+  deleteData: (name: string) => Promise<void>;
 }
 
 interface MCPAccessor {

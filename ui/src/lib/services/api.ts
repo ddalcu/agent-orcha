@@ -39,6 +39,20 @@ export const api = {
     return (await _fetch(`/api/knowledge/${name}/index`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })).json();
   },
   indexKnowledgeStoreStream(name: string) { return new EventSource(`/api/knowledge/${name}/index/stream`); },
+  async createKnowledgeStore(config: Record<string, unknown>) {
+    return (await _fetch('/api/knowledge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })).json();
+  },
+  async updateKnowledgeStore(name: string, config: Record<string, unknown>) {
+    return (await _fetch(`/api/knowledge/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })).json();
+  },
+  async deleteKnowledgeStore(name: string) {
+    return (await _fetch(`/api/knowledge/${encodeURIComponent(name)}`, { method: 'DELETE' })).json();
+  },
+  async uploadKnowledgeFiles(name: string, files: FileList | File[]) {
+    const formData = new FormData();
+    for (const file of files) formData.append('files', file);
+    return (await _fetch(`/api/knowledge/${encodeURIComponent(name)}/upload`, { method: 'POST', body: formData })).json();
+  },
 
   // LLMs
   async getLLMs() { return (await _fetch('/api/llm')).json(); },

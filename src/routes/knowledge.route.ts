@@ -1,5 +1,15 @@
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { stringify as stringifyYaml } from 'yaml';
+import multipart from '@fastify/multipart';
 import type { FastifyPluginAsync } from 'fastify';
 import type { IndexingProgressCallback } from '../../lib/knowledge/knowledge-store-metadata.ts';
+import { KnowledgeConfigSchema } from '../../lib/knowledge/types.ts';
+import { createLogger } from '../../lib/logger.ts';
+
+const logger = createLogger('KnowledgeRoutes');
+
+const SAFE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
 interface KnowledgeParams {
   name: string;
@@ -15,6 +25,32 @@ interface AddDocumentsBody {
     content: string;
     metadata?: Record<string, unknown>;
   }>;
+}
+
+interface CreateKnowledgeBody {
+  name: string;
+  description: string;
+  source: {
+    type: 'file' | 'directory' | 'web' | 'database';
+    path?: string;
+    pattern?: string;
+    recursive?: boolean;
+    url?: string;
+    selector?: string;
+    headers?: Record<string, string>;
+    jsonPath?: string;
+    connectionString?: string;
+    query?: string;
+    contentColumn?: string;
+    metadataColumns?: string[];
+    batchSize?: number;
+  };
+  loader?: { type: string; options?: Record<string, unknown> };
+  splitter: { type: string; chunkSize: number; chunkOverlap: number; separator?: string };
+  embedding?: string;
+  search?: { defaultK?: number; scoreThreshold?: number };
+  reindex?: { schedule: string };
+  metadata?: Record<string, unknown>;
 }
 
 // Track active SSE connections for indexing progress
@@ -53,6 +89,266 @@ function broadcastSSE(name: string, event: string, data: string) {
 }
 
 export const knowledgeRoutes: FastifyPluginAsync = async (fastify) => {
+  // Register multipart for file uploads (scoped to this plugin)
+  await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
+
+  // POST / - Create a new knowledge store
+  fastify.post<{ Body: CreateKnowledgeBody }>('/', async (request, reply) => {
+    const body = request.body;
+
+    if (!body.name || !SAFE_NAME_RE.test(body.name)) {
+      return reply.status(400).send({
+        error: 'Invalid name. Must start with alphanumeric and contain only letters, numbers, hyphens, underscores.',
+      });
+    }
+
+    const existing = fastify.orchestrator.knowledge.getConfig(body.name);
+    if (existing) {
+      return reply.status(409).send({ error: `Knowledge store "${body.name}" already exists` });
+    }
+
+    // For file/directory sources, default path to knowledge/<name>/
+    if ((body.source.type === 'file' || body.source.type === 'directory') && !body.source.path) {
+      body.source.path = `knowledge/${body.name}/`;
+    }
+
+    // Build the config object
+    const config: Record<string, unknown> = {
+      name: body.name,
+      description: body.description,
+      source: body.source,
+      splitter: body.splitter,
+    };
+    if (body.loader) config.loader = body.loader;
+    if (body.embedding) config.embedding = body.embedding;
+    if (body.search) config.search = body.search;
+    if (body.reindex) config.reindex = body.reindex;
+    if (body.metadata) config.metadata = body.metadata;
+
+    // Validate via Zod
+    try {
+      KnowledgeConfigSchema.parse(config);
+    } catch (err) {
+      return reply.status(400).send({
+        error: 'Invalid knowledge store configuration',
+        details: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Write YAML to disk
+    const knowledgeDir = fastify.orchestrator.knowledge.getKnowledgeDir();
+    const yamlPath = path.join(knowledgeDir, `${body.name}.knowledge.yaml`);
+    const workspaceRoot = fastify.orchestrator.knowledge.getWorkspaceRoot();
+    const relativePath = path.relative(workspaceRoot, yamlPath);
+
+    try {
+      await fs.mkdir(knowledgeDir, { recursive: true });
+      await fs.writeFile(yamlPath, stringifyYaml(config));
+    } catch (err) {
+      logger.error(`Failed to write knowledge config for "${body.name}":`, err);
+      return reply.status(500).send({ error: 'Failed to write configuration file' });
+    }
+
+    // Hot-load into orchestrator
+    try {
+      await fastify.orchestrator.reloadFile(relativePath);
+    } catch (err) {
+      logger.error(`Failed to reload knowledge config for "${body.name}":`, err);
+      // Clean up the file we just wrote
+      await fs.unlink(yamlPath).catch(() => {});
+      return reply.status(500).send({ error: 'Failed to load configuration' });
+    }
+
+    // Create upload directory for file/directory sources
+    if (body.source.type === 'file' || body.source.type === 'directory') {
+      const uploadDir = path.resolve(workspaceRoot, body.source.path!);
+      await fs.mkdir(uploadDir, { recursive: true });
+    }
+
+    logger.info(`Created knowledge store "${body.name}"`);
+    return { success: true, name: body.name };
+  });
+
+  // PUT /:name - Update an existing knowledge store
+  fastify.put<{ Params: KnowledgeParams; Body: CreateKnowledgeBody }>(
+    '/:name',
+    async (request, reply) => {
+      const { name } = request.params;
+      const body = request.body;
+
+      const existingConfig = fastify.orchestrator.knowledge.getConfig(name);
+      if (!existingConfig) {
+        return reply.status(404).send({ error: 'Knowledge store not found', name });
+      }
+
+      if (fastify.orchestrator.knowledge.isIndexing(name)) {
+        return reply.status(409).send({ error: `"${name}" is currently being indexed, cannot update` });
+      }
+
+      if (body.name && body.name !== name) {
+        return reply.status(400).send({ error: 'Cannot rename a knowledge store. Delete and recreate instead.' });
+      }
+
+      // For file/directory sources, default path to knowledge/<name>/
+      if ((body.source.type === 'file' || body.source.type === 'directory') && !body.source.path) {
+        body.source.path = `knowledge/${name}/`;
+      }
+
+      // Build config
+      const config: Record<string, unknown> = {
+        name,
+        description: body.description,
+        source: body.source,
+        splitter: body.splitter,
+      };
+      if (body.loader) config.loader = body.loader;
+      if (body.embedding) config.embedding = body.embedding;
+      if (body.search) config.search = body.search;
+      if (body.reindex) config.reindex = body.reindex;
+      if (body.metadata) config.metadata = body.metadata;
+
+      // Validate via Zod
+      try {
+        KnowledgeConfigSchema.parse(config);
+      } catch (err) {
+        return reply.status(400).send({
+          error: 'Invalid knowledge store configuration',
+          details: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      // Find existing YAML file path
+      const filePath = fastify.orchestrator.knowledge.getFilePath(name);
+      const workspaceRoot = fastify.orchestrator.knowledge.getWorkspaceRoot();
+      const yamlPath = filePath || path.join(fastify.orchestrator.knowledge.getKnowledgeDir(), `${name}.knowledge.yaml`);
+      const relativePath = path.relative(workspaceRoot, yamlPath);
+
+      try {
+        await fs.writeFile(yamlPath, stringifyYaml(config));
+      } catch (err) {
+        logger.error(`Failed to write knowledge config for "${name}":`, err);
+        return reply.status(500).send({ error: 'Failed to write configuration file' });
+      }
+
+      // Reload (evicts old, loads new)
+      try {
+        await fastify.orchestrator.reloadFile(relativePath);
+      } catch (err) {
+        logger.error(`Failed to reload knowledge config for "${name}":`, err);
+        return reply.status(500).send({ error: 'Failed to reload configuration' });
+      }
+
+      logger.info(`Updated knowledge store "${name}"`);
+      return { success: true, name };
+    }
+  );
+
+  // DELETE /:name - Delete a knowledge store and all its data
+  fastify.delete<{ Params: KnowledgeParams }>(
+    '/:name',
+    async (request, reply) => {
+      const { name } = request.params;
+
+      const existingConfig = fastify.orchestrator.knowledge.getConfig(name);
+      if (!existingConfig) {
+        return reply.status(404).send({ error: 'Knowledge store not found', name });
+      }
+
+      if (fastify.orchestrator.knowledge.isIndexing(name)) {
+        return reply.status(409).send({ error: `"${name}" is currently being indexed, cannot delete` });
+      }
+
+      // Find YAML file path before unloading
+      const filePath = fastify.orchestrator.knowledge.getFilePath(name);
+      const workspaceRoot = fastify.orchestrator.knowledge.getWorkspaceRoot();
+
+      // Unload from memory
+      if (filePath) {
+        const relativePath = path.relative(workspaceRoot, filePath);
+        await fastify.orchestrator.unloadFile(relativePath);
+      }
+
+      // Delete YAML file
+      if (filePath) {
+        try {
+          await fs.unlink(filePath);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+            logger.warn(`Failed to delete config file for "${name}": ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      }
+
+      // Delete SQLite database
+      await fastify.orchestrator.knowledge.deleteData(name);
+
+      // Delete metadata cache
+      await fastify.orchestrator.knowledge.getMetadataManager().delete(name);
+
+      logger.info(`Deleted knowledge store "${name}"`);
+      return { success: true, name };
+    }
+  );
+
+  // POST /:name/upload - Upload files to a file/directory-based knowledge store
+  fastify.post<{ Params: KnowledgeParams }>(
+    '/:name/upload',
+    async (request, reply) => {
+      const { name } = request.params;
+
+      const config = fastify.orchestrator.knowledge.getConfig(name);
+      if (!config) {
+        return reply.status(404).send({ error: 'Knowledge store not found', name });
+      }
+
+      if (config.source.type !== 'file' && config.source.type !== 'directory') {
+        return reply.status(400).send({
+          error: `File upload is only supported for file/directory source types, not "${config.source.type}"`,
+        });
+      }
+
+      const sourcePath = config.source.path;
+      const workspaceRoot = fastify.orchestrator.knowledge.getWorkspaceRoot();
+      const uploadDir = path.resolve(workspaceRoot, sourcePath);
+
+      // Ensure the upload directory exists
+      await fs.mkdir(uploadDir, { recursive: true });
+
+      const uploadedFiles: { name: string; size: number }[] = [];
+
+      const parts = request.parts();
+      for await (const part of parts) {
+        if (part.type !== 'file') continue;
+
+        // Sanitize filename — strip path separators and traversal
+        const sanitized = part.filename
+          .replace(/\.\./g, '')
+          .replace(/[/\\]/g, '')
+          .replace(/\0/g, '');
+
+        if (!sanitized) {
+          logger.warn(`Skipping file with invalid name: "${part.filename}"`);
+          continue;
+        }
+
+        const destPath = path.join(uploadDir, sanitized);
+
+        // Ensure we're still within the upload directory (path traversal protection)
+        if (!destPath.startsWith(uploadDir)) {
+          logger.warn(`Path traversal attempt blocked: "${part.filename}"`);
+          continue;
+        }
+
+        const buffer = await part.toBuffer();
+        await fs.writeFile(destPath, buffer);
+        uploadedFiles.push({ name: sanitized, size: buffer.length });
+        logger.info(`Uploaded file "${sanitized}" (${buffer.length} bytes) to "${name}"`);
+      }
+
+      return { success: true, files: uploadedFiles };
+    }
+  );
+
   // GET / - List all knowledge stores with status metadata
   fastify.get('/', async () => {
     const configs = fastify.orchestrator.knowledge.listConfigs();
