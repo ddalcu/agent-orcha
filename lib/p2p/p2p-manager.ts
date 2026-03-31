@@ -6,7 +6,7 @@ import { P2PProtocol } from './p2p-protocol.ts';
 import { resolveP2PConfig } from '../agents/types.ts';
 import { logger } from '../logger.ts';
 import type { Orchestrator } from '../orchestrator.ts';
-import { listModelConfigs, getModelConfig, listImageConfigs, listTtsConfigs, listVideoConfigs, getImageConfig, getTtsConfig } from '../llm/llm-config.ts';
+import { listModelConfigs, getModelConfig, listImageConfigs, listTtsConfigs, listVideoConfigs, getImageConfig, getVideoConfig, getTtsConfig } from '../llm/llm-config.ts';
 import { LLMFactory } from '../llm/llm-factory.ts';
 import { OmniModelCache } from '../llm/providers/omni-model-cache.ts';
 import { humanMessage, aiMessage, systemMessage, toolMessage } from '../types/llm-types.ts';
@@ -803,27 +803,50 @@ export class P2PManager {
 
     try {
       const { OmniModelCache } = await import('../llm/providers/omni-model-cache.ts');
+      const resolve = (p: string) => path.isAbsolute(p) ? p : path.join(this.orchestrator.workspaceRoot, p);
 
-      const config = getImageConfig(configName);
-      if (!config) {
-        protocol.send({ type: 'model_task_error', requestId, error: `Image config "${configName}" not found` });
-        taskManager.reject(task.id, new Error(`Image config "${configName}" not found`));
-        return;
+      let buffer: Buffer;
+
+      if (taskType === 'video_frame') {
+        // Video frames use the dedicated video model slot
+        let config: any;
+        try { config = getVideoConfig(configName); } catch { /* fallback below */ }
+        if (!config?.modelPath) {
+          protocol.send({ type: 'model_task_error', requestId, error: `Video config "${configName}" not found` });
+          taskManager.reject(task.id, new Error(`Video config "${configName}" not found`));
+          return;
+        }
+        const videoModel = await OmniModelCache.getVideoModel(resolve(config.modelPath), {
+          ...(config.t5xxl ? { t5xxlPath: resolve(config.t5xxl) } : {}),
+          ...(config.vae ? { vaePath: resolve(config.vae) } : {}),
+        });
+        const frames = await videoModel.generateVideo(prompt, {
+          videoFrames: 1,
+          ...(params['steps'] !== undefined ? { steps: params['steps'] as number } : {}),
+          ...(params['width'] !== undefined ? { width: params['width'] as number } : {}),
+          ...(params['height'] !== undefined ? { height: params['height'] as number } : {}),
+          ...(params['cfgScale'] !== undefined ? { cfgScale: params['cfgScale'] as number } : {}),
+          ...(params['flowShift'] !== undefined ? { flowShift: params['flowShift'] as number } : {}),
+          ...(params['seed'] !== undefined ? { seed: params['seed'] as number } : {}),
+        });
+        buffer = frames[0]!;
+      } else {
+        // Image generation uses the image model slot
+        const config = getImageConfig(configName);
+        if (!config) {
+          protocol.send({ type: 'model_task_error', requestId, error: `Image config "${configName}" not found` });
+          taskManager.reject(task.id, new Error(`Image config "${configName}" not found`));
+          return;
+        }
+        const imageModel = await OmniModelCache.getImageModel(resolve(config.modelPath ?? configName), {});
+        buffer = await imageModel.generate(prompt, {
+          ...(params['steps'] !== undefined ? { steps: params['steps'] as number } : {}),
+          ...(params['width'] !== undefined ? { width: params['width'] as number } : {}),
+          ...(params['height'] !== undefined ? { height: params['height'] as number } : {}),
+          ...(params['cfgScale'] !== undefined ? { cfgScale: params['cfgScale'] as number } : {}),
+          ...(params['seed'] !== undefined ? { seed: params['seed'] as number } : {}),
+        });
       }
-
-      const modelPath = config.modelPath ?? configName;
-      const resolvedPath = path.isAbsolute(modelPath)
-        ? modelPath
-        : path.join(this.orchestrator.workspaceRoot, modelPath);
-
-      const imageModel = await OmniModelCache.getImageModel(resolvedPath, {});
-      const buffer = await imageModel.generate(prompt, {
-        ...(params['steps'] !== undefined ? { steps: params['steps'] as number } : {}),
-        ...(params['width'] !== undefined ? { width: params['width'] as number } : {}),
-        ...(params['height'] !== undefined ? { height: params['height'] as number } : {}),
-        ...(params['cfgScale'] !== undefined ? { cfgScale: params['cfgScale'] as number } : {}),
-        ...(params['seed'] !== undefined ? { seed: params['seed'] as number } : {}),
-      });
 
       const metadata: Record<string, unknown> = {};
       if (taskType === 'video_frame' && params['frameIndex'] !== undefined) {
@@ -1414,12 +1437,12 @@ export class P2PManager {
       }
     }
 
-    // Video models from 'video' section — only advertise if image model is loaded (video uses image model)
-    if (omniStatus.image.loaded) {
+    // Video models from 'video' section — only advertise if video model is loaded
+    if (omniStatus.video.loaded) {
       for (const { name, config } of listVideoConfigs()) {
         if (config.share) {
           const modelId = config.modelPath?.split('/').pop() || config.model || name;
-          result.push({ name, model: config.description || modelId, type: 'image', modelId }); // video models generate frames (images)
+          result.push({ name, model: config.description || modelId, type: 'video', modelId });
         }
       }
     }

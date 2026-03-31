@@ -1,3 +1,4 @@
+<!-- NOTE: This page is disabled for now — nav tab hidden in NavBar.svelte. Kept for future redesign. -->
 <script lang="ts">
   import { api } from '../lib/services/api.js';
   import type { Agent } from '../lib/types/index.js';

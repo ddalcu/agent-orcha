@@ -1,4 +1,5 @@
 name: p2pvoice
+icon: fa-tower-broadcast
 description: Text-to-speech agent that uses a remote peer's TTS model via P2P network
 version: "1.0.0"
 

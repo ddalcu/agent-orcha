@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { orgStore } from '../lib/stores/org.svelte.js';
   import { orgApi } from '../lib/services/org-api.js';
   import { appStore } from '../lib/stores/app.svelte.js';
@@ -77,19 +76,25 @@
   let selectedRoutine = $state<Routine | null>(null);
   let runs = $state<RoutineRun[]>([]);
 
-  onMount(async () => {
-    if (appStore.routeOrgId) {
-      await orgStore.selectOrgById(appStore.routeOrgId);
-    }
-    if (orgStore.selectedOrg) {
-      await orgStore.loadRoutines();
-    }
-    agents = await api.getAgents();
+  let lastLoadedOrgId: string | undefined;
 
-    // Deep-link: open routine detail if itemId in route
-    if (appStore.routeItemId && orgStore.selectedOrg) {
-      const routine = orgStore.routines.find(r => r.id === appStore.routeItemId);
-      if (routine) await openDetail(routine);
+  $effect(() => {
+    const orgId = appStore.routeOrgId;
+    if (orgId && orgId !== lastLoadedOrgId) {
+      lastLoadedOrgId = orgId;
+      (async () => {
+        await orgStore.selectOrgById(orgId);
+        if (orgStore.selectedOrg) {
+          await orgStore.loadRoutines();
+        }
+        agents = await api.getAgents();
+
+        // Deep-link: open routine detail if itemId in route
+        if (appStore.routeItemId && orgStore.selectedOrg) {
+          const routine = orgStore.routines.find(r => r.id === appStore.routeItemId);
+          if (routine) await openDetail(routine);
+        }
+      })();
     }
   });
 
@@ -358,7 +363,8 @@
 <!-- Create/Edit Routine Modal -->
 {#if showForm}
   <div class="modal-overlay" role="presentation">
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
       <h3>{editingRoutine ? 'Edit Routine' : 'New Routine'}</h3>
       {#if formError}
         <div class="form-error">{formError}</div>

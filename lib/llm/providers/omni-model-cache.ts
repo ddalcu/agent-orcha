@@ -6,6 +6,7 @@ export interface OmniModelStatus {
   llmChat: { loaded: boolean; modelPath: string | null };
   llmEmbed: { loaded: boolean; modelPath: string | null };
   image: { loaded: boolean; modelPath: string | null };
+  video: { loaded: boolean; modelPath: string | null };
   tts: { loaded: boolean; modelPath: string | null };
   gpu: GpuInfo;
 }
@@ -25,6 +26,9 @@ export class OmniModelCache {
   private static imageModel: ImageModel | null = null;
   private static imagePath: string | null = null;
 
+  private static videoModel: ImageModel | null = null;
+  private static videoPath: string | null = null;
+
   private static ttsModel: TtsModel | null = null;
   private static ttsPath: string | null = null;
 
@@ -34,6 +38,7 @@ export class OmniModelCache {
   private static llmChatLoading: Promise<LlmModel> | null = null;
   private static llmEmbedLoading: Promise<LlmModel> | null = null;
   private static imageLoading: Promise<ImageModel> | null = null;
+  private static videoLoading: Promise<ImageModel> | null = null;
   private static ttsLoading: Promise<TtsModel> | null = null;
 
   static async getLlmChat(modelPath: string, options?: LlmLoadOptions): Promise<LlmModel> {
@@ -106,6 +111,30 @@ export class OmniModelCache {
     return this.imageLoading;
   }
 
+  static async getVideoModel(modelPath: string, options?: ImageLoadOptions): Promise<ImageModel> {
+    if (this.videoModel && this.videoPath === modelPath) {
+      return this.videoModel;
+    }
+    if (this.videoLoading) return this.videoLoading;
+    this.videoLoading = (async () => {
+      try {
+        if (this.videoModel) {
+          logger.info(`[OmniModelCache] Unloading video model: ${this.videoPath}`);
+          await this.videoModel.unload();
+        }
+        logger.info(`[OmniModelCache] Loading video model: ${modelPath}`);
+        const model = createModel(modelPath, 'image');
+        await model.load({ keepVaeOnCpu: true, ...options });
+        this.videoModel = model;
+        this.videoPath = modelPath;
+        return this.videoModel;
+      } finally {
+        this.videoLoading = null;
+      }
+    })();
+    return this.videoLoading;
+  }
+
   static async getTtsModel(modelPath: string, options?: TtsLoadOptions): Promise<TtsModel> {
     if (this.ttsModel && this.ttsPath === modelPath) {
       return this.ttsModel;
@@ -155,6 +184,14 @@ export class OmniModelCache {
     }
   }
 
+  static async unloadVideo(): Promise<void> {
+    if (this.videoModel) {
+      await this.videoModel.unload();
+      this.videoModel = null;
+      this.videoPath = null;
+    }
+  }
+
   static async unloadTts(): Promise<void> {
     if (this.ttsModel) {
       await this.ttsModel.unload();
@@ -168,6 +205,7 @@ export class OmniModelCache {
       this.unloadLlmChat(),
       this.unloadLlmEmbed(),
       this.unloadImage(),
+      this.unloadVideo(),
       this.unloadTts(),
     ]);
     logger.info('[OmniModelCache] All models unloaded');
@@ -178,6 +216,7 @@ export class OmniModelCache {
       llmChat: { loaded: this.llmChat?.loaded ?? false, modelPath: this.llmChatPath },
       llmEmbed: { loaded: this.llmEmbed?.loaded ?? false, modelPath: this.llmEmbedPath },
       image: { loaded: this.imageModel?.loaded ?? false, modelPath: this.imagePath },
+      video: { loaded: this.videoModel?.loaded ?? false, modelPath: this.videoPath },
       tts: { loaded: this.ttsModel?.loaded ?? false, modelPath: this.ttsPath },
       gpu: detectGpu(),
     };

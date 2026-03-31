@@ -356,18 +356,19 @@ export const p2pRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const modelRef = model.toLowerCase();
-      const peers = manager.getRemoteModelsByName(modelRef, 'image');
+      const peers = manager.getRemoteModelsByName(modelRef, 'video');
       if (peers.length === 0) {
         return reply.status(404).send({ error: `No P2P peers found sharing model "${model}"`, availableModels: manager.getRemoteModels().map(l => l.model) });
       }
 
       const settings: VideoSettings = {
-        totalFrames: userSettings?.totalFrames ?? 24,
-        width: userSettings?.width ?? 512,
-        height: userSettings?.height ?? 512,
-        cfgScale: userSettings?.cfgScale ?? 7,
-        steps: userSettings?.steps ?? 20,
-        fps: userSettings?.fps ?? 12,
+        totalFrames: userSettings?.totalFrames ?? 9,
+        width: userSettings?.width ?? 832,
+        height: userSettings?.height ?? 480,
+        cfgScale: userSettings?.cfgScale ?? 5,
+        steps: userSettings?.steps ?? 2.5,
+        flowShift: userSettings?.flowShift ?? 5,
+        fps: userSettings?.fps ?? 16,
         ...(userSettings?.seed !== undefined ? { seed: userSettings.seed } : {}),
       };
 

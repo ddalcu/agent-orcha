@@ -1,4 +1,5 @@
 name: image-creator
+icon: fa-image
 description: Creative assistant that generates images from text descriptions using FLUX.2 via node-omni-orcha
 version: "1.0.0"
 

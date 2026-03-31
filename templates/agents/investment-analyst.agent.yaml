@@ -1,4 +1,5 @@
 name: investment-analyst
+icon: fa-chart-line
 description: Daily tech stock analyst — researches market data and sends a high-level summary via email and Collabnook at 4pm
 version: "1.0.0"
 

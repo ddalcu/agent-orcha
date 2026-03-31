@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { orgStore } from '../lib/stores/org.svelte.js';
   import { orgApi } from '../lib/services/org-api.js';
   import { appStore } from '../lib/stores/app.svelte.js';
@@ -26,14 +25,20 @@
   let formError = $state('');
   let confirmDelete = $state<OrgMember | null>(null);
 
-  onMount(async () => {
-    if (appStore.routeOrgId) {
-      await orgStore.selectOrgById(appStore.routeOrgId);
+  let lastLoadedOrgId: string | undefined;
+
+  $effect(() => {
+    const orgId = appStore.routeOrgId;
+    if (orgId && orgId !== lastLoadedOrgId) {
+      lastLoadedOrgId = orgId;
+      (async () => {
+        await orgStore.selectOrgById(orgId);
+        if (orgStore.selectedOrg) {
+          await orgStore.loadMembers();
+        }
+        agents = await api.getAgents();
+      })();
     }
-    if (orgStore.selectedOrg) {
-      await orgStore.loadMembers();
-    }
-    agents = await api.getAgents();
   });
 
   function openCreate() {
@@ -192,7 +197,8 @@
 <!-- Add/Edit Member Modal -->
 {#if showForm}
   <div class="modal-overlay" onclick={() => { showForm = false; }} role="presentation">
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
       <h3>{editingMember ? 'Edit Member' : 'Add Member'}</h3>
 
       {#if formError}
@@ -260,7 +266,8 @@
 
 {#if confirmDelete}
   <div class="modal-overlay" onclick={() => { confirmDelete = null; }} role="presentation">
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
       <h3>Remove Member</h3>
       <p class="text-sm">
         Remove <strong>{confirmDelete.agentName}</strong> from the org chart? Direct reports will be moved to top level.

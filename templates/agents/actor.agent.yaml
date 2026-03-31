@@ -1,4 +1,5 @@
 name: actor
+icon: fa-masks-theater
 description: A hilarious impersonation chatbot — give it any character, celebrity, or fictional figure and it stays in character while answering your questions
 version: 1.0.0
 model:

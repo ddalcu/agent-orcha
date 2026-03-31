@@ -20,7 +20,9 @@ final class BareP2PService {
     private(set) var connectionState: P2PConnectionState = .starting
     private(set) var peers: [PeerInfo] = []
     private(set) var lastError: String?
-    private(set) var leaderboardEntries: [P2PLeaderboardEntry] = []
+    private(set) var leaderboardEntries: [P2PLeaderboardEntry] = [] {
+        didSet { LeaderboardCache.save(leaderboardEntries) }
+    }
 
     /// Peers that recently disconnected — kept for a grace period so chat sessions survive brief drops
     private var recentlyLostPeers: [String: PeerInfo] = [:]
@@ -92,6 +94,7 @@ final class BareP2PService {
     // MARK: - Lifecycle
 
     init() {
+        leaderboardEntries = LeaderboardCache.load()
         startWorklet()
     }
 
@@ -444,5 +447,34 @@ final class BareP2PService {
 
     func resume() {
         worklet?.resume()
+    }
+}
+
+// MARK: - Leaderboard Disk Cache
+
+private enum LeaderboardCache {
+    private static let cacheURL: URL = {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        return dir.appendingPathComponent("leaderboard.json")
+    }()
+
+    static func save(_ entries: [P2PLeaderboardEntry]) {
+        guard !entries.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            do {
+                let data = try JSONEncoder().encode(entries)
+                try data.write(to: cacheURL, options: .atomic)
+            } catch {
+                // Cache write failed — not critical
+            }
+        }
+    }
+
+    static func load() -> [P2PLeaderboardEntry] {
+        guard let data = try? Data(contentsOf: cacheURL),
+              let entries = try? JSONDecoder().decode([P2PLeaderboardEntry].self, from: data) else {
+            return []
+        }
+        return entries
     }
 }

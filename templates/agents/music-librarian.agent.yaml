@@ -1,4 +1,5 @@
 name: music-librarian
+icon: fa-music
 description: Music store expert — explore the catalog, discover artists, and analyze customer listening patterns
 version: "1.0.0"
 

@@ -70,11 +70,16 @@ struct PeersView: View {
     private var leaderboardContent: some View {
         Group {
             if viewModel.leaderboardEntries.isEmpty {
-                ContentUnavailableView {
-                    Label("No Data", systemImage: "trophy")
-                } description: {
-                    Text("Leaderboard data will appear as peers share models and agents.")
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(AppTheme.accent)
+                    Text("Loading leaderboard...")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onAppear { viewModel.refreshLeaderboard() }
             } else {
                 leaderboardList
             }

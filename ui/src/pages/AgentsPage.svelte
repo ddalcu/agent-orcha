@@ -332,6 +332,7 @@
   }
 
   function showNewSessionModal() {
+    newSessionSearch = '';
     newSessionModalOpen = true;
   }
 
@@ -358,6 +359,7 @@
   // --- Modals ---
 
   let newSessionModalOpen = $state(false);
+  let newSessionSearch = $state('');
   let newAgentModalOpen = $state(false);
 
   // Input context menu
@@ -387,13 +389,13 @@
   }
   let videoSettingsOpen = $state(false);
   let videoSettings = $state<VideoSettingsData>({
-    totalFrames: 24,
-    width: 512,
-    height: 512,
-    cfgScale: 7,
-    steps: 20,
+    totalFrames: 9,
+    width: 832,
+    height: 480,
+    cfgScale: 5,
+    steps: 6,
     seed: '',
-    fps: 12,
+    fps: 16,
     enabled: false,
   });
 
@@ -419,8 +421,54 @@
 
   function createAgentViaIde() {
     newAgentModalOpen = false;
+    appStore.pendingAction = { type: 'create', resourceType: 'agent' };
     appStore.setTab('ide');
   }
+
+  function editAgentInIde(agentName: string) {
+    newSessionModalOpen = false;
+    appStore.pendingAction = { type: 'open', filePath: `agents/${agentName}.agent.yaml` };
+    appStore.setTab('ide');
+  }
+
+  // --- Agent capability detection ---
+  function agentCategory(agent: Agent): string {
+    const tools = agent.tools?.map(t => typeof t === 'string' ? t : t.name) || [];
+    if (tools.some(t => t.includes('generate_video'))) return 'video';
+    if (tools.some(t => t.includes('generate_image'))) return 'image';
+    if (tools.some(t => t.includes('generate_tts'))) return 'tts';
+    if (tools.some(t => t.startsWith('workspace:'))) return 'workspace';
+    if (tools.some(t => t.startsWith('sandbox:'))) return 'sandbox';
+    if (tools.some(t => t.startsWith('knowledge:'))) return 'knowledge';
+    if (tools.some(t => t.startsWith('function:'))) return 'function';
+    return 'default';
+  }
+
+  const GLOW_MAP: Record<string, string> = {
+    video: 'glow-video', image: 'glow-image', tts: 'glow-tts',
+    workspace: 'glow-workspace', sandbox: 'glow-sandbox',
+    knowledge: 'glow-knowledge', function: 'glow-function', default: 'glow-default',
+  };
+  const ICON_COLOR_MAP: Record<string, string> = {
+    video: 'picker-card-icon-orange', image: 'picker-card-icon-blue', tts: 'picker-card-icon-green',
+    workspace: 'picker-card-icon-red', sandbox: 'picker-card-icon-amber',
+    knowledge: 'picker-card-icon-cyan', function: 'picker-card-icon-yellow', default: 'picker-card-icon-purple',
+  };
+
+  function agentGlow(agent: Agent): string { return GLOW_MAP[agentCategory(agent)]; }
+  function agentIconColor(agent: Agent): string { return ICON_COLOR_MAP[agentCategory(agent)]; }
+
+  // --- Filtered lists for new session modal ---
+  const searchLower = $derived(newSessionSearch.toLowerCase());
+  const filteredAgents = $derived(
+    appStore.agents.filter(a => !searchLower || a.name.toLowerCase().includes(searchLower) || (a.description || '').toLowerCase().includes(searchLower))
+  );
+  const filteredWorkflows = $derived(
+    appStore.workflows.filter(w => !searchLower || w.name.toLowerCase().includes(searchLower) || (w.description || '').toLowerCase().includes(searchLower))
+  );
+  const filteredLlms = $derived(
+    appStore.llms.filter(l => !searchLower || l.name.toLowerCase().includes(searchLower) || (l.model || '').toLowerCase().includes(searchLower))
+  );
 
   // --- Bubble helpers ---
 
@@ -1786,10 +1834,10 @@
   // --- Video presets ---
 
   const videoPresets = [
-    { id: 'quick', label: 'Quick', icon: 'fa-bolt', frames: 12, w: 256, h: 256, steps: 10, cfg: 7, fps: 8 },
-    { id: 'standard', label: 'Standard', icon: 'fa-circle-play', frames: 24, w: 512, h: 512, steps: 20, cfg: 7, fps: 12 },
-    { id: 'quality', label: 'Quality', icon: 'fa-star', frames: 48, w: 768, h: 768, steps: 30, cfg: 7, fps: 24 },
-    { id: 'cinematic', label: 'Cinematic', icon: 'fa-clapperboard', frames: 72, w: 1024, h: 576, steps: 40, cfg: 5, fps: 24 },
+    { id: 'quick',    label: 'Quick',    icon: 'fa-bolt',         frames: 9,  w: 832, h: 480, steps: 6,  cfg: 5, fps: 16 },
+    { id: 'standard', label: 'Standard', icon: 'fa-circle-play',  frames: 33, w: 832, h: 480, steps: 30, cfg: 5, fps: 16 },
+    { id: 'quality',  label: 'Quality',  icon: 'fa-star',         frames: 49, w: 832, h: 480, steps: 50, cfg: 5, fps: 16 },
+    { id: 'cinematic',label: 'Cinematic',icon: 'fa-clapperboard', frames: 81, w: 832, h: 480, steps: 50, cfg: 5, fps: 16 },
   ];
 
   function applyVideoPreset(presetId: string) {
@@ -2171,57 +2219,102 @@
 {#if newSessionModalOpen}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="modal-backdrop" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) newSessionModalOpen = false; }} role="dialog" tabindex="-1">
-    <div class="modal-content modal-content-sm">
+    <div class="modal-content picker-modal">
       <div class="modal-header">
         <h3 class="text-lg font-semibold text-primary">New conversation</h3>
         <button class="modal-close-btn" title="Close" onclick={() => { newSessionModalOpen = false; }}>
           <i class="fas fa-xmark"></i>
         </button>
       </div>
-      <div class="overflow-y-auto custom-scrollbar flex-1">
-        {#if appStore.agents.length > 0}
+      <div class="picker-search">
+        <i class="fas fa-search text-muted text-xs"></i>
+        <input class="picker-search-input" type="text" placeholder="Search agents, workflows, LLMs..." bind:value={newSessionSearch} />
+      </div>
+      <div class="overflow-y-auto custom-scrollbar flex-1 picker-body">
+        {#if filteredAgents.length > 0}
           <div class="modal-section-label">Agents</div>
-          {#each appStore.agents as a}
-            <button class="modal-pick-item" onclick={() => createSession('agent', a.name)}>
-              <i class="fas fa-robot text-blue text-sm"></i>
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-primary">{a.name}</div>
-                <div class="text-xs text-muted truncate">{a.description || ''}</div>
+          <div class="picker-grid">
+            {#each filteredAgents as a}
+              <div class="picker-card {agentGlow(a)}">
+                <button class="picker-card-main" onclick={() => createSession('agent', a.name)}>
+                  <div class="picker-card-icon {agentIconColor(a)}">
+                    <i class="fas {a.icon || 'fa-robot'}"></i>
+                  </div>
+                  <div class="picker-card-body">
+                    <div class="picker-card-name">{a.name}</div>
+                    <div class="picker-card-desc">{a.description || ''}</div>
+                    <div class="picker-card-tags">
+                      {#if a.tools?.length}
+                        <span class="picker-tag" title="{a.tools.length} tool{a.tools.length !== 1 ? 's' : ''}"><i class="fas fa-wrench"></i> {a.tools.length}</span>
+                      {/if}
+                      {#if a.publish && typeof a.publish === 'object' && a.publish.enabled}
+                        <span class="picker-tag picker-tag-green" title="Published"><i class="fas fa-globe"></i></span>
+                      {/if}
+                      {#if a.p2p?.share}
+                        <span class="picker-tag picker-tag-cyan" title="P2P shared"><i class="fas fa-tower-broadcast"></i></span>
+                      {/if}
+                      {#if a.memory}
+                        <span class="picker-tag picker-tag-purple" title="Memory enabled"><i class="fas fa-brain"></i></span>
+                      {/if}
+                    </div>
+                  </div>
+                </button>
+                <button class="picker-card-edit" title="Edit in IDE" onclick={() => editAgentInIde(a.name)} aria-label="Edit {a.name} in IDE">
+                  <i class="fas fa-pen-to-square"></i>
+                </button>
               </div>
-            </button>
-          {/each}
+            {/each}
+          </div>
         {/if}
-        {#if appStore.workflows.length > 0}
+        {#if filteredWorkflows.length > 0}
           <div class="modal-section-label">Workflows</div>
-          {#each appStore.workflows as w}
-            <button class="modal-pick-item" onclick={() => createSession('workflow', w.name)}>
-              <i class="fas fa-project-diagram text-orange text-sm"></i>
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-primary">{w.name}</div>
-                <div class="text-xs text-muted truncate">{w.description || ''}</div>
+          <div class="picker-grid">
+            {#each filteredWorkflows as w}
+              <div class="picker-card glow-default">
+                <button class="picker-card-main" onclick={() => createSession('workflow', w.name)}>
+                  <div class="picker-card-icon picker-card-icon-orange">
+                    <i class="fas fa-project-diagram"></i>
+                  </div>
+                  <div class="picker-card-body">
+                    <div class="picker-card-name">{w.name}</div>
+                    <div class="picker-card-desc">{w.description || ''}</div>
+                  </div>
+                </button>
               </div>
-            </button>
-          {/each}
+            {/each}
+          </div>
         {/if}
-        {#if appStore.llms.length > 0}
+        {#if filteredLlms.length > 0}
           <div class="modal-section-label">LLMs</div>
-          {#each appStore.llms as l}
-            <button class="modal-pick-item" onclick={() => createSession('llm', l.name)}>
-              <i class="fas fa-microchip text-purple text-sm"></i>
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-medium text-primary">{l.name}</span>
-                  {#if l.name === appStore.defaultLlmName}
-                    <span class="badge badge-green text-2xs">default</span>
-                  {/if}
-                </div>
-                <div class="text-xs text-muted truncate">{l.model || ''}</div>
+          <div class="picker-grid">
+            {#each filteredLlms as l}
+              <div class="picker-card glow-default">
+                <button class="picker-card-main" onclick={() => createSession('llm', l.name)}>
+                  <div class="picker-card-icon picker-card-icon-purple">
+                    <i class="fas fa-microchip"></i>
+                  </div>
+                  <div class="picker-card-body">
+                    <div class="picker-card-name">
+                      {l.name}
+                      {#if l.name === appStore.defaultLlmName}
+                        <span class="badge badge-green text-2xs">default</span>
+                      {/if}
+                    </div>
+                    <div class="picker-card-desc">{l.model || ''}</div>
+                  </div>
+                </button>
               </div>
-            </button>
-          {/each}
+            {/each}
+          </div>
         {/if}
-        {#if appStore.agents.length === 0 && appStore.workflows.length === 0 && appStore.llms.length === 0}
-          <div class="text-muted text-sm text-center py-8">No agents, workflows or LLMs available</div>
+        {#if filteredAgents.length === 0 && filteredWorkflows.length === 0 && filteredLlms.length === 0}
+          <div class="text-muted text-sm text-center py-8">
+            {#if newSessionSearch}
+              No results for "{newSessionSearch}"
+            {:else}
+              No agents, workflows or LLMs available
+            {/if}
+          </div>
         {/if}
       </div>
     </div>
@@ -2324,7 +2417,7 @@
     <div class="modal-content video-settings-dialog">
       <div class="modal-header">
         <h3 class="text-lg font-semibold text-primary">
-          <i class="fas fa-film text-accent mr-2"></i>Video Settings
+          <i class="fas fa-film text-accent mr-2"></i>Video Settings <span class="text-xs text-muted font-normal ml-1">WAN 2.2</span>
         </h3>
         <button class="modal-close-btn" title="Close" onclick={() => { videoSettingsOpen = false; }}>
           <i class="fas fa-xmark"></i>
@@ -2341,28 +2434,30 @@
         </div>
         <div class="video-settings-grid">
           <div class="video-setting-group">
-            <label for="vs-frames" class="text-sm text-muted mb-1 block">Total Frames</label>
+            <label for="vs-frames" class="text-sm text-muted mb-1 block">Frames</label>
             <input
               id="vs-frames"
               type="number"
-              min="1"
-              max="300"
+              min="5"
+              max="81"
+              step="4"
               bind:value={videoSettings.totalFrames}
               class="input"
             />
-            <span class="video-setting-hint">{(videoSettings.totalFrames / videoSettings.fps).toFixed(1)}s at {videoSettings.fps}fps</span>
+            <span class="video-setting-hint">{(videoSettings.totalFrames / videoSettings.fps).toFixed(1)}s &middot; WAN: 1+4n</span>
           </div>
 
           <div class="video-setting-group">
-            <label for="vs-fps" class="text-sm text-muted mb-1 block">FPS</label>
+            <label for="vs-steps" class="text-sm text-muted mb-1 block">Steps</label>
             <input
-              id="vs-fps"
+              id="vs-steps"
               type="number"
               min="1"
-              max="60"
-              bind:value={videoSettings.fps}
+              max="50"
+              bind:value={videoSettings.steps}
               class="input"
             />
+            <span class="video-setting-hint">6 fast &middot; 30 good &middot; 50 official</span>
           </div>
 
           <div class="video-setting-group">
@@ -2370,9 +2465,9 @@
             <input
               id="vs-width"
               type="number"
-              min="64"
-              max="2048"
-              step="64"
+              min="480"
+              max="832"
+              step="16"
               bind:value={videoSettings.width}
               class="input"
             />
@@ -2383,12 +2478,13 @@
             <input
               id="vs-height"
               type="number"
-              min="64"
-              max="2048"
-              step="64"
+              min="480"
+              max="832"
+              step="16"
               bind:value={videoSettings.height}
               class="input"
             />
+            <span class="video-setting-hint">832x480 &middot; 480x832 &middot; 624x624</span>
           </div>
 
           <div class="video-setting-group">
@@ -2397,7 +2493,7 @@
               id="vs-cfg"
               type="number"
               min="1"
-              max="30"
+              max="20"
               step="0.5"
               bind:value={videoSettings.cfgScale}
               class="input"
@@ -2405,13 +2501,13 @@
           </div>
 
           <div class="video-setting-group">
-            <label for="vs-steps" class="text-sm text-muted mb-1 block">Steps</label>
+            <label for="vs-fps" class="text-sm text-muted mb-1 block">FPS</label>
             <input
-              id="vs-steps"
+              id="vs-fps"
               type="number"
-              min="1"
-              max="100"
-              bind:value={videoSettings.steps}
+              min="8"
+              max="30"
+              bind:value={videoSettings.fps}
               class="input"
             />
           </div>

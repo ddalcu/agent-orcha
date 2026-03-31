@@ -1,4 +1,5 @@
 name: web-pilot
+icon: fa-globe
 description: Browser agent — navigates, fills forms, clicks through pages using observe-act loop
 version: "1.0.0"
 

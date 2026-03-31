@@ -40,21 +40,24 @@ function distributeFrames(totalFrames: number, workerCount: number): Array<{ sta
  */
 async function stitchFrames(framesDir: string, outputPath: string, fps: number): Promise<string> {
   const framePattern = path.join(framesDir, 'frame_%06d.png');
+  const isMac = process.platform === 'darwin';
+  const encoder = isMac ? 'h264_videotoolbox' : 'libx264';
+  const encoderArgs = isMac
+    ? ['-c:v', encoder, '-pix_fmt', 'yuv420p', '-q:v', '65']
+    : ['-c:v', encoder, '-pix_fmt', 'yuv420p', '-crf', '23', '-preset', 'medium'];
 
   try {
-    // Use minterpolate to generate smooth in-between frames for better continuity.
-    // The blend mode creates crossfades between frames, softening discontinuities.
+    logger.info(`[VideoTool] ffmpeg: encoding MP4 with ${encoder} (minterpolate ${fps}->${fps * 2}fps)...`);
+    const t0 = Date.now();
     await execFileAsync('ffmpeg', [
       '-y',
       '-framerate', String(fps),
       '-i', framePattern,
       '-vf', `minterpolate=fps=${fps * 2}:mi_mode=blend`,
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-crf', '23',
-      '-preset', 'medium',
+      ...encoderArgs,
       outputPath,
     ], { timeout: 300_000 });
+    logger.info(`[VideoTool] ffmpeg: MP4 encoded in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     return outputPath;
   } catch (ffmpegErr) {
     logger.warn('[VideoTool] ffmpeg MP4 failed, trying GIF fallback:', ffmpegErr);
@@ -77,7 +80,100 @@ async function stitchFrames(framesDir: string, outputPath: string, fps: number):
 }
 
 /**
- * Generate frames locally using the image model via OmniModelCache.
+ * Resolve the image model from the image config (for frame-by-frame generation).
+ */
+async function resolveImageModel(generatedDir: string) {
+  const { OmniModelCache } = await import('../../llm/providers/omni-model-cache.ts');
+  const { getImageConfig } = await import('../../llm/llm-config.ts');
+
+  const imageConfig = getImageConfig('omni');
+  if (!imageConfig?.modelPath) {
+    throw new Error('No image model configured — load an image model first');
+  }
+
+  const resolve = (p: string) => path.isAbsolute(p) ? p : path.join(generatedDir, '..', p);
+  const modelPath = resolve(imageConfig.modelPath);
+
+  return OmniModelCache.getImageModel(modelPath, {
+    ...(imageConfig.t5xxl ? { t5xxlPath: resolve(imageConfig.t5xxl) } : {}),
+    ...(imageConfig.llm ? { llmPath: resolve(imageConfig.llm) } : {}),
+    ...(imageConfig.vae ? { vaePath: resolve(imageConfig.vae) } : {}),
+    ...(imageConfig.clipL ? { clipLPath: resolve(imageConfig.clipL) } : {}),
+  });
+}
+
+/**
+ * Resolve the video model from the video config (for native video generation).
+ */
+async function resolveVideoModel(generatedDir: string) {
+  const { OmniModelCache } = await import('../../llm/providers/omni-model-cache.ts');
+  const { getVideoConfig } = await import('../../llm/llm-config.ts');
+
+  const videoConfig = getVideoConfig('omni');
+  if (!videoConfig?.modelPath) {
+    throw new Error('No video model configured — load a video model first');
+  }
+
+  const resolve = (p: string) => path.isAbsolute(p) ? p : path.join(generatedDir, '..', p);
+  const modelPath = resolve(videoConfig.modelPath);
+
+  return OmniModelCache.getVideoModel(modelPath, {
+    ...(videoConfig.t5xxl ? { t5xxlPath: resolve(videoConfig.t5xxl) } : {}),
+    ...(videoConfig.llm ? { llmPath: resolve(videoConfig.llm) } : {}),
+    ...(videoConfig.vae ? { vaePath: resolve(videoConfig.vae) } : {}),
+    ...(videoConfig.clipL ? { clipLPath: resolve(videoConfig.clipL) } : {}),
+  });
+}
+
+/**
+ * Check if the configured model is a native video model (WAN) that supports generateVideo().
+ */
+async function isNativeVideoModel(): Promise<boolean> {
+  try {
+    const { getVideoConfig } = await import('../../llm/llm-config.ts');
+    const config = getVideoConfig('omni');
+    return config.provider === 'omni' && !!config.modelPath;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Generate all frames natively via generateVideo() (WAN models).
+ * WAN generates temporally coherent frames in a single pass.
+ */
+async function generateNativeVideoFrames(
+  generatedDir: string,
+  prompt: string,
+  totalFrames: number,
+  settings: VideoSettings,
+  frameMap: Map<number, Buffer>,
+  peerContributions: Map<string, number>,
+): Promise<void> {
+  const videoModel = await resolveVideoModel(generatedDir);
+
+  logger.info(`[VideoTool] GPU: generating ${totalFrames} frames (${settings.width}x${settings.height}, ${settings.steps} steps, cfg ${settings.cfgScale})...`);
+  const t0 = Date.now();
+  const frames = await videoModel.generateVideo(prompt, {
+    videoFrames: totalFrames,
+    width: settings.width,
+    height: settings.height,
+    steps: settings.steps,
+    cfgScale: settings.cfgScale,
+    flowShift: settings.flowShift,
+    ...(settings.seed !== undefined ? { seed: settings.seed } : {}),
+  });
+  const genSec = ((Date.now() - t0) / 1000).toFixed(1);
+
+  for (let i = 0; i < frames.length; i++) {
+    frameMap.set(i, frames[i]!);
+  }
+  peerContributions.set('local', frames.length);
+  logger.info(`[VideoTool] GPU: ${frames.length} frames generated in ${genSec}s`);
+}
+
+/**
+ * Generate frames locally using per-frame image generation (for non-WAN models).
  */
 async function generateLocalFrames(
   generatedDir: string,
@@ -88,21 +184,7 @@ async function generateLocalFrames(
   frameMap: Map<number, Buffer>,
   peerContributions: Map<string, number>,
 ): Promise<void> {
-  const { OmniModelCache } = await import('../../llm/providers/omni-model-cache.ts');
-  const { getImageConfig } = await import('../../llm/llm-config.ts');
-
-  // Find the active image config to resolve model path
-  const imageConfig = getImageConfig('omni');
-  if (!imageConfig) {
-    throw new Error('No image model configured — load a video/image model first');
-  }
-  const modelPath = imageConfig.modelPath;
-  if (!modelPath) {
-    throw new Error('Image model has no modelPath configured');
-  }
-  const resolvedPath = path.isAbsolute(modelPath)
-    ? modelPath
-    : path.join(generatedDir, '..', modelPath);
+  const imageModel = await resolveImageModel(generatedDir);
 
   for (let i = range.start; i < range.end; i++) {
     const progress = i / Math.max(totalFrames - 1, 1);
@@ -110,7 +192,6 @@ async function generateLocalFrames(
     const framePrompt = `${prompt}, continuous animation sequence, ${timeLabel} of scene, smooth motion, consistent style and composition, frame ${i + 1} of ${totalFrames}`;
     const frameSeed = settings.seed !== undefined ? settings.seed + i : undefined;
 
-    const imageModel = await OmniModelCache.getImageModel(resolvedPath, {});
     const buffer = await imageModel.generate(framePrompt, {
       steps: settings.steps,
       width: settings.width,
@@ -147,7 +228,7 @@ async function generateRemoteFrames(
       peer.peerId, peer.name, 'video_frame',
       {
         prompt: framePrompt, width: settings.width, height: settings.height,
-        steps: settings.steps, cfgScale: settings.cfgScale,
+        steps: settings.steps, cfgScale: settings.cfgScale, flowShift: settings.flowShift,
         ...(frameSeed !== undefined ? { seed: frameSeed } : {}),
         frameIndex: i, totalFrames,
       },
@@ -159,12 +240,11 @@ async function generateRemoteFrames(
 }
 
 /**
- * Check if a local image model is available for video frame generation.
+ * Check if a local image model is available (for frame-by-frame generation).
  */
-async function hasLocalModel(): Promise<boolean> {
+async function hasLocalImageModel(): Promise<boolean> {
   const { getImageConfig } = await import('../../llm/llm-config.ts');
-  const config = getImageConfig('omni');
-  return !!config?.modelPath;
+  return !!getImageConfig('omni')?.modelPath;
 }
 
 /**
@@ -182,15 +262,20 @@ async function finalizeVideo(
   const framesDir = path.join(generatedDir, videoId);
   await fs.mkdir(framesDir, { recursive: true });
 
+  logger.info(`[VideoTool] Disk: writing ${frameMap.size} PNG frames to ${framesDir}...`);
+  const t0 = Date.now();
   let writtenFrames = 0;
+  let totalBytes = 0;
   for (let i = 0; i < totalFrames; i++) {
     const frameData = frameMap.get(i);
     if (frameData) {
       const paddedIndex = String(i + 1).padStart(6, '0');
       await fs.writeFile(path.join(framesDir, `frame_${paddedIndex}.png`), frameData);
       writtenFrames++;
+      totalBytes += frameData.length;
     }
   }
+  logger.info(`[VideoTool] Disk: ${writtenFrames} frames written (${(totalBytes / 1024 / 1024).toFixed(1)} MB) in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
   if (writtenFrames === 0) {
     return JSON.stringify({
@@ -199,7 +284,6 @@ async function finalizeVideo(
     });
   }
 
-  logger.info(`[VideoTool] ${writtenFrames}/${totalFrames} frames received. Stitching video...`);
   await fs.mkdir(generatedDir, { recursive: true });
   const outputPath = path.join(generatedDir, `${videoId}.mp4`);
   const result = await stitchFrames(framesDir, outputPath, fps);
@@ -226,12 +310,12 @@ async function finalizeVideo(
 export function createVideoGenerateTool(deps: VideoToolDeps): StructuredTool {
   return tool(
     async (args) => {
-      const { prompt, model, totalFrames, width, height, cfgScale, steps, seed, fps } = args;
+      const { prompt, model, totalFrames, width, height, cfgScale, steps, flowShift, seed, fps } = args;
       const modelRef = model || 'wan2.2';
       const mode = deps.leverage || false;
 
       const settings: VideoSettings = {
-        totalFrames, width, height, cfgScale, steps, fps,
+        totalFrames, width, height, cfgScale, steps, flowShift, fps,
         ...(seed !== undefined ? { seed } : {}),
       };
 
@@ -240,12 +324,29 @@ export function createVideoGenerateTool(deps: VideoToolDeps): StructuredTool {
       const peerContributions = new Map<string, number>();
 
       try {
-        // Discover workers based on leverage mode
-        const hasLocal = await hasLocalModel();
+        const nativeVideo = await isNativeVideoModel();
+
+        // Native video models (WAN) generate all frames in a single pass —
+        // frame-by-frame distribution is not applicable.
+        if (nativeVideo) {
+          if (mode === 'remote-only') {
+            return JSON.stringify({
+              __modelTask: true,
+              error: 'Native video models (WAN) require local generation — remote-only mode is not supported.',
+            });
+          }
+          await generateNativeVideoFrames(deps.generatedDir, prompt, totalFrames, settings, frameMap, peerContributions)
+            .catch(err => { errors.push(`native: ${(err as Error).message}`); });
+          const actualFrames = frameMap.size || totalFrames;
+          return finalizeVideo(frameMap, actualFrames, fps, deps.generatedDir, peerContributions, errors);
+        }
+
+        // Frame-by-frame generation for standard image models (FLUX, SD, etc.)
+        const hasLocal = await hasLocalImageModel();
         let remotePeers: Array<{ peerId: string; name: string; peerName: string }> = [];
 
         if (mode && deps.p2pManager) {
-          remotePeers = deps.p2pManager.getRemoteModelsByName(modelRef, 'image');
+          remotePeers = deps.p2pManager.getRemoteModelsByName(modelRef, 'video');
         }
 
         // ── remote-only: only use P2P peers ──
@@ -344,19 +445,19 @@ export function createVideoGenerateTool(deps: VideoToolDeps): StructuredTool {
     {
       name: 'generate_video',
       description:
-        'Generate a video by creating frames with a video/image model and stitching them together. ' +
-        'When P2P leverage is enabled, frames are distributed across network peers for faster generation. ' +
-        'Use the video_settings from the session context if available.',
+        'Generate a video from a text prompt. Native video models (WAN) produce temporally coherent frames in a single pass. ' +
+        'Standard image models generate frames individually then stitch. Use video_settings from session context if available.',
       schema: z.object({
         prompt: z.string().describe('Text prompt describing the video to generate'),
-        model: z.string().optional().describe('Model name to use for generation (default: wan2.2). Matched against P2P peers by model name when leverage is enabled.'),
-        totalFrames: z.number().default(24).describe('Total number of frames to generate'),
-        width: z.number().default(512).describe('Frame width in pixels'),
-        height: z.number().default(512).describe('Frame height in pixels'),
-        cfgScale: z.number().default(7).describe('CFG scale for generation guidance'),
-        steps: z.number().default(20).describe('Number of diffusion steps per frame'),
+        model: z.string().optional().describe('Model name (default: wan2.2). Used for P2P peer matching when leverage is enabled.'),
+        totalFrames: z.number().default(9).describe('Frames to generate. WAN requires 1+4n (9, 13, 17, 21, 25, 33, 49, 81). Default 9 for quick preview.'),
+        width: z.number().default(832).describe('Frame width (WAN 480p: 832 landscape, 480 portrait, 624 square)'),
+        height: z.number().default(480).describe('Frame height (WAN 480p: 480 landscape, 832 portrait, 624 square)'),
+        cfgScale: z.number().default(5).describe('CFG guidance scale (WAN TI2V-5B official: 5.0)'),
+        steps: z.number().default(6).describe('Diffusion steps — 6 quick, 30 standard, 50 official quality'),
+        flowShift: z.number().default(5).describe('Flow shift (TI2V-5B official: 5.0, sd-cli default: 3.0)'),
         seed: z.number().optional().describe('Random seed for reproducibility'),
-        fps: z.number().default(12).describe('Frames per second for the output video'),
+        fps: z.number().default(16).describe('Output frames per second (TI2V-5B native: 24, playback: 16)'),
       }),
     },
   );

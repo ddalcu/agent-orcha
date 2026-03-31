@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { orgStore } from '../lib/stores/org.svelte.js';
   import { orgApi } from '../lib/services/org-api.js';
   import { appStore } from '../lib/stores/app.svelte.js';
@@ -12,13 +11,19 @@
   let showHbConfig = $state(false);
   let wakingCEO = $state(false);
 
-  onMount(async () => {
-    if (appStore.routeOrgId) {
-      await orgStore.selectOrgById(appStore.routeOrgId);
-    }
-    if (orgStore.selectedOrg) {
-      await orgStore.loadDashboard();
-      await loadHeartbeatConfig();
+  let lastLoadedOrgId: string | undefined;
+
+  $effect(() => {
+    const orgId = appStore.routeOrgId;
+    if (orgId && orgId !== lastLoadedOrgId) {
+      lastLoadedOrgId = orgId;
+      (async () => {
+        await orgStore.selectOrgById(orgId);
+        if (orgStore.selectedOrg) {
+          await orgStore.loadDashboard();
+          await loadHeartbeatConfig();
+        }
+      })();
     }
   });
 
@@ -416,7 +421,7 @@
               <span class="run-meta">{formatDate(run.startedAt)}</span>
               <span class="run-trigger">{run.triggerSource}</span>
               {#if run.status === 'running' && run.taskId}
-                <span class="run-live" onclick={(e) => { e.stopPropagation(); appStore.setTab('monitor'); }} role="button" tabindex="-1"><i class="fas fa-eye"></i></span>
+                <span class="run-live" onclick={(e) => { e.stopPropagation(); appStore.setTab('monitor'); }} onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); appStore.setTab('monitor'); } }} role="button" tabindex="-1"><i class="fas fa-eye"></i></span>
               {/if}
             </button>
             {#if expandedRunId === run.id}
@@ -516,9 +521,6 @@
   }
   .form-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--text-2); cursor: pointer; }
   .form-check input[type="checkbox"] { accent-color: var(--accent); }
-  .form-label { font-size: 0.78rem; color: var(--text-2); }
-  .form-label .input { display: block; margin-top: 0.15rem; }
-
   .ceo-summary { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
   .ceo-summary h4 { font-size: 0.72rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
   .summary-text { font-size: 0.82rem; color: var(--text-1); line-height: 1.5; max-height: 300px; overflow-y: auto; }
