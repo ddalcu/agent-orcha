@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { resolvePublishConfig } from '../../lib/agents/types.ts';
+import { resolvePublishConfig, resolveP2PConfig } from '../../lib/agents/types.ts';
 import type { ContentPart } from '../../lib/types/llm-types.ts';
 import { StreamEventBuffer } from '../../lib/tasks/stream-event-buffer.ts';
 
@@ -17,14 +17,17 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
     const agents = fastify.orchestrator.agents.list();
     return agents.map((agent) => {
       const publish = resolvePublishConfig(agent.publish);
+      const p2pConfig = resolveP2PConfig(agent.p2p);
       return {
         name: agent.name,
         description: agent.description,
+        icon: agent.icon,
         version: agent.version,
         tools: agent.tools,
         memory: agent.memory,
         inputVariables: agent.prompt.inputVariables,
         publish: { enabled: publish.enabled, hasPassword: !!publish.password },
+        p2p: { share: p2pConfig.share, leverage: p2pConfig.leverage },
         sampleQuestions: agent.sampleQuestions,
       };
     });

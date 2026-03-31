@@ -1,4 +1,5 @@
 name: web-engineer
+icon: fa-code
 description: Web software engineer that builds and publishes web applications using sandbox shell and htmlhost
 version: "1.0.0"
 

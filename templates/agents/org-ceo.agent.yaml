@@ -1,4 +1,5 @@
 name: org-ceo
+icon: fa-user-tie
 description: Autonomous CEO agent for organizations — triages tickets, delegates to team, creates agents, reviews work
 version: 1.0.0
 model:

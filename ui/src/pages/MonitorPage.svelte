@@ -134,6 +134,10 @@
     closeEventSource();
   }
 
+  function handleModalKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') closeDetail();
+  }
+
   function closeEventSource() {
     if (eventSource) {
       eventSource.close();
@@ -300,200 +304,257 @@
       {/each}
     </div>
   {/if}
+</div>
 
-  <!-- Detail panel -->
-  {#if selectedTask}
-    {@const cfg = getStatusConfig(selectedTask.status)}
-    <div class="border-t pt-4 space-y-4">
+<!-- Task Detail Modal -->
+{#if selectedTask}
+  {@const cfg = getStatusConfig(selectedTask.status)}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="monitor-modal-backdrop" onclick={closeDetail} onkeydown={handleModalKeydown}>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="monitor-modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
       <!-- Detail header -->
-      <div class="panel-dim">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="flex items-center gap-2">
-              <i class="fas {cfg.icon} text-{cfg.color}"></i>
-              <span class="font-medium text-primary">{selectedTask.target}</span>
-              <span class="badge badge-pill badge-{cfg.color}">{cfg.label}</span>
-            </div>
-            <div class="text-xs text-muted mt-1">{selectedTask.id}</div>
-          </div>
-          <button class="btn-ghost" onclick={closeDetail} title="Close detail"><i class="fas fa-times"></i></button>
-        </div>
-      </div>
-
-      <!-- Meta grid -->
-      <div class="panel-dim">
-        <div class="grid grid-cols-4 gap-4 text-sm">
-          <div>
-            <span class="text-muted block text-xs">Kind</span>
-            <span class="text-primary">{selectedTask.kind}</span>
-          </div>
-          <div>
-            <span class="text-muted block text-xs">Created</span>
-            <span class="text-primary">{new Date(selectedTask.createdAt).toLocaleString()}</span>
-          </div>
-          <div>
-            <span class="text-muted block text-xs">Updated</span>
-            <span class="text-primary">{new Date(selectedTask.updatedAt).toLocaleString()}</span>
-          </div>
-          <div>
-            <span class="text-muted block text-xs">Completed</span>
-            <span class="text-primary">{selectedTask.completedAt ? new Date(selectedTask.completedAt).toLocaleString() : '-'}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- P2P Info -->
-      {#if selectedTask.p2p}
-        <div class="panel-dim">
-          <div class="flex items-center gap-2 mb-3">
-            <i class="fas fa-network-wired text-accent text-sm"></i>
-            <span class="text-sm font-medium text-secondary">P2P</span>
-          </div>
-          <div class="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <span class="text-muted block text-xs">Direction</span>
-              <span class="text-primary">
-                <i class="fas fa-{selectedTask.p2p.direction === 'incoming' ? 'arrow-down text-amber' : 'arrow-up text-cyan'} mr-1"></i>
-                {selectedTask.p2p.direction === 'incoming' ? 'Incoming' : 'Outgoing'}
+      <div class="monitor-modal-header">
+        <div>
+          <div class="flex items-center gap-2">
+            <i class="fas {cfg.icon} text-{cfg.color}"></i>
+            <span class="font-medium text-primary">{selectedTask.target}</span>
+            <span class="badge badge-{kindBadgeVariant(selectedTask.kind)}">{selectedTask.kind}</span>
+            <span class="badge badge-pill badge-{cfg.color}">{cfg.label}</span>
+            {#if selectedTask.p2p}
+              <span class="badge badge-{selectedTask.p2p.direction === 'incoming' ? 'amber' : 'cyan'}">
+                <i class="fas fa-{selectedTask.p2p.direction === 'incoming' ? 'arrow-down' : 'arrow-up'} mr-1"></i>P2P {selectedTask.p2p.peerName}
               </span>
-            </div>
-            <div>
-              <span class="text-muted block text-xs">Peer</span>
-              <span class="text-primary">{selectedTask.p2p.peerName}</span>
-            </div>
-            <div>
-              <span class="text-muted block text-xs">Peer ID</span>
-              <span class="text-primary font-mono text-xs">{selectedTask.p2p.peerId.slice(0, 12)}...</span>
-            </div>
-          </div>
-        </div>
-      {/if}
-
-      <!-- React-Loop Metrics -->
-      {#if selectedTask.metrics}
-        {@const m = selectedTask.metrics}
-        <div class="panel-dim">
-          <div class="flex items-center gap-2 mb-3">
-            <i class="fas fa-chart-line text-accent text-sm"></i>
-            <span class="text-sm font-medium text-secondary">React-Loop Metrics</span>
-          </div>
-          <div class="grid grid-cols-6 gap-4 text-sm">
-            <div>
-              <span class="text-muted block text-xs">Iteration</span>
-              <span class="text-primary font-mono">{m.iteration}</span>
-            </div>
-            <div>
-              <span class="text-muted block text-xs">Messages</span>
-              <span class="text-primary font-mono">{m.messageCount}</span>
-            </div>
-            <div>
-              <span class="text-muted block text-xs">Images</span>
-              <span class="text-primary font-mono">{m.imageCount}</span>
-            </div>
-            <div>
-              <span class="text-muted block text-xs">Context Size</span>
-              <span class="text-primary font-mono">{formatContextSize(m.contextChars)}</span>
-            </div>
-            <div>
-              <span class="text-muted block text-xs">Input Tokens</span>
-              <span class="text-primary font-mono">{m.inputTokens ? m.inputTokens.toLocaleString() : '-'}</span>
-            </div>
-            <div>
-              <span class="text-muted block text-xs">Output Tokens</span>
-              <span class="text-primary font-mono">{m.outputTokens ? m.outputTokens.toLocaleString() : '-'}</span>
-            </div>
-          </div>
-        </div>
-      {/if}
-
-      <!-- Input Required -->
-      {#if selectedTask.status === 'input-required' && selectedTask.inputRequest}
-        <div class="interrupt-prompt">
-          <div class="flex items-center gap-2 mb-3">
-            <i class="fas fa-question-circle text-amber"></i>
-            <span class="text-sm font-medium text-amber">Input Required</span>
-          </div>
-          <p class="text-sm text-primary mb-3">{selectedTask.inputRequest.question}</p>
-          <div class="flex gap-2">
-            <input bind:value={respondText} type="text" placeholder="Type your response..."
-                   class="input flex-1 text-sm" onkeydown={handleRespondKeydown} />
-            <button class="btn btn-accent btn-sm" onclick={handleRespond}>Send</button>
-          </div>
-        </div>
-      {/if}
-
-      <!-- Input -->
-      <details>
-        <summary class="text-sm font-medium text-secondary">
-          <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i> Input
-        </summary>
-        <pre class="mt-2 panel-sm text-xs text-primary overflow-x-auto">{escapeHtml(JSON.stringify(selectedTask.input, null, 2))}</pre>
-      </details>
-
-      <!-- Activity feed (show above result when task is working) -->
-      {#if selectedTask.events?.length}
-        <details open>
-          <summary class="text-sm font-medium text-secondary">
-            <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i>
-            {#if selectedTask.status === 'working'}
-              <i class="fas fa-circle text-green blink-dot"></i> Live Activity ({selectedTask.events.length} events)
-            {:else}
-              Activity ({selectedTask.events.length} events)
             {/if}
-          </summary>
-          <div class="mt-2 panel-sm overflow-y-auto monitor-scroll-panel" bind:this={activityFeedEl}>
-            {#each selectedTask.events as evt}
-              {@const time = new Date(evt.timestamp).toLocaleTimeString()}
-              <div class="monitor-event">
-                <span class="monitor-event-time">{time}</span>
-                <span class="text-xs">
-                  {#if evt.type === 'tool_start'}
-                    <i class="fas fa-play text-blue mr-1"></i>
-                    <span class="text-blue-300 font-medium">{escapeHtml(evt.tool ?? '')}</span>
-                    <span class="text-muted">{escapeHtml(truncate(formatEventInput(evt.input), 120))}</span>
-                  {:else if evt.type === 'tool_end'}
-                    <i class="fas fa-check text-green mr-1"></i>
-                    <span class="text-green-300 font-medium">{escapeHtml(evt.tool ?? '')}</span>
-                    <span class="text-secondary">{escapeHtml(truncate(formatEventOutput(evt.output), 200))}</span>
-                  {:else if evt.type === 'thinking'}
-                    <i class="fas fa-brain text-purple mr-1"></i>
-                    <span class="text-purple-300">{escapeHtml(truncate(evt.content || '', 200))}</span>
-                  {:else if evt.type === 'content'}
-                    <i class="fas fa-comment text-secondary mr-1"></i>
-                    <span class="text-primary">{escapeHtml(truncate(evt.content || '', 300))}</span>
-                  {/if}
+          </div>
+          <div class="text-xs text-muted mt-1">{selectedTask.id}</div>
+        </div>
+        <button class="btn-ghost" onclick={closeDetail} aria-label="Close detail"><i class="fas fa-times"></i></button>
+      </div>
+
+      <!-- Scrollable body -->
+      <div class="monitor-modal-body">
+        <!-- Meta grid -->
+        <div class="panel-dim">
+          <div class="grid grid-cols-4 gap-4 text-sm">
+            <div>
+              <span class="text-muted block text-xs">Kind</span>
+              <span class="text-primary">{selectedTask.kind}</span>
+            </div>
+            <div>
+              <span class="text-muted block text-xs">Created</span>
+              <span class="text-primary">{new Date(selectedTask.createdAt).toLocaleString()}</span>
+            </div>
+            <div>
+              <span class="text-muted block text-xs">Updated</span>
+              <span class="text-primary">{new Date(selectedTask.updatedAt).toLocaleString()}</span>
+            </div>
+            <div>
+              <span class="text-muted block text-xs">Elapsed</span>
+              <span class="text-primary">{formatElapsed(selectedTask)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- P2P Info -->
+        {#if selectedTask.p2p}
+          <div class="panel-dim">
+            <div class="flex items-center gap-2 mb-3">
+              <i class="fas fa-network-wired text-accent text-sm"></i>
+              <span class="text-sm font-medium text-secondary">P2P</span>
+            </div>
+            <div class="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <span class="text-muted block text-xs">Direction</span>
+                <span class="text-primary">
+                  <i class="fas fa-{selectedTask.p2p.direction === 'incoming' ? 'arrow-down text-amber' : 'arrow-up text-cyan'} mr-1"></i>
+                  {selectedTask.p2p.direction === 'incoming' ? 'Incoming' : 'Outgoing'}
                 </span>
               </div>
-            {/each}
+              <div>
+                <span class="text-muted block text-xs">Peer</span>
+                <span class="text-primary">{selectedTask.p2p.peerName}</span>
+              </div>
+              <div>
+                <span class="text-muted block text-xs">Peer ID</span>
+                <span class="text-primary font-mono text-xs">{selectedTask.p2p.peerId.slice(0, 12)}...</span>
+              </div>
+            </div>
           </div>
-        </details>
-      {:else if selectedTask.status === 'working'}
-        <div class="text-sm text-muted italic"><i class="fas fa-spinner fa-spin mr-1"></i> Waiting for activity...</div>
-      {/if}
+        {/if}
 
-      <!-- Result / Error -->
-      {#if selectedTask.error}
-        <div>
-          <span class="text-sm font-medium text-red block mb-2">Error</span>
-          <pre class="badge-outline-red rounded-lg p-4 text-xs overflow-x-auto">{escapeHtml(selectedTask.error)}</pre>
-        </div>
-      {:else if selectedTask.result}
-        <details open={!selectedTask.events?.length}>
+        <!-- React-Loop Metrics -->
+        {#if selectedTask.metrics}
+          {@const m = selectedTask.metrics}
+          <div class="panel-dim">
+            <div class="flex items-center gap-2 mb-3">
+              <i class="fas fa-chart-line text-accent text-sm"></i>
+              <span class="text-sm font-medium text-secondary">React-Loop Metrics</span>
+            </div>
+            <div class="grid grid-cols-6 gap-4 text-sm">
+              <div>
+                <span class="text-muted block text-xs">Iteration</span>
+                <span class="text-primary font-mono">{m.iteration}</span>
+              </div>
+              <div>
+                <span class="text-muted block text-xs">Messages</span>
+                <span class="text-primary font-mono">{m.messageCount}</span>
+              </div>
+              <div>
+                <span class="text-muted block text-xs">Images</span>
+                <span class="text-primary font-mono">{m.imageCount}</span>
+              </div>
+              <div>
+                <span class="text-muted block text-xs">Context Size</span>
+                <span class="text-primary font-mono">{formatContextSize(m.contextChars)}</span>
+              </div>
+              <div>
+                <span class="text-muted block text-xs">Input Tokens</span>
+                <span class="text-primary font-mono">{m.inputTokens ? m.inputTokens.toLocaleString() : '-'}</span>
+              </div>
+              <div>
+                <span class="text-muted block text-xs">Output Tokens</span>
+                <span class="text-primary font-mono">{m.outputTokens ? m.outputTokens.toLocaleString() : '-'}</span>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Input Required -->
+        {#if selectedTask.status === 'input-required' && selectedTask.inputRequest}
+          <div class="interrupt-prompt">
+            <div class="flex items-center gap-2 mb-3">
+              <i class="fas fa-question-circle text-amber"></i>
+              <span class="text-sm font-medium text-amber">Input Required</span>
+            </div>
+            <p class="text-sm text-primary mb-3">{selectedTask.inputRequest.question}</p>
+            <div class="flex gap-2">
+              <input bind:value={respondText} type="text" placeholder="Type your response..."
+                     class="input flex-1 text-sm" onkeydown={handleRespondKeydown} />
+              <button class="btn btn-accent btn-sm" onclick={handleRespond}>Send</button>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Input -->
+        <details>
           <summary class="text-sm font-medium text-secondary">
-            <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i> Result
+            <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i> Input
           </summary>
-          <pre class="mt-2 panel-sm text-xs text-primary overflow-x-auto overflow-y-auto monitor-scroll-panel">{escapeHtml(JSON.stringify(selectedTask.result, null, 2))}</pre>
+          <pre class="mt-2 panel-sm text-xs text-primary overflow-x-auto">{escapeHtml(JSON.stringify(selectedTask.input, null, 2))}</pre>
         </details>
-      {/if}
 
-      <!-- Cancel action -->
+        <!-- Activity feed -->
+        {#if selectedTask.events?.length}
+          <details open>
+            <summary class="text-sm font-medium text-secondary">
+              <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i>
+              {#if selectedTask.status === 'working'}
+                <i class="fas fa-circle text-green blink-dot"></i> Live Activity ({selectedTask.events.length} events)
+              {:else}
+                Activity ({selectedTask.events.length} events)
+              {/if}
+            </summary>
+            <div class="mt-2 panel-sm overflow-y-auto monitor-scroll-panel" bind:this={activityFeedEl}>
+              {#each selectedTask.events as evt}
+                {@const time = new Date(evt.timestamp).toLocaleTimeString()}
+                <div class="monitor-event">
+                  <span class="monitor-event-time">{time}</span>
+                  <span class="text-xs">
+                    {#if evt.type === 'tool_start'}
+                      <i class="fas fa-play text-blue mr-1"></i>
+                      <span class="text-blue-300 font-medium">{escapeHtml(evt.tool ?? '')}</span>
+                      <span class="text-muted">{escapeHtml(truncate(formatEventInput(evt.input), 120))}</span>
+                    {:else if evt.type === 'tool_end'}
+                      <i class="fas fa-check text-green mr-1"></i>
+                      <span class="text-green-300 font-medium">{escapeHtml(evt.tool ?? '')}</span>
+                      <span class="text-secondary">{escapeHtml(truncate(formatEventOutput(evt.output), 200))}</span>
+                    {:else if evt.type === 'thinking'}
+                      <i class="fas fa-brain text-purple mr-1"></i>
+                      <span class="text-purple-300">{escapeHtml(truncate(evt.content || '', 200))}</span>
+                    {:else if evt.type === 'content'}
+                      <i class="fas fa-comment text-secondary mr-1"></i>
+                      <span class="text-primary">{escapeHtml(truncate(evt.content || '', 300))}</span>
+                    {/if}
+                  </span>
+                </div>
+              {/each}
+            </div>
+          </details>
+        {:else if selectedTask.status === 'working'}
+          <div class="text-sm text-muted italic"><i class="fas fa-spinner fa-spin mr-1"></i> Waiting for activity...</div>
+        {/if}
+
+        <!-- Result / Error -->
+        {#if selectedTask.error}
+          <div>
+            <span class="text-sm font-medium text-red block mb-2">Error</span>
+            <pre class="badge-outline-red rounded-lg p-4 text-xs overflow-x-auto">{escapeHtml(selectedTask.error)}</pre>
+          </div>
+        {:else if selectedTask.result}
+          <details open>
+            <summary class="text-sm font-medium text-secondary">
+              <i class="fas fa-chevron-right text-xs mr-1 chevron-icon"></i> Result
+            </summary>
+            <pre class="mt-2 panel-sm text-xs text-primary overflow-x-auto overflow-y-auto monitor-scroll-panel">{escapeHtml(JSON.stringify(selectedTask.result, null, 2))}</pre>
+          </details>
+        {/if}
+      </div>
+
+      <!-- Footer actions -->
       {#if ['submitted', 'working', 'input-required'].includes(selectedTask.status)}
-        <div>
+        <div class="monitor-modal-footer">
           <button class="btn btn-danger btn-sm" onclick={handleCancel}>
             <i class="fas fa-ban"></i> Cancel Task
           </button>
         </div>
       {/if}
     </div>
-  {/if}
-</div>
+  </div>
+{/if}
+
+<style>
+  .monitor-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--overlay-heavy);
+    animation: fadeIn 0.15s ease-out;
+  }
+  .monitor-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-xl);
+    width: 100%;
+    max-width: 56rem;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.2s ease-out;
+    margin: var(--sp-4);
+  }
+  .monitor-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: var(--sp-4) var(--sp-5);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .monitor-modal-body {
+    padding: var(--sp-5);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+  }
+  .monitor-modal-footer {
+    padding: var(--sp-3) var(--sp-5);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+</style>

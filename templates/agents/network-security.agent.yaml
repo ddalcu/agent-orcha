@@ -1,4 +1,5 @@
 name: network-security
+icon: fa-shield-halved
 description: Offensive network security scanner that performs deep reconnaissance, cross-subnet discovery, vulnerability scanning, and provides remediation solutions
 model:
   llm: default

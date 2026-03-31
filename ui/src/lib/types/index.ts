@@ -1,11 +1,13 @@
 export interface Agent {
   name: string;
   description?: string;
+  icon?: string;
   model?: string;
   tools?: (string | { name: string })[];
   inputVariables?: string[];
   sampleQuestions?: string[];
   publish?: { enabled: boolean; password?: string } | boolean;
+  p2p?: { share: boolean; leverage: false | string };
   memory?: boolean | { enabled: boolean };
 }
 

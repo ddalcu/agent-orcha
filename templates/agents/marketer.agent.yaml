@@ -1,4 +1,5 @@
 name: marketer
+icon: fa-bullhorn
 description: Autonomous marketing agent — promotes your product across forums, communities, and social platforms using a browser and web search
 version: "1.0.0"
 

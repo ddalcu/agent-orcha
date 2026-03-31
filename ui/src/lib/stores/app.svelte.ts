@@ -23,10 +23,9 @@ function parseHash(): { tab: TabId; orgId?: string; itemId?: string } {
   return { tab: 'agents' };
 }
 
-interface PendingAction {
-  type: 'create';
-  resourceType: string;
-}
+type PendingAction =
+  | { type: 'create'; resourceType: string }
+  | { type: 'open'; filePath: string };
 
 class AppStore {
   activeTab = $state<TabId>('agents');

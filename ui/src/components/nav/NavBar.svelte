@@ -13,7 +13,7 @@
     { id: "agents", label: "Agents", icon: "fa-robot" },
     { id: "knowledge", label: "Knowledge", icon: "fa-brain" },
     { id: "graph", label: "Graph", icon: "fa-network-wired" },
-    { id: "tools", label: "Tools", icon: "fa-wrench" },
+    // { id: "tools", label: "Tools", icon: "fa-wrench" }, // disabled — tools view is being redesigned
     { id: "monitor", label: "Monitor", icon: "fa-tasks" },
     { id: "llm", label: "LLM", icon: "fa-microchip" },
     { id: "ide", label: "IDE", icon: "fa-code" },

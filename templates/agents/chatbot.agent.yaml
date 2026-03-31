@@ -1,4 +1,5 @@
 name: chatbot
+icon: fa-comments
 description: A general-purpose chatbot that connects to CollabNook, answers questions, remembers channel context, and posts periodic status reports with jokes
 version: "1.0.0"
 

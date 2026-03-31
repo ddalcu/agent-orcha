@@ -147,11 +147,15 @@
     document.addEventListener('click', handleDocClick);
     loadTree();
 
-    // Handle pending create action from other pages
+    // Handle pending actions from other pages
     if (appStore.pendingAction?.type === 'create') {
       const resourceType = appStore.pendingAction.resourceType;
       appStore.pendingAction = null;
       tick().then(() => selectResourceType(resourceType));
+    } else if (appStore.pendingAction?.type === 'open') {
+      const filePath = appStore.pendingAction.filePath;
+      appStore.pendingAction = null;
+      tick().then(() => openFile(filePath));
     }
   });
 

@@ -1,4 +1,5 @@
 name: canvas
+icon: fa-palette
 description: Writing assistant that drafts content in a side canvas pane — articles, reports, code, games, and more
 version: 1.0.0
 model:

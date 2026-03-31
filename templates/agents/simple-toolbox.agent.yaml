@@ -1,4 +1,5 @@
 name: simple-toolbox
+icon: fa-toolbox
 description: Simple agent that uses calculator and text-formatter functions
 version: "1.0.0"
 

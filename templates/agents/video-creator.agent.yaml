@@ -1,4 +1,5 @@
 name: video-creator
+icon: fa-video
 description: Generate videos by distributing frame generation across P2P peers sharing a video/image model, then stitching frames together locally
 version: "1.0.0"
 

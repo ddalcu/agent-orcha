@@ -1,4 +1,5 @@
 name: voice-clone
+icon: fa-microphone
 description: Text-to-speech assistant with Qwen3 voice cloning — upload a short audio sample and it speaks in that voice
 version: "1.0.0"
 

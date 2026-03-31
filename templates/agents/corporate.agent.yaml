@@ -1,4 +1,5 @@
 name: corporate
+icon: fa-building
 description: Friendly corporate assistant — answers questions about the org, people, departments
 version: "1.0.0"
 

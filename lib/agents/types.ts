@@ -74,6 +74,7 @@ export function resolvePublishConfig(
 export const AgentDefinitionSchema = z.object({
   name: z.string().describe('Unique agent identifier'),
   description: z.string().describe('Human-readable description'),
+  icon: z.string().optional().describe('Font Awesome icon class (e.g. fa-video, fa-image)'),
   version: z.string().default('1.0.0'),
   model: AgentModelRefSchema.default('default'),
   prompt: z.object({
