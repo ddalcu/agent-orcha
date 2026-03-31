@@ -74,7 +74,7 @@
   let uploadError = $state('');
   let uploadSuccess = $state('');
   let dragOver = $state(false);
-  let fileInput: HTMLInputElement;
+  let fileInput: HTMLInputElement = $state(null!);
 
   const isIndexing = $derived(
     selectedStore != null && (selectedStore.isIndexing === true || selectedStore.status === 'indexing')
@@ -607,10 +607,10 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <button class="btn-ghost text-sm" onclick={() => openEdit(selectedStore!)}>
+          <button class="btn-ghost text-sm" onclick={() => openEdit(selectedStore!)} aria-label="Edit knowledge store">
             <i class="fas fa-pen"></i>
           </button>
-          <button class="btn-ghost text-sm kb-delete-btn" onclick={() => showDeleteConfirm = true}>
+          <button class="btn-ghost text-sm kb-delete-btn" onclick={() => showDeleteConfirm = true} aria-label="Delete knowledge store">
             <i class="fas fa-trash"></i>
           </button>
           <button class="btn btn-accent btn-sm" disabled={isIndexing} onclick={startIndexing}>
@@ -804,8 +804,8 @@
 {#if showForm}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="modal-overlay" role="presentation" onclick={() => showForm = false}>
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
 
       {#if editingStore}
         <!-- Edit mode — always advanced -->
@@ -841,7 +841,7 @@
       {:else if createMode === 'easy'}
         <!-- Easy mode -->
         <div class="flex items-center gap-2 mb-4">
-          <button class="btn-ghost text-xs" onclick={() => { createMode = 'pick'; formError = ''; }}>
+          <button class="btn-ghost text-xs" onclick={() => { createMode = 'pick'; formError = ''; }} aria-label="Back">
             <i class="fas fa-arrow-left"></i>
           </button>
           <h3 class="mb-0">New Knowledge Store</h3>
@@ -901,8 +901,8 @@
 {#if showDeleteConfirm}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="modal-overlay" role="presentation" onclick={() => showDeleteConfirm = false}>
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
       <h3>Delete Knowledge Store</h3>
       <p class="text-sm text-secondary mb-4">
         Are you sure you want to delete <strong>"{selectedStore?.name}"</strong>?

@@ -171,7 +171,8 @@
 
 {#if showForm}
   <div class="modal-overlay" role="presentation">
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
       <h3>{editingOrg ? 'Edit Organization' : 'New Organization'}</h3>
 
       {#if formError}
@@ -260,7 +261,8 @@
 
 {#if confirmDelete}
   <div class="modal-overlay" role="presentation">
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
       <h3>Delete Organization</h3>
       <p class="text-sm">
         This will permanently delete <strong>{confirmDelete.name}</strong> and all its tickets, routines, org chart, and activity.

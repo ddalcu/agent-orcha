@@ -363,7 +363,8 @@
 <!-- Create/Edit Routine Modal -->
 {#if showForm}
   <div class="modal-overlay" role="presentation">
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
       <h3>{editingRoutine ? 'Edit Routine' : 'New Routine'}</h3>
       {#if formError}
         <div class="form-error">{formError}</div>
