@@ -171,46 +171,72 @@ export function createSandboxWebFetchTool(config: SandboxConfig): StructuredTool
   );
 }
 
+async function searchWithTavily(query: string, numResults: number): Promise<string> {
+  const { tavily } = await import('@tavily/core');
+  const client = tavily({ apiKey: process.env.TAVILY_API_KEY! });
+
+  const response = await client.search(query, {
+    maxResults: Math.min(numResults, 20),
+  });
+
+  if (!response.results || response.results.length === 0) {
+    return 'No results found. Do not retry — tell the user no results were found for this query.';
+  }
+
+  const entries = response.results.map((r: { title: string; url: string; content: string }, i: number) =>
+    `${i + 1}. [${r.title}](${r.url})\n   ${r.content}`,
+  );
+
+  return entries.join('\n\n');
+}
+
+async function searchWithDuckDuckGo(query: string, numResults: number): Promise<string> {
+  const encodedQuery = encodeURIComponent(query);
+  const url = `https://html.duckduckgo.com/html/?q=${encodedQuery}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+
+  const response = await fetch(url, {
+    headers: BROWSER_HEADERS,
+    signal: controller.signal,
+    redirect: 'follow',
+  });
+  clearTimeout(timer);
+
+  logger.info(`[web_search] ${response.status} (${query})`);
+
+  if (response.status !== 200) {
+    throw new Error(`Search request failed with status ${response.status}. Do not retry.`);
+  }
+
+  const html = await response.text();
+
+  // Detect CAPTCHA/block pages
+  if (html.includes('bot') && html.includes('captcha') || html.includes('blocked')) {
+    logger.warn(`[web_search] Blocked by DuckDuckGo for query: "${query}"`);
+    throw new Error('Search blocked by DuckDuckGo (rate limited or CAPTCHA). Do not retry — use sandbox_web_fetch to access specific URLs directly instead.');
+  }
+
+  return parseDuckDuckGoResults(html, numResults);
+}
+
 export function createSandboxWebSearchTool(): StructuredTool {
+  const useTavily = !!process.env.TAVILY_API_KEY;
+  if (useTavily) {
+    logger.info('[web_search] Tavily API key detected — using Tavily as search provider');
+  }
+
   return tool(
     async ({ query, num_results }) => {
-      logger.info(`[web_search] "${query}"`);
-
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://html.duckduckgo.com/html/?q=${encodedQuery}`;
+      logger.info(`[web_search] "${query}" (provider: ${useTavily ? 'tavily' : 'duckduckgo'})`);
+      const maxResults = num_results ?? 10;
 
       try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 10_000);
+        const results = useTavily
+          ? await searchWithTavily(query, maxResults)
+          : await searchWithDuckDuckGo(query, maxResults);
 
-        const response = await fetch(url, {
-          headers: BROWSER_HEADERS,
-          signal: controller.signal,
-          redirect: 'follow',
-        });
-        clearTimeout(timer);
-
-        logger.info(`[web_search] ${response.status} (${query})`);
-
-        if (response.status !== 200) {
-          return JSON.stringify({
-            error: `Search request failed with status ${response.status}. Do not retry.`,
-            query,
-          });
-        }
-
-        const html = await response.text();
-
-        // Detect CAPTCHA/block pages
-        if (html.includes('bot') && html.includes('captcha') || html.includes('blocked')) {
-          logger.warn(`[web_search] Blocked by DuckDuckGo for query: "${query}"`);
-          return JSON.stringify({
-            error: 'Search blocked by DuckDuckGo (rate limited or CAPTCHA). Do not retry — use sandbox_web_fetch to access specific URLs directly instead.',
-            query,
-          });
-        }
-
-        const results = parseDuckDuckGoResults(html, num_results ?? 10);
         const resultCount = results.startsWith('No results') ? 0 : results.split('\n\n').length;
         logger.info(`[web_search] ${resultCount} result(s) for "${query}"`);
 
@@ -227,7 +253,7 @@ export function createSandboxWebSearchTool(): StructuredTool {
     {
       name: 'sandbox_web_search',
       description:
-        'Search the web using DuckDuckGo. ' +
+        'Search the web for information. ' +
         'Returns titles, URLs, and snippets for the top results. ' +
         'If the search returns no results or an error, do NOT retry — report what you found to the user.',
       schema: z.object({
@@ -237,7 +263,7 @@ export function createSandboxWebSearchTool(): StructuredTool {
         num_results: z
           .number()
           .optional()
-          .describe('Maximum number of results to return (default 10, max 10)'),
+          .describe('Maximum number of results to return (default 10)'),
       }),
     },
   );
