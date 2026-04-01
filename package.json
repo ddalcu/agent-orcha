@@ -93,7 +93,8 @@
     "@agent-orcha/node-omni-orcha-linux-x64": "^2026.328.1614",
     "@agent-orcha/node-omni-orcha-linux-x64-cuda": "^2026.328.1614",
     "@agent-orcha/node-omni-orcha-win32-x64": "^2026.328.1614",
-    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.328.1614"
+    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.328.1614",
+    "@tavily/core": "^0.6.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

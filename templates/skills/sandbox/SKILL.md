@@ -16,7 +16,7 @@ Run shell commands in `/tmp` with limited permissions (Docker only).
 Fetch web pages (auto-converted to markdown) or APIs (`raw: true`).
 
 ## sandbox_web_search
-Search DuckDuckGo. Params: `query`, `num_results`.
+Search the web. Uses Tavily when `TAVILY_API_KEY` is configured, otherwise falls back to DuckDuckGo. Params: `query`, `num_results`.
 
 ## Browser Tools
 
