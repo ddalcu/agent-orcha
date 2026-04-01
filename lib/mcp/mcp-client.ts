@@ -96,14 +96,16 @@ export class MCPClientManager {
 
       const url = new URL(config.url);
 
+      const requestInit = config.headers ? { headers: config.headers } : undefined;
+
       if (config.transport === 'streamable-http' || config.transport === 'sse') {
         // Use StreamableHTTPClientTransport for remote servers
         // It handles both POST for messages and optional GET for SSE
-        const transport = new StreamableHTTPClientTransport(url);
+        const transport = new StreamableHTTPClientTransport(url, { requestInit });
         await client.connect(transport);
       } else if (config.transport === 'sse-only') {
         // Legacy SSE-only transport (rarely needed)
-        const transport = new SSEClientTransport(url);
+        const transport = new SSEClientTransport(url, { requestInit });
         await client.connect(transport);
       } else {
         throw new Error(`Unsupported transport: ${config.transport}`);

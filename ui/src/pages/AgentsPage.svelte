@@ -8,7 +8,7 @@
   import { formatElapsedTime, estimateTokens, escapeHtml } from '../lib/utils/format.js';
   import type { Agent, Workflow, LLM, Session, StreamEvent, MessageMeta } from '../lib/types/index.js';
 
-  import ChatInput from '../components/chat/ChatInput.svelte';
+  import ChatInput, { type MentionableAgent } from '../components/chat/ChatInput.svelte';
   import ChatMessages from '../components/chat/ChatMessages.svelte';
   import UserBubble from '../components/chat/UserBubble.svelte';
   import ResponseBubble from '../components/chat/ResponseBubble.svelte';
@@ -469,6 +469,21 @@
   const filteredLlms = $derived(
     appStore.llms.filter(l => !searchLower || l.name.toLowerCase().includes(searchLower) || (l.model || '').toLowerCase().includes(searchLower))
   );
+
+  // --- @mention agents for react workflows ---
+  const mentionAgents: MentionableAgent[] = $derived.by(() => {
+    if (appStore.selectionType !== 'workflow') return [];
+    const wf = appStore.selectedWorkflow;
+    if (!wf || wf.type !== 'react' || !wf.agents?.length) return [];
+    return wf.agents.map(name => {
+      const agent = appStore.agents.find(a => a.name === name);
+      return {
+        name,
+        description: agent?.description,
+        icon: agent?.icon,
+      };
+    });
+  });
 
   // --- Bubble helpers ---
 
@@ -2205,7 +2220,8 @@
         bind:this={chatInputRef}
         disabled={isLoading}
         readonly={!hasActiveSession}
-        placeholder="Ask anything"
+        placeholder={mentionAgents.length > 0 ? 'Ask anything — type @ to mention agents' : 'Ask anything'}
+        {mentionAgents}
         onsubmit={handleSubmit}
         onfileselect={handleFileAttach}
         onplusclick={toggleInputMenu}
