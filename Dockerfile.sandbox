@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git zip unzip tar file htop lsof procps cron \
     # Browser Sandbox
     chromium xvfb x11vnc novnc websockify fonts-liberation fonts-noto-color-emoji \
+    # Minimal Desktop (JWM + terminal + file manager)
+    jwm xterm pcmanfm \
     && rm -rf /var/lib/apt/lists/*
 
 # Create sandbox user
@@ -18,6 +20,10 @@ RUN groupadd -g 10000 sandbox \
 
 COPY sandbox-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
+
+COPY sandbox-jwmrc /home/sandbox/.jwmrc
+COPY sandbox-xresources /home/sandbox/.Xresources
+RUN chown sandbox:sandbox /home/sandbox/.jwmrc /home/sandbox/.Xresources
 
 # Sandbox working directory
 RUN mkdir -p /tmp/sandbox && chown sandbox:sandbox /tmp/sandbox

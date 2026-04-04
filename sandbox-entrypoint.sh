@@ -10,6 +10,13 @@ rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
 Xvfb :99 -screen 0 1280x720x24 -ac &
 sleep 1
 
+# Load Xresources (xterm theme)
+xrdb -merge /home/sandbox/.Xresources 2>/dev/null || true
+
+# Start JWM window manager
+su -s /bin/sh sandbox -c "jwm" &
+sleep 0.5
+
 # Start VNC server
 x11vnc -display :99 -rfbport 5900 -shared -forever -nopw &
 
@@ -47,14 +54,14 @@ PREFS
 touch /tmp/.chromium/'First Run'
 chown sandbox:sandbox /tmp/.chromium/Default/Preferences /tmp/.chromium/'First Run'
 
-# Chrome flags — kiosk mode removes close/minimize buttons so users can't kill it via VNC.
+# Chrome flags — JWM manages the window, no kiosk mode needed.
 # Container must have SYS_ADMIN capability for Chrome's internal sandbox.
 # Flags chosen to look like a normal browser — no --test-type, --enable-automation, --headless.
 CHROME_FLAGS='--disable-gpu --disable-dev-shm-usage \
   --disable-software-rasterizer \
   --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
   --window-size=1280,720 \
-  --kiosk \
+  --start-maximized \
   --no-first-run --no-default-browser-check \
   --disable-background-networking \
   --disable-client-side-phishing-detection \

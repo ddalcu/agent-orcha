@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<JWM>
+    <!-- Start menu button + right-click desktop -->
+    <RootMenu onroot="12" label="Apps">
+        <Program icon="chromium" label="Chromium">chromium --no-first-run --no-default-browser-check --user-data-dir=/tmp/.chromium</Program>
+        <Program icon="utilities-terminal" label="Terminal">xterm</Program>
+        <Program icon="system-file-manager" label="Files">pcmanfm</Program>
+    </RootMenu>
+
+    <!-- Bottom taskbar -->
+    <Tray x="0" y="-1" autohide="off" height="26">
+        <TrayButton label="Apps">root:1</TrayButton>
+        <Spacer width="4"/>
+        <TaskList/>
+        <Dock/>
+        <Clock format="%H:%M"/>
+    </Tray>
+
+    <!-- Window decorations -->
+    <WindowStyle>
+        <Font>Sans-9</Font>
+        <Width>3</Width>
+        <Height>22</Height>
+        <Corner>2</Corner>
+        <Active>
+            <Text>#ffffff</Text>
+            <Title>#3b6ea5</Title>
+            <Outline>#1a1a2e</Outline>
+        </Active>
+        <Inactive>
+            <Text>#999999</Text>
+            <Title>#2a2a3e</Title>
+            <Outline>#1a1a2e</Outline>
+        </Inactive>
+    </WindowStyle>
+
+    <TaskListStyle>
+        <Font>Sans-9</Font>
+        <Active>
+            <Text>#ffffff</Text>
+            <Background>#3b6ea5</Background>
+        </Active>
+        <Foreground>
+            <Text>#cccccc</Text>
+            <Background>#2a2a3e</Background>
+        </Foreground>
+    </TaskListStyle>
+
+    <TrayStyle>
+        <Font>Sans-9</Font>
+        <Background>#1e1e2e</Background>
+        <Foreground>#cccccc</Foreground>
+    </TrayStyle>
+
+    <!-- Dark desktop -->
+    <Background type="solid">#1a1a2e</Background>
+
+    <!-- Key bindings -->
+    <Key key="F2">exec:xterm</Key>
+
+    <FocusModel>sloppy</FocusModel>
+    <MoveMode>opaque</MoveMode>
+    <ResizeMode>opaque</ResizeMode>
+    <SnapMode distance="10" screens="true"/>
+</JWM>
