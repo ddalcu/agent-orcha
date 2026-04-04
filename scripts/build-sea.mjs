@@ -250,6 +250,15 @@ for (const addon of ['sodium-native', 'udx-native']) {
       if (fs.existsSync(metallibPath)) {
         assets['native/default.metallib'] = metallibPath;
       }
+      // Embed companion shared libraries (.dylib/.so) — e.g. libonnxruntime
+      const pkgDir = path.join('node_modules', pkg);
+      const sharedLibExt = platform === 'darwin' ? '.dylib' : platform === 'win32' ? '.dll' : '.so';
+      for (const file of fs.readdirSync(pkgDir)) {
+        if (file.endsWith(sharedLibExt) && file !== 'omni.node') {
+          assets[`native/${file}`] = path.join(pkgDir, file);
+          console.log(`  + companion lib: ${file}`);
+        }
+      }
       omniFound = true;
       break;
     }
