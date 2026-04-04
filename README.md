@@ -123,7 +123,7 @@ llm:
   default: omni
   omni:
     provider: omni
-    model: Qwen3.5-4B-IQ4_NL
+    model: gemma-4-E2B-it-IQ4_NL
     contextSize: 32768
   ollama:
     provider: local
@@ -347,7 +347,7 @@ Add `share: true` to a model in `models.yaml`, or use the P2P share toggle on ea
 llm:
   omni:
     provider: omni
-    model: Qwen3.5-4B-IQ4_NL
+    model: gemma-4-E2B-it-IQ4_NL
     share: true  # Share on P2P network
 ```
 

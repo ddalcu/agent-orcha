@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
 
+## Release 2026.403
+
+### Added
+
+- **Gemma 4 Vision Support** — Updated node-omni-orcha to llama.cpp `f49e917` with `gemma4v` multimodal projector, enabling Gemma 4 as a vision model with image input
+- **Gemma 4 as Default Model** — Replaced Qwen3.5-4B with Gemma 4 E2B-it as the recommended default model (vision + reasoning + tool calling)
+- **Edit Agent Button** — Added an "Edit Agent" icon in the chat header that opens the agent YAML in the IDE
+- **Gemma 4 Capability Badges** — Gemma 4 models now show "think" and "vision" badges in the Local LLM page
+
+### Fixed
+
+- **Stream Token Sanitizer** — Gemma 4 special tokens (`<|tool_call>`, `<|channel>`, `<|"|>`) no longer leak into streaming output. New `StreamSanitizer` state machine in node-omni-orcha strips model-specific tokens during streaming
+- **Thinking Model Tool Call Loop** — Fixed react-loop going to 3 iterations when thinking models respond with reasoning-only after a tool result. Now correctly accepts reasoning as the final answer and promotes it to content so the user sees the response
+- **Canvas Agent Template** — Removed hardcoded `model: p2p` from canvas agent template so it uses the configured default model
+
+### Changed
+
+- **node-omni-orcha `2026.403.1422`** — Updated dependency with Gemma 4 vision, stream sanitizer, and all platform packages
+
 ## Release 2026.328
 
 ### Added

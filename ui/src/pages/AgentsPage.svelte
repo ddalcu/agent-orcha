@@ -2084,6 +2084,15 @@
           <span class="text-muted">No conversation selected</span>
         {/if}
       </div>
+      {#if headerSession?.agentType === 'agent' && headerSession.agentName}
+        <button
+          class="edit-agent-btn"
+          title="Edit Agent"
+          onclick={() => editAgentInIde(headerSession!.agentName!)}
+        >
+          <i class="fas fa-pen-to-square"></i>
+        </button>
+      {/if}
     </div>
 
     <div class="chat-area-body">

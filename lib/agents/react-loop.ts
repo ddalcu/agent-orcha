@@ -144,8 +144,19 @@ async function* runLoop(
     // No tool calls — accept substantial text as final answer, nudge otherwise
     if (!hasToolCalls) {
       logger.info(`[ReactLoop] iteration ${i + 1} timing — LLM: ${(llmTime / 1000).toFixed(1)}s | no tools`);
-      if (accumulatedContent.trim().length > 50 || (accumulatedReasoning && accumulatedContent.trim())) {
-        logger.info(`[ReactLoop] iteration ${i + 1} — text response (${accumulatedContent.trim().length} chars), accepting as final answer`);
+      // Check if the previous iteration executed tools (the AI message was just pushed,
+      // so the tool message is second-to-last)
+      const prevMsg = allMessages[allMessages.length - 2];
+      const afterToolResult = prevMsg?.role === 'tool';
+      if (accumulatedContent.trim().length > 50
+        || (accumulatedReasoning && accumulatedContent.trim())
+        || (afterToolResult && accumulatedReasoning.trim().length > 10)) {
+        // When thinking models respond with reasoning only (no content) after a tool
+        // result, promote the reasoning to content so the user sees the answer
+        if (afterToolResult && !accumulatedContent.trim() && accumulatedReasoning.trim()) {
+          yield { event: 'on_chat_model_stream', data: { chunk: { content: accumulatedReasoning.trim() } } };
+        }
+        logger.info(`[ReactLoop] iteration ${i + 1} — text response (${accumulatedContent.trim().length} chars, ${accumulatedReasoning.trim().length} reasoning chars), accepting as final answer`);
         break;
       }
       noToolStreak++;
@@ -156,8 +167,7 @@ async function* runLoop(
 
       // Nudge the model based on context — small/local LLMs sometimes return
       // empty responses after tool results and need explicit guidance
-      const lastMsg = allMessages[allMessages.length - 1];
-      const nudge = lastMsg?.role === 'tool'
+      const nudge = afterToolResult
         ? 'The tool above returned results. Please respond to the user based on that data.'
         : 'Please continue. Either call a tool or provide your response.';
       logger.warn(`[ReactLoop] iteration ${i + 1} — empty response (attempt ${noToolStreak}/${MAX_NO_TOOL_RETRIES}), nudging model`);

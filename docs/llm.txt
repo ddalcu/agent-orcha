@@ -61,7 +61,7 @@ This creates a project with:
     "llama-cpp": {
       "provider": "local",
       "engine": "llama-cpp",
-      "model": "Qwen3.5-4B-IQ4_NL",
+      "model": "gemma-4-E2B-it-IQ4_NL",
       "reasoningBudget": 0,
       "contextSize": 32768
     },

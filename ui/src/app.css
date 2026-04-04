@@ -964,6 +964,17 @@ img { display: block; max-width: 100%; }
   border-bottom: 1px solid var(--border-40);
   font-size: var(--text-sm);
 }
+.edit-agent-btn {
+  flex-shrink: 0;
+  color: var(--text-2);
+  padding: var(--sp-1h) var(--sp-2);
+  border-radius: var(--radius-md);
+  transition: color var(--fast), background var(--fast);
+}
+.edit-agent-btn:hover {
+  color: var(--text-1);
+  background: var(--hover);
+}
 .chat-messages {
   flex: 1;
   overflow-y: auto;

@@ -21,10 +21,10 @@
     /nemotron/i, /granite/i,
   ];
   const VISION_PIPELINE_TAGS = ['image-text-to-text', 'image-to-text'];
-  const VISION_NAME_PATTERNS = [/vision/i, /llava/i, /pixtral/i, /qwen3\.5/i];
+  const VISION_NAME_PATTERNS = [/vision/i, /llava/i, /pixtral/i, /qwen3\.5/i, /gemma.?4/i];
   const REASONING_NAME_PATTERNS = [
     /deepseek.?r1/i, /qwq/i, /o[134]-/i, /reasoning/i,
-    /think/i, /r1.?distill/i, /qwen3/i,
+    /think/i, /r1.?distill/i, /qwen3/i, /gemma.?4/i,
   ];
   const REASONING_TAG_PATTERNS = [/qwen3/i];
 
@@ -59,7 +59,15 @@
   };
 
   const RECOMMENDED_MODELS_GGUF: any[] = [
-    { repo: 'unsloth/Qwen3.5-4B-GGUF', file: 'Qwen3.5-4B-IQ4_NL.gguf', label: 'Qwen3.5-4B-IQ4_NL', desc: 'Chat model with tool calling, vision, and reasoning. Great all-rounder for local use.', size: '~2.5 GB', icon: 'fa-comments', color: 'amber', type: 'gguf', category: 'llm' },
+    {
+      repo: 'unsloth/gemma-4-E2B-it-GGUF', file: 'gemma-4-e2b-it', label: 'Gemma 4 E2B-it', type: 'bundle', category: 'llm',
+      desc: 'Vision + reasoning + tool calling. Best all-rounder for local use.',
+      size: '~3.7 GB', icon: 'fa-comments', color: 'amber',
+      bundle: [
+        { repo: 'unsloth/gemma-4-E2B-it-GGUF', file: 'gemma-4-E2B-it-IQ4_NL.gguf' },
+        { repo: 'unsloth/gemma-4-E2B-it-GGUF', file: 'mmproj-BF16.gguf' },
+      ],
+    },
     { repo: 'nomic-ai/nomic-embed-text-v1.5-GGUF', file: 'nomic-embed-text-v1.5.Q4_K_M.gguf', label: 'nomic-embed-text-v1.5-Q4_K_M', desc: 'Embedding model for knowledge stores. Required for local RAG pipelines.', size: '~80 MB', icon: 'fa-vector-square', color: 'blue', type: 'gguf', category: 'embed' },
     {
       repo: 'unsloth/FLUX.2-klein-4B-GGUF', file: 'flux2-klein', label: 'FLUX.2 Klein 4B', type: 'bundle', category: 'image',

@@ -239,7 +239,7 @@ llm:
   default: omni
   omni:
     provider: omni
-    model: Qwen3.5-4B-IQ4_NL
+    model: gemma-4-E2B-it-IQ4_NL
     reasoningBudget: 0
     contextSize: 32768
     active: true

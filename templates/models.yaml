@@ -3,7 +3,7 @@ llm:
   default: omni
   omni:
     provider: omni
-    model: Qwen3.5-4B-IQ4_NL
+    model: gemma-4-E2B-it-IQ4_NL
     maxTokens: 512
     reasoningBudget: 128
     contextSize: 9216
