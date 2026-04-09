@@ -146,6 +146,31 @@ describe('LLMFactory — extended coverage', () => {
     });
   });
 
+  describe('openrouter provider', () => {
+    it('should create an OpenRouter instance', async () => {
+      const llm = await LLMFactory.create('openrouter');
+      assert.ok(llm);
+      assert.ok(typeof llm.invoke === 'function');
+    });
+
+    it('should cache OpenRouter instances', async () => {
+      const llm1 = await LLMFactory.create('openrouter');
+      const llm2 = await LLMFactory.create('openrouter');
+      assert.strictEqual(llm1, llm2);
+    });
+
+    it('should create OpenRouter with temperature override', async () => {
+      const llm = await LLMFactory.create({ name: 'openrouter', temperature: 0.7 });
+      assert.ok(llm);
+    });
+
+    it('should create OpenRouter instance without explicit apiKey in config', async () => {
+      const llm = await LLMFactory.create('openrouter-nokey');
+      assert.ok(llm);
+      assert.ok(typeof llm.invoke === 'function');
+    });
+  });
+
   describe('unsupported provider', () => {
     it('should throw for unsupported provider', async () => {
       // We need a config that detectProvider returns an unknown provider

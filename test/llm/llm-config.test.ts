@@ -177,35 +177,81 @@ embeddings:
 });
 
 describe('resolveApiKey', () => {
+  const saved: Record<string, string | undefined> = {};
+
+  before(() => {
+    saved.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    saved.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    saved.OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+  });
+
+  after(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
   it('should return explicit apiKey when provided', () => {
     assert.equal(resolveApiKey('openai', 'my-key'), 'my-key');
   });
 
   it('should fall back to env var', () => {
-    const originalKey = process.env.OPENAI_API_KEY;
     process.env.OPENAI_API_KEY = 'env-key';
-
     assert.equal(resolveApiKey('openai'), 'env-key');
-
-    // Restore
-    if (originalKey !== undefined) {
-      process.env.OPENAI_API_KEY = originalKey;
-    } else {
-      delete process.env.OPENAI_API_KEY;
-    }
   });
 
   it('should return undefined when no key available', () => {
-    const originalKey = process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
+    assert.equal(resolveApiKey('anthropic'), undefined);
+  });
 
-    const result = resolveApiKey('anthropic');
-    // Might be undefined or might be set in env
-    assert.ok(result === undefined || typeof result === 'string');
+  it('should resolve ${OPENROUTER_API_KEY} when env var is set', () => {
+    process.env.OPENROUTER_API_KEY = 'sk-or-v1-test123';
+    assert.equal(resolveApiKey('openrouter', '${OPENROUTER_API_KEY}'), 'sk-or-v1-test123');
+  });
 
-    // Restore
-    if (originalKey !== undefined) {
-      process.env.ANTHROPIC_API_KEY = originalKey;
-    }
+  it('should return undefined for unresolved ${OPENROUTER_API_KEY} placeholder', () => {
+    delete process.env.OPENROUTER_API_KEY;
+    assert.equal(resolveApiKey('openrouter', '${OPENROUTER_API_KEY}'), undefined);
+  });
+
+  it('should fall back to OPENROUTER_API_KEY env var when no explicit key', () => {
+    process.env.OPENROUTER_API_KEY = 'sk-or-v1-fallback';
+    assert.equal(resolveApiKey('openrouter'), 'sk-or-v1-fallback');
+  });
+
+  it('should return undefined for openrouter when env var not set and no explicit key', () => {
+    delete process.env.OPENROUTER_API_KEY;
+    assert.equal(resolveApiKey('openrouter'), undefined);
+  });
+
+  it('should return explicit key for openrouter even when env var differs', () => {
+    process.env.OPENROUTER_API_KEY = 'env-key';
+    assert.equal(resolveApiKey('openrouter', 'explicit-key'), 'explicit-key');
+  });
+
+  it('should return undefined when apiKey is unresolved placeholder for any provider', () => {
+    delete process.env.OPENAI_API_KEY;
+    assert.equal(resolveApiKey('openai', '${OPENAI_API_KEY}'), undefined);
+  });
+});
+
+describe('getModelConfig — openrouter', () => {
+  before(async () => {
+    await loadModelsConfig(fixturePath);
+  });
+
+  it('should return openrouter config with explicit provider', () => {
+    const config = getModelConfig('openrouter');
+    assert.equal(config.provider, 'openrouter');
+    assert.equal(config.model, 'deepseek/deepseek-r1');
+    assert.equal(config.apiKey, 'test-openrouter-key-not-real');
+  });
+
+  it('should list openrouter in model configs', () => {
+    const names = listModelConfigs();
+    assert.ok(names.includes('openrouter'));
+    assert.ok(names.includes('openrouter-nokey'));
   });
 });

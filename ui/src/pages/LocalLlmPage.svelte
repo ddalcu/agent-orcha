@@ -28,11 +28,12 @@
   ];
   const REASONING_TAG_PATTERNS = [/qwen3/i];
 
-  const PROVIDERS = ['local', 'openai', 'anthropic', 'gemini'] as const;
+  const PROVIDERS = ['local', 'openai', 'anthropic', 'openrouter', 'gemini'] as const;
 
   const BRAND_SVGS: Record<string, string> = {
     openai: `<svg viewBox="0 0 24 24" fill="currentColor" class="llm-brand-icon"><path d="M22.28 9.82a5.98 5.98 0 0 0-.52-4.91 6.05 6.05 0 0 0-6.51-2.9A6.07 6.07 0 0 0 4.98 4.18a5.98 5.98 0 0 0-4 2.9 6.05 6.05 0 0 0 .74 7.1 5.98 5.98 0 0 0 .51 4.91 6.05 6.05 0 0 0 6.52 2.9A5.98 5.98 0 0 0 13.26 24a6.06 6.06 0 0 0 5.77-4.21 5.99 5.99 0 0 0 4-2.9 6.06 6.06 0 0 0-.75-7.07zm-9.02 12.61a4.48 4.48 0 0 1-2.88-1.04l.14-.08 4.78-2.76a.8.8 0 0 0 .39-.68v-6.74l2.02 1.17a.07.07 0 0 1 .04.05v5.58a4.5 4.5 0 0 1-4.49 4.5zM3.6 18.3a4.47 4.47 0 0 1-.54-3.01l.14.08 4.78 2.76a.77.77 0 0 0 .78 0l5.84-3.37v2.33a.08.08 0 0 1-.03.06l-4.84 2.79a4.5 4.5 0 0 1-6.14-1.65zM2.34 7.9a4.49 4.49 0 0 1 2.37-1.97V11.6a.77.77 0 0 0 .39.68l5.81 3.35-2.02 1.17a.08.08 0 0 1-.07 0L4.02 14.01A4.5 4.5 0 0 1 2.34 7.87zm16.6 3.86L13.1 8.36l2.02-1.16a.08.08 0 0 1 .07 0l4.83 2.79a4.49 4.49 0 0 1-.68 8.1V12.42a.79.79 0 0 0-.41-.68zm2.01-3.02l-.14-.09-4.77-2.78a.78.78 0 0 0-.79 0L9.41 9.23V6.9a.07.07 0 0 1 .03-.06l4.83-2.79a4.5 4.5 0 0 1 6.68 4.66zM8.31 12.86l-2.02-1.16a.08.08 0 0 1-.04-.06V6.07a4.5 4.5 0 0 1 7.38-3.45l-.14.08-4.78 2.76a.8.8 0 0 0-.39.68zm1.1-2.36l2.6-1.5 2.6 1.5v3l-2.6 1.5-2.6-1.5z"/></svg>`,
     anthropic: `<svg viewBox="0 0 24 24" fill="currentColor" class="llm-brand-icon"><path d="M13.83 3.52h3.6L24 20.48h-3.6l-6.57-16.96zm-7.26 0h3.6l6.57 16.96h-3.6L6.57 3.52z"/></svg>`,
+    openrouter: `<svg viewBox="0 0 24 24" fill="currentColor" class="llm-brand-icon"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.8L19.2 8 12 11.2 4.8 8 12 4.8zM4 15.8V9.2l7.2 3.2v6.6L4 15.8zm16 0l-7.2 3.2v-6.6l7.2-3.2v6.6z"/></svg>`,
     gemini: `<svg viewBox="0 0 24 24" fill="currentColor" class="llm-brand-icon"><path d="M12 0C12 6.63 6.63 12 0 12c6.63 0 12 5.37 12 12 0-6.63 5.37-12 12-12C17.37 12 12 6.63 12 0z"/></svg>`,
   };
 
@@ -41,20 +42,24 @@
     omni:      { label: 'Local',     color: 'amber' },
     openai:    { label: 'OpenAI',    color: 'green' },
     anthropic: { label: 'Anthropic', color: 'purple' },
+    openrouter: { label: 'OpenRouter', color: 'orange' },
     gemini:    { label: 'Google',    color: 'blue' },
   };
   const POPULAR_MODELS: Record<string, string[]> = {
     openai:    ['gpt-5.4', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'o4-mini', 'o3', 'o3-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini'],
     anthropic: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001', 'claude-sonnet-4-5', 'claude-opus-4-5'],
+    openrouter: ['deepseek/deepseek-r1', 'qwen/qwen3.6-plus:free', 'meta-llama/llama-4-70b', 'anthropic/claude-sonnet-4-6', 'google/gemini-2.5-flash', 'mistralai/mistral-large-2411'],
     gemini:    ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'],
   };
   const POPULAR_EMBEDDINGS: Record<string, string[]> = {
     openai: ['text-embedding-3-small', 'text-embedding-3-large'],
+    openrouter: ['openai/text-embedding-3-small', 'openai/text-embedding-3-large'],
     gemini: ['gemini-embedding-001', 'text-embedding-004'],
   };
   const PROVIDER_ENV_NAMES: Record<string, string> = {
     openai: 'OPENAI_API_KEY',
     anthropic: 'ANTHROPIC_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
     gemini: 'GOOGLE_API_KEY',
   };
 
@@ -1307,7 +1312,7 @@
       {@const entry = llmConfig?.llm?.[eng]}
       {@const isEngActive = entry?.active !== false}
       {@const isSelected = activeProvider === 'local' && selectedEngine === eng}
-      {@const isEngDefault = (resolveDefault('models')?.engine === eng || resolveDefault('models')?.provider === eng) && !['openai', 'anthropic', 'gemini'].includes(defaultProvider)}
+      {@const isEngDefault = (resolveDefault('models')?.engine === eng || resolveDefault('models')?.provider === eng) && !PROVIDERS.filter(p => p !== 'local').includes(defaultProvider as any)}
       <button class="llm-provider-tab {isSelected ? 'active' : ''} {isEngActive ? '' : 'disabled'}"
         onclick={() => { activeProvider = 'local'; selectEngine(eng); }}>
         <i class="fas {ENGINE_ICONS[eng]} text-amber"></i>
@@ -1318,7 +1323,7 @@
         </div>
       </button>
     {/each}
-    {#each ['openai', 'anthropic', 'gemini'] as p}
+    {#each PROVIDERS.filter(p => p !== 'local') as p}
       {@const meta = PROVIDER_META[p]}
       {@const entry = llmConfig?.llm?.[p]}
       {@const isCloudActive = entry?.active !== false}
@@ -1470,6 +1475,17 @@
               <i class="fas fa-save mr-1"></i>Save Configuration
             {/if}
           </button>
+          {#if defaultProvider !== provider}
+            <button class="btn btn-ghost" disabled={settingDefault === provider} onclick={() => setDefaultProvider(provider)}>
+              {#if settingDefault === provider}
+                <i class="fas fa-spinner fa-spin mr-1"></i>Setting...
+              {:else}
+                <i class="fas fa-star mr-1"></i>Set as Default
+              {/if}
+            </button>
+          {:else}
+            <span class="badge badge-green text-xs"><i class="fas fa-star mr-1"></i>Default</span>
+          {/if}
           {#if p2pEnabled}
             {@const pEntry = llmConfig?.llm?.[provider]}
             <div class="flex items-center gap-2">
@@ -1500,6 +1516,15 @@
               <span class="text-xs {extAvailable ? 'text-green' : 'text-red'}">{extAvailable ? 'Connected' : 'Not detected / Not running'}</span>
             </div>
             <div class="flex items-center gap-2">
+              {#if selectedEngine && resolveDefaultKey('models') !== selectedEngine}
+                <button class="btn-ghost text-xs flex-shrink-0" disabled={settingDefault === selectedEngine} onclick={() => setDefaultProvider(selectedEngine!)}>
+                  {#if settingDefault === selectedEngine}
+                    <i class="fas fa-spinner fa-spin mr-1"></i>
+                  {:else}
+                    <i class="fas fa-star mr-1"></i>Set as Default
+                  {/if}
+                </button>
+              {/if}
               <button class="btn-ghost text-xs flex-shrink-0" onclick={loadEngines}>
                 <i class="fas fa-sync-alt mr-1"></i>Refresh
               </button>

@@ -35,6 +35,14 @@ llm:
     model: gpt-4o
     temperature: 0.3
     share: true
+  openrouter:
+    provider: openrouter
+    apiKey: test-openrouter-key-not-real
+    model: deepseek/deepseek-r1
+    active: true
+  openrouter-nokey:
+    provider: openrouter
+    model: qwen/qwen3.6-plus:free
 
 embeddings:
   default: openai

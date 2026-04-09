@@ -1,6 +1,6 @@
 import type { ModelConfig } from './llm-config.ts';
 
-export type LLMProvider = 'openai' | 'gemini' | 'anthropic' | 'local' | 'omni';
+export type LLMProvider = 'openai' | 'gemini' | 'anthropic' | 'openrouter' | 'local' | 'omni';
 
 /**
  * Detects which LLM provider to use based on configuration
@@ -30,6 +30,9 @@ export function detectProvider(config: ModelConfig): LLMProvider {
     }
     if (config.baseUrl.includes('api.anthropic.com')) {
       return 'anthropic';
+    }
+    if (config.baseUrl.includes('openrouter.ai')) {
+      return 'openrouter';
     }
     // Any other baseUrl is assumed to be an OpenAI-compatible local server
     return 'local';

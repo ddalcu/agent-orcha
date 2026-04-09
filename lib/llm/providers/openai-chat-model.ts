@@ -96,7 +96,7 @@ interface OpenAIChatModelOptions {
   maxTokens?: number;
   baseURL?: string;
   streamUsage?: boolean;
-  provider?: 'openai' | 'local';
+  provider?: 'openai' | 'openrouter' | 'local';
   supportsVision?: boolean;
   reasoningBudget?: number;
   engine?: string;
@@ -109,7 +109,7 @@ export class OpenAIChatModel implements ChatModel {
   private temperature?: number;
   private maxTokens?: number;
   private streamUsage: boolean;
-  private provider: 'openai' | 'local';
+  private provider: 'openai' | 'openrouter' | 'local';
   private supportsVision: boolean;
   private isReasoningModel: boolean;
   private reasoningBudget: number;
@@ -120,8 +120,13 @@ export class OpenAIChatModel implements ChatModel {
   private contextSize?: number;
 
   constructor(options: OpenAIChatModelOptions) {
+    const envFallback: Record<string, string | undefined> = {
+      openai: process.env.OPENAI_API_KEY,
+      local: process.env.OPENAI_API_KEY,
+      openrouter: process.env.OPENROUTER_API_KEY,
+    };
     this.client = new OpenAI({
-      apiKey: options.apiKey ?? process.env.OPENAI_API_KEY ?? 'not-set',
+      apiKey: options.apiKey ?? envFallback[options.provider ?? 'openai'] ?? 'not-set',
       ...(options.baseURL ? { baseURL: options.baseURL } : {}),
     });
     this.modelName = options.modelName;
@@ -130,7 +135,7 @@ export class OpenAIChatModel implements ChatModel {
     this.streamUsage = options.streamUsage ?? true;
     this.provider = options.provider ?? 'openai';
     this.supportsVision = options.supportsVision ?? true;
-    this.isReasoningModel = this.provider === 'openai' && /^o[134]/.test(this.modelName);
+    this.isReasoningModel = (this.provider === 'openai' || this.provider === 'openrouter') && /^o[134]/.test(this.modelName);
     this.reasoningBudget = options.reasoningBudget ?? 0;
     this.engine = options.engine;
     this.contextSize = options.contextSize;

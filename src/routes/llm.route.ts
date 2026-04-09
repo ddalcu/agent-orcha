@@ -19,6 +19,7 @@ const PROVIDER_ENV_VARS: Record<string, string> = {
   openai: 'OPENAI_API_KEY',
   gemini: 'GOOGLE_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
   local: 'OPENAI_API_KEY',
 };
 

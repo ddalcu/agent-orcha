@@ -37,6 +37,17 @@ describe('detectProvider', () => {
     );
   });
 
+  it('should detect openrouter from explicit provider', () => {
+    assert.equal(detectProvider({ provider: 'openrouter', model: 'deepseek/deepseek-r1' }), 'openrouter');
+  });
+
+  it('should detect openrouter from baseUrl', () => {
+    assert.equal(
+      detectProvider({ model: 'deepseek/deepseek-r1', baseUrl: 'https://openrouter.ai/api/v1' }),
+      'openrouter'
+    );
+  });
+
   it('should return local for unknown baseUrl', () => {
     assert.equal(
       detectProvider({ model: 'llama3', baseUrl: 'http://localhost:11434/v1' }),

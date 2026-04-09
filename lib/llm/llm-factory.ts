@@ -133,6 +133,9 @@ export class LLMFactory {
       case 'anthropic':
         llm = this.createAnthropic(config, temperature);
         break;
+      case 'openrouter':
+        llm = this.createOpenAI(config, temperature, 'openrouter');
+        break;
       case 'local':
         llm = this.createOpenAI(config, temperature, 'local');
         break;
@@ -149,7 +152,7 @@ export class LLMFactory {
 
   private static createOpenAI(config: ModelConfig, temperature?: number, provider: LLMProvider = 'openai'): ChatModel {
     const apiKey = resolveApiKey(provider, config.apiKey);
-    const baseURL = config.baseUrl;
+    const baseURL = config.baseUrl ?? (provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : undefined);
     const supportsVision = true;
     return new OpenAIChatModel({
       modelName: config.model,
@@ -157,7 +160,7 @@ export class LLMFactory {
       maxTokens: config.maxTokens ?? (provider === 'local' ? 4096 : undefined),
       streamUsage: true,
       baseURL,
-      provider: provider as 'openai' | 'local',
+      provider: provider as 'openai' | 'openrouter' | 'local',
       supportsVision,
       ...(provider === 'local' && config.reasoningBudget ? { reasoningBudget: config.reasoningBudget } : {}),
       ...(config.engine ? { engine: config.engine } : {}),

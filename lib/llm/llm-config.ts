@@ -9,6 +9,7 @@ const PROVIDER_ENV_VARS: Record<LLMProvider, string> = {
   openai: 'OPENAI_API_KEY',
   gemini: 'GOOGLE_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
   local: 'OPENAI_API_KEY',
   omni: 'OPENAI_API_KEY', // omni doesn't need an API key, but satisfies the record type
 };
@@ -21,6 +22,8 @@ export function resolveApiKey(provider: LLMProvider, apiKey?: string): string | 
   if (apiKey) {
     const resolved = substituteEnvVars(apiKey);
     if (resolved !== apiKey) return resolved || undefined;
+    // If it's a placeholder like ${VAR} and stayed exactly that, it wasn't resolved.
+    if (apiKey.startsWith('${') && apiKey.endsWith('}')) return undefined;
     return apiKey;
   }
   const envVar = PROVIDER_ENV_VARS[provider];
@@ -29,7 +32,7 @@ export function resolveApiKey(provider: LLMProvider, apiKey?: string): string | 
 
 // Schema for individual model configuration
 export const ModelConfigSchema = z.object({
-  provider: z.enum(['openai', 'gemini', 'anthropic', 'local', 'omni']).optional(),
+  provider: z.enum(['openai', 'gemini', 'anthropic', 'openrouter', 'local', 'omni']).optional(),
   engine: z.enum(['llama-cpp', 'mlx-serve', 'ollama', 'lmstudio']).optional(),
   baseUrl: z.string().optional(),
   apiKey: z.string().nullish().transform(v => v ?? undefined),
@@ -46,7 +49,7 @@ export const ModelConfigSchema = z.object({
 
 // Schema for individual embedding configuration
 export const EmbeddingModelConfigSchema = z.object({
-  provider: z.enum(['openai', 'gemini', 'anthropic', 'local', 'omni']).optional(),
+  provider: z.enum(['openai', 'gemini', 'anthropic', 'openrouter', 'local', 'omni']).optional(),
   engine: z.enum(['llama-cpp', 'mlx-serve', 'ollama', 'lmstudio']).optional(),
   baseUrl: z.string().optional(),
   apiKey: z.string().nullish().transform(v => v ?? undefined),

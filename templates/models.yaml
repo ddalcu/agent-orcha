@@ -42,6 +42,12 @@ llm:
     apiKey: ${GOOGLE_API_KEY}
     model: gemini-3.1-pro-preview
     active: false
+  openrouter:
+    provider: openrouter
+    apiKey: ${OPENROUTER_API_KEY}
+    model: deepseek/deepseek-r1
+    active: false
+    share: false
 embeddings:
   default: omni
   omni:
@@ -65,6 +71,11 @@ embeddings:
     provider: gemini
     apiKey: ${GOOGLE_API_KEY}
     model: gemini-embedding-001
+  openrouter:
+    provider: openrouter
+    apiKey: ${OPENROUTER_API_KEY}
+    model: openai/text-embedding-3-small
+    active: false
 image:
   default: omni
   omni:
