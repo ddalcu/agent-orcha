@@ -198,4 +198,4 @@ When adding, removing, or renaming templates (agents, skills, knowledge, functio
 
 ### Debugging
 
-When analyzing chat history or debugging tool calls, fetch `http://localhost:3000/api/tasks` to inspect task events, tool invocations, and model responses.
+When analyzing chat history or debugging tool calls, fetch `http://localhost:3333/api/tasks` to inspect task events, tool invocations, and model responses.

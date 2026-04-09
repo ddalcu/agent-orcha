@@ -16,7 +16,7 @@ Agent Orcha is a declarative framework for building, managing, and scaling multi
 npx agent-orcha
 
 # With Docker (cloud LLM providers)
-docker run -p 3000:3000 -v ./my-workspace:/data ddalcu/agent-orcha
+docker run -p 3333:3333 -v ./my-workspace:/data ddalcu/agent-orcha
 ```
 
 ## Why Agent Orcha?
@@ -36,7 +36,7 @@ docker run -p 3000:3000 -v ./my-workspace:/data ddalcu/agent-orcha
 
 ## Agent Orcha Studio
 
-Built-in web dashboard at `http://localhost:3000` with agent testing, knowledge browsing, workflow execution, real-time monitoring, and an in-browser IDE with visual agent composer.
+Built-in web dashboard at `http://localhost:3333` with agent testing, knowledge browsing, workflow execution, real-time monitoring, and an in-browser IDE with visual agent composer.
 
 <p align="center">
   <img src="docs/assets/images/screenshots/0.0.7-chat.png" alt="Agent Orcha Studio — Chat" width="100%" />
@@ -106,7 +106,7 @@ WORKSPACE=./my-project npx agent-orcha
 Best when using cloud LLM providers (OpenAI, Anthropic, Gemini) or connecting to an LLM server running on the host. Docker does not have direct access to the host GPU, so local inference engines will not be available inside the container.
 
 ```bash
-docker run -p 3000:3000 -e AUTH_PASSWORD=mypass -v ./my-project:/data ddalcu/agent-orcha
+docker run -p 3333:3333 -e AUTH_PASSWORD=mypass -v ./my-project:/data ddalcu/agent-orcha
 ```
 
 An empty workspace is automatically scaffolded with example agents, workflows, and configurations.
@@ -166,7 +166,7 @@ tts:
 ### Environment Variables
 
 ```bash
-PORT=3000                              # Server port
+PORT=3333                              # Server port
 HOST=0.0.0.0                          # Server host (SEA default: 127.0.0.1)
 WORKSPACE=/path/to/project             # Workspace directory (default: ~/.orcha/workspace)
 AUTH_PASSWORD=your-secret-password     # Password auth for all API routes and Studio

@@ -16,7 +16,7 @@ test.describe('Published Agent Chat', () => {
   let publishedAgent: Agent | null = null;
 
   test.beforeAll(async ({ browser }) => {
-    const context = await browser.newContext({ baseURL: 'http://localhost:3000' });
+    const context = await browser.newContext({ baseURL: 'http://localhost:3333' });
     await authenticate(context);
 
     const res = await context.request.get('/api/agents');

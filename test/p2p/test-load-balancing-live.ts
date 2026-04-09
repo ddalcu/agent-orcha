@@ -7,10 +7,10 @@
  * Usage:
  *   node --experimental-strip-types test/p2p/test-load-balancing-live.ts [baseUrl] [concurrency]
  *
- * Defaults: http://localhost:3000, 6 concurrent requests
+ * Defaults: http://localhost:3333, 6 concurrent requests
  */
 
-const BASE_URL = process.argv[2] ?? 'http://localhost:3000';
+const BASE_URL = process.argv[2] ?? 'http://localhost:3333';
 const CONCURRENCY = parseInt(process.argv[3] ?? '6', 10);
 
 const PHRASES = [

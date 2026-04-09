@@ -2,11 +2,11 @@ services:
   agent-orcha:
     build: .
     ports:
-      - "3000:3000"
+      - "3333:3333"
     volumes:
       - ./templates:/data
     environment:
-      PORT: 3000
+      PORT: 3333
       NODE_ENV: development
       VITE_DEV: "false"
       BROWSER_SANDBOX: "true"

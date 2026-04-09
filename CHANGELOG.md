@@ -623,7 +623,7 @@ Versions use CalVer (`YYYY.MDD.HMM`) matching the npm/Docker publish pipeline.
   - **MCP Tab**: Browse MCP servers, view available tools, call tools directly
   - **Workflows Tab**: Browse and execute workflows (step-based and LangGraph), stream progress
   - **IDE Tab**: In-browser file editor with file tree, syntax highlighting (YAML, JSON, JS), hot-reload on save
-  - Built with web components, served at `http://localhost:3000` when server is running
+  - Built with web components, served at `http://localhost:3333` when server is running
 
 - **New Data Source Types** for knowledge stores:
   - `database`: Load documents from PostgreSQL or MySQL via SQL queries

@@ -56,7 +56,7 @@
     "sync": "node -e \"const{cpSync}=require('fs'),p=require('path'),d=p.join(require('os').homedir(),'.orcha','workspace');['agents','workflows','knowledge'].forEach(f=>{cpSync(p.join('templates',f),p.join(d,f),{recursive:true,force:true});console.log('Synced '+f)})\""
   },
   "dependencies": {
-    "@agent-orcha/node-omni-orcha": "^2026.404.448",
+    "@agent-orcha/node-omni-orcha": "^2026.409.2132",
     "@agent-orcha/trayconsolejs": "^0.1.1",
     "@anthropic-ai/sdk": "^0.76.0",
     "@fastify/cors": "^10.0.1",
@@ -88,12 +88,12 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "optionalDependencies": {
-    "@agent-orcha/node-omni-orcha-darwin-arm64": "^2026.404.448",
-    "@agent-orcha/node-omni-orcha-linux-arm64": "^2026.404.448",
-    "@agent-orcha/node-omni-orcha-linux-x64": "^2026.404.448",
-    "@agent-orcha/node-omni-orcha-linux-x64-cuda": "^2026.404.448",
-    "@agent-orcha/node-omni-orcha-win32-x64": "^2026.404.448",
-    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.404.448"
+    "@agent-orcha/node-omni-orcha-darwin-arm64": "^2026.409.2132",
+    "@agent-orcha/node-omni-orcha-linux-arm64": "^2026.409.2132",
+    "@agent-orcha/node-omni-orcha-linux-x64": "^2026.409.2132",
+    "@agent-orcha/node-omni-orcha-linux-x64-cuda": "^2026.409.2132",
+    "@agent-orcha/node-omni-orcha-win32-x64": "^2026.409.2132",
+    "@agent-orcha/node-omni-orcha-win32-x64-cuda": "^2026.409.2132"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

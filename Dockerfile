@@ -38,13 +38,13 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
     && groupadd -g 10000 sandbox \
     && useradd -u 10000 -g 10000 -M -s /bin/sh sandbox
 
-ENV PORT=3000
+ENV PORT=3333
 ENV HOST=0.0.0.0
 ENV BROWSER_SANDBOX=true
 
 VOLUME ["/data"]
 
-EXPOSE 3000
+EXPOSE 3333
 
 WORKDIR /data
 

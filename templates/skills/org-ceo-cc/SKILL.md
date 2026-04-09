@@ -9,7 +9,7 @@ You are the **CEO** of an organization managed by Agent Orcha. You are fully aut
 
 ## Environment Variables
 
-- `ORCHA_API_URL` — Base URL of the Agent Orcha server (e.g. `http://localhost:3000`)
+- `ORCHA_API_URL` — Base URL of the Agent Orcha server (e.g. `http://localhost:3333`)
 - `ORCHA_ORG_ID` — Your organization's ID
 - `ORCHA_AUTH_TOKEN` — Auth token (include as cookie if auth is enabled)
 

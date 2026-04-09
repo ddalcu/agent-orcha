@@ -312,10 +312,10 @@ output:
                   <button class="code-copy-btn" data-copy-target="start-cmd">Copy</button>
                 </div>
                 <div class="code-content">
-                  <pre id="start-cmd"><code>docker run -p 3000:3000 -e AUTH_PASSWORD=mypass -v ./my-project:/data ddalcu/agent-orcha start</code></pre>
+                  <pre id="start-cmd"><code>docker run -p 3333:3333 -e AUTH_PASSWORD=mypass -v ./my-project:/data ddalcu/agent-orcha start</code></pre>
                 </div>
               </div>
-              <p>The server and Studio dashboard will be available at <code>http://localhost:3000</code>.</p>
+              <p>The server and Studio dashboard will be available at <code>http://localhost:3333</code>.</p>
             </div>
           </div>
         </div>
@@ -334,7 +334,7 @@ output:
                   <button class="code-copy-btn" data-copy-target="test-agent">Copy</button>
                 </div>
                 <div class="code-content">
-                  <pre id="test-agent"><code>curl -X POST http://localhost:3000/api/agents/myagent/invoke \
+                  <pre id="test-agent"><code>curl -X POST http://localhost:3333/api/agents/myagent/invoke \
   -H "Content-Type: application/json" \
   -d '{"input": {"query": "Hello, how are you?"}}'</code></pre>
                 </div>
@@ -361,7 +361,7 @@ output:
 
         <!-- Agent Orcha Studio -->
         <h3 id="studio" class="mt-xl">Agent Orcha Studio</h3>
-        <p>Agent Orcha includes a built-in web dashboard accessible at <code>http://localhost:3000</code> when the server is running. The Studio provides a visual interface for managing and testing your entire instance. When <code>AUTH_PASSWORD</code> is set, the Studio will prompt for the password before granting access.</p>
+        <p>Agent Orcha includes a built-in web dashboard accessible at <code>http://localhost:3333</code> when the server is running. The Studio provides a visual interface for managing and testing your entire instance. When <code>AUTH_PASSWORD</code> is set, the Studio will prompt for the password before granting access.</p>
 
         <h4>Studio Tabs</h4>
         <table>
@@ -415,7 +415,7 @@ output:
             <button class="code-copy-btn" data-copy-target="docker-start">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="docker-start"><code>docker run -p 3000:3000 -e AUTH_PASSWORD=mypass -v ./my-agent-orcha-project:/data ddalcu/agent-orcha start</code></pre>
+            <pre id="docker-start"><code>docker run -p 3333:3333 -e AUTH_PASSWORD=mypass -v ./my-agent-orcha-project:/data ddalcu/agent-orcha start</code></pre>
           </div>
         </div>
 
@@ -431,7 +431,7 @@ output:
   agent-orcha:
     image: ddalcu/agent-orcha
     ports:
-      - "3000:3000"
+      - "3333:3333"
     volumes:
       - ./my-agent-orcha-project:/data
     environment:
@@ -457,7 +457,7 @@ output:
             <tr>
               <td><code>PORT</code></td>
               <td>Port for the server to listen on</td>
-              <td><code>3000</code></td>
+              <td><code>3333</code></td>
             </tr>
             <tr>
               <td><code>AUTH_PASSWORD</code></td>
@@ -721,12 +721,12 @@ output:
           </div>
           <div class="code-content">
             <pre id="memory-example"><code># First message with sessionId
-curl -X POST http://localhost:3000/api/agents/chatbot/invoke \
+curl -X POST http://localhost:3333/api/agents/chatbot/invoke \
   -H "Content-Type: application/json" \
   -d '{"input": {"message": "My name is Alice"}, "sessionId": "user-123"}'
 
 # Second message - agent remembers context
-curl -X POST http://localhost:3000/api/agents/chatbot/invoke \
+curl -X POST http://localhost:3333/api/agents/chatbot/invoke \
   -H "Content-Type: application/json" \
   -d '{"input": {"message": "What is my name?"}, "sessionId": "user-123"}'</code></pre>
           </div>
@@ -1136,7 +1136,7 @@ skills:
           </div>
           <div class="code-content">
             <pre><code># Submit an agent task
-curl -X POST http://localhost:3000/api/tasks/agent \
+curl -X POST http://localhost:3333/api/tasks/agent \
   -H "Content-Type: application/json" \
   -d '{
     "agent": "researcher",
@@ -1145,7 +1145,7 @@ curl -X POST http://localhost:3000/api/tasks/agent \
   }'
 
 # Submit a workflow task
-curl -X POST http://localhost:3000/api/tasks/workflow \
+curl -X POST http://localhost:3333/api/tasks/workflow \
   -H "Content-Type: application/json" \
   -d '{
     "workflow": "research-paper",
@@ -1160,7 +1160,7 @@ curl -X POST http://localhost:3000/api/tasks/workflow \
             <span class="code-language">Bash</span>
           </div>
           <div class="code-content">
-            <pre><code>curl -N http://localhost:3000/api/tasks/TASK_ID/stream</code></pre>
+            <pre><code>curl -N http://localhost:3333/api/tasks/TASK_ID/stream</code></pre>
           </div>
         </div>
 
@@ -1171,7 +1171,7 @@ curl -X POST http://localhost:3000/api/tasks/workflow \
             <span class="code-language">Bash</span>
           </div>
           <div class="code-content">
-            <pre><code>curl -X POST http://localhost:3000/api/tasks/TASK_ID/respond \
+            <pre><code>curl -X POST http://localhost:3333/api/tasks/TASK_ID/respond \
   -H "Content-Type: application/json" \
   -d '{"response": "Yes, proceed with option A"}'</code></pre>
           </div>
@@ -2453,7 +2453,7 @@ Response (auth disabled):
             <button class="code-copy-btn" data-copy-target="agent-invoke">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="agent-invoke"><code>curl -X POST http://localhost:3000/api/agents/researcher/invoke \
+            <pre id="agent-invoke"><code>curl -X POST http://localhost:3333/api/agents/researcher/invoke \
   -H "Content-Type: application/json" \
   -d '{
     "input": {
@@ -2524,7 +2524,7 @@ Response (auth disabled):
             <span class="code-language">Bash</span>
           </div>
           <div class="code-content">
-            <pre><code>curl -X POST http://localhost:3000/api/chat/my-agent/auth \
+            <pre><code>curl -X POST http://localhost:3333/api/chat/my-agent/auth \
   -H "Content-Type: application/json" \
   -d '{ "password": "secret123" }'
 
@@ -2538,7 +2538,7 @@ Response (auth disabled):
             <span class="code-language">Bash</span>
           </div>
           <div class="code-content">
-            <pre><code>curl -N -X POST http://localhost:3000/api/chat/my-agent/stream \
+            <pre><code>curl -N -X POST http://localhost:3333/api/chat/my-agent/stream \
   -H "Content-Type: application/json" \
   -H "X-Chat-Token: abc123..." \
   -d '{
@@ -2593,7 +2593,7 @@ Response (auth disabled):
             <button class="code-copy-btn" data-copy-target="workflow-run">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="workflow-run"><code>curl -X POST http://localhost:3000/api/workflows/research-paper/run \
+            <pre id="workflow-run"><code>curl -X POST http://localhost:3333/api/workflows/research-paper/run \
   -H "Content-Type: application/json" \
   -d '{
     "input": {
@@ -2659,7 +2659,7 @@ Response (auth disabled):
             <button class="code-copy-btn" data-copy-target="knowledge-search">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="knowledge-search"><code>curl -X POST http://localhost:3000/api/knowledge/docs/search \
+            <pre id="knowledge-search"><code>curl -X POST http://localhost:3333/api/knowledge/docs/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": "search term",
@@ -2676,7 +2676,7 @@ Response (auth disabled):
             <button class="code-copy-btn" data-copy-target="knowledge-add">Copy</button>
           </div>
           <div class="code-content">
-            <pre id="knowledge-add"><code>curl -X POST http://localhost:3000/api/knowledge/docs/add \
+            <pre id="knowledge-add"><code>curl -X POST http://localhost:3333/api/knowledge/docs/add \
   -H "Content-Type: application/json" \
   -d '{
     "documents": [

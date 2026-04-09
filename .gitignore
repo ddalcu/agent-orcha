@@ -22,7 +22,6 @@ Dockerfile.deploy
 .mlx-serve
 .sd-cpp
 .generated
-templates/llm.json
 agent-orcha-*.tgz
 .memory
 .p2p-seed

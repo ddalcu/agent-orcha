@@ -65,7 +65,7 @@ export class ClaudeCodeCEO {
 
   private async execute(org: Organization, prompt: string, onEvent?: (event: { type: string; content?: string; tool?: string; input?: unknown; output?: unknown }) => void): Promise<ClaudeCodeResult> {
     const ceoConfig = this.parseCeoConfig(org.ceoConfig);
-    const apiUrl = `http://localhost:${process.env['PORT'] ?? '3000'}`;
+    const apiUrl = `http://localhost:${process.env['PORT'] ?? '3333'}`;
 
     const model = ceoConfig.model || process.env['CLAUDE_CODE_CEO_MODEL'] || 'sonnet';
     const args = ['--print', '--output-format', 'stream-json', '--verbose', '--model', model];

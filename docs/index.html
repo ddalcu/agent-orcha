@@ -94,7 +94,7 @@
                 <span class="terminal-output">✓ Workspace scaffolded at ~/.orcha/workspace</span>
               </div>
               <div class="terminal-line">
-                <span class="terminal-output"><i class="fa-solid fa-rocket"></i> Server running on http://localhost:3000</span>
+                <span class="terminal-output"><i class="fa-solid fa-rocket"></i> Server running on http://localhost:3333</span>
               </div>
             </div>
             <div class="terminal-content" data-tab-content="docker" style="display:none;">
@@ -109,7 +109,7 @@
                 <span class="terminal-command" style="margin-left:1.5rem;">ddalcu/agent-orcha</span>
               </div>
               <div class="terminal-line">
-                <span class="terminal-output"><i class="fa-solid fa-rocket"></i> Server running on http://localhost:3000</span>
+                <span class="terminal-output"><i class="fa-solid fa-rocket"></i> Server running on http://localhost:3333</span>
               </div>
             </div>
           </div>
@@ -353,7 +353,7 @@ output:
             </div>
             <div class="code-content">
               <pre id="api-bash"><code>curl -X POST \
-  http://localhost:3000/api/agents/researcher/invoke \
+  http://localhost:3333/api/agents/researcher/invoke \
   -H "Content-Type: application/json" \
   -d '{
     "input": {
@@ -428,7 +428,7 @@ output:
   },
   "servers": [
     {
-      "url": "http://localhost:3000",
+      "url": "http://localhost:3333",
       "description": "Local Development Server"
     }
   ]

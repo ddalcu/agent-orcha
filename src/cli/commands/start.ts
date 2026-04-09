@@ -116,7 +116,7 @@ export async function startCommand(_args: string[]): Promise<void> {
       tooltip: 'Agent Orcha',
       title: 'Agent Orcha — Starting...',
       onClicked: (id) => {
-        if (id === 'open') openAppWindow(`http://localhost:${process.env['PORT'] ?? '3000'}`);
+        if (id === 'open') openAppWindow(`http://localhost:${process.env['PORT'] ?? '3333'}`);
         else if (id === 'show') trayConsole!.showWindow();
         else if (id === 'quit') shutdown();
       },
@@ -208,7 +208,7 @@ export async function startCommand(_args: string[]): Promise<void> {
     return; // uncaughtException handler keeps the tray alive
   }
 
-  const port = parseInt(process.env['PORT'] ?? '3000', 10);
+  const port = parseInt(process.env['PORT'] ?? '3333', 10);
   const host = process.env['HOST'] ?? (isSea() ? '127.0.0.1' : '0.0.0.0');
 
   logger.info('Initializing Agent Orcha...');
