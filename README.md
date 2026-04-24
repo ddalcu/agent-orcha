@@ -530,6 +530,20 @@ Configure in `mcp.json`:
 
 Reference in agents with `mcp:fetch`.
 
+### Built-in: Exa search
+
+The default `mcp.json` ships with an `exa` server pre-configured against Exa's
+hosted MCP endpoint. Set `EXA_API_KEY` (get one at
+[dashboard.exa.ai](https://dashboard.exa.ai/api-keys)) and the following tools
+become available to any agent that includes `mcp:exa`:
+
+- `web_search_exa` — neural web search with clean, ready-to-use content
+- `web_search_advanced_exa` — domain/date/text filters, highlights, summaries
+- `web_fetch_exa` — fetch full page content as markdown
+
+If `EXA_API_KEY` is unset the server simply fails to connect and is skipped —
+the rest of the MCP config is unaffected.
+
 ## Tool Types
 
 | Prefix | Description |
