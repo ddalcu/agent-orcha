@@ -3,6 +3,16 @@
   "servers": {
     "htmlhost": {
       "url": "https://htmlhost.jax.workers.dev/mcp"
+    },
+    "exa": {
+      "transport": "streamable-http",
+      "url": "https://mcp.exa.ai/mcp",
+      "headers": {
+        "x-api-key": "${EXA_API_KEY:-}",
+        "x-exa-integration": "agent-orcha"
+      },
+      "description": "Exa AI-powered web search and content retrieval. Set EXA_API_KEY to enable.",
+      "enabled": true
     }
   },
   "globalOptions": {
