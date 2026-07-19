@@ -2581,6 +2581,99 @@ details[open] summary .chevron-icon { transform: rotate(90deg); }
   margin-left: var(--sp-1);
 }
 
+/* Status dot shown on each cloud/custom provider tab */
+.llm-tab-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-3);
+  font-size: 7px;
+  line-height: 1;
+  margin-left: var(--sp-1);
+  flex-shrink: 0;
+}
+.llm-tab-status-ok { background: var(--green); }
+.llm-tab-status-error { background: var(--red); }
+.llm-tab-status-testing {
+  background: var(--amber-400);
+  color: #1a1a1f;
+}
+.llm-tab-status-not-configured {
+  background: transparent;
+  border: 1px dashed var(--border);
+}
+.llm-tab-status-unknown { background: var(--text-3); }
+
+/* Connection status pill in the cloud config card header */
+.llm-conn-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface-dim);
+}
+.llm-conn-pill-ok { color: var(--green); border-color: var(--green); }
+.llm-conn-pill-error { color: var(--red); border-color: var(--red); }
+.llm-conn-pill-testing { color: var(--amber-400); border-color: var(--amber-400); }
+.llm-conn-pill-unknown { color: var(--text-3); }
+
+/* Free-only filter checkbox inline above the chat model dropdown */
+.llm-free-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+  user-select: none;
+  align-self: flex-start;
+  padding: var(--sp-1) 0;
+}
+
+/* Test connection row — inline button + result text */
+.llm-test-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.llm-test-result {
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* Advanced details/summary */
+.llm-advanced { border-top: 1px solid var(--border-subtle); padding-top: var(--sp-3); }
+.llm-advanced-summary {
+  cursor: pointer;
+  user-select: none;
+  padding: var(--sp-1) 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.llm-advanced-summary::-webkit-details-marker { display: none; }
+.llm-advanced-summary::before {
+  content: "\25b8"; /* ▸ */
+  display: inline-block;
+  transition: transform 0.15s;
+  font-size: 0.7em;
+  color: var(--text-3);
+}
+.llm-advanced[open] .llm-advanced-summary::before { transform: rotate(90deg); }
+.llm-advanced > .llm-form-row,
+.llm-advanced > .llm-form-group { margin-top: var(--sp-3); }
+
 /* ─── Cloud Provider Config ─── */
 .llm-cloud-form {
   display: flex;

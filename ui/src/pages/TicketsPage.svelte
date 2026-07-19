@@ -6,6 +6,8 @@
   import type { Ticket, TicketActivity, Agent } from '../lib/types/index.js';
 
   const STATUSES = ['backlog', 'todo', 'in_progress', 'in_review', 'blocked', 'done', 'cancelled'];
+  // Columns shown on the board, in flow order.
+  const BOARD_COLUMNS = ['backlog', 'todo', 'in_progress', 'in_review', 'blocked', 'done', 'cancelled'];
   const PRIORITIES = ['low', 'medium', 'high', 'critical'];
   const STATUS_COLORS: Record<string, string> = {
     backlog: 'var(--text-3)', todo: 'var(--cyan)', in_progress: 'var(--accent)',
@@ -18,6 +20,20 @@
   let agents = $state<Agent[]>([]);
   let filterStatus = $state('');
   let filterPriority = $state('');
+
+  // Drag & drop state for the board
+  let draggedTicketId = $state<string | null>(null);
+  let dragOverStatus = $state<string | null>(null);
+
+  // Group the current tickets into board columns by status.
+  let ticketsByStatus = $derived.by(() => {
+    const groups: Record<string, Ticket[]> = {};
+    for (const s of BOARD_COLUMNS) groups[s] = [];
+    for (const t of orgStore.tickets) {
+      (groups[t.status] ??= []).push(t);
+    }
+    return groups;
+  });
 
   // Create form
   let showCreate = $state(false);
@@ -123,6 +139,50 @@
     await orgStore.loadTickets();
   }
 
+  function handleDragStart(e: DragEvent, ticket: Ticket) {
+    draggedTicketId = ticket.id;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', ticket.id);
+    }
+  }
+
+  function handleDragEnd() {
+    draggedTicketId = null;
+    dragOverStatus = null;
+  }
+
+  function handleDragOver(e: DragEvent, status: string) {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    dragOverStatus = status;
+  }
+
+  function handleDragLeave(status: string) {
+    if (dragOverStatus === status) dragOverStatus = null;
+  }
+
+  async function handleDrop(e: DragEvent, status: string) {
+    e.preventDefault();
+    const id = draggedTicketId ?? e.dataTransfer?.getData('text/plain') ?? null;
+    draggedTicketId = null;
+    dragOverStatus = null;
+    if (!id) return;
+
+    const ticket = orgStore.tickets.find(t => t.id === id);
+    if (!ticket || ticket.status === status) return;
+
+    const prev = ticket.status;
+    ticket.status = status; // optimistic move
+    try {
+      await orgApi.transitionTicket(id, status);
+      await orgStore.loadTickets();
+    } catch (err) {
+      ticket.status = prev; // revert on failure
+      console.warn('Ticket transition failed:', err);
+    }
+  }
+
   async function addComment() {
     if (!selectedTicket || !commentText.trim()) return;
     await orgApi.addComment(selectedTicket.id, commentText.trim(), 'User');
@@ -212,7 +272,7 @@
   }
 </script>
 
-<div class="space-y-4 h-full overflow-y-auto pb-6 view-panel">
+<div class="tickets-page view-panel">
   {#if !orgStore.selectedOrg}
     <div class="empty-state">
       <i class="fas fa-building empty-icon"></i>
@@ -223,7 +283,7 @@
     </div>
   {:else if selectedTicket}
     <!-- Ticket Detail View -->
-    <div class="detail-view">
+    <div class="detail-view detail-scroll">
       <button class="btn btn-ghost btn-sm mb-3" onclick={closeDetail}>
         <i class="fas fa-arrow-left"></i> Back to list
       </button>
@@ -354,52 +414,73 @@
       </div>
     </div>
   {:else}
-    <!-- Ticket List View -->
+    <!-- Ticket Board View -->
     <div class="page-header">
       <h2 class="page-title">
         <i class="fas fa-ticket"></i> Tickets
         <span class="title-org">({orgStore.selectedOrg.issuePrefix})</span>
       </h2>
-      <button class="btn btn-accent btn-sm" onclick={() => { showCreate = true; }}>
-        <i class="fas fa-plus"></i> New Ticket
-      </button>
-    </div>
-
-    <div class="filter-bar">
-      <select class="input input-sm" bind:value={filterStatus} onchange={applyFilters}>
-        <option value="">All statuses</option>
-        {#each STATUSES as s}
-          <option value={s}>{formatStatus(s)}</option>
-        {/each}
-      </select>
-      <select class="input input-sm" bind:value={filterPriority} onchange={applyFilters}>
-        <option value="">All priorities</option>
-        {#each PRIORITIES as p}
-          <option value={p}>{p}</option>
-        {/each}
-      </select>
-    </div>
-
-    {#if orgStore.tickets.length === 0}
-      <div class="empty-state">
-        <i class="fas fa-ticket empty-icon"></i>
-        <p>No tickets yet.</p>
+      <div class="header-actions">
+        <select class="input input-sm" bind:value={filterPriority} onchange={applyFilters}>
+          <option value="">All priorities</option>
+          {#each PRIORITIES as p}
+            <option value={p}>{p}</option>
+          {/each}
+        </select>
+        <button class="btn btn-accent btn-sm" onclick={() => { showCreate = true; }}>
+          <i class="fas fa-plus"></i> New Ticket
+        </button>
       </div>
-    {:else}
-      <div class="ticket-list">
-        {#each orgStore.tickets as ticket}
-          <button class="ticket-row" onclick={() => openDetail(ticket)}>
-            <span class="ticket-id">{ticket.identifier}</span>
-            <span class="ticket-title">{ticket.title}</span>
-            <span class="ticket-badge" style:color={STATUS_COLORS[ticket.status]}>{formatStatus(ticket.status)}</span>
-            <span class="ticket-badge" style:color={PRIORITY_COLORS[ticket.priority]}>{ticket.priority}</span>
-            {#if ticket.assigneeAgent}
-              <span class="ticket-agent"><i class="fas fa-robot"></i> {ticket.assigneeAgent}</span>
+    </div>
+
+    <div class="board">
+      {#each BOARD_COLUMNS as status}
+        <div
+          class="board-col"
+          class:drag-over={dragOverStatus === status}
+          role="list"
+          ondragover={(e) => handleDragOver(e, status)}
+          ondragleave={() => handleDragLeave(status)}
+          ondrop={(e) => handleDrop(e, status)}
+        >
+          <div class="col-header">
+            <span class="col-dot" style:background={STATUS_COLORS[status]}></span>
+            <span class="col-name">{formatStatus(status)}</span>
+            <span class="col-count">{ticketsByStatus[status].length}</span>
+          </div>
+
+          <div class="col-cards">
+            {#each ticketsByStatus[status] as ticket (ticket.id)}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                class="card"
+                class:dragging={draggedTicketId === ticket.id}
+                draggable="true"
+                role="button"
+                tabindex="0"
+                ondragstart={(e) => handleDragStart(e, ticket)}
+                ondragend={handleDragEnd}
+                onclick={() => openDetail(ticket)}
+                onkeydown={(e) => { if (e.key === 'Enter') openDetail(ticket); }}
+              >
+                <div class="card-top">
+                  <span class="card-id">{ticket.identifier}</span>
+                  <span class="card-priority" style:color={PRIORITY_COLORS[ticket.priority]}>{ticket.priority}</span>
+                </div>
+                <div class="card-title">{ticket.title}</div>
+                {#if ticket.assigneeAgent}
+                  <div class="card-agent"><i class="fas fa-robot"></i> {ticket.assigneeAgent}</div>
+                {/if}
+              </div>
+            {/each}
+
+            {#if ticketsByStatus[status].length === 0}
+              <div class="col-empty">{dragOverStatus === status ? 'Drop here' : '—'}</div>
             {/if}
-          </button>
-        {/each}
-      </div>
-    {/if}
+          </div>
+        </div>
+      {/each}
+    </div>
   {/if}
 </div>
 
@@ -452,30 +533,69 @@
 {/if}
 
 <style>
-  .page-header { display: flex; align-items: center; justify-content: space-between; }
+  .tickets-page { display: flex; flex-direction: column; height: 100%; gap: var(--sp-4); }
+
+  .page-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
   .page-title { font-size: 1.2rem; font-weight: 600; color: var(--text-1); display: flex; align-items: center; gap: 0.5rem; }
   .title-org { color: var(--text-3); font-size: 0.85rem; font-weight: 400; }
+  .header-actions { display: flex; align-items: center; gap: 0.5rem; }
+  .header-actions select { max-width: 160px; }
   .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-2); }
   .empty-icon { font-size: 2.5rem; opacity: 0.3; margin-bottom: 1rem; }
 
-  .filter-bar { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-  .filter-bar select { max-width: 160px; }
-
-  .ticket-list { display: flex; flex-direction: column; gap: 2px; }
-  .ticket-row {
-    display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-    cursor: pointer; transition: border-color 0.15s; text-align: left; width: 100%;
-    font: inherit; color: inherit;
+  /* Board (Trello-like columns) */
+  .board {
+    flex: 1; min-height: 0;
+    display: flex; gap: 0.75rem;
+    overflow-x: auto; overflow-y: hidden;
+    padding-bottom: 0.5rem;
+    align-items: stretch;
   }
-  .ticket-row:hover { border-color: var(--accent); }
-  .ticket-id { font-size: 0.75rem; color: var(--text-3); font-family: monospace; min-width: 60px; }
-  .ticket-title { flex: 1; color: var(--text-1); font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ticket-badge { font-size: 0.7rem; text-transform: uppercase; font-weight: 600; }
-  .ticket-agent { font-size: 0.72rem; color: var(--text-2); }
+  .board-col {
+    flex: 0 0 280px;
+    display: flex; flex-direction: column; min-height: 0;
+    background: var(--surface-30);
+    border: 1px solid var(--border-60);
+    border-radius: var(--radius-lg);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .board-col.drag-over { border-color: var(--accent); background: var(--hover-40); }
+  .col-header {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border-60);
+    flex-shrink: 0;
+  }
+  .col-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .col-name { font-size: 0.78rem; font-weight: 600; color: var(--text-1); text-transform: capitalize; flex: 1; }
+  .col-count {
+    font-size: 0.7rem; font-weight: 600; color: var(--text-3);
+    background: var(--hover); border-radius: var(--radius-full);
+    min-width: 20px; text-align: center; padding: 1px 6px;
+  }
+  .col-cards {
+    flex: 1; min-height: 0; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 0.5rem;
+    padding: 0.5rem;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 0.6rem 0.7rem;
+    cursor: grab; transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+    text-align: left; width: 100%; font: inherit; color: inherit;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card:active { cursor: grabbing; }
+  .card.dragging { opacity: 0.4; }
+  .card-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.35rem; }
+  .card-id { font-size: 0.7rem; color: var(--text-3); font-family: monospace; }
+  .card-priority { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.02em; }
+  .card-title { color: var(--text-1); font-size: 0.85rem; line-height: 1.35; word-break: break-word; }
+  .card-agent { font-size: 0.72rem; color: var(--text-2); margin-top: 0.4rem; display: flex; align-items: center; gap: 4px; }
+  .col-empty { font-size: 0.78rem; color: var(--text-3); text-align: center; padding: 1rem 0; user-select: none; }
 
   /* Detail view */
-  .detail-view { }
+  .detail-scroll { flex: 1; min-height: 0; overflow-y: auto; }
   .detail-header { margin-bottom: 1rem; }
   .detail-id { font-size: 0.75rem; color: var(--text-3); font-family: monospace; margin-bottom: 0.25rem; }
   .detail-title { font-size: 1.15rem; font-weight: 600; color: var(--text-1); margin-bottom: 0.5rem; }

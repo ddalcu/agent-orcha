@@ -75,6 +75,9 @@ export const api = {
   async saveLlmEmbedding(name: string, config: unknown) {
     return (await _fetch(`/api/llm/config/embeddings/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })).json();
   },
+  async testLlmConnection(body: { provider: string; apiKey?: string; baseUrl?: string; configName?: string }) {
+    return (await _fetch('/api/llm/test-connection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+  },
   async streamLLM(name: string, message: string, sessionId: string, attachments?: unknown[], opts: { signal?: AbortSignal } = {}) {
     return _fetch(`/api/llm/${name}/stream`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, sessionId, ...(attachments ? { attachments } : {}) }), signal: opts.signal });
   },

@@ -45,6 +45,9 @@
     openrouter: { label: 'OpenRouter', color: 'orange' },
     gemini:    { label: 'Google',    color: 'blue' },
   };
+
+  // Providers backed by /test-connection on the server (cloud only)
+  const CLOUD_PROVIDERS = ['openai', 'anthropic', 'openrouter', 'gemini'] as const;
   const POPULAR_MODELS: Record<string, string[]> = {
     openai:    ['gpt-5.4', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'o4-mini', 'o3', 'o3-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini'],
     anthropic: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001', 'claude-sonnet-4-5', 'claude-opus-4-5'],
@@ -212,6 +215,15 @@
     }
     return ids;
   });
+
+  // Connection status + live model lists per cloud/custom provider
+  type ProviderModel = { id: string; type?: 'chat' | 'embedding' | 'image' | 'audio' | 'video' | 'unknown'; contextLength?: number; description?: string };
+  type ConnState = 'unknown' | 'testing' | 'ok' | 'error' | 'not-configured';
+  let connectionStatus = $state<Record<string, { state: ConnState; error?: string; modelCount?: number; warning?: string; at?: number }>>({});
+  let providerModels = $state<Record<string, ProviderModel[]>>({});
+  let testingProvider = $state<string | null>(null);
+  // OpenRouter has a lot of paid models — let users narrow the dropdown to the :free ones
+  let freeOnlyFilter = $state(false);
 
   // Cloud config form state
   let cloudApiKey = $state('');
@@ -508,6 +520,9 @@
   let cloudModelEntry = $derived(() => {
     const isDefault = resolveDefault('models')?._provider === activeProvider;
     if (isDefault) return { entry: resolveDefault('models'), name: resolveDefaultKey('models') };
+    // Prefer the entry stored under the provider's own slot name (e.g. llm.openai)
+    const direct = llmConfig?.llm?.[activeProvider];
+    if (direct && typeof direct !== 'string') return { entry: direct, name: activeProvider };
     for (const [name, m] of Object.entries(llmConfig?.llm || {})) {
       if (typeof m === 'string') continue;
       if ((m as any)._provider === activeProvider && name !== 'default') {
@@ -668,16 +683,35 @@
     }
   });
 
+  // When the free-only filter toggles and the current cloudModel is no longer in the list,
+  // pick a valid option so the dropdown doesn't sit on an orphan value.
+  $effect(() => {
+    if (activeProvider !== 'openrouter') return;
+    if (!freeOnlyFilter) return;
+    const live = providerModels['openrouter'] || [];
+    if (live.length === 0) return;
+    const free = live.filter(m => m.type !== 'embedding' && (/:free\b|\bfree\b/i.test(m.id) || /\bfree\b/i.test(m.description || '')));
+    if (free.length === 0) return;
+    if (cloudModel && free.some(m => m.id === cloudModel)) return;
+    if (cloudModel === '' && cloudModelCustom) return;
+    cloudModel = free[0]!.id;
+    cloudModelCustom = '';
+  });
+
   // Cloud form sync when provider or config changes
   function syncCloudForm() {
-    const { entry, name } = cloudModelEntry();
+    const { entry } = cloudModelEntry();
     const provider = activeProvider;
     const popularModels = POPULAR_MODELS[provider] || [];
     const popularEmbs = POPULAR_EMBEDDINGS[provider] || [];
+    const liveChat = (providerModels[provider] || []).filter(m => m.type !== 'embedding').map(m => m.id);
+    const liveEmb = (providerModels[provider] || []).filter(m => m.type === 'embedding').map(m => m.id);
+    const knownChat = liveChat.length > 0 ? liveChat : popularModels;
+    const knownEmb = liveEmb.length > 0 ? liveEmb : popularEmbs;
 
     if (entry) {
-      const currentModel = entry.model || popularModels[0] || '';
-      const isCustom = currentModel && !popularModels.includes(currentModel);
+      const currentModel = entry.model || knownChat[0] || '';
+      const isCustom = currentModel && !knownChat.includes(currentModel);
       cloudModel = isCustom ? '' : currentModel;
       cloudModelCustom = isCustom ? currentModel : '';
       cloudApiKey = entry.apiKey && !entry.apiKey.startsWith('••••') ? '' : (entry.apiKey || '');
@@ -688,20 +722,20 @@
 
       // Embedding
       const embDefault = resolveDefault('embeddings');
-      const isEmbDefault = embDefault?.provider === provider;
-      const currentEmb = isEmbDefault ? embDefault?.model : popularEmbs[0] || '';
-      const isCustomEmb = currentEmb && !popularEmbs.includes(currentEmb);
+      const isEmbDefault = embDefault?.provider === provider || embDefault?._provider === provider;
+      const currentEmb = isEmbDefault ? embDefault?.model : knownEmb[0] || '';
+      const isCustomEmb = currentEmb && !knownEmb.includes(currentEmb);
       cloudEmbModel = isCustomEmb ? '' : (currentEmb || '');
       cloudEmbModelCustom = isCustomEmb ? currentEmb : '';
     } else {
-      cloudModel = popularModels[0] || '';
+      cloudModel = knownChat[0] || '';
       cloudModelCustom = '';
       cloudApiKey = '';
       cloudTemp = '';
       cloudMaxTokens = '';
       cloudThinkingBudget = '';
       cloudBaseUrl = '';
-      cloudEmbModel = popularEmbs[0] || '';
+      cloudEmbModel = knownEmb[0] || '';
       cloudEmbModelCustom = '';
     }
     cloudSaveStatus = '';
@@ -1042,7 +1076,8 @@
       const model = cloudModel || cloudModelCustom.trim();
       if (!model) throw new Error('Please select or enter a model name');
 
-      const apiKey = cloudApiKey.trim() || (PROVIDER_ENV_NAMES[provider] ? `\${${PROVIDER_ENV_NAMES[provider]}}` : undefined);
+      const envVar = PROVIDER_ENV_NAMES[provider];
+      const apiKey = cloudApiKey.trim() || (envVar ? `\${${envVar}}` : undefined);
       const config: any = {
         provider,
         model,
@@ -1067,12 +1102,78 @@
 
       await loadLlmConfig();
       cloudSaveStatus = 'saved';
+      // Re-probe after save so the status pill catches up
+      testProvider(provider, { silent: true });
       setTimeout(() => { cloudSaveStatus = ''; }, 3000);
     } catch (e: any) {
       console.error('Failed to save config:', e);
       cloudSaveStatus = `error:${e.message}`;
     } finally {
       cloudSaving = false;
+    }
+  }
+
+  // ─── Connection testing ───
+  async function testProvider(provider: string, opts: { silent?: boolean; useFormValues?: boolean } = {}) {
+    const useForm = !!opts.useFormValues && activeProvider === provider;
+    const body = {
+      provider,
+      configName: provider,
+      ...(useForm && cloudApiKey.trim() ? { apiKey: cloudApiKey.trim() } : {}),
+      ...(useForm && cloudBaseUrl.trim() ? { baseUrl: cloudBaseUrl.trim() } : {}),
+    };
+    if (!opts.silent) testingProvider = provider;
+    connectionStatus = { ...connectionStatus, [provider]: { state: 'testing' } };
+    try {
+      const result: any = await api.testLlmConnection(body);
+      if (result?.ok) {
+        providerModels = { ...providerModels, [provider]: result.models || [] };
+        connectionStatus = {
+          ...connectionStatus,
+          [provider]: {
+            state: 'ok',
+            modelCount: (result.models || []).length,
+            warning: result.warning,
+            at: Date.now(),
+          },
+        };
+        // If the user is currently viewing this provider, refresh the dropdown selection
+        // against the new live list (the previously selected hardcoded model may not exist).
+        if (activeProvider === provider) syncCloudForm();
+      } else {
+        connectionStatus = {
+          ...connectionStatus,
+          [provider]: { state: 'error', error: result?.error || 'Connection failed', at: Date.now() },
+        };
+      }
+    } catch (e: any) {
+      connectionStatus = {
+        ...connectionStatus,
+        [provider]: { state: 'error', error: e?.message || String(e), at: Date.now() },
+      };
+    } finally {
+      if (!opts.silent) testingProvider = null;
+    }
+  }
+
+  function providerHasUsableKey(p: string): boolean {
+    const entry = llmConfig?.llm?.[p];
+    if (!entry || typeof entry === 'string') return false;
+    if (entry.apiKey) return true;
+    if ((entry as any)._hasEnvKey) return true;
+    // OpenRouter exposes a public model catalog, but /auth/key still needs a key
+    return false;
+  }
+
+  async function autoCheckProviders() {
+    if (!llmConfig?.llm) return;
+    for (const p of CLOUD_PROVIDERS) {
+      if (!providerHasUsableKey(p)) {
+        connectionStatus = { ...connectionStatus, [p]: { state: 'not-configured' } };
+        continue;
+      }
+      // Fire-and-forget — don't block the UI
+      testProvider(p, { silent: true });
     }
   }
 
@@ -1267,6 +1368,8 @@
       browseFormat = 'mlx';
     }
     syncCloudForm();
+    // Probe cloud + custom providers in the background — populates tab status pills
+    autoCheckProviders();
   });
 
   onDestroy(() => {
@@ -1329,6 +1432,13 @@
       {@const isCloudActive = entry?.active !== false}
       {@const isSelected = activeProvider === p}
       {@const isCloudDefault = defaultProvider === p}
+      {@const status = connectionStatus[p]?.state || 'unknown'}
+      {@const statusTitle =
+        status === 'ok' ? `Connected · ${connectionStatus[p]?.modelCount || 0} models`
+        : status === 'error' ? `Error: ${connectionStatus[p]?.error || 'unknown'}`
+        : status === 'testing' ? 'Testing connection…'
+        : status === 'not-configured' ? 'Not configured'
+        : 'Status unknown'}
       <button class="llm-provider-tab {isSelected ? 'active' : ''} {isCloudActive ? '' : 'disabled'}"
         onclick={() => selectProvider(p)}>
         <span class="text-{meta.color}">
@@ -1339,6 +1449,9 @@
           {/if}
         </span>
         <span>{meta.label}</span>
+        <span class="llm-tab-status llm-tab-status-{status}" title={statusTitle}>
+          {#if status === 'testing'}<i class="fas fa-spinner fa-spin"></i>{/if}
+        </span>
         {#if isCloudDefault}<span class="badge badge-green text-2xs">default</span>{/if}
         <div class="llm-tab-toggle" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
           <Toggle active={isCloudActive} disabled={togglingActive === p} onchange={() => toggleModelActive(p)} />
@@ -1353,11 +1466,27 @@
     {@const meta = PROVIDER_META[provider]}
     {@const popularModels = POPULAR_MODELS[provider] || []}
     {@const popularEmbs = POPULAR_EMBEDDINGS[provider] || []}
+    {@const liveAll = providerModels[provider] || []}
+    {@const liveChatModelsFull = liveAll.filter(m => m.type !== 'embedding' && m.type !== 'audio' && m.type !== 'image' && m.type !== 'video')}
+    {@const freeFilterApplied = freeOnlyFilter && provider === 'openrouter' && liveChatModelsFull.length > 0}
+    {@const liveChatModelsFiltered = freeFilterApplied
+      ? liveChatModelsFull.filter(m => /:free\b|\bfree\b/i.test(m.id) || /\bfree\b/i.test(m.description || ''))
+      : liveChatModelsFull}
+    {@const liveChatModels = liveChatModelsFiltered.map(m => m.id)}
+    {@const liveEmbModels = liveAll.filter(m => m.type === 'embedding').map(m => m.id)}
+    {@const chatModelOptions = liveChatModels.length > 0 ? liveChatModels : popularModels}
+    {@const embModelOptions = liveEmbModels.length > 0 ? liveEmbModels : popularEmbs}
+    {@const modelsAreLive = liveChatModels.length > 0 && liveChatModelsFull.length > 0}
     {@const { entry: modelEntry } = cloudModelEntry()}
     {@const hasEnvKey = modelEntry?._hasEnvKey || false}
     {@const isEnvRef = modelEntry?.apiKey && /^\$\{.+\}$/.test(modelEntry.apiKey)}
     {@const hasConfigKey = isEnvRef ? false : (modelEntry?.apiKey && !modelEntry.apiKey.startsWith('••••') ? false : !!modelEntry?.apiKey)}
     {@const envVarName = PROVIDER_ENV_NAMES[provider] || ''}
+    {@const connState = connectionStatus[provider]}
+    {@const baseUrlPlaceholder = provider === 'openai' ? 'https://api.openai.com'
+      : provider === 'openrouter' ? 'https://openrouter.ai/api/v1'
+      : provider === 'anthropic' ? 'https://api.anthropic.com'
+      : 'https://generativelanguage.googleapis.com'}
 
     <div class="llm-config-card">
       <div class="flex items-center justify-between mb-4">
@@ -1370,6 +1499,25 @@
             {/if}
           </span>
           <span class="font-semibold text-primary">{meta.label} Configuration</span>
+        </div>
+        <div class="flex items-center gap-2">
+          {#if connState?.state === 'ok'}
+            <span class="llm-conn-pill llm-conn-pill-ok">
+              <i class="fas fa-check-circle"></i> Connected · {connState.modelCount || 0} models
+            </span>
+          {:else if connState?.state === 'error'}
+            <span class="llm-conn-pill llm-conn-pill-error" title={connState.error || ''}>
+              <i class="fas fa-exclamation-circle"></i> Error
+            </span>
+          {:else if connState?.state === 'testing'}
+            <span class="llm-conn-pill llm-conn-pill-testing">
+              <i class="fas fa-spinner fa-spin"></i> Testing
+            </span>
+          {:else}
+            <span class="llm-conn-pill llm-conn-pill-unknown">
+              <i class="fas fa-circle-question"></i> Untested
+            </span>
+          {/if}
         </div>
       </div>
 
@@ -1394,12 +1542,73 @@
           {/if}
         </div>
 
+        <!-- Base URL (promoted out of Advanced — first-class for OpenAI-compatible endpoints) -->
+        {#if provider !== 'anthropic'}
+          <div class="llm-form-group">
+            <label class="llm-form-label" for="cloudBaseUrl">Base URL</label>
+            <input id="cloudBaseUrl" type="text" class="input"
+              placeholder={baseUrlPlaceholder} bind:value={cloudBaseUrl} />
+            {#if provider === 'openai'}
+              <span class="llm-form-hint">Leave empty for OpenAI. Override to use any OpenAI-compatible endpoint (Groq, Together, DeepInfra, Fireworks, vLLM, etc.).</span>
+            {:else}
+              <span class="llm-form-hint">Leave empty for the standard {meta.label} endpoint.</span>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Test connection -->
+        <div class="llm-form-group">
+          <div class="llm-test-row">
+            <button class="btn btn-ghost btn-sm" disabled={testingProvider === provider}
+              onclick={() => testProvider(provider, { useFormValues: true })}>
+              {#if testingProvider === provider}
+                <i class="fas fa-spinner fa-spin mr-1"></i>Testing...
+              {:else}
+                <i class="fas fa-bolt mr-1"></i>Test connection
+              {/if}
+            </button>
+            <span class="llm-test-result">
+              {#if connState?.state === 'ok'}
+                <i class="fas fa-check text-green mr-1"></i>
+                <span class="text-2">Reachable · {connState.modelCount || 0} models available{connState.warning ? ` · ${connState.warning}` : ''}</span>
+              {:else if connState?.state === 'error'}
+                <i class="fas fa-times text-red mr-1"></i>
+                <span class="text-2">{connState.error || 'Connection failed'}</span>
+              {:else if connState?.state === 'testing'}
+                <span class="text-muted">Probing /v1/models...</span>
+              {:else}
+                <span class="text-muted">Click to verify the key + base URL can list models.</span>
+              {/if}
+            </span>
+          </div>
+        </div>
+
         <!-- Chat Model -->
         <div class="llm-form-group">
-          <label class="llm-form-label" for="cloudModel">Chat Model</label>
+          <div class="flex items-center justify-between">
+            <label class="llm-form-label" for="cloudModel">Chat Model</label>
+            {#if modelsAreLive}
+              <span class="llm-form-hint">
+                {liveChatModels.length}{freeFilterApplied ? ` of ${liveChatModelsFull.length}` : ''} live from provider
+              </span>
+            {:else if connState?.state === 'ok' && liveChatModelsFull.length === 0}
+              <span class="llm-form-hint">No chat models in listing</span>
+            {:else}
+              <span class="llm-form-hint">Showing popular defaults — test to load live list</span>
+            {/if}
+          </div>
+          {#if provider === 'openrouter' && liveChatModelsFull.length > 0}
+            <label class="llm-free-filter">
+              <input type="checkbox" bind:checked={freeOnlyFilter} />
+              <span class="text-xs text-muted">Only show free models</span>
+            </label>
+          {/if}
           <div class="llm-form-row">
-            <select id="cloudModel" class="select" bind:value={cloudModel} onchange={() => { if (cloudModel === '') { /* custom */ } }}>
-              {#each popularModels as m}
+            <select id="cloudModel" class="select" bind:value={cloudModel}>
+              {#if chatModelOptions.length === 0}
+                <option value="">— No models — pick Custom...</option>
+              {/if}
+              {#each chatModelOptions as m}
                 <option value={m}>{m}</option>
               {/each}
               <option value="">Custom...</option>
@@ -1411,12 +1620,17 @@
         </div>
 
         <!-- Embedding Model -->
-        {#if popularEmbs.length > 0}
+        {#if embModelOptions.length > 0 || liveEmbModels.length > 0 || provider !== 'anthropic'}
           <div class="llm-form-group">
-            <label class="llm-form-label" for="cloudEmbModel">Embedding Model</label>
+            <div class="flex items-center justify-between">
+              <label class="llm-form-label" for="cloudEmbModel">Embedding Model</label>
+              {#if liveEmbModels.length > 0}
+                <span class="llm-form-hint">{liveEmbModels.length} live from provider</span>
+              {/if}
+            </div>
             <div class="llm-form-row">
               <select id="cloudEmbModel" class="select" bind:value={cloudEmbModel}>
-                {#each popularEmbs as m}
+                {#each embModelOptions as m}
                   <option value={m}>{m}</option>
                 {/each}
                 <option value="">Custom...</option>
@@ -1429,9 +1643,8 @@
         {/if}
 
         <!-- Advanced -->
-        <div class="llm-form-group">
-          <!-- svelte-ignore a11y_label_has_associated_control -->
-          <label class="llm-form-label">Advanced</label>
+        <details class="llm-form-group llm-advanced">
+          <summary class="llm-form-label llm-advanced-summary">Advanced</summary>
           <div class="llm-form-row">
             <div class="llm-form-group">
               <label class="llm-form-label" for="cloudTemp">Temperature</label>
@@ -1451,12 +1664,7 @@
                 placeholder="0 = disabled" bind:value={cloudThinkingBudget} />
             </div>
           {/if}
-          <div class="llm-form-group">
-            <label class="llm-form-label" for="cloudBaseUrl">Base URL</label>
-            <input id="cloudBaseUrl" type="text" class="input"
-              placeholder="Default (leave empty for standard API)" bind:value={cloudBaseUrl} />
-          </div>
-        </div>
+        </details>
 
         <!-- Save status -->
         <div class="text-xs text-muted">

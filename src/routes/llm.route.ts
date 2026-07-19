@@ -68,6 +68,157 @@ async function buildUserContent(text: string, attachments?: Attachment[]): Promi
   return parts.length > 0 ? parts : text;
 }
 
+interface ProviderModel {
+  id: string;
+  type?: 'chat' | 'embedding' | 'image' | 'audio' | 'video' | 'unknown';
+  contextLength?: number;
+  description?: string;
+}
+
+interface ListModelsResult {
+  models: ProviderModel[];
+  warning?: string;
+}
+
+function classifyModelId(id: string): ProviderModel['type'] {
+  const s = id.toLowerCase();
+  if (/embed|nomic|bge-|gte-|minilm|e5-/.test(s)) return 'embedding';
+  if (/whisper|tts|audio|transcrib/.test(s)) return 'audio';
+  if (/dall-?e|stable-?diffusion|flux|sdxl|imagen|midjourney/.test(s)) return 'image';
+  if (/video|wan2|sora|veo/.test(s)) return 'video';
+  return 'chat';
+}
+
+// Normalize an OpenAI-compatible base URL to the /models endpoint.
+// Accepts both styles: with or without a trailing /v1 path segment.
+function openAiModelsUrl(base: string): string {
+  const trimmed = base.replace(/\/+$/, '');
+  if (/\/v\d+$/.test(trimmed)) return `${trimmed}/models`;
+  return `${trimmed}/v1/models`;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms = 10_000): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function listProviderModels(provider: string, apiKey: string, baseUrl: string): Promise<ListModelsResult> {
+  const needsKey = provider !== 'openai-compat' || !!baseUrl;
+  if (!apiKey && (provider === 'openai' || provider === 'anthropic' || provider === 'gemini')) {
+    throw new Error('Missing API key');
+  }
+  if (provider === 'openai-compat' && !baseUrl) {
+    throw new Error('Base URL is required for custom OpenAI-compatible endpoints');
+  }
+
+  if (provider === 'openai') {
+    const url = openAiModelsUrl(baseUrl || 'https://api.openai.com');
+    const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${(await res.text()).slice(0, 200)}`);
+    const json: any = await res.json();
+    const models: ProviderModel[] = (json.data || []).map((m: any) => ({
+      id: m.id,
+      type: classifyModelId(m.id),
+    }));
+    return { models };
+  }
+
+  if (provider === 'openrouter') {
+    const base = baseUrl || 'https://openrouter.ai/api/v1';
+    // OpenRouter's /models endpoint is PUBLIC — calling it with a bad key still returns 200.
+    // To actually validate the key, hit /auth/key which requires authentication.
+    if (apiKey) {
+      const authRes = await fetchWithTimeout(`${base}/auth/key`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!authRes.ok) {
+        throw new Error(`${authRes.status} ${authRes.statusText}: ${(await authRes.text()).slice(0, 200)}`);
+      }
+    }
+    const headers: Record<string, string> = {};
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+    const res = await fetchWithTimeout(`${base}/models`, { headers });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${(await res.text()).slice(0, 200)}`);
+    const json: any = await res.json();
+    const models: ProviderModel[] = (json.data || []).map((m: any) => ({
+      id: m.id,
+      type: classifyModelId(m.id),
+      contextLength: m.context_length,
+      description: m.name || m.description,
+    }));
+    return {
+      models,
+      ...(apiKey ? {} : { warning: 'No API key provided — listing public model catalog. Add a key to use the models.' }),
+    };
+  }
+
+  if (provider === 'anthropic') {
+    const url = `${baseUrl || 'https://api.anthropic.com'}/v1/models`;
+    const res = await fetchWithTimeout(url, {
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${(await res.text()).slice(0, 200)}`);
+    const json: any = await res.json();
+    const models: ProviderModel[] = (json.data || []).map((m: any) => ({
+      id: m.id,
+      type: 'chat' as const,
+      description: m.display_name,
+    }));
+    return { models };
+  }
+
+  if (provider === 'gemini') {
+    const base = baseUrl || 'https://generativelanguage.googleapis.com';
+    const url = `${base}/v1beta/models?key=${encodeURIComponent(apiKey)}`;
+    const res = await fetchWithTimeout(url, {});
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${(await res.text()).slice(0, 200)}`);
+    const json: any = await res.json();
+    const models: ProviderModel[] = (json.models || []).map((m: any) => {
+      const id = (m.name || '').replace(/^models\//, '');
+      const methods: string[] = m.supportedGenerationMethods || [];
+      let type: ProviderModel['type'] = 'chat';
+      if (methods.includes('embedContent') || /embed/.test(id)) type = 'embedding';
+      else if (/imagen|image-/.test(id)) type = 'image';
+      else if (/veo|video/.test(id)) type = 'video';
+      return {
+        id,
+        type,
+        contextLength: m.inputTokenLimit,
+        description: m.displayName,
+      };
+    });
+    return { models };
+  }
+
+  // Custom OpenAI-compatible endpoint (Groq, Together, DeepInfra, vLLM, etc.)
+  if (provider === 'openai-compat' || provider === 'local') {
+    if (!baseUrl) throw new Error('Base URL is required');
+    const url = openAiModelsUrl(baseUrl);
+    const headers: Record<string, string> = {};
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+    const res = await fetchWithTimeout(url, { headers });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${(await res.text()).slice(0, 200)}`);
+    const json: any = await res.json();
+    const models: ProviderModel[] = (json.data || []).map((m: any) => ({
+      id: m.id,
+      type: classifyModelId(m.id),
+    }));
+    return { models };
+  }
+
+  // Suppress unused warning for needsKey on providers that don't use it
+  void needsKey;
+  throw new Error(`Unsupported provider: ${provider}`);
+}
+
 async function checkConfigReady(
   config: { provider?: string; baseUrl?: string; apiKey?: string; model: string; active?: boolean },
   manager: ModelManager,
@@ -331,6 +482,62 @@ export const llmRoutes: FastifyPluginAsync = async (fastify) => {
       await saveModelsConfig(modelsConfigPath, config);
 
       return { ok: true };
+    },
+  );
+
+  // POST /test-connection — verify reachability + list available models for a cloud provider
+  // Body: { provider, apiKey?, baseUrl?, configName? }
+  // If apiKey is missing or redacted, falls back to the stored key for configName (or provider).
+  fastify.post<{ Body: { provider?: string; apiKey?: string; baseUrl?: string; configName?: string } }>(
+    '/test-connection',
+    async (request, reply) => {
+      const body = request.body || {};
+      const provider = (body.provider || '').toLowerCase();
+      if (!provider) return reply.status(400).send({ ok: false, error: 'provider is required' });
+
+      const lookupName = body.configName || provider;
+      const cfg = getModelsConfig();
+      const storedEntry = cfg?.llm[lookupName];
+      const storedObj = (storedEntry && typeof storedEntry !== 'string') ? storedEntry : null;
+
+      let apiKey = body.apiKey?.trim() || '';
+      if (!apiKey || apiKey.startsWith('••••')) {
+        if (storedObj?.apiKey) {
+          const resolved = resolveApiKey(provider as any, storedObj.apiKey);
+          if (resolved) apiKey = resolved;
+        }
+      }
+      if (!apiKey) {
+        // For some providers an env var may still be set even without configName
+        const envVar = PROVIDER_ENV_VARS[provider];
+        if (envVar && process.env[envVar]) apiKey = process.env[envVar]!;
+      }
+
+      // baseUrl: explicit body value wins; otherwise fall back to stored config's baseUrl
+      let baseUrl: string;
+      if (body.baseUrl !== undefined) {
+        baseUrl = body.baseUrl.trim().replace(/\/+$/, '');
+      } else {
+        baseUrl = (storedObj?.baseUrl || '').replace(/\/+$/, '');
+      }
+      const start = Date.now();
+
+      try {
+        const result = await listProviderModels(provider, apiKey, baseUrl);
+        return {
+          ok: true,
+          models: result.models,
+          latencyMs: Date.now() - start,
+          ...(result.warning ? { warning: result.warning } : {}),
+        };
+      } catch (err: any) {
+        logger.warn(`test-connection failed for ${provider}: ${err?.message || err}`);
+        return reply.status(200).send({
+          ok: false,
+          error: err?.message || String(err),
+          latencyMs: Date.now() - start,
+        });
+      }
     },
   );
 
